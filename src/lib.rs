@@ -1,3 +1,5 @@
+mod finite_field;
+
 #[cfg(test)]
 mod tests {
     #[test]
