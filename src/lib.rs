@@ -1,4 +1,5 @@
 mod finite_field;
+mod polynomial;
 
 #[cfg(test)]
 mod tests {
