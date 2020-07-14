@@ -1,3 +1,4 @@
+mod client;
 mod finite_field;
 mod polynomial;
 

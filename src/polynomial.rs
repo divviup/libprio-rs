@@ -1,6 +1,6 @@
 use crate::finite_field::*;
 
-struct PolyFFTTempMemory {
+pub struct PolyFFTTempMemory {
     fft_tmp: Vec<Field>,
     fft_y_sub: Vec<Field>,
     fft_roots_sub: Vec<Field>,
@@ -17,12 +17,12 @@ impl PolyFFTTempMemory {
 }
 
 pub struct PolyTempMemory {
-    roots: Vec<Field>,
-    roots_inverted: Vec<Field>,
-    roots_half: Vec<Field>,
-    roots_half_inverted: Vec<Field>,
-    coeffs: Vec<Field>,
-    fft_memory: PolyFFTTempMemory,
+    pub roots: Vec<Field>,
+    pub roots_inverted: Vec<Field>,
+    pub roots_half: Vec<Field>,
+    pub roots_half_inverted: Vec<Field>,
+    pub coeffs: Vec<Field>,
+    pub fft_memory: PolyFFTTempMemory,
 }
 
 impl PolyTempMemory {
@@ -38,7 +38,7 @@ impl PolyTempMemory {
     }
 }
 
-fn vector_with_length(len: usize) -> Vec<Field> {
+pub fn vector_with_length(len: usize) -> Vec<Field> {
     vec![Field::from(0); len]
 }
 
@@ -121,7 +121,7 @@ fn fft_get_roots(count: usize, invert: bool) -> Vec<Field> {
 }
 
 fn fft_interpolate_raw(
-    mut out: &mut [Field],
+    out: &mut [Field],
     ys: &[Field],
     n_points: usize,
     roots: &[Field],
@@ -129,7 +129,7 @@ fn fft_interpolate_raw(
     mem: &mut PolyFFTTempMemory,
 ) {
     fft_recurse(
-        &mut out,
+        out,
         n_points,
         roots,
         ys,
@@ -145,22 +145,15 @@ fn fft_interpolate_raw(
     }
 }
 
-fn poly_fft(
-    mut points_out: &mut [Field],
+pub fn poly_fft(
+    points_out: &mut [Field],
     points_in: &[Field],
     scaled_roots: &[Field],
     n_points: usize,
     invert: bool,
     mem: &mut PolyFFTTempMemory,
 ) {
-    fft_interpolate_raw(
-        &mut points_out,
-        points_in,
-        n_points,
-        scaled_roots,
-        invert,
-        mem,
-    )
+    fft_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
 }
 
 pub fn poly_horner_eval(poly: &[Field], eval_at: Field) -> Field {
