@@ -117,8 +117,8 @@ fn test_arithmetic() {
 
     // add + sub
     for _ in 0..100 {
-        let f = Field(random());
-        let g = Field(random());
+        let f = Field::from(random::<u32>());
+        let g = Field::from(random::<u32>());
         assert_eq!(f + g - f - g, 0.into());
         assert_eq!(f + g - g, f);
         assert_eq!(f + g - f, g);

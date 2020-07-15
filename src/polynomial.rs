@@ -171,16 +171,11 @@ pub fn poly_interpret_eval(
     points: &[Field],
     roots: &[Field],
     eval_at: Field,
-    mut mem: PolyTempMemory,
-) {
-    poly_fft(
-        &mut mem.coeffs,
-        points,
-        roots,
-        points.len(),
-        true,
-        &mut mem.fft_memory,
-    );
+    tmp_coeffs: &mut [Field],
+    fft_memory: &mut PolyFFTTempMemory,
+) -> Field {
+    poly_fft(tmp_coeffs, points, roots, points.len(), true, fft_memory);
+    poly_horner_eval(&tmp_coeffs, eval_at)
 }
 
 #[test]

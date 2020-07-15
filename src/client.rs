@@ -1,5 +1,6 @@
 use crate::finite_field::*;
 use crate::polynomial::*;
+use crate::util::*;
 
 pub struct ClientMemory {
     coeffs: Vec<Field>,
@@ -26,10 +27,6 @@ impl ClientMemory {
             poly_mem: PolyTempMemory::new(2 * n),
         })
     }
-}
-
-pub fn share_length(dimension: usize) -> usize {
-    dimension + 3 + (dimension + 1).next_power_of_two()
 }
 
 fn poly_interpolate_eval_2n(
