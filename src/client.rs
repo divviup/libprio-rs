@@ -57,22 +57,15 @@ fn poly_interpolate_eval_2n(
 }
 
 pub fn encode(dimension: usize, share: &mut [Field], mem: &mut ClientMemory) {
-    // split share into components
-    let (data, mut rest) = share.split_at_mut(dimension);
-    let (mut f0, mut rest) = rest.split_at_mut(1);
-    let (mut g0, mut rest) = rest.split_at_mut(1);
-    let (mut h0, mut points_h_packed) = rest.split_at_mut(1);
+    let mut unpacked = unpack_share_mut(share, dimension).unwrap();
 
-    let mut f00 = &mut f0[0];
-    let mut g00 = &mut g0[0];
-    let mut h00 = &mut h0[0];
     construct_proof(
-        &data,
+        &unpacked.data,
         dimension,
-        &mut f00,
-        &mut g00,
-        &mut h00,
-        &mut points_h_packed,
+        &mut unpacked.f0,
+        &mut unpacked.g0,
+        &mut unpacked.h0,
+        &mut unpacked.points_h_packed,
         mem,
     );
 }
