@@ -74,9 +74,9 @@ impl Server {
 }
 
 pub struct VerificationMessage {
-    fR: Field,
-    gR: Field,
-    hR: Field,
+    f_r: Field,
+    g_r: Field,
+    h_r: Field,
 }
 
 pub fn generate_verification_message(
@@ -116,21 +116,21 @@ pub fn generate_verification_message(
     }
 
     // evaluate polynomials at random point
-    let fR = poly_interpret_eval(
+    let f_r = poly_interpret_eval(
         &mem.points_f,
         &mem.poly_mem.roots_half_inverted,
         eval_at,
         &mut mem.poly_mem.coeffs,
         &mut mem.poly_mem.fft_memory,
     );
-    let gR = poly_interpret_eval(
+    let g_r = poly_interpret_eval(
         &mem.points_g,
         &mem.poly_mem.roots_half_inverted,
         eval_at,
         &mut mem.poly_mem.coeffs,
         &mut mem.poly_mem.fft_memory,
     );
-    let hR = poly_interpret_eval(
+    let h_r = poly_interpret_eval(
         &mem.points_h,
         &mem.poly_mem.roots_inverted,
         eval_at,
@@ -138,15 +138,15 @@ pub fn generate_verification_message(
         &mut mem.poly_mem.fft_memory,
     );
 
-    let vm = VerificationMessage { fR, gR, hR };
+    let vm = VerificationMessage { f_r, g_r, h_r };
     Some(vm)
 }
 
 pub fn is_valid_share(v1: VerificationMessage, v2: VerificationMessage) -> bool {
-    // reconstruct fR, gR, hR
-    let fR = v1.fR + v2.fR;
-    let gR = v1.gR + v2.gR;
-    let hR = v1.hR + v2.hR;
+    // reconstruct f_r, g_r, h_r
+    let f_r = v1.f_r + v2.f_r;
+    let g_r = v1.g_r + v2.g_r;
+    let h_r = v1.h_r + v2.h_r;
     // validity check
-    fR * gR == hR
+    f_r * g_r == h_r
 }
