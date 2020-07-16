@@ -29,7 +29,7 @@ pub struct Server {
 }
 
 impl Server {
-    fn new(dimension: usize, is_first_server: bool) -> Server {
+    pub fn new(dimension: usize, is_first_server: bool) -> Server {
         Server {
             dimension,
             is_first_server,
@@ -38,7 +38,7 @@ impl Server {
         }
     }
 
-    fn generate_verification_message(
+    pub fn generate_verification_message(
         &mut self,
         eval_at: Field,
         share: &[Field],
@@ -52,11 +52,11 @@ impl Server {
         )
     }
 
-    fn aggregate(
+    pub fn aggregate(
         &mut self,
         share: &[Field],
-        v1: VerificationMessage,
-        v2: VerificationMessage,
+        v1: &VerificationMessage,
+        v2: &VerificationMessage,
     ) -> bool {
         if share_length(self.dimension) != share.len() {
             return false;
@@ -70,6 +70,19 @@ impl Server {
         }
 
         is_valid
+    }
+
+    pub fn total_shares(&self) -> &[Field] {
+        &self.accumulator
+    }
+
+    pub fn choose_eval_at(&self) -> Field {
+        loop {
+            let eval_at = Field::from(rand::random::<u32>());
+            if !self.validation_mem.poly_mem.roots.contains(&eval_at) {
+                break eval_at;
+            }
+        }
     }
 }
 
@@ -142,11 +155,40 @@ pub fn generate_verification_message(
     Some(vm)
 }
 
-pub fn is_valid_share(v1: VerificationMessage, v2: VerificationMessage) -> bool {
+pub fn is_valid_share(v1: &VerificationMessage, v2: &VerificationMessage) -> bool {
     // reconstruct f_r, g_r, h_r
     let f_r = v1.f_r + v2.f_r;
     let g_r = v1.g_r + v2.g_r;
     let h_r = v1.h_r + v2.h_r;
     // validity check
     f_r * g_r == h_r
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_validation() {
+        let dim = 8;
+        let share_u32: Vec<u32> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 2052337230, 3217065186, 1886032198, 2533724497, 397524722,
+            3820138372, 1535223968, 4291254640, 3565670552, 2447741959, 163741941, 335831680,
+            2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
+        ];
+
+        let mut share1: Vec<Field> = share_u32.iter().map(|x| Field::from(*x)).collect();
+        let share2 = secret_share(&mut share1);
+
+        let mut server1 = Server::new(dim, true);
+        let mut server2 = Server::new(dim, false);
+        let eval_at = Field::from(12313);
+        let v1 = server1
+            .generate_verification_message(eval_at, &share1)
+            .unwrap();
+        let v2 = server2
+            .generate_verification_message(eval_at, &share2)
+            .unwrap();
+        assert_eq!(is_valid_share(&v1, &v2), true);
+    }
 }

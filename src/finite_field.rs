@@ -31,6 +31,7 @@ impl std::ops::Sub for Field {
 impl std::ops::Mul for Field {
     type Output = Field;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn mul(self, rhs: Self) -> Self {
         let l = self.0 as u64;
         let r = rhs.0 as u64;
@@ -42,6 +43,7 @@ impl std::ops::Mul for Field {
 impl std::ops::Div for Field {
     type Output = Field;
 
+    #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self {
         self * rhs.inv()
     }
@@ -93,6 +95,12 @@ impl Field {
 impl From<u32> for Field {
     fn from(x: u32) -> Self {
         Field(x % MODULUS)
+    }
+}
+
+impl From<Field> for u32 {
+    fn from(x: Field) -> Self {
+        x.0
     }
 }
 

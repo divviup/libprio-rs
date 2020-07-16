@@ -1,4 +1,5 @@
 use crate::finite_field::*;
+use crate::util::*;
 
 pub struct PolyFFTTempMemory {
     fft_tmp: Vec<Field>,
@@ -38,10 +39,6 @@ impl PolyTempMemory {
     }
 }
 
-pub fn vector_with_length(len: usize) -> Vec<Field> {
-    vec![Field::from(0); len]
-}
-
 fn fft_recurse(
     out: &mut [Field],
     n: usize,
@@ -59,8 +56,8 @@ fn fft_recurse(
     let half_n = n / 2;
 
     let (mut tmp_first, mut tmp_second) = tmp.split_at_mut(half_n);
-    let (mut y_sub_first, mut y_sub_second) = y_sub.split_at_mut(half_n);
-    let (mut roots_sub_first, mut roots_sub_second) = roots_sub.split_at_mut(half_n);
+    let (y_sub_first, mut y_sub_second) = y_sub.split_at_mut(half_n);
+    let (roots_sub_first, mut roots_sub_second) = roots_sub.split_at_mut(half_n);
 
     // Recurse on the first half
     for i in 0..half_n {
@@ -156,10 +153,10 @@ pub fn poly_fft(
     fft_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
 }
 
-pub fn poly_horner_eval(poly: &[Field], eval_at: Field) -> Field {
-    let mut result = poly[poly.len() - 1];
+pub fn poly_horner_eval(poly: &[Field], eval_at: Field, len: usize) -> Field {
+    let mut result = poly[len - 1];
 
-    for i in (0..(poly.len() - 1)).rev() {
+    for i in (0..(len - 1)).rev() {
         result = result * eval_at;
         result = result + poly[i];
     }
@@ -175,7 +172,7 @@ pub fn poly_interpret_eval(
     fft_memory: &mut PolyFFTTempMemory,
 ) -> Field {
     poly_fft(tmp_coeffs, points, roots, points.len(), true, fft_memory);
-    poly_horner_eval(&tmp_coeffs, eval_at)
+    poly_horner_eval(&tmp_coeffs, eval_at, points.len())
 }
 
 #[test]
@@ -198,10 +195,10 @@ fn test_horner_eval() {
     poly[1] = 1.into();
     poly[2] = 5.into();
     // 5*3^2 + 3 + 2 = 50
-    assert_eq!(poly_horner_eval(&poly, 3.into()), 50.into());
+    assert_eq!(poly_horner_eval(&poly, 3.into(), 3), 50.into());
     poly[3] = 4.into();
     // 4*3^3 + 5*3^2 + 3 + 2 = 158
-    assert_eq!(poly_horner_eval(&poly, 3.into()), 158.into());
+    assert_eq!(poly_horner_eval(&poly, 3.into(), 4), 158.into());
 }
 
 #[test]

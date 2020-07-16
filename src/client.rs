@@ -3,7 +3,7 @@ use crate::polynomial::*;
 use crate::util::*;
 
 pub struct ClientMemory {
-    coeffs: Vec<Field>,
+    dimension: usize,
     points_f: Vec<Field>,
     points_g: Vec<Field>,
     evals_f: Vec<Field>,
@@ -12,14 +12,14 @@ pub struct ClientMemory {
 }
 
 impl ClientMemory {
-    fn new(dimension: usize) -> Option<Self> {
-        let n = dimension.next_power_of_two();
+    pub fn new(dimension: usize) -> Option<Self> {
+        let n = (dimension + 1).next_power_of_two();
         if 2 * n > N_ROOTS as usize {
             return None;
         }
 
         Some(ClientMemory {
-            coeffs: vector_with_length(2 * n),
+            dimension,
             points_f: vector_with_length(n),
             points_g: vector_with_length(n),
             evals_f: vector_with_length(2 * n),
@@ -27,13 +27,53 @@ impl ClientMemory {
             poly_mem: PolyTempMemory::new(2 * n),
         })
     }
+
+    pub fn encode_simple(&mut self, data: &[Field]) -> (Vec<Field>, Vec<Field>) {
+        let copy_data = |share_data: &mut [Field]| {
+            share_data[..].clone_from_slice(data);
+        };
+        self.encode_with(copy_data)
+    }
+
+    pub fn encode_with<F>(&mut self, init_function: F) -> (Vec<Field>, Vec<Field>)
+    where
+        F: FnOnce(&mut [Field]),
+    {
+        let mut share = vector_with_length(share_length(self.dimension));
+        let mut unpacked = unpack_share_mut(&mut share, self.dimension).unwrap();
+        init_function(&mut unpacked.data);
+        let share2 = self.encode(&mut share);
+        (share, share2)
+    }
+
+    fn encode(&mut self, share: &mut [Field]) -> Vec<Field> {
+        let mut unpacked = unpack_share_mut(share, self.dimension).unwrap();
+
+        construct_proof(
+            &unpacked.data,
+            self.dimension,
+            &mut unpacked.f0,
+            &mut unpacked.g0,
+            &mut unpacked.h0,
+            &mut unpacked.points_h_packed,
+            self,
+        );
+        secret_share(share)
+    }
+}
+
+pub fn encode_simple(data: &[Field]) -> Option<(Vec<Field>, Vec<Field>)> {
+    let dimension = data.len();
+    let mut client_memory = ClientMemory::new(dimension)?;
+    let mut share = vector_with_length(share_length(dimension));
+    let share2 = client_memory.encode(&mut share);
+    Some((share, share2))
 }
 
 fn poly_interpolate_eval_2n(
     n: usize,
     points_in: &[Field],
     evals_out: &mut [Field],
-    coeffs: &mut [Field],
     mem: &mut PolyTempMemory,
 ) {
     // interpolate through roots of unity
@@ -56,20 +96,6 @@ fn poly_interpolate_eval_2n(
     );
 }
 
-pub fn encode(dimension: usize, share: &mut [Field], mem: &mut ClientMemory) {
-    let mut unpacked = unpack_share_mut(share, dimension).unwrap();
-
-    construct_proof(
-        &unpacked.data,
-        dimension,
-        &mut unpacked.f0,
-        &mut unpacked.g0,
-        &mut unpacked.h0,
-        &mut unpacked.points_h_packed,
-        mem,
-    );
-}
-
 fn construct_proof(
     data: &[Field],
     dimension: usize,
@@ -77,7 +103,7 @@ fn construct_proof(
     g0: &mut Field,
     h0: &mut Field,
     points_h_packed: &mut [Field],
-    mut mem: &mut ClientMemory,
+    mem: &mut ClientMemory,
 ) {
     let proof_length = 2 * (dimension + 1).next_power_of_two();
 
@@ -100,16 +126,14 @@ fn construct_proof(
     // interpolate and evaluate at roots of unity
     poly_interpolate_eval_2n(
         proof_length / 2,
-        &mut mem.points_f,
+        &mem.points_f,
         &mut mem.evals_f,
-        &mut mem.coeffs,
         &mut mem.poly_mem,
     );
     poly_interpolate_eval_2n(
         proof_length / 2,
-        &mut mem.points_g,
+        &mem.points_g,
         &mut mem.evals_g,
-        &mut mem.coeffs,
         &mut mem.poly_mem,
     );
 
@@ -126,9 +150,10 @@ fn construct_proof(
 
 #[test]
 fn test_encode() {
-    let dimension = 80;
+    let dimension = 8;
     let mut mem = ClientMemory::new(dimension).unwrap();
     let mut share = vector_with_length(share_length(dimension));
+    share[0] = 1.into();
 
-    encode(dimension, &mut share, &mut mem);
+    mem.encode(&mut share);
 }

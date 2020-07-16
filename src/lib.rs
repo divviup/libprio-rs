@@ -1,8 +1,8 @@
-mod client;
-mod finite_field;
+pub mod client;
+pub mod finite_field;
 mod polynomial;
-mod server;
-mod util;
+pub mod server;
+pub mod util;
 
 #[cfg(test)]
 mod tests {
