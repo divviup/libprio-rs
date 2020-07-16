@@ -65,7 +65,7 @@ impl Server {
         if is_valid {
             // add to the accumulator
             for (i, a) in self.accumulator.iter_mut().enumerate() {
-                *a = *a + share[i];
+                *a += share[i];
             }
         }
 

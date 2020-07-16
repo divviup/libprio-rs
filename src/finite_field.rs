@@ -13,6 +13,12 @@ impl std::ops::Add for Field {
     }
 }
 
+impl std::ops::AddAssign for Field {
+    fn add_assign(&mut self, rhs: Self) {
+        *self = *self + rhs;
+    }
+}
+
 impl std::ops::Sub for Field {
     type Output = Field;
 
@@ -28,6 +34,12 @@ impl std::ops::Sub for Field {
     }
 }
 
+impl std::ops::SubAssign for Field {
+    fn sub_assign(&mut self, rhs: Self) {
+        *self = *self - rhs;
+    }
+}
+
 impl std::ops::Mul for Field {
     type Output = Field;
 
@@ -40,12 +52,24 @@ impl std::ops::Mul for Field {
     }
 }
 
+impl std::ops::MulAssign for Field {
+    fn mul_assign(&mut self, rhs: Self) {
+        *self = *self * rhs;
+    }
+}
+
 impl std::ops::Div for Field {
     type Output = Field;
 
     #[allow(clippy::suspicious_arithmetic_impl)]
     fn div(self, rhs: Self) -> Self {
         self * rhs.inv()
+    }
+}
+
+impl std::ops::DivAssign for Field {
+    fn div_assign(&mut self, rhs: Self) {
+        *self = *self / rhs;
     }
 }
 
@@ -58,10 +82,10 @@ impl Field {
         while exp > 0 {
             while (exp & 1) == 0 {
                 exp /= 2;
-                base = base * base;
+                base *= base;
             }
             exp -= 1;
-            result = result * base;
+            result *= base;
         }
         result
     }

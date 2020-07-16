@@ -80,7 +80,7 @@ fn fft_recurse(
     // Recurse on the second half
     for i in 0..half_n {
         y_sub_first[i] = ys[i] - ys[i + half_n];
-        y_sub_first[i] = y_sub_first[i] * roots[i];
+        y_sub_first[i] *= roots[i];
     }
     fft_recurse(
         &mut tmp_first,
@@ -137,7 +137,7 @@ fn fft_interpolate_raw(
     if invert {
         let n_inverse = Field::from(n_points as u32).inv();
         for i in 0..n_points {
-            out[i] = out[i] * n_inverse;
+            out[i] *= n_inverse;
         }
     }
 }
@@ -157,8 +157,8 @@ pub fn poly_horner_eval(poly: &[Field], eval_at: Field, len: usize) -> Field {
     let mut result = poly[len - 1];
 
     for i in (0..(len - 1)).rev() {
-        result = result * eval_at;
-        result = result + poly[i];
+        result *= eval_at;
+        result += poly[i];
     }
 
     result

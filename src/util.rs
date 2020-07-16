@@ -81,7 +81,7 @@ pub fn secret_share(share: &mut [Field]) -> Vec<Field> {
     }
 
     for (f1, f2) in share.iter_mut().zip(share2.iter()) {
-        *f1 = *f1 - *f2;
+        *f1 -= *f2;
     }
 
     share2
