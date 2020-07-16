@@ -87,9 +87,9 @@ impl Server {
 }
 
 pub struct VerificationMessage {
-    f_r: Field,
-    g_r: Field,
-    h_r: Field,
+    pub f_r: Field,
+    pub g_r: Field,
+    pub h_r: Field,
 }
 
 pub fn generate_verification_message(
