@@ -128,48 +128,54 @@ impl From<Field> for u32 {
     }
 }
 
+impl PartialEq<u32> for Field {
+    fn eq(&self, rhs: &u32) -> bool {
+        self.0 == *rhs
+    }
+}
+
 #[test]
 fn test_arithmetic() {
     use rand::prelude::*;
     // add
-    assert_eq!(Field(MODULUS - 1) + Field(1), 0.into());
-    assert_eq!(Field(MODULUS - 2) + Field(2), 0.into());
-    assert_eq!(Field(MODULUS - 2) + Field(3), 1.into());
-    assert_eq!(Field(1) + Field(1), 2.into());
-    assert_eq!(Field(2) + Field(MODULUS), 2.into());
-    assert_eq!(Field(3) + Field(MODULUS - 1), 2.into());
+    assert_eq!(Field(MODULUS - 1) + Field(1), 0);
+    assert_eq!(Field(MODULUS - 2) + Field(2), 0);
+    assert_eq!(Field(MODULUS - 2) + Field(3), 1);
+    assert_eq!(Field(1) + Field(1), 2);
+    assert_eq!(Field(2) + Field(MODULUS), 2);
+    assert_eq!(Field(3) + Field(MODULUS - 1), 2);
 
     // sub
-    assert_eq!(Field(0) - Field(1), (MODULUS - 1).into());
-    assert_eq!(Field(1) - Field(2), (MODULUS - 1).into());
-    assert_eq!(Field(15) - Field(3), 12.into());
-    assert_eq!(Field(1) - Field(1), 0.into());
-    assert_eq!(Field(2) - Field(MODULUS), 2.into());
-    assert_eq!(Field(3) - Field(MODULUS - 1), 4.into());
+    assert_eq!(Field(0) - Field(1), MODULUS - 1);
+    assert_eq!(Field(1) - Field(2), MODULUS - 1);
+    assert_eq!(Field(15) - Field(3), 12);
+    assert_eq!(Field(1) - Field(1), 0);
+    assert_eq!(Field(2) - Field(MODULUS), 2);
+    assert_eq!(Field(3) - Field(MODULUS - 1), 4);
 
     // add + sub
     for _ in 0..100 {
         let f = Field::from(random::<u32>());
         let g = Field::from(random::<u32>());
-        assert_eq!(f + g - f - g, 0.into());
+        assert_eq!(f + g - f - g, 0);
         assert_eq!(f + g - g, f);
         assert_eq!(f + g - f, g);
     }
 
     // mul
-    assert_eq!(Field(35) * Field(123), 4305.into());
-    assert_eq!(Field(1) * Field(MODULUS), 0.into());
-    assert_eq!(Field(0) * Field(123), 0.into());
-    assert_eq!(Field(123) * Field(0), 0.into());
-    assert_eq!(Field(123123123) * Field(123123123), 1237630077.into());
+    assert_eq!(Field(35) * Field(123), 4305);
+    assert_eq!(Field(1) * Field(MODULUS), 0);
+    assert_eq!(Field(0) * Field(123), 0);
+    assert_eq!(Field(123) * Field(0), 0);
+    assert_eq!(Field(123123123) * Field(123123123), 1237630077);
 
     // div
-    assert_eq!(Field(35) / Field(5), 7.into());
-    assert_eq!(Field(35) / Field(0), 0.into());
-    assert_eq!(Field(0) / Field(5), 0.into());
-    assert_eq!(Field(1237630077) / Field(123123123), 123123123.into());
+    assert_eq!(Field(35) / Field(5), 7);
+    assert_eq!(Field(35) / Field(0), 0);
+    assert_eq!(Field(0) / Field(5), 0);
+    assert_eq!(Field(1237630077) / Field(123123123), 123123123);
 
-    assert_eq!(Field(0).inv(), 0.into());
+    assert_eq!(Field(0).inv(), 0);
 
     // mul and div
     let uniform = rand::distributions::Uniform::from(1..MODULUS);
@@ -177,12 +183,12 @@ fn test_arithmetic() {
     for _ in 0..100 {
         // non-zero element
         let f = Field(uniform.sample(&mut rng));
-        assert_eq!(f * f.inv(), 1.into());
-        assert_eq!(f.inv() * f, 1.into());
+        assert_eq!(f * f.inv(), 1);
+        assert_eq!(f.inv() * f, 1);
     }
 
     // pow
-    assert_eq!(Field(2).pow(3.into()), 8.into());
-    assert_eq!(Field(3).pow(9.into()), 19683.into());
-    assert_eq!(Field(51).pow(27.into()), 3760729523.into());
+    assert_eq!(Field(2).pow(3.into()), 8);
+    assert_eq!(Field(3).pow(9.into()), 19683);
+    assert_eq!(Field(51).pow(27.into()), 3760729523);
 }

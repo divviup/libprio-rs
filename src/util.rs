@@ -115,7 +115,7 @@ mod tests {
         let mut share = vec![Field::from(0); len];
         let unpacked = unpack_share_mut(&mut share, dim).unwrap();
         *unpacked.f0 = Field::from(12);
-        assert_eq!(share[dim], 12.into());
+        assert_eq!(share[dim], 12);
     }
 
     #[test]

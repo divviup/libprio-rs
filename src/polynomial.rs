@@ -182,9 +182,9 @@ fn test_roots() {
     let roots_inv = fft_get_roots(count, true);
 
     for i in 0..count {
-        assert_eq!(roots[i] * roots_inv[i], 1.into());
-        assert_eq!(roots[i].pow(Field::from(count as u32)), 1.into());
-        assert_eq!(roots_inv[i].pow(Field::from(count as u32)), 1.into());
+        assert_eq!(roots[i] * roots_inv[i], 1);
+        assert_eq!(roots[i].pow(Field::from(count as u32)), 1);
+        assert_eq!(roots_inv[i].pow(Field::from(count as u32)), 1);
     }
 }
 
@@ -195,10 +195,10 @@ fn test_horner_eval() {
     poly[1] = 1.into();
     poly[2] = 5.into();
     // 5*3^2 + 3 + 2 = 50
-    assert_eq!(poly_horner_eval(&poly, 3.into(), 3), 50.into());
+    assert_eq!(poly_horner_eval(&poly, 3.into(), 3), 50);
     poly[3] = 4.into();
     // 4*3^3 + 5*3^2 + 3 + 2 = 158
-    assert_eq!(poly_horner_eval(&poly, 3.into(), 4), 158.into());
+    assert_eq!(poly_horner_eval(&poly, 3.into(), 4), 158);
 }
 
 #[test]

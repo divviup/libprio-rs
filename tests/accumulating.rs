@@ -47,9 +47,5 @@ fn accumulation() {
     let total2 = server2.total_shares();
 
     let reconstructed = libprio_rs::util::reconstruct_shares(total1, total2).unwrap();
-    let reconstructed_u32 = reconstructed
-        .iter()
-        .map(|x| u32::from(*x))
-        .collect::<Vec<u32>>();
-    assert_eq!(reconstructed_u32, reference_count);
+    assert_eq!(reconstructed, reference_count);
 }
