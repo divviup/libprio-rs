@@ -1,6 +1,7 @@
 pub mod client;
 pub mod finite_field;
 mod polynomial;
+mod prng;
 pub mod server;
 pub mod util;
 
