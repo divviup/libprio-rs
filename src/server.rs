@@ -8,7 +8,7 @@ pub struct ValidationMemory {
     points_f: Vec<Field>,
     points_g: Vec<Field>,
     points_h: Vec<Field>,
-    poly_mem: PolyTempMemory,
+    poly_mem: PolyAuxMemory,
 }
 
 impl ValidationMemory {
@@ -18,7 +18,7 @@ impl ValidationMemory {
             points_f: vector_with_length(n),
             points_g: vector_with_length(n),
             points_h: vector_with_length(2 * n),
-            poly_mem: PolyTempMemory::new(2 * n),
+            poly_mem: PolyAuxMemory::new(n),
         }
     }
 }
@@ -44,7 +44,7 @@ impl Server {
         if self.is_first_server {
             util::deserialize(share)
         } else {
-            let len = util::share_length(self.dimension);
+            let len = util::proof_length(self.dimension);
             prng::extract_share_from_seed(len, share)
         }
     }
@@ -89,7 +89,7 @@ impl Server {
     pub fn choose_eval_at(&self) -> Field {
         loop {
             let eval_at = Field::from(rand::random::<u32>());
-            if !self.validation_mem.poly_mem.roots.contains(&eval_at) {
+            if !self.validation_mem.poly_mem.roots_2n.contains(&eval_at) {
                 break eval_at;
             }
         }
@@ -109,7 +109,7 @@ pub fn generate_verification_message(
     is_first_server: bool,
     mem: &mut ValidationMemory,
 ) -> Option<VerificationMessage> {
-    let unpacked = unpack_share(share, dimension)?;
+    let unpacked = unpack_proof(share, dimension)?;
     let proof_length = 2 * (dimension + 1).next_power_of_two();
 
     // set zero terms
@@ -122,7 +122,7 @@ pub fn generate_verification_message(
         mem.points_f[i + 1] = *x;
 
         if is_first_server {
-            // only one server needs to subtract one
+            // only one server needs to subtract one for point_g
             mem.points_g[i + 1] = *x - 1.into();
         } else {
             mem.points_g[i + 1] = *x;
@@ -141,21 +141,21 @@ pub fn generate_verification_message(
     // evaluate polynomials at random point
     let f_r = poly_interpret_eval(
         &mem.points_f,
-        &mem.poly_mem.roots_half_inverted,
+        &mem.poly_mem.roots_n_inverted,
         eval_at,
         &mut mem.poly_mem.coeffs,
         &mut mem.poly_mem.fft_memory,
     );
     let g_r = poly_interpret_eval(
         &mem.points_g,
-        &mem.poly_mem.roots_half_inverted,
+        &mem.poly_mem.roots_n_inverted,
         eval_at,
         &mut mem.poly_mem.coeffs,
         &mut mem.poly_mem.fft_memory,
     );
     let h_r = poly_interpret_eval(
         &mem.points_h,
-        &mem.poly_mem.roots_inverted,
+        &mem.poly_mem.roots_2n_inverted,
         eval_at,
         &mut mem.poly_mem.coeffs,
         &mut mem.poly_mem.fft_memory,
@@ -181,16 +181,16 @@ mod tests {
     #[test]
     fn test_validation() {
         let dim = 8;
-        let share_u32: Vec<u32> = vec![
+        let proof_u32: Vec<u32> = vec![
             1, 0, 0, 0, 0, 0, 0, 0, 2052337230, 3217065186, 1886032198, 2533724497, 397524722,
             3820138372, 1535223968, 4291254640, 3565670552, 2447741959, 163741941, 335831680,
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut share1_field: Vec<Field> = share_u32.iter().map(|x| Field::from(*x)).collect();
-        let share2 = prng::secret_share(&mut share1_field);
+        let mut proof: Vec<Field> = proof_u32.iter().map(|x| Field::from(*x)).collect();
+        let share2 = prng::secret_share(&mut proof);
 
-        let share1 = serialize(&share1_field);
+        let share1 = serialize(&proof);
 
         let mut server1 = Server::new(dim, true);
         let mut server2 = Server::new(dim, false);

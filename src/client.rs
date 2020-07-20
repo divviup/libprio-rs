@@ -2,31 +2,31 @@ use crate::finite_field::*;
 use crate::polynomial::*;
 use crate::util::*;
 
-pub struct ClientMemory {
+pub struct Client {
     dimension: usize,
     points_f: Vec<Field>,
     points_g: Vec<Field>,
     evals_f: Vec<Field>,
     evals_g: Vec<Field>,
-    poly_mem: PolyTempMemory,
+    poly_mem: PolyAuxMemory,
 }
 
-impl ClientMemory {
+impl Client {
     pub fn new(dimension: usize) -> Option<Self> {
         let n = (dimension + 1).next_power_of_two();
 
         if 2 * n > N_ROOTS as usize {
-            // too many elements for this field size
+            // too many elements for this field, not enough roots of unity
             return None;
         }
 
-        Some(ClientMemory {
+        Some(Client {
             dimension,
             points_f: vector_with_length(n),
             points_g: vector_with_length(n),
             evals_f: vector_with_length(2 * n),
             evals_g: vector_with_length(2 * n),
-            poly_mem: PolyTempMemory::new(2 * n),
+            poly_mem: PolyAuxMemory::new(n),
         })
     }
 
@@ -41,9 +41,9 @@ impl ClientMemory {
     where
         F: FnOnce(&mut [Field]),
     {
-        let mut data_and_proof = vector_with_length(share_length(self.dimension));
+        let mut proof = vector_with_length(proof_length(self.dimension));
         // unpack one long vector to different subparts
-        let mut unpacked = unpack_share_mut(&mut data_and_proof, self.dimension).unwrap();
+        let mut unpacked = unpack_proof_mut(&mut proof, self.dimension).unwrap();
         // initialize the data part
         init_function(&mut unpacked.data);
         // fill in the rest
@@ -57,30 +57,30 @@ impl ClientMemory {
             self,
         );
 
-        // use prng to share the
-        let share2 = crate::prng::secret_share(&mut data_and_proof);
-        let share1 = serialize(&data_and_proof);
+        // use prng to share the proof: share2 is the PRNG seed, and proof is mutated in place
+        let share2 = crate::prng::secret_share(&mut proof);
+        let share1 = serialize(&proof);
         (share1, share2)
     }
 }
 
 pub fn encode_simple(data: &[Field]) -> Option<(Vec<u8>, Vec<u8>)> {
     let dimension = data.len();
-    let mut client_memory = ClientMemory::new(dimension)?;
+    let mut client_memory = Client::new(dimension)?;
     Some(client_memory.encode_simple(data))
 }
 
-fn poly_interpolate_eval_2n(
+fn interpolate_and_evaluate_at_2n(
     n: usize,
     points_in: &[Field],
     evals_out: &mut [Field],
-    mem: &mut PolyTempMemory,
+    mem: &mut PolyAuxMemory,
 ) {
     // interpolate through roots of unity
     poly_fft(
         &mut mem.coeffs,
         points_in,
-        &mem.roots_half_inverted,
+        &mem.roots_n_inverted,
         n,
         true,
         &mut mem.fft_memory,
@@ -89,7 +89,7 @@ fn poly_interpolate_eval_2n(
     poly_fft(
         evals_out,
         &mem.coeffs,
-        &mem.roots,
+        &mem.roots_2n,
         2 * n,
         false,
         &mut mem.fft_memory,
@@ -103,9 +103,9 @@ fn construct_proof(
     g0: &mut Field,
     h0: &mut Field,
     points_h_packed: &mut [Field],
-    mem: &mut ClientMemory,
+    mem: &mut Client,
 ) {
-    let proof_length = 2 * (dimension + 1).next_power_of_two();
+    let n = (dimension + 1).next_power_of_two();
 
     // set zero terms to random
     *f0 = Field::from(rand::random::<u32>());
@@ -124,24 +124,14 @@ fn construct_proof(
     }
 
     // interpolate and evaluate at roots of unity
-    poly_interpolate_eval_2n(
-        proof_length / 2,
-        &mem.points_f,
-        &mut mem.evals_f,
-        &mut mem.poly_mem,
-    );
-    poly_interpolate_eval_2n(
-        proof_length / 2,
-        &mem.points_g,
-        &mut mem.evals_g,
-        &mut mem.poly_mem,
-    );
+    interpolate_and_evaluate_at_2n(n, &mem.points_f, &mut mem.evals_f, &mut mem.poly_mem);
+    interpolate_and_evaluate_at_2n(n, &mem.points_g, &mut mem.evals_g, &mut mem.poly_mem);
 
     // calculate the proof polynomial as evals_f(r) * evals_g(r)
     // only add non-zero points
     let mut j: usize = 0;
     let mut i: usize = 1;
-    while i < proof_length {
+    while i < 2 * n {
         points_h_packed[j] = mem.evals_f[i] * mem.evals_g[i];
         j += 1;
         i += 2;

@@ -23,7 +23,7 @@ fn tweaks(tweak: Tweak) {
     let mut server1 = Server::new(dim, true);
     let mut server2 = Server::new(dim, false);
 
-    let mut client_mem = ClientMemory::new(dim).unwrap();
+    let mut client_mem = Client::new(dim).unwrap();
 
     // all zero data
     let mut data = vector_with_length(dim);
@@ -35,7 +35,7 @@ fn tweaks(tweak: Tweak) {
     let (share1_original, share2) = client_mem.encode_simple(&data);
 
     let mut share1_field = deserialize(&share1_original);
-    let unpacked_share1 = unpack_share_mut(&mut share1_field, dim).unwrap();
+    let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
     let one = Field::from(1);
 

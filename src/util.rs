@@ -4,11 +4,12 @@ pub fn vector_with_length(len: usize) -> Vec<Field> {
     vec![Field::from(0); len]
 }
 
-pub fn share_length(dimension: usize) -> usize {
+pub fn proof_length(dimension: usize) -> usize {
+    // number of data items + number of zero terms + N
     dimension + 3 + (dimension + 1).next_power_of_two()
 }
 
-pub struct UnpackedShare<'a> {
+pub struct UnpackedProof<'a> {
     pub data: &'a [Field],
     pub f0: &'a Field,
     pub g0: &'a Field,
@@ -16,7 +17,7 @@ pub struct UnpackedShare<'a> {
     pub points_h_packed: &'a [Field],
 }
 
-pub struct UnpackedShareMut<'a> {
+pub struct UnpackedProofMut<'a> {
     pub data: &'a mut [Field],
     pub f0: &'a mut Field,
     pub g0: &'a mut Field,
@@ -24,16 +25,16 @@ pub struct UnpackedShareMut<'a> {
     pub points_h_packed: &'a mut [Field],
 }
 
-pub fn unpack_share(share: &[Field], dimension: usize) -> Option<UnpackedShare> {
-    // check the share length
-    if share.len() != share_length(dimension) {
+pub fn unpack_proof(proof: &[Field], dimension: usize) -> Option<UnpackedProof> {
+    // check the proof length
+    if proof.len() != proof_length(dimension) {
         return None;
     }
     // split share into components
-    let (data, rest) = share.split_at(dimension);
+    let (data, rest) = proof.split_at(dimension);
     let (zero_terms, points_h_packed) = rest.split_at(3);
     if let [f0, g0, h0] = zero_terms {
-        let unpacked = UnpackedShare {
+        let unpacked = UnpackedProof {
             data,
             f0,
             g0,
@@ -46,16 +47,16 @@ pub fn unpack_share(share: &[Field], dimension: usize) -> Option<UnpackedShare> 
     }
 }
 
-pub fn unpack_share_mut(share: &mut [Field], dimension: usize) -> Option<UnpackedShareMut> {
+pub fn unpack_proof_mut(proof: &mut [Field], dimension: usize) -> Option<UnpackedProofMut> {
     // check the share length
-    if share.len() != share_length(dimension) {
+    if proof.len() != proof_length(dimension) {
         return None;
     }
     // split share into components
-    let (data, rest) = share.split_at_mut(dimension);
+    let (data, rest) = proof.split_at_mut(dimension);
     let (zero_terms, points_h_packed) = rest.split_at_mut(3);
     if let [f0, g0, h0] = zero_terms {
-        let unpacked = UnpackedShareMut {
+        let unpacked = UnpackedProofMut {
             data,
             f0,
             g0,
@@ -94,25 +95,6 @@ pub fn deserialize(data: &[u8]) -> Vec<Field> {
     vec
 }
 
-pub fn secret_share(share: &mut [Field]) -> Vec<Field> {
-    use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let mut random = vec![0u32; share.len()];
-    let mut share2 = vector_with_length(share.len());
-
-    rng.fill(&mut random[..]);
-
-    for (r, f) in random.iter().zip(share2.iter_mut()) {
-        *f = Field::from(*r);
-    }
-
-    for (f1, f2) in share.iter_mut().zip(share2.iter()) {
-        *f1 -= *f2;
-    }
-
-    share2
-}
-
 pub fn reconstruct_shares(share1: &[Field], share2: &[Field]) -> Option<Vec<Field>> {
     if share1.len() != share2.len() {
         return None;
@@ -133,13 +115,33 @@ pub fn reconstruct_shares(share1: &[Field], share2: &[Field]) -> Option<Vec<Fiel
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn secret_share(share: &mut [Field]) -> Vec<Field> {
+        use rand::Rng;
+        let mut rng = rand::thread_rng();
+        let mut random = vec![0u32; share.len()];
+        let mut share2 = vector_with_length(share.len());
+
+        rng.fill(&mut random[..]);
+
+        for (r, f) in random.iter().zip(share2.iter_mut()) {
+            *f = Field::from(*r);
+        }
+
+        for (f1, f2) in share.iter_mut().zip(share2.iter()) {
+            *f1 -= *f2;
+        }
+
+        share2
+    }
+
     #[test]
     fn test_unpack_share() {
         let dim = 15;
-        let len = share_length(dim);
+        let len = proof_length(dim);
 
         let mut share = vec![Field::from(0); len];
-        let unpacked = unpack_share_mut(&mut share, dim).unwrap();
+        let unpacked = unpack_proof_mut(&mut share, dim).unwrap();
         *unpacked.f0 = Field::from(12);
         assert_eq!(share[dim], 12);
     }

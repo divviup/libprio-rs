@@ -13,7 +13,7 @@ fn accumulation() {
     let mut server1 = Server::new(dim, true);
     let mut server2 = Server::new(dim, false);
 
-    let mut client_mem = ClientMemory::new(dim).unwrap();
+    let mut client_mem = Client::new(dim).unwrap();
 
     use rand::Rng;
     let mut rng = rand::thread_rng();
