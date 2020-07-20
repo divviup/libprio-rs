@@ -68,6 +68,32 @@ pub fn unpack_share_mut(share: &mut [Field], dimension: usize) -> Option<Unpacke
     }
 }
 
+pub fn serialize(data: &[Field]) -> Vec<u8> {
+    let field_size = std::mem::size_of::<Field>();
+    let mut vec = Vec::with_capacity(data.len() * field_size);
+
+    for elem in data.iter() {
+        let int = u32::from(*elem);
+        vec.extend(int.to_le_bytes().iter());
+    }
+
+    vec
+}
+
+pub fn deserialize(data: &[u8]) -> Vec<Field> {
+    let field_size = std::mem::size_of::<Field>();
+
+    let mut vec = Vec::with_capacity(data.len() / field_size);
+    use std::convert::TryInto;
+
+    for chunk in data.chunks_exact(field_size) {
+        let integer = u32::from_le_bytes(chunk.try_into().unwrap());
+        vec.push(Field::from(integer));
+    }
+
+    vec
+}
+
 pub fn secret_share(share: &mut [Field]) -> Vec<Field> {
     use rand::Rng;
     let mut rng = rand::thread_rng();
@@ -130,5 +156,13 @@ mod tests {
 
         let reconstructed = reconstruct_shares(&share1, &share2).unwrap();
         assert_eq!(reconstructed, original_data);
+    }
+
+    #[test]
+    fn serialization() {
+        let field = [Field::from(1), Field::from(0x99997)];
+        let bytes = serialize(&field);
+        let field_deserialized = deserialize(&bytes);
+        assert_eq!(field_deserialized, field);
     }
 }

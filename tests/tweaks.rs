@@ -32,9 +32,10 @@ fn tweaks(tweak: Tweak) {
         data[0] = Field::from(2);
     }
 
-    let (mut share1, share2) = client_mem.encode_simple(&data);
+    let (share1_original, share2) = client_mem.encode_simple(&data);
 
-    let unpacked_share1 = unpack_share_mut(&mut share1, dim).unwrap();
+    let mut share1_field = deserialize(&share1_original);
+    let unpacked_share1 = unpack_share_mut(&mut share1_field, dim).unwrap();
 
     let one = Field::from(1);
 
@@ -47,10 +48,13 @@ fn tweaks(tweak: Tweak) {
         _ => (),
     };
 
+    // reserialize altered share1
+    let share1_modified = serialize(&share1_field);
+
     let eval_at = server1.choose_eval_at();
 
     let mut v1 = server1
-        .generate_verification_message(eval_at, &share1)
+        .generate_verification_message(eval_at, &share1_modified)
         .unwrap();
     let v2 = server2
         .generate_verification_message(eval_at, &share2)
@@ -67,7 +71,10 @@ fn tweaks(tweak: Tweak) {
         Tweak::None => true,
         _ => false,
     };
-    assert_eq!(server1.aggregate(&share1, &v1, &v2), should_be_valid);
+    assert_eq!(
+        server1.aggregate(&share1_modified, &v1, &v2),
+        should_be_valid
+    );
     assert_eq!(server2.aggregate(&share2, &v1, &v2), should_be_valid);
 }
 

@@ -14,7 +14,9 @@ pub struct ClientMemory {
 impl ClientMemory {
     pub fn new(dimension: usize) -> Option<Self> {
         let n = (dimension + 1).next_power_of_two();
+
         if 2 * n > N_ROOTS as usize {
+            // too many elements for this field size
             return None;
         }
 
@@ -28,27 +30,23 @@ impl ClientMemory {
         })
     }
 
-    pub fn encode_simple(&mut self, data: &[Field]) -> (Vec<Field>, Vec<Field>) {
+    pub fn encode_simple(&mut self, data: &[Field]) -> (Vec<u8>, Vec<u8>) {
         let copy_data = |share_data: &mut [Field]| {
             share_data[..].clone_from_slice(data);
         };
         self.encode_with(copy_data)
     }
 
-    pub fn encode_with<F>(&mut self, init_function: F) -> (Vec<Field>, Vec<Field>)
+    pub fn encode_with<F>(&mut self, init_function: F) -> (Vec<u8>, Vec<u8>)
     where
         F: FnOnce(&mut [Field]),
     {
-        let mut share = vector_with_length(share_length(self.dimension));
-        let mut unpacked = unpack_share_mut(&mut share, self.dimension).unwrap();
+        let mut data_and_proof = vector_with_length(share_length(self.dimension));
+        // unpack one long vector to different subparts
+        let mut unpacked = unpack_share_mut(&mut data_and_proof, self.dimension).unwrap();
+        // initialize the data part
         init_function(&mut unpacked.data);
-        let share2 = self.encode(&mut share);
-        (share, share2)
-    }
-
-    fn encode(&mut self, share: &mut [Field]) -> Vec<Field> {
-        let mut unpacked = unpack_share_mut(share, self.dimension).unwrap();
-
+        // fill in the rest
         construct_proof(
             &unpacked.data,
             self.dimension,
@@ -58,16 +56,18 @@ impl ClientMemory {
             &mut unpacked.points_h_packed,
             self,
         );
-        secret_share(share)
+
+        // use prng to share the
+        let share2 = crate::prng::secret_share(&mut data_and_proof);
+        let share1 = serialize(&data_and_proof);
+        (share1, share2)
     }
 }
 
-pub fn encode_simple(data: &[Field]) -> Option<(Vec<Field>, Vec<Field>)> {
+pub fn encode_simple(data: &[Field]) -> Option<(Vec<u8>, Vec<u8>)> {
     let dimension = data.len();
     let mut client_memory = ClientMemory::new(dimension)?;
-    let mut share = vector_with_length(share_length(dimension));
-    let share2 = client_memory.encode(&mut share);
-    Some((share, share2))
+    Some(client_memory.encode_simple(data))
 }
 
 fn poly_interpolate_eval_2n(
@@ -150,10 +150,11 @@ fn construct_proof(
 
 #[test]
 fn test_encode() {
-    let dimension = 8;
-    let mut mem = ClientMemory::new(dimension).unwrap();
-    let mut share = vector_with_length(share_length(dimension));
-    share[0] = 1.into();
-
-    mem.encode(&mut share);
+    let data_u32 = [0u32, 1, 0, 1, 1, 0, 0, 0, 1];
+    let data = data_u32
+        .iter()
+        .map(|x| Field::from(*x))
+        .collect::<Vec<Field>>();
+    let encoded_shares = encode_simple(&data);
+    assert_eq!(encoded_shares.is_some(), true);
 }

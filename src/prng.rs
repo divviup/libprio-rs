@@ -4,6 +4,9 @@ use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use aes_ctr::Aes128Ctr;
 
+const BLOCK_SIZE: usize = 16;
+pub const SEED_LENGTH: usize = BLOCK_SIZE;
+
 pub fn secret_share(share1: &mut [Field]) -> Vec<u8> {
     let field_size = std::mem::size_of::<Field>();
     // get prng array
@@ -21,6 +24,7 @@ pub fn secret_share(share1: &mut [Field]) -> Vec<u8> {
 }
 
 pub fn extract_share_from_seed(length: usize, seed: &[u8]) -> Vec<Field> {
+    assert_eq!(seed.len(), SEED_LENGTH);
     let field_size = std::mem::size_of::<Field>();
     let data = random_data_from_seed(seed, length * field_size);
 
@@ -36,7 +40,7 @@ pub fn extract_share_from_seed(length: usize, seed: &[u8]) -> Vec<Field> {
 }
 
 fn random_data_and_seed(length: usize) -> (Vec<u8>, Vec<u8>) {
-    let mut seed = vec![0u8; 16];
+    let mut seed = vec![0u8; SEED_LENGTH];
     use rand::RngCore;
     rand::thread_rng().fill_bytes(&mut seed);
     let data = random_data_from_seed(&seed, length);
@@ -44,7 +48,7 @@ fn random_data_and_seed(length: usize) -> (Vec<u8>, Vec<u8>) {
 }
 
 fn random_data_from_seed(seed: &[u8], length: usize) -> Vec<u8> {
-    let nonce = GenericArray::from_slice(&[0u8; 16]);
+    let nonce = GenericArray::from_slice(&[0u8; BLOCK_SIZE]);
     let key_array = GenericArray::from_slice(&seed);
     let mut cipher = Aes128Ctr::new(&key_array, &nonce);
     let mut data = vec![0; length];

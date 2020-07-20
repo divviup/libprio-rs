@@ -1,5 +1,7 @@
+use super::prng;
 use crate::finite_field::*;
 use crate::polynomial::*;
+use crate::util;
 use crate::util::*;
 
 pub struct ValidationMemory {
@@ -38,15 +40,25 @@ impl Server {
         }
     }
 
+    fn deserialize_share(&self, share: &[u8]) -> Vec<Field> {
+        if self.is_first_server {
+            util::deserialize(share)
+        } else {
+            let len = util::share_length(self.dimension);
+            prng::extract_share_from_seed(len, share)
+        }
+    }
+
     pub fn generate_verification_message(
         &mut self,
         eval_at: Field,
-        share: &[Field],
+        share: &[u8],
     ) -> Option<VerificationMessage> {
+        let share_field = self.deserialize_share(share);
         generate_verification_message(
             self.dimension,
             eval_at,
-            share,
+            &share_field,
             self.is_first_server,
             &mut self.validation_mem,
         )
@@ -54,18 +66,16 @@ impl Server {
 
     pub fn aggregate(
         &mut self,
-        share: &[Field],
+        share: &[u8],
         v1: &VerificationMessage,
         v2: &VerificationMessage,
     ) -> bool {
-        if share_length(self.dimension) != share.len() {
-            return false;
-        }
+        let share_field = self.deserialize_share(share);
         let is_valid = is_valid_share(v1, v2);
         if is_valid {
             // add to the accumulator
-            for (i, a) in self.accumulator.iter_mut().enumerate() {
-                *a += share[i];
+            for (a, s) in self.accumulator.iter_mut().zip(share_field.iter()) {
+                *a += *s;
             }
         }
 
@@ -177,8 +187,10 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut share1: Vec<Field> = share_u32.iter().map(|x| Field::from(*x)).collect();
-        let share2 = secret_share(&mut share1);
+        let mut share1_field: Vec<Field> = share_u32.iter().map(|x| Field::from(*x)).collect();
+        let share2 = prng::secret_share(&mut share1_field);
+
+        let share1 = serialize(&share1_field);
 
         let mut server1 = Server::new(dim, true);
         let mut server2 = Server::new(dim, false);
