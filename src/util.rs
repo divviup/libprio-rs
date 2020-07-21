@@ -113,10 +113,10 @@ pub fn reconstruct_shares(share1: &[Field], share2: &[Field]) -> Option<Vec<Fiel
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
 
-    fn secret_share(share: &mut [Field]) -> Vec<Field> {
+    pub fn secret_share(share: &mut [Field]) -> Vec<Field> {
         use rand::Rng;
         let mut rng = rand::thread_rng();
         let mut random = vec![0u32; share.len()];

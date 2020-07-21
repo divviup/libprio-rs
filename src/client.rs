@@ -1,3 +1,4 @@
+use crate::encrypt::*;
 use crate::finite_field::*;
 use crate::polynomial::*;
 use crate::util::*;
@@ -9,10 +10,12 @@ pub struct Client {
     evals_f: Vec<Field>,
     evals_g: Vec<Field>,
     poly_mem: PolyAuxMemory,
+    public_key1: PublicKey,
+    public_key2: PublicKey,
 }
 
 impl Client {
-    pub fn new(dimension: usize) -> Option<Self> {
+    pub fn new(dimension: usize, public_key1: PublicKey, public_key2: PublicKey) -> Option<Self> {
         let n = (dimension + 1).next_power_of_two();
 
         if 2 * n > N_ROOTS as usize {
@@ -27,17 +30,19 @@ impl Client {
             evals_f: vector_with_length(2 * n),
             evals_g: vector_with_length(2 * n),
             poly_mem: PolyAuxMemory::new(n),
+            public_key1,
+            public_key2,
         })
     }
 
-    pub fn encode_simple(&mut self, data: &[Field]) -> (Vec<u8>, Vec<u8>) {
+    pub fn encode_simple(&mut self, data: &[Field]) -> Result<(Vec<u8>, Vec<u8>), EncryptError> {
         let copy_data = |share_data: &mut [Field]| {
             share_data[..].clone_from_slice(data);
         };
         self.encode_with(copy_data)
     }
 
-    pub fn encode_with<F>(&mut self, init_function: F) -> (Vec<u8>, Vec<u8>)
+    pub fn encode_with<F>(&mut self, init_function: F) -> Result<(Vec<u8>, Vec<u8>), EncryptError>
     where
         F: FnOnce(&mut [Field]),
     {
@@ -60,14 +65,21 @@ impl Client {
         // use prng to share the proof: share2 is the PRNG seed, and proof is mutated in place
         let share2 = crate::prng::secret_share(&mut proof);
         let share1 = serialize(&proof);
-        (share1, share2)
+        // encrypt shares with respective keys
+        let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
+        let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
+        Ok((encrypted_share1, encrypted_share2))
     }
 }
 
-pub fn encode_simple(data: &[Field]) -> Option<(Vec<u8>, Vec<u8>)> {
+pub fn encode_simple(
+    data: &[Field],
+    public_key1: PublicKey,
+    public_key2: PublicKey,
+) -> Option<(Vec<u8>, Vec<u8>)> {
     let dimension = data.len();
-    let mut client_memory = Client::new(dimension)?;
-    Some(client_memory.encode_simple(data))
+    let mut client_memory = Client::new(dimension, public_key1, public_key2)?;
+    client_memory.encode_simple(data).ok()
 }
 
 fn interpolate_and_evaluate_at_2n(
@@ -140,11 +152,20 @@ fn construct_proof(
 
 #[test]
 fn test_encode() {
+    let pub_key1 = PublicKey::from_base64(
+        "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
+    )
+    .unwrap();
+    let pub_key2 = PublicKey::from_base64(
+        "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=",
+    )
+    .unwrap();
+
     let data_u32 = [0u32, 1, 0, 1, 1, 0, 0, 0, 1];
     let data = data_u32
         .iter()
         .map(|x| Field::from(*x))
         .collect::<Vec<Field>>();
-    let encoded_shares = encode_simple(&data);
+    let encoded_shares = encode_simple(&data, pub_key1, pub_key2);
     assert_eq!(encoded_shares.is_some(), true);
 }

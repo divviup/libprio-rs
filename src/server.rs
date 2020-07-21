@@ -1,6 +1,7 @@
-use super::prng;
+use crate::encrypt::*;
 use crate::finite_field::*;
 use crate::polynomial::*;
+use crate::prng;
 use crate::util;
 use crate::util::*;
 
@@ -28,25 +29,28 @@ pub struct Server {
     is_first_server: bool,
     accumulator: Vec<Field>,
     validation_mem: ValidationMemory,
+    private_key: PrivateKey,
 }
 
 impl Server {
-    pub fn new(dimension: usize, is_first_server: bool) -> Server {
+    pub fn new(dimension: usize, is_first_server: bool, private_key: PrivateKey) -> Server {
         Server {
             dimension,
             is_first_server,
             accumulator: vector_with_length(dimension),
             validation_mem: ValidationMemory::new(dimension),
+            private_key,
         }
     }
 
-    fn deserialize_share(&self, share: &[u8]) -> Vec<Field> {
-        if self.is_first_server {
-            util::deserialize(share)
+    fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<Field>, EncryptError> {
+        let share = decrypt_share(encrypted_share, &self.private_key)?;
+        Ok(if self.is_first_server {
+            util::deserialize(&share)
         } else {
             let len = util::proof_length(self.dimension);
-            prng::extract_share_from_seed(len, share)
-        }
+            prng::extract_share_from_seed(len, &share)
+        })
     }
 
     pub fn generate_verification_message(
@@ -54,7 +58,7 @@ impl Server {
         eval_at: Field,
         share: &[u8],
     ) -> Option<VerificationMessage> {
-        let share_field = self.deserialize_share(share);
+        let share_field = self.deserialize_share(share).ok()?;
         generate_verification_message(
             self.dimension,
             eval_at,
@@ -69,8 +73,8 @@ impl Server {
         share: &[u8],
         v1: &VerificationMessage,
         v2: &VerificationMessage,
-    ) -> bool {
-        let share_field = self.deserialize_share(share);
+    ) -> Result<bool, EncryptError> {
+        let share_field = self.deserialize_share(share)?;
         let is_valid = is_valid_share(v1, v2);
         if is_valid {
             // add to the accumulator
@@ -79,7 +83,7 @@ impl Server {
             }
         }
 
-        is_valid
+        Ok(is_valid)
     }
 
     pub fn total_shares(&self) -> &[Field] {
@@ -188,18 +192,14 @@ mod tests {
         ];
 
         let mut proof: Vec<Field> = proof_u32.iter().map(|x| Field::from(*x)).collect();
-        let share2 = prng::secret_share(&mut proof);
-
-        let share1 = serialize(&proof);
-
-        let mut server1 = Server::new(dim, true);
-        let mut server2 = Server::new(dim, false);
+        let share2 = util::tests::secret_share(&mut proof);
         let eval_at = Field::from(12313);
-        let v1 = server1
-            .generate_verification_message(eval_at, &share1)
-            .unwrap();
-        let v2 = server2
-            .generate_verification_message(eval_at, &share2)
+
+        let mut validation_mem = ValidationMemory::new(dim);
+
+        let v1 =
+            generate_verification_message(dim, eval_at, &proof, true, &mut validation_mem).unwrap();
+        let v2 = generate_verification_message(dim, eval_at, &share2, false, &mut validation_mem)
             .unwrap();
         assert_eq!(is_valid_share(&v1, &v2), true);
     }

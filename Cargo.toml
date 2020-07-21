@@ -11,3 +11,6 @@ license = "MPL-2.0"
 [dependencies]
 rand = "0.7"
 aes-ctr = "0.4.0"
+base64 = "0.12.3"
+ring = "0.16.15"
+aes-gcm = "0.6.0"
