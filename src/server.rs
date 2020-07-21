@@ -1,3 +1,5 @@
+//! Prio server
+
 use crate::encrypt::*;
 use crate::finite_field::*;
 use crate::polynomial::*;
@@ -5,6 +7,7 @@ use crate::prng;
 use crate::util;
 use crate::util::*;
 
+#[derive(Debug)]
 pub struct ValidationMemory {
     points_f: Vec<Field>,
     points_g: Vec<Field>,
@@ -13,7 +16,7 @@ pub struct ValidationMemory {
 }
 
 impl ValidationMemory {
-    fn new(dimension: usize) -> Self {
+    pub fn new(dimension: usize) -> Self {
         let n: usize = (dimension + 1).next_power_of_two();
         ValidationMemory {
             points_f: vector_with_length(n),
@@ -24,6 +27,7 @@ impl ValidationMemory {
     }
 }
 
+#[derive(Debug)]
 pub struct Server {
     dimension: usize,
     is_first_server: bool,
@@ -86,10 +90,16 @@ impl Server {
         Ok(is_valid)
     }
 
+    /// Return the current accumulated shares.
+    ///
+    /// These can be merged together using [`reconstruct_shares`](../util/fn.reconstruct_shares.html).
     pub fn total_shares(&self) -> &[Field] {
         &self.accumulator
     }
 
+    /// Choose a random point for polynomial evaluation
+    ///
+    /// The point returned is not one of the roots used for polynomial evaluation.
     pub fn choose_eval_at(&self) -> Field {
         loop {
             let eval_at = Field::from(rand::random::<u32>());
@@ -100,20 +110,25 @@ impl Server {
     }
 }
 
+/// Verification message only has three field elements
 pub struct VerificationMessage {
+    /// f evaluated at random point
     pub f_r: Field,
+    /// g evaluated at random point
     pub g_r: Field,
+    /// h evaluated at random point
     pub h_r: Field,
 }
 
+/// Given a proof and evaluation point, this constructs the verification message.
 pub fn generate_verification_message(
     dimension: usize,
     eval_at: Field,
-    share: &[Field],
+    proof: &[Field],
     is_first_server: bool,
     mem: &mut ValidationMemory,
 ) -> Option<VerificationMessage> {
-    let unpacked = unpack_proof(share, dimension)?;
+    let unpacked = unpack_proof(proof, dimension)?;
     let proof_length = 2 * (dimension + 1).next_power_of_two();
 
     // set zero terms
@@ -169,6 +184,7 @@ pub fn generate_verification_message(
     Some(vm)
 }
 
+/// Decides if the distributed proof is valid
 pub fn is_valid_share(v1: &VerificationMessage, v2: &VerificationMessage) -> bool {
     // reconstruct f_r, g_r, h_r
     let f_r = v1.f_r + v2.f_r;

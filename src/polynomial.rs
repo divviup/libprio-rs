@@ -1,6 +1,8 @@
 use crate::finite_field::*;
 use crate::util::*;
 
+/// Temporary memory used for FFT
+#[derive(Debug)]
 pub struct PolyFFTTempMemory {
     fft_tmp: Vec<Field>,
     fft_y_sub: Vec<Field>,
@@ -17,6 +19,8 @@ impl PolyFFTTempMemory {
     }
 }
 
+/// Auxiliary memory for polynomial interpolation and evaluation
+#[derive(Debug)]
 pub struct PolyAuxMemory {
     pub roots_2n: Vec<Field>,
     pub roots_2n_inverted: Vec<Field>,
@@ -96,6 +100,7 @@ fn fft_recurse(
     }
 }
 
+/// Calculate `count` number of roots of unity of order `count`
 fn fft_get_roots(count: usize, invert: bool) -> Vec<Field> {
     let mut roots = vec![Field::from(0); count];
     let mut gen: Field = GENERATOR.into();

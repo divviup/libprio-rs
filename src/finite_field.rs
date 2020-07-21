@@ -1,9 +1,17 @@
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+//! Finite field arithmetic over a prime field using a 32bit prime.
+
+/// Newtype wrapper over u32
+///
+/// Implements the arithmetic over the finite prime field
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
 pub struct Field(u32);
 
-pub const MODULUS: u32 = 4293918721; // 2^32 - 2^20 + 1 - a prime
-pub const GENERATOR: u32 = 3925978153; // generator for the multiplicative subgroup
-pub const N_ROOTS: u32 = 1 << 20; // number of primitive roots
+/// Modulus for the field, a FFT friendly prime: 2^32 - 2^20 + 1
+pub const MODULUS: u32 = 4293918721;
+/// Generator for the multiplicative subgroup
+pub(crate) const GENERATOR: u32 = 3925978153;
+/// Number of primitive roots
+pub(crate) const N_ROOTS: u32 = 1 << 20; // number of primitive roots
 
 impl std::ops::Add for Field {
     type Output = Field;
@@ -74,6 +82,7 @@ impl std::ops::DivAssign for Field {
 }
 
 impl Field {
+    /// Modular exponentation
     pub fn pow(self, exp: Self) -> Self {
         // repeated squaring
         let mut base = self;
@@ -90,6 +99,9 @@ impl Field {
         result
     }
 
+    /// Modular inverse
+    ///
+    /// Note: inverse of 0 is defined as 0.
     pub fn inv(self) -> Self {
         // extended Euclidean
         let mut x1: i32 = 1;
@@ -131,6 +143,12 @@ impl From<Field> for u32 {
 impl PartialEq<u32> for Field {
     fn eq(&self, rhs: &u32) -> bool {
         self.0 == *rhs
+    }
+}
+
+impl std::fmt::Display for Field {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

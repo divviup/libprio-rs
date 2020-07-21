@@ -1,14 +1,22 @@
+//! Some utility functions for handling Prio stuff.
+
 use crate::finite_field::Field;
 
+/// Convenience function for initializing fixed sized vectors of Field elements.
 pub fn vector_with_length(len: usize) -> Vec<Field> {
     vec![Field::from(0); len]
 }
 
+/// Returns the number of field elements in the proof for given dimension of data elements
+///
+/// Proof is a vector, where the first `dimension` elements are the data elements,
+/// the next 3 elements are the zero terms for polynomials f, g and h and the remaining elements are non-zero points of h(x).
 pub fn proof_length(dimension: usize) -> usize {
     // number of data items + number of zero terms + N
     dimension + 3 + (dimension + 1).next_power_of_two()
 }
 
+/// Deconstructed proof into subcomponents
 pub struct UnpackedProof<'a> {
     pub data: &'a [Field],
     pub f0: &'a Field,
@@ -17,6 +25,7 @@ pub struct UnpackedProof<'a> {
     pub points_h_packed: &'a [Field],
 }
 
+/// Deconstructed proof into mutable subcomponents
 pub struct UnpackedProofMut<'a> {
     pub data: &'a mut [Field],
     pub f0: &'a mut Field,
@@ -25,6 +34,7 @@ pub struct UnpackedProofMut<'a> {
     pub points_h_packed: &'a mut [Field],
 }
 
+/// Unpacks the proof vector into subcomponents
 pub fn unpack_proof(proof: &[Field], dimension: usize) -> Option<UnpackedProof> {
     // check the proof length
     if proof.len() != proof_length(dimension) {
@@ -47,6 +57,7 @@ pub fn unpack_proof(proof: &[Field], dimension: usize) -> Option<UnpackedProof> 
     }
 }
 
+/// Unpacks a mutable proof vector into mutable subcomponents
 pub fn unpack_proof_mut(proof: &mut [Field], dimension: usize) -> Option<UnpackedProofMut> {
     // check the share length
     if proof.len() != proof_length(dimension) {
@@ -69,6 +80,7 @@ pub fn unpack_proof_mut(proof: &mut [Field], dimension: usize) -> Option<Unpacke
     }
 }
 
+/// Get a byte array from a slice of field elements
 pub fn serialize(data: &[Field]) -> Vec<u8> {
     let field_size = std::mem::size_of::<Field>();
     let mut vec = Vec::with_capacity(data.len() * field_size);
@@ -81,6 +93,7 @@ pub fn serialize(data: &[Field]) -> Vec<u8> {
     vec
 }
 
+/// Get a vector of field elements from a byte slice
 pub fn deserialize(data: &[u8]) -> Vec<Field> {
     let field_size = std::mem::size_of::<Field>();
 
@@ -95,6 +108,9 @@ pub fn deserialize(data: &[u8]) -> Vec<Field> {
     vec
 }
 
+/// Add two Field element arrays together elementwise.
+///
+/// Returns None, when array lengths are not equal.
 pub fn reconstruct_shares(share1: &[Field], share2: &[Field]) -> Option<Vec<Field>> {
     if share1.len() != share2.len() {
         return None;

@@ -1,3 +1,5 @@
+//! Utilities for ECIES encryption / decryption
+
 use aes_gcm::aead::generic_array::typenum::U16;
 use aes_gcm::aead::generic_array::GenericArray;
 use aes_gcm::{AeadInPlace, NewAead};
@@ -6,30 +8,29 @@ type Aes128 = aes_gcm::AesGcm<aes_gcm::aes::Aes128, U16>;
 
 #[derive(Debug)]
 pub enum EncryptError {
-    Base64DecodeError(base64::DecodeError),
+    DecodeBase64Error(base64::DecodeError),
     KeyAgreementError,
     KeyDerivationError,
     EncryptionError,
     DecryptionError,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PublicKey(Vec<u8>);
 
+#[derive(Debug)]
 pub struct PrivateKey(Vec<u8>);
 
 impl PublicKey {
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
-        let keydata =
-            base64::decode(key).map_err(EncryptError::Base64DecodeError)?;
+        let keydata = base64::decode(key).map_err(EncryptError::DecodeBase64Error)?;
         Ok(PublicKey(keydata))
     }
 }
 
 impl PrivateKey {
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
-        let keydata =
-            base64::decode(key).map_err(EncryptError::Base64DecodeError)?;
+        let keydata = base64::decode(key).map_err(EncryptError::DecodeBase64Error)?;
         Ok(PrivateKey(keydata))
     }
 }
@@ -70,6 +71,7 @@ pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptE
 
     let ephemeral_pub =
         agreement::UnparsedPublicKey::new(&agreement::ECDH_P256, empheral_pub_bytes);
+
     let fake_rng = ring::test::rand::FixedSliceRandom {
         bytes: &key.0[65..],
     };

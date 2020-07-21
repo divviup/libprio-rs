@@ -1,4 +1,4 @@
-use super::finite_field::Field;
+use crate::finite_field::Field;
 use aes_ctr::stream_cipher::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;

@@ -1,8 +1,14 @@
+//! Prio client
+
 use crate::encrypt::*;
 use crate::finite_field::*;
 use crate::polynomial::*;
 use crate::util::*;
 
+/// The main object that can be used to create Prio shares
+///
+/// Client is used to create Prio shares.
+#[derive(Debug)]
 pub struct Client {
     dimension: usize,
     points_f: Vec<Field>,
@@ -72,6 +78,7 @@ impl Client {
     }
 }
 
+/// Convenience function if one does not want to reuse [`Client`](struct.Client.html).
 pub fn encode_simple(
     data: &[Field],
     public_key1: PublicKey,
@@ -108,6 +115,10 @@ fn interpolate_and_evaluate_at_2n(
     );
 }
 
+/// Proof construction
+///
+/// Based on Theorem 2.3.3 from Henry Corrigan-Gibbs' dissertation
+/// This constructs the output \pi by doing the necessesary calculations
 fn construct_proof(
     data: &[Field],
     dimension: usize,

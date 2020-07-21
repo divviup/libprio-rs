@@ -6,9 +6,6 @@ mod prng;
 pub mod server;
 pub mod util;
 
-pub use encrypt::PrivateKey;
-pub use encrypt::PublicKey;
-
 #[cfg(test)]
 mod tests {
     #[test]
