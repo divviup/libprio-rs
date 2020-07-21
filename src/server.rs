@@ -47,6 +47,7 @@ impl Server {
         }
     }
 
+    /// Decrypt and deserialize
     fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<Field>, EncryptError> {
         let share = decrypt_share(encrypted_share, &self.private_key)?;
         Ok(if self.is_first_server {
@@ -57,6 +58,7 @@ impl Server {
         })
     }
 
+    /// Generate verification message from encrypted share
     pub fn generate_verification_message(
         &mut self,
         eval_at: Field,
@@ -72,6 +74,7 @@ impl Server {
         )
     }
 
+    /// Add the content of the encrypted share into the accumulator, if the verification messages indicate it as a valid input.
     pub fn aggregate(
         &mut self,
         share: &[u8],
@@ -95,6 +98,15 @@ impl Server {
     /// These can be merged together using [`reconstruct_shares`](../util/fn.reconstruct_shares.html).
     pub fn total_shares(&self) -> &[Field] {
         &self.accumulator
+    }
+
+    /// Merge shares from another server.
+    ///
+    /// This modifies the current accumulator
+    pub fn merge_total_shares(&mut self, other_total_shares: &[Field]) {
+        for (a, o) in self.accumulator.iter_mut().zip(other_total_shares.iter()) {
+            *a += *o;
+        }
     }
 
     /// Choose a random point for polynomial evaluation
