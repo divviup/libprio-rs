@@ -6,6 +6,10 @@ use aes_gcm::{AeadInPlace, NewAead};
 use ring::agreement;
 type Aes128 = aes_gcm::AesGcm<aes_gcm::aes::Aes128, U16>;
 
+pub const PUBLICKEY_LENGTH: usize = 65;
+pub const TAG_LENGTH: usize = 16;
+const KEY_LENGTH: usize = 16;
+
 #[derive(Debug)]
 pub enum EncryptError {
     DecodeBase64Error(base64::DecodeError),
@@ -66,14 +70,17 @@ pub fn encrypt_share(share: &[u8], key: &PublicKey) -> Result<Vec<u8>, EncryptEr
 }
 
 pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptError> {
-    let public_key_length = 2 * (256 / 8) + 1; // 65
-    let empheral_pub_bytes: &[u8] = &share[0..public_key_length];
+    if share.len() < PUBLICKEY_LENGTH + TAG_LENGTH {
+        return Err(EncryptError::DecryptionError);
+    }
+    let empheral_pub_bytes: &[u8] = &share[0..PUBLICKEY_LENGTH];
 
     let ephemeral_pub =
         agreement::UnparsedPublicKey::new(&agreement::ECDH_P256, empheral_pub_bytes);
 
     let fake_rng = ring::test::rand::FixedSliceRandom {
-        bytes: &key.0[65..],
+        // private key consists of the public key + private scalar
+        bytes: &key.0[PUBLICKEY_LENGTH..],
     };
 
     let private_key = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P256, &fake_rng)
@@ -86,10 +93,11 @@ pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptE
         |material| Ok(x963_kdf(material, empheral_pub_bytes)),
     )?;
 
-    let in_out = share[public_key_length..].to_owned();
+    // in_out is the AES-GCM ciphertext+tag, wihtout the ephemeral EC pubkey
+    let in_out = share[PUBLICKEY_LENGTH..].to_owned();
     decrypt_aes_gcm(
-        &symmetric_key_bytes[..16],
-        &symmetric_key_bytes[16..],
+        &symmetric_key_bytes[..KEY_LENGTH],
+        &symmetric_key_bytes[KEY_LENGTH..],
         in_out,
     )
 }
