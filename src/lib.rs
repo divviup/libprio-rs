@@ -1,3 +1,6 @@
+// Copyright (c) 2020 Apple Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 #![warn(missing_docs)]
 
 //! Libprio-rs

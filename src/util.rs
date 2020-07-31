@@ -1,4 +1,7 @@
-//! Some utility functions for handling Prio stuff.
+// Copyright (c) 2020 Apple Inc.
+// SPDX-License-Identifier: MPL-2.0
+
+//! Utility functions for handling Prio stuff.
 
 use crate::finite_field::Field;
 

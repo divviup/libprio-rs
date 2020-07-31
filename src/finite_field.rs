@@ -1,3 +1,6 @@
+// Copyright (c) 2020 Apple Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Finite field arithmetic over a prime field using a 32bit prime.
 
 /// Newtype wrapper over u32

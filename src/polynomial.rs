@@ -1,3 +1,8 @@
+// Copyright (c) 2020 Apple Inc.
+// SPDX-License-Identifier: MPL-2.0
+
+//! Functions for polynomial interpolation and evaluation
+
 use crate::finite_field::*;
 use crate::util::*;
 

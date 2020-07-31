@@ -1,3 +1,6 @@
+// Copyright (c) 2020 Apple Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 //! Utilities for ECIES encryption / decryption
 
 use aes_gcm::aead::generic_array::typenum::U16;

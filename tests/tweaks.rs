@@ -1,3 +1,6 @@
+// Copyright (c) 2020 Apple Inc.
+// SPDX-License-Identifier: MPL-2.0
+
 use libprio_rs::client::*;
 use libprio_rs::encrypt::*;
 use libprio_rs::finite_field::Field;
