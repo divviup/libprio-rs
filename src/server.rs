@@ -7,6 +7,8 @@ use crate::prng;
 use crate::util;
 use crate::util::*;
 
+/// Auxiliary memory for constructing a
+/// [`VerificationMessage`](struct.VerificationMessage.html)
 #[derive(Debug)]
 pub struct ValidationMemory {
     points_f: Vec<Field>,
@@ -16,6 +18,8 @@ pub struct ValidationMemory {
 }
 
 impl ValidationMemory {
+    /// Construct a new ValidationMemory object for validating proof shares of
+    /// length `dimension`.
     pub fn new(dimension: usize) -> Self {
         let n: usize = (dimension + 1).next_power_of_two();
         ValidationMemory {
@@ -27,6 +31,7 @@ impl ValidationMemory {
     }
 }
 
+/// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server {
     dimension: usize,
@@ -37,6 +42,12 @@ pub struct Server {
 }
 
 impl Server {
+    /// Construct a new server instance
+    ///
+    /// Params:
+    ///  * `dimension`: the number of elements in the aggregation vector.
+    ///  * `is_first_server`: only one of the servers should have this true.
+    ///  * `private_key`: the private key for decrypting the share of the proof.
     pub fn new(dimension: usize, is_first_server: bool, private_key: PrivateKey) -> Server {
         Server {
             dimension,
@@ -58,7 +69,12 @@ impl Server {
         })
     }
 
-    /// Generate verification message from encrypted share
+    /// Generate verification message from an encrypted share
+    ///
+    /// This decrypts the share of the proof and constructs the
+    /// [`VerificationMessage`](struct.VerificationMessage.html).
+    /// The `eval_at` field should be generate by
+    /// [choose_eval_at](#method.choose_eval_at).
     pub fn generate_verification_message(
         &mut self,
         eval_at: Field,
@@ -74,7 +90,10 @@ impl Server {
         )
     }
 
-    /// Add the content of the encrypted share into the accumulator, if the verification messages indicate it as a valid input.
+    /// Add the content of the encrypted share into the accumulator
+    ///
+    /// This only changes the accumulator if the verification messages `v1` and
+    /// `v2` indicate that the share passed validation.
     pub fn aggregate(
         &mut self,
         share: &[u8],
@@ -95,7 +114,8 @@ impl Server {
 
     /// Return the current accumulated shares.
     ///
-    /// These can be merged together using [`reconstruct_shares`](../util/fn.reconstruct_shares.html).
+    /// These can be merged together using
+    /// [`reconstruct_shares`](../util/fn.reconstruct_shares.html).
     pub fn total_shares(&self) -> &[Field] {
         &self.accumulator
     }
@@ -111,7 +131,8 @@ impl Server {
 
     /// Choose a random point for polynomial evaluation
     ///
-    /// The point returned is not one of the roots used for polynomial evaluation.
+    /// The point returned is not one of the roots used for polynomial
+    /// evaluation.
     pub fn choose_eval_at(&self) -> Field {
         loop {
             let eval_at = Field::from(rand::random::<u32>());
@@ -122,7 +143,7 @@ impl Server {
     }
 }
 
-/// Verification message only has three field elements
+/// Verification message for proof validation
 pub struct VerificationMessage {
     /// f evaluated at random point
     pub f_r: Field,
@@ -132,7 +153,8 @@ pub struct VerificationMessage {
     pub h_r: Field,
 }
 
-/// Given a proof and evaluation point, this constructs the verification message.
+/// Given a proof and evaluation point, this constructs the verification
+/// message.
 pub fn generate_verification_message(
     dimension: usize,
     eval_at: Field,

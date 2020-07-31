@@ -7,30 +7,42 @@ pub fn vector_with_length(len: usize) -> Vec<Field> {
     vec![Field::from(0); len]
 }
 
-/// Returns the number of field elements in the proof for given dimension of data elements
+/// Returns the number of field elements in the proof for given dimension of
+/// data elements
 ///
-/// Proof is a vector, where the first `dimension` elements are the data elements,
-/// the next 3 elements are the zero terms for polynomials f, g and h and the remaining elements are non-zero points of h(x).
+/// Proof is a vector, where the first `dimension` elements are the data
+/// elements, the next 3 elements are the zero terms for polynomials f, g and h
+/// and the remaining elements are non-zero points of h(x).
 pub fn proof_length(dimension: usize) -> usize {
     // number of data items + number of zero terms + N
     dimension + 3 + (dimension + 1).next_power_of_two()
 }
 
-/// Deconstructed proof into subcomponents
+/// Unpacked proof with subcomponents
 pub struct UnpackedProof<'a> {
+    /// Data
     pub data: &'a [Field],
+    /// Zeroth coefficient of polynomial f
     pub f0: &'a Field,
+    /// Zeroth coefficient of polynomial g
     pub g0: &'a Field,
+    /// Zeroth coefficient of polynomial h
     pub h0: &'a Field,
+    /// Non-zero points of polynomial h
     pub points_h_packed: &'a [Field],
 }
 
-/// Deconstructed proof into mutable subcomponents
+/// Unpacked proof with mutable subcomponents
 pub struct UnpackedProofMut<'a> {
+    /// Data
     pub data: &'a mut [Field],
+    /// Zeroth coefficient of polynomial f
     pub f0: &'a mut Field,
+    /// Zeroth coefficient of polynomial g
     pub g0: &'a mut Field,
+    /// Zeroth coefficient of polynomial h
     pub h0: &'a mut Field,
+    /// Non-zero points of polynomial h
     pub points_h_packed: &'a mut [Field],
 }
 

@@ -6,26 +6,40 @@ use aes_gcm::{AeadInPlace, NewAead};
 use ring::agreement;
 type Aes128 = aes_gcm::AesGcm<aes_gcm::aes::Aes128, U16>;
 
+/// Length of the EC public key (X9.62 format)
 pub const PUBLICKEY_LENGTH: usize = 65;
+/// Length of the AES-GCM tag
 pub const TAG_LENGTH: usize = 16;
+/// Length of the symmetric AES-GCM key
 const KEY_LENGTH: usize = 16;
 
+/// Possible errors from encryption / decryption.
 #[derive(Debug)]
 pub enum EncryptError {
+    /// Base64 decoding error
     DecodeBase64Error(base64::DecodeError),
+    /// Error in ECDH
     KeyAgreementError,
-    KeyDerivationError,
+    /// Buffer for ciphertext was not large enough
     EncryptionError,
+    /// Authentication tags did not match.
     DecryptionError,
+    /// Input ciphertext was too small
+    DecryptionLengthError,
 }
 
+/// NIST P-256, public key in X9.62 uncompressed format
 #[derive(Debug, Clone)]
 pub struct PublicKey(Vec<u8>);
 
+/// NIST P-256, private key
+///
+/// X9.62 uncompressed public key concatenated with the secret scalar.
 #[derive(Debug)]
 pub struct PrivateKey(Vec<u8>);
 
 impl PublicKey {
+    /// Load public key from a base64 encoded X9.62 uncompressed representation.
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
         let keydata = base64::decode(key).map_err(EncryptError::DecodeBase64Error)?;
         Ok(PublicKey(keydata))
@@ -33,12 +47,17 @@ impl PublicKey {
 }
 
 impl PrivateKey {
+    /// Load private key from a base64 encoded string.
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
         let keydata = base64::decode(key).map_err(EncryptError::DecodeBase64Error)?;
         Ok(PrivateKey(keydata))
     }
 }
 
+/// Encrypt a bytestring using the public key
+///
+/// This uses ECIES with X9.63 key derivation function and AES-GCM for the
+/// symmetic encryption and MAC.
 pub fn encrypt_share(share: &[u8], key: &PublicKey) -> Result<Vec<u8>, EncryptError> {
     let rng = ring::rand::SystemRandom::new();
     let ephemeral_priv = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P256, &rng)
@@ -69,9 +88,13 @@ pub fn encrypt_share(share: &[u8], key: &PublicKey) -> Result<Vec<u8>, EncryptEr
     Ok(output)
 }
 
+/// Decrypt a bytestring using the private key
+///
+/// This uses ECIES with X9.63 key derivation function and AES-GCM for the
+/// symmetic encryption and MAC.
 pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptError> {
     if share.len() < PUBLICKEY_LENGTH + TAG_LENGTH {
-        return Err(EncryptError::DecryptionError);
+        return Err(EncryptError::DecryptionLengthError);
     }
     let empheral_pub_bytes: &[u8] = &share[0..PUBLICKEY_LENGTH];
 

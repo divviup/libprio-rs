@@ -21,6 +21,7 @@ pub struct Client {
 }
 
 impl Client {
+    /// Construct a new Prio client
     pub fn new(dimension: usize, public_key1: PublicKey, public_key2: PublicKey) -> Option<Self> {
         let n = (dimension + 1).next_power_of_two();
 
@@ -41,6 +42,7 @@ impl Client {
         })
     }
 
+    /// Construct a pair of encrypted shares based on the input data.
     pub fn encode_simple(&mut self, data: &[Field]) -> Result<(Vec<u8>, Vec<u8>), EncryptError> {
         let copy_data = |share_data: &mut [Field]| {
             share_data[..].clone_from_slice(data);
@@ -48,6 +50,10 @@ impl Client {
         self.encode_with(copy_data)
     }
 
+    /// Construct a pair of encrypted shares using a initilization function.
+    ///
+    /// This might be slightly more efficient on large vectors, because one can
+    /// avoid copying the input data.
     pub fn encode_with<F>(&mut self, init_function: F) -> Result<(Vec<u8>, Vec<u8>), EncryptError>
     where
         F: FnOnce(&mut [Field]),
@@ -68,7 +74,8 @@ impl Client {
             self,
         );
 
-        // use prng to share the proof: share2 is the PRNG seed, and proof is mutated in place
+        // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
+        // in-place
         let share2 = crate::prng::secret_share(&mut proof);
         let share1 = serialize(&proof);
         // encrypt shares with respective keys
@@ -78,7 +85,8 @@ impl Client {
     }
 }
 
-/// Convenience function if one does not want to reuse [`Client`](struct.Client.html).
+/// Convenience function if one does not want to reuse
+/// [`Client`](struct.Client.html).
 pub fn encode_simple(
     data: &[Field],
     public_key1: PublicKey,
