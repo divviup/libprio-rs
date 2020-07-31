@@ -209,4 +209,6 @@ fn test_arithmetic() {
     assert_eq!(Field(2).pow(3.into()), 8);
     assert_eq!(Field(3).pow(9.into()), 19683);
     assert_eq!(Field(51).pow(27.into()), 3760729523);
+    assert_eq!(Field(432).pow(0.into()), 1);
+    assert_eq!(Field(0).pow(123.into()), 0);
 }
