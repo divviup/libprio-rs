@@ -46,6 +46,13 @@ impl PublicKey {
     }
 }
 
+/// Copy public key from a private key
+impl std::convert::From<&PrivateKey> for PublicKey {
+    fn from(pk: &PrivateKey) -> Self {
+        PublicKey(pk.0[..PUBLICKEY_LENGTH].to_owned())
+    }
+}
+
 impl PrivateKey {
     /// Load private key from a base64 encoded string.
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
