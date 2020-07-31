@@ -38,7 +38,7 @@ pub struct PublicKey(Vec<u8>);
 /// NIST P-256, private key
 ///
 /// X9.62 uncompressed public key concatenated with the secret scalar.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PrivateKey(Vec<u8>);
 
 impl PublicKey {

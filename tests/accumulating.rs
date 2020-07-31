@@ -21,14 +21,8 @@ fn accumulation() {
     )
     .unwrap();
 
-    let pub_key1 = PublicKey::from_base64(
-        "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
-    )
-    .unwrap();
-    let pub_key2 = PublicKey::from_base64(
-        "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=",
-    )
-    .unwrap();
+    let pub_key1 = PublicKey::from(&priv_key1);
+    let pub_key2 = PublicKey::from(&priv_key2);
 
     let mut reference_count = vec![0u32; dim];
 

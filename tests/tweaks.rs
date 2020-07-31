@@ -30,28 +30,17 @@ fn tweaks(tweak: Tweak) {
     )
     .unwrap();
 
-    let priv_key1_copy = PrivateKey::from_base64(
-        "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9Rq\
-        Zx3XMkdEHBHfNuCSMpOwofVSq3TfyKwn0NrftKisKKVSaTOt5seJ67P5QL4hxgPWvxw==",
-    )
-    .unwrap();
     let priv_key2 = PrivateKey::from_base64(
         "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g\
         /WTdcxT4rDULoycUNFB60LER6hPEHg/ObBnRPV1rwS3nj9Bj0tbjVPPyL9p8QW8B+w==",
     )
     .unwrap();
 
-    let pub_key1 = PublicKey::from_base64(
-        "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
-    )
-    .unwrap();
+    let pub_key1 = PublicKey::from(&priv_key1);
+    let pub_key2 = PublicKey::from(&priv_key2);
 
+    let priv_key1_clone = priv_key1.clone();
     let pub_key1_clone = pub_key1.clone();
-
-    let pub_key2 = PublicKey::from_base64(
-        "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=",
-    )
-    .unwrap();
 
     let mut server1 = Server::new(dim, true, priv_key1);
     let mut server2 = Server::new(dim, false, priv_key2);
@@ -67,7 +56,7 @@ fn tweaks(tweak: Tweak) {
 
     let (share1_original, share2) = client_mem.encode_simple(&data).unwrap();
 
-    let decrypted_share1 = decrypt_share(&share1_original, &priv_key1_copy).unwrap();
+    let decrypted_share1 = decrypt_share(&share1_original, &priv_key1_clone).unwrap();
     let mut share1_field = deserialize(&decrypted_share1);
     let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
