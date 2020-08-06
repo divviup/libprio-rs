@@ -16,6 +16,10 @@ mod polynomial;
 mod prng;
 pub mod server;
 pub mod util;
+pub mod c_vec;
+pub mod crypto_io;
+pub mod client_io;
+pub mod server_io;
 
 #[cfg(test)]
 mod tests {
