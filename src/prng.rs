@@ -1,98 +1,86 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::finite_field::Field;
+use super::finite_field::{Field, MODULUS};
 use aes_ctr::stream_cipher::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use aes_ctr::Aes128Ctr;
+use rand::RngCore;
+use std::convert::TryInto;
 
 const BLOCK_SIZE: usize = 16;
-pub const SEED_LENGTH: usize = BLOCK_SIZE;
+const MAXIMUM_BUFFER_SIZE_IN_BLOCKS: usize = 4096;
+pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
 
 pub fn secret_share(share1: &mut [Field]) -> Vec<u8> {
-    let field_size = std::mem::size_of::<Field>();
     // get prng array
-    let (data, seed) = random_data_and_seed(share1.len() * field_size);
+    let (data, seed) = random_field_and_seed(share1.len());
 
-    use std::convert::TryInto;
-
-    for (s1, d) in share1.iter_mut().zip(data.chunks_exact(field_size)) {
-        let integer = u32::from_le_bytes(d.try_into().unwrap());
-        let field = Field::from(integer);
-        *s1 -= field;
+    // secret share
+    for (s1, d) in share1.iter_mut().zip(data.iter()) {
+        *s1 -= *d;
     }
 
     seed
 }
 
 pub fn extract_share_from_seed(length: usize, seed: &[u8]) -> Vec<Field> {
-    assert_eq!(seed.len(), SEED_LENGTH);
-    let field_size = std::mem::size_of::<Field>();
-    let data = random_data_from_seed(seed, length * field_size);
-
-    use std::convert::TryInto;
-
-    let mut share = Vec::with_capacity(length);
-    for d in data.chunks_exact(field_size) {
-        let integer = u32::from_le_bytes(d.try_into().unwrap());
-        share.push(Field::from(integer));
-    }
-
-    share
+    random_field_from_seed(seed, length)
 }
 
-fn random_data_and_seed(length: usize) -> (Vec<u8>, Vec<u8>) {
+fn random_field_and_seed(length: usize) -> (Vec<Field>, Vec<u8>) {
     let mut seed = vec![0u8; SEED_LENGTH];
-    use rand::RngCore;
     rand::thread_rng().fill_bytes(&mut seed);
-    let data = random_data_from_seed(&seed, length);
+    let data = random_field_from_seed(&seed, length);
     (data, seed)
 }
 
-fn random_data_from_seed(seed: &[u8], length: usize) -> Vec<u8> {
-    let nonce = GenericArray::from_slice(&[0u8; BLOCK_SIZE]);
-    let key_array = GenericArray::from_slice(&seed);
-    let mut cipher = Aes128Ctr::new(&key_array, &nonce);
-    let mut data = vec![0; length];
-    cipher.apply_keystream(&mut data);
-    data
+fn random_field_from_seed(seed: &[u8], length: usize) -> Vec<Field> {
+    let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
+    let nonce = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
+    let mut cipher = Aes128Ctr::new(&key, &nonce);
+
+    let mut output = super::util::vector_with_length(length);
+    let mut output_written = 0;
+
+    let length_in_blocks = length * std::mem::size_of::<Field>() / BLOCK_SIZE;
+    // add one more block to account for rejection and roundoff errors
+    let buffer_len_in_blocks = std::cmp::min(MAXIMUM_BUFFER_SIZE_IN_BLOCKS, length_in_blocks + 1);
+    // Note: buffer_len must be a multiple of BLOCK_SIZE, so that different buffer
+    // lengths return the same data
+    let buffer_len = buffer_len_in_blocks * BLOCK_SIZE;
+    let mut buffer = vec![0; buffer_len];
+
+    while output_written < length {
+        // zero the buffer
+        for b in &mut buffer {
+            *b = 0;
+        }
+
+        cipher.apply_keystream(&mut buffer);
+
+        // rejection sampling
+        for chunk in buffer.chunks_exact(std::mem::size_of::<Field>()) {
+            let integer = u32::from_le_bytes(chunk.try_into().unwrap());
+            if integer < MODULUS {
+                output[output_written] = Field::from(integer);
+                output_written += 1;
+                if output_written == length {
+                    break;
+                }
+            }
+        }
+    }
+
+    assert_eq!(output_written, length);
+
+    output
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_random_data_zero_seed() {
-        let data = random_data_from_seed(&[0u8; 16], 32);
-
-        let reference = [
-            0x66, 0xe9, 0x4b, 0xd4, 0xef, 0x8a, 0x2c, 0x3b, 0x88, 0x4c, 0xfa, 0x59, 0xca, 0x34,
-            0x2b, 0x2e, 0x58, 0xe2, 0xfc, 0xce, 0xfa, 0x7e, 0x30, 0x61, 0x36, 0x7f, 0x1d, 0x57,
-            0xa4, 0xe7, 0x45, 0x5a,
-        ];
-
-        assert_eq!(data, reference);
-    }
-
-    #[test]
-    fn test_random_data_fixed_seed() {
-        let seed = [
-            0x55, 0x57, 0x6b, 0x04, 0xfe, 0x74, 0x9c, 0x4d, 0x25, 0x9b, 0x36, 0xec, 0x4f, 0x62,
-            0xb8, 0x20,
-        ];
-
-        let data = random_data_from_seed(&seed, 32);
-
-        let reference = [
-            0xe4, 0xd2, 0x1d, 0xd9, 0xd3, 0xbb, 0xab, 0xdf, 0x2b, 0x51, 0x98, 0x79, 0x16, 0xc6,
-            0x14, 0x9f, 0xa6, 0x86, 0xc9, 0x3c, 0xd3, 0x3a, 0x4a, 0xe4, 0x64, 0x07, 0x1d, 0x56,
-            0xed, 0x8f, 0x05, 0x38,
-        ];
-
-        assert_eq!(data, reference);
-    }
 
     #[test]
     fn secret_sharing() {
@@ -106,6 +94,8 @@ mod tests {
 
         let share2 = extract_share_from_seed(data.len(), &seed);
 
+        assert_eq!(data.len(), share2.len());
+
         // recombine
         for (d, d2) in data.iter_mut().zip(share2.iter()) {
             *d += *d2;
@@ -117,33 +107,66 @@ mod tests {
     #[test]
     fn secret_sharing_interop() {
         let seed = [
-            0x84, 0xfd, 0xfd, 0x87, 0x38, 0xe9, 0x8b, 0xf1, 0xf6, 0xe4, 0x36, 0xec, 0x7c, 0xc8,
-            0xe0, 0xd4,
+            0xcd, 0x85, 0x5b, 0xd4, 0x86, 0x48, 0xa4, 0xce, 0x52, 0x5c, 0x36, 0xee, 0x5a, 0x71,
+            0xf3, 0x0f, 0x66, 0x80, 0xd3, 0x67, 0x53, 0x9a, 0x39, 0x6f, 0x12, 0x2f, 0xad, 0x94,
+            0x4d, 0x34, 0xcb, 0x58,
         ];
 
         let reference = [
-            0xcdbb43cfu32,
-            0x01e71d83,
-            0x4352fd19,
-            0x4e1f5785,
-            0x8dee2ad7,
-            0xe7d067ca,
-            0xd4cbf324,
-            0x4f9ab2dc,
-            0x260ee94e,
-            0x8be00cba,
-            0xd169bb1d,
-            0xe05ab3b7,
-            0x8bacdb03,
-            0x2b5f90e3,
-            0x90adf992,
-            0x105255be,
-            0xb9be822d,
-            0x9d96a1a1,
+            0xd0056ec5, 0xe23f9c52, 0x47e4ddb4, 0xbe5dacf6, 0x4b130aba, 0x530c7a90, 0xe8fc4ee5,
+            0xb0569cb7, 0x7774cd3c, 0x7f24e6a5, 0xcc82355d, 0xc41f4f13, 0x67fe193c, 0xc94d63a4,
+            0x5d7b474c, 0xcc5c9f5f, 0xe368e1d5, 0x020fa0cf, 0x9e96aa2a, 0xe924137d, 0xfa026ab9,
+            0x8ebca0cc, 0x26fc58a5, 0x10a7b173, 0xb9c97291, 0x53ef0e28, 0x069cfb8e, 0xe9383cae,
+            0xacb8b748, 0x6f5b9d49, 0x887d061b, 0x86db0c58,
         ];
 
         let share2 = extract_share_from_seed(reference.len(), &seed);
 
         assert_eq!(share2, reference);
+    }
+
+    /// takes a seed and hash as base64 encoded strings
+    fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
+        let seed = base64::decode(seed_base64).unwrap();
+        let random_data = extract_share_from_seed(len, &seed);
+
+        let random_bytes = crate::util::serialize(&random_data);
+
+        let digest = ring::digest::digest(&ring::digest::SHA256, &random_bytes);
+        assert_eq!(base64::encode(digest), hash_base64);
+    }
+
+    #[test]
+    fn test_hash_interop() {
+        random_data_interop(
+            "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+            "RtzeQuuiWdD6bW2ZTobRELDmClz1wLy3HUiKsYsITOI=",
+            100_000,
+        );
+
+        // zero seed
+        random_data_interop(
+            "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+            "3wHQbSwAn9GPfoNkKe1qSzWdKnu/R+hPPyRwwz6Di+w=",
+            100_000,
+        );
+        // 0, 1, 2 ... seed
+        random_data_interop(
+            "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+            "RtzeQuuiWdD6bW2ZTobRELDmClz1wLy3HUiKsYsITOI=",
+            100_000,
+        );
+        // one arbirtary fixed seed
+        random_data_interop(
+            "rkLrnVcU8ULaiuXTvR3OKrfpMX0kQidqVzta1pleKKg=",
+            "b1fMXYrGUNR3wOZ/7vmUMmY51QHoPDBzwok0fz6xC0I=",
+            100_000,
+        );
+        // all bits set seed
+        random_data_interop(
+            "//////////////////////////////////////////8=",
+            "iBiDaqLrv7/rX/+vs6akPiprGgYfULdh/XhoD61HQXA=",
+            100_000,
+        );
     }
 }
