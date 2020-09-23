@@ -1,10 +1,11 @@
 [package]
-name = "libprio-rs"
-version = "0.1.0"
+name = "prio"
+version = "0.1.1"
 authors = ["Josh Aas <jaas@kflag.net>", "Karl Tarbe <tarbe@apple.com>"]
 edition = "2018"
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0"
+repository = "https://github.com/abetterinternet/libprio-rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

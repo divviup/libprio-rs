@@ -1,11 +1,11 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use libprio_rs::client::*;
-use libprio_rs::encrypt::*;
-use libprio_rs::finite_field::Field;
-use libprio_rs::server::*;
-use libprio_rs::util::*;
+use prio::client::*;
+use prio::encrypt::*;
+use prio::finite_field::Field;
+use prio::server::*;
+use prio::util::*;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Tweak {
