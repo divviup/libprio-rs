@@ -1,10 +1,10 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use libprio_rs::client::*;
-use libprio_rs::encrypt::*;
-use libprio_rs::finite_field::Field;
-use libprio_rs::server::*;
+use prio::client::*;
+use prio::encrypt::*;
+use prio::finite_field::Field;
+use prio::server::*;
 
 #[test]
 fn accumulation() {
@@ -62,6 +62,6 @@ fn accumulation() {
     let total1 = server1.total_shares();
     let total2 = server2.total_shares();
 
-    let reconstructed = libprio_rs::util::reconstruct_shares(total1, total2).unwrap();
+    let reconstructed = prio::util::reconstruct_shares(total1, total2).unwrap();
     assert_eq!(reconstructed, reference_count);
 }
