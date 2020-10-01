@@ -17,17 +17,22 @@ pub const TAG_LENGTH: usize = 16;
 const KEY_LENGTH: usize = 16;
 
 /// Possible errors from encryption / decryption.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 pub enum EncryptError {
     /// Base64 decoding error
-    DecodeBase64Error(base64::DecodeError),
+    #[error("base64 decoding error")]
+    DecodeBase64Error(#[from] base64::DecodeError),
     /// Error in ECDH
+    #[error("error in ECDH")]
     KeyAgreementError,
     /// Buffer for ciphertext was not large enough
+    #[error("buffer for ciphertext was not large enough")]
     EncryptionError,
     /// Authentication tags did not match.
+    #[error("authentication tags did not match")]
     DecryptionError,
     /// Input ciphertext was too small
+    #[error("input ciphertext was too small")]
     DecryptionLengthError,
 }
 
@@ -44,7 +49,7 @@ pub struct PrivateKey(Vec<u8>);
 impl PublicKey {
     /// Load public key from a base64 encoded X9.62 uncompressed representation.
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
-        let keydata = base64::decode(key).map_err(EncryptError::DecodeBase64Error)?;
+        let keydata = base64::decode(key)?;
         Ok(PublicKey(keydata))
     }
 }
@@ -59,7 +64,7 @@ impl std::convert::From<&PrivateKey> for PublicKey {
 impl PrivateKey {
     /// Load private key from a base64 encoded string.
     pub fn from_base64(key: &str) -> Result<Self, EncryptError> {
-        let keydata = base64::decode(key).map_err(EncryptError::DecodeBase64Error)?;
+        let keydata = base64::decode(key)?;
         Ok(PrivateKey(keydata))
     }
 }
