@@ -16,3 +16,6 @@ base64 = "0.12.3"
 rand = "0.7"
 ring = "0.16.15"
 thiserror = "1.0"
+
+[[example]]
+name = "sum"
