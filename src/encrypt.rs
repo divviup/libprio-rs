@@ -21,19 +21,19 @@ const KEY_LENGTH: usize = 16;
 pub enum EncryptError {
     /// Base64 decoding error
     #[error("base64 decoding error")]
-    DecodeBase64Error(#[from] base64::DecodeError),
+    DecodeBase64(#[from] base64::DecodeError),
     /// Error in ECDH
     #[error("error in ECDH")]
-    KeyAgreementError,
+    KeyAgreement,
     /// Buffer for ciphertext was not large enough
     #[error("buffer for ciphertext was not large enough")]
-    EncryptionError,
+    Encryption,
     /// Authentication tags did not match.
     #[error("authentication tags did not match")]
-    DecryptionError,
+    Decryption,
     /// Input ciphertext was too small
     #[error("input ciphertext was too small")]
-    DecryptionLengthError,
+    DecryptionLength,
 }
 
 /// NIST P-256, public key in X9.62 uncompressed format
@@ -76,16 +76,16 @@ impl PrivateKey {
 pub fn encrypt_share(share: &[u8], key: &PublicKey) -> Result<Vec<u8>, EncryptError> {
     let rng = ring::rand::SystemRandom::new();
     let ephemeral_priv = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P256, &rng)
-        .map_err(|_| EncryptError::KeyAgreementError)?;
+        .map_err(|_| EncryptError::KeyAgreement)?;
     let peer_public = agreement::UnparsedPublicKey::new(&agreement::ECDH_P256, &key.0);
     let ephemeral_pub = ephemeral_priv
         .compute_public_key()
-        .map_err(|_| EncryptError::KeyAgreementError)?;
+        .map_err(|_| EncryptError::KeyAgreement)?;
 
     let symmetric_key_bytes = agreement::agree_ephemeral(
         ephemeral_priv,
         &peer_public,
-        EncryptError::KeyAgreementError,
+        EncryptError::KeyAgreement,
         |material| Ok(x963_kdf(material, ephemeral_pub.as_ref())),
     )?;
 
@@ -109,7 +109,7 @@ pub fn encrypt_share(share: &[u8], key: &PublicKey) -> Result<Vec<u8>, EncryptEr
 /// symmetic encryption and MAC.
 pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptError> {
     if share.len() < PUBLICKEY_LENGTH + TAG_LENGTH {
-        return Err(EncryptError::DecryptionLengthError);
+        return Err(EncryptError::DecryptionLength);
     }
     let empheral_pub_bytes: &[u8] = &share[0..PUBLICKEY_LENGTH];
 
@@ -122,12 +122,12 @@ pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptE
     };
 
     let private_key = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P256, &fake_rng)
-        .map_err(|_| EncryptError::KeyAgreementError)?;
+        .map_err(|_| EncryptError::KeyAgreement)?;
 
     let symmetric_key_bytes = agreement::agree_ephemeral(
         private_key,
         &ephemeral_pub,
-        EncryptError::KeyAgreementError,
+        EncryptError::KeyAgreement,
         |material| Ok(x963_kdf(material, empheral_pub_bytes)),
     )?;
 
@@ -155,7 +155,7 @@ fn decrypt_aes_gcm(key: &[u8], nonce: &[u8], mut data: Vec<u8>) -> Result<Vec<u8
     let cipher = Aes128::new(GenericArray::from_slice(key));
     cipher
         .decrypt_in_place(GenericArray::from_slice(nonce), &[], &mut data)
-        .map_err(|_| EncryptError::DecryptionError)?;
+        .map_err(|_| EncryptError::Decryption)?;
     Ok(data)
 }
 
@@ -163,7 +163,7 @@ fn encrypt_aes_gcm(key: &[u8], nonce: &[u8], mut data: Vec<u8>) -> Result<Vec<u8
     let cipher = Aes128::new(GenericArray::from_slice(key));
     cipher
         .encrypt_in_place(GenericArray::from_slice(nonce), &[], &mut data)
-        .map_err(|_| EncryptError::EncryptionError)?;
+        .map_err(|_| EncryptError::Encryption)?;
     Ok(data)
 }
 

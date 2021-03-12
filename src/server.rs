@@ -3,12 +3,24 @@
 
 //! Prio server
 
-use crate::encrypt::*;
-use crate::finite_field::*;
-use crate::polynomial::*;
-use crate::prng;
-use crate::util;
-use crate::util::*;
+use crate::{
+    encrypt::{decrypt_share, EncryptError, PrivateKey},
+    finite_field::{merge_vector, Field, FiniteFieldError},
+    polynomial::{poly_interpret_eval, PolyAuxMemory},
+    prng::extract_share_from_seed,
+    util::{deserialize, proof_length, unpack_proof, vector_with_length},
+};
+
+/// Possible errors from server operations
+#[derive(Debug, thiserror::Error)]
+pub enum ServerError {
+    /// Encryption/decryption error
+    #[error("encryption/decryption error")]
+    Encrypt(#[from] EncryptError),
+    /// Finite field operation error
+    #[error("finite field operation error")]
+    FiniteField(#[from] FiniteFieldError),
+}
 
 /// Auxiliary memory for constructing a
 /// [`VerificationMessage`](struct.VerificationMessage.html)
@@ -62,13 +74,13 @@ impl Server {
     }
 
     /// Decrypt and deserialize
-    fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<Field>, EncryptError> {
+    fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<Field>, ServerError> {
         let share = decrypt_share(encrypted_share, &self.private_key)?;
         Ok(if self.is_first_server {
-            util::deserialize(&share)
+            deserialize(&share)
         } else {
-            let len = util::proof_length(self.dimension);
-            prng::extract_share_from_seed(len, &share)
+            let len = proof_length(self.dimension);
+            extract_share_from_seed(len, &share)
         })
     }
 
@@ -102,14 +114,14 @@ impl Server {
         share: &[u8],
         v1: &VerificationMessage,
         v2: &VerificationMessage,
-    ) -> Result<bool, EncryptError> {
+    ) -> Result<bool, ServerError> {
         let share_field = self.deserialize_share(share)?;
         let is_valid = is_valid_share(v1, v2);
         if is_valid {
-            // add to the accumulator
-            for (a, s) in self.accumulator.iter_mut().zip(share_field.iter()) {
-                *a += *s;
-            }
+            // Add to the accumulator. share_field also includes the proof
+            // encoding, so we slice off the first dimension fields, which are
+            // the actual data share.
+            merge_vector(&mut self.accumulator, &share_field[..self.dimension])?;
         }
 
         Ok(is_valid)
@@ -125,11 +137,14 @@ impl Server {
 
     /// Merge shares from another server.
     ///
-    /// This modifies the current accumulator
-    pub fn merge_total_shares(&mut self, other_total_shares: &[Field]) {
-        for (a, o) in self.accumulator.iter_mut().zip(other_total_shares.iter()) {
-            *a += *o;
-        }
+    /// This modifies the current accumulator.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `other_total_shares.len()` is not equal to this
+    //// server's `dimension`.
+    pub fn merge_total_shares(&mut self, other_total_shares: &[Field]) -> Result<(), ServerError> {
+        Ok(merge_vector(&mut self.accumulator, other_total_shares)?)
     }
 
     /// Choose a random point for polynomial evaluation
@@ -234,6 +249,7 @@ pub fn is_valid_share(v1: &VerificationMessage, v2: &VerificationMessage) -> boo
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util;
 
     #[test]
     fn test_validation() {
