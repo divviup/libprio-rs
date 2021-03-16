@@ -3,6 +3,14 @@
 
 //! Finite field arithmetic over a prime field using a 32bit prime.
 
+/// Possible errors from finite field operations.
+#[derive(Debug, thiserror::Error)]
+pub enum FiniteFieldError {
+    /// Input sizes do not match
+    #[error("input sizes do not match")]
+    InputSizeMismatch,
+}
+
 /// Newtype wrapper over u32
 ///
 /// Implements the arithmetic over the finite prime field
@@ -214,4 +222,47 @@ fn test_arithmetic() {
     assert_eq!(Field(51).pow(27.into()), 3760729523);
     assert_eq!(Field(432).pow(0.into()), 1);
     assert_eq!(Field(0).pow(123.into()), 0);
+}
+
+/// Merge two vectors of fields by summing other_vector into accumulator.
+///
+/// # Errors
+///
+/// Fails if the two vectors do not have the same length.
+pub fn merge_vector(
+    accumulator: &mut [Field],
+    other_vector: &[Field],
+) -> Result<(), FiniteFieldError> {
+    if accumulator.len() != other_vector.len() {
+        return Err(FiniteFieldError::InputSizeMismatch);
+    }
+    for (a, o) in accumulator.iter_mut().zip(other_vector.iter()) {
+        *a += *o;
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::util::vector_with_length;
+    use assert_matches::assert_matches;
+
+    #[test]
+    fn test_accumulate() {
+        let mut lhs = vector_with_length(10);
+        lhs.iter_mut().for_each(|f| *f = Field(1));
+        let mut rhs = vector_with_length(10);
+        rhs.iter_mut().for_each(|f| *f = Field(2));
+
+        merge_vector(&mut lhs, &rhs).unwrap();
+
+        lhs.iter().for_each(|f| assert_eq!(*f, Field(3)));
+        rhs.iter().for_each(|f| assert_eq!(*f, Field(2)));
+
+        let wrong_len = vector_with_length(9);
+        let result = merge_vector(&mut lhs, &wrong_len);
+        assert_matches!(result, Err(FiniteFieldError::InputSizeMismatch));
+    }
 }

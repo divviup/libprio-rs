@@ -68,6 +68,6 @@ fn main() {
     let _ = server1.aggregate(&share2_1, &v2_1, &v2_2).unwrap();
     let _ = server2.aggregate(&share2_2, &v2_1, &v2_2).unwrap();
 
-    server1.merge_total_shares(server2.total_shares());
+    server1.merge_total_shares(server2.total_shares()).unwrap();
     println!("Final Publication: {:?}", server1.total_shares());
 }
