@@ -12,6 +12,7 @@
 pub mod client;
 pub mod encrypt;
 pub mod finite_field;
+mod fp;
 mod polynomial;
 mod prng;
 pub mod server;
