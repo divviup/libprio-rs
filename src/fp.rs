@@ -146,7 +146,7 @@ impl FieldParameters {
     /// runtime of this algorithm is linear in the bit length of `exp`.
     pub fn pow(&self, x: u128, exp: u128) -> u128 {
         let mut t = self.elem(1);
-        for i in (0..128).rev() {
+        for i in (0..128 - exp.leading_zeros()).rev() {
             t = self.mul(t, t);
             if (exp >> i) & 1 != 0 {
                 t = self.mul(t, x);
