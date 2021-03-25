@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use super::finite_field::{Field, MODULUS, SMALL_FP};
+use super::finite_field::{Field, FieldElement};
 use aes_ctr::stream_cipher::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
@@ -61,9 +61,14 @@ fn random_field_from_seed(seed: &[u8], length: usize) -> Vec<Field> {
         cipher.apply_keystream(&mut buffer);
 
         // rejection sampling
-        for chunk in buffer.chunks_exact(SMALL_FP.size()) {
-            let integer = u32::from_le_bytes(chunk.try_into().unwrap());
-            if integer < MODULUS {
+        //
+        // TODO(cjpatton): Once implemented, use FieldParameters::size() and
+        // FieldElement::form_bytes() to implement this loop.
+        let field_size = std::mem::size_of::<<Field as FieldElement>::Integer>();
+        for chunk in buffer.chunks_exact(field_size) {
+            let integer =
+                <Field as FieldElement>::Integer::from_le_bytes(chunk.try_into().unwrap());
+            if integer < Field::modulus() {
                 output[output_written] = Field::from(integer);
                 output_written += 1;
                 if output_written == length {

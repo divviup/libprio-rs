@@ -3,7 +3,7 @@
 
 //! Utility functions for handling Prio stuff.
 
-use crate::finite_field::{Field, SMALL_FP};
+use crate::finite_field::{Field, FieldElement};
 
 /// Convenience function for initializing fixed sized vectors of Field elements.
 pub fn vector_with_length(len: usize) -> Vec<Field> {
@@ -97,11 +97,13 @@ pub fn unpack_proof_mut(proof: &mut [Field], dimension: usize) -> Option<Unpacke
 
 /// Get a byte array from a slice of field elements
 pub fn serialize(data: &[Field]) -> Vec<u8> {
-    let field_size = std::mem::size_of::<Field>();
+    let field_size = std::mem::size_of::<<Field as FieldElement>::Integer>();
     let mut vec = Vec::with_capacity(data.len() * field_size);
 
     for elem in data.iter() {
-        let int = u32::from(*elem);
+        // TODO(cjpatton) Implement FieldElement::bytes() that encodes each field element using
+        // FieldParameters::size() bytes.
+        let int = <Field as FieldElement>::Integer::from(*elem);
         vec.extend(int.to_le_bytes().iter());
     }
 
@@ -110,13 +112,15 @@ pub fn serialize(data: &[Field]) -> Vec<u8> {
 
 /// Get a vector of field elements from a byte slice
 pub fn deserialize(data: &[u8]) -> Vec<Field> {
-    let field_size = SMALL_FP.size();
+    let field_size = std::mem::size_of::<<Field as FieldElement>::Integer>();
 
     let mut vec = Vec::with_capacity(data.len() / field_size);
     use std::convert::TryInto;
 
     for chunk in data.chunks_exact(field_size) {
-        let integer = u32::from_le_bytes(chunk.try_into().unwrap());
+        // TODO(cjpatton) Implement FieldElement::from_bytes() that decodes field elements from a
+        // string with FieldParameters::size() bytes.
+        let integer = <Field as FieldElement>::Integer::from_le_bytes(chunk.try_into().unwrap());
         vec.push(Field::from(integer));
     }
 
