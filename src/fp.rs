@@ -1,4 +1,3 @@
-// Copyright (c) 2021 The Authors
 // SPDX-License-Identifier: MPL-2.0
 
 //! Finite field arithmetic for any field GF(p) for which p < 2^126.
