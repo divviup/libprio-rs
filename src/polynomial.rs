@@ -114,7 +114,7 @@ fn fft_get_roots(count: usize, invert: bool) -> Vec<Field> {
     }
 
     roots[0] = 1.into();
-    let step_size: u32 = (Field::num_roots() as u32) / (count as u32);
+    let step_size: u32 = (Field::generator_order() as u32) / (count as u32);
     // generator for subgroup of order count
     gen = gen.pow(step_size.into());
 
