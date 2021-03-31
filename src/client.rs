@@ -28,7 +28,7 @@ impl Client {
     pub fn new(dimension: usize, public_key1: PublicKey, public_key2: PublicKey) -> Option<Self> {
         let n = (dimension + 1).next_power_of_two();
 
-        if 2 * n > N_ROOTS as usize {
+        if 2 * n > Field::num_roots() as usize {
             // too many elements for this field, not enough roots of unity
             return None;
         }
