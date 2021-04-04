@@ -1,19 +1,18 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use super::finite_field::{Field, FieldElement};
+use super::field::{FieldElement, FieldError};
 use aes_ctr::stream_cipher::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use aes_ctr::Aes128Ctr;
 use rand::RngCore;
-use std::convert::TryInto;
 
 const BLOCK_SIZE: usize = 16;
 const MAXIMUM_BUFFER_SIZE_IN_BLOCKS: usize = 4096;
 pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
 
-pub fn secret_share(share1: &mut [Field]) -> Vec<u8> {
+pub fn secret_share<F: FieldElement>(share1: &mut [F]) -> Vec<u8> {
     // get prng array
     let (data, seed) = random_field_and_seed(share1.len());
 
@@ -25,26 +24,26 @@ pub fn secret_share(share1: &mut [Field]) -> Vec<u8> {
     seed
 }
 
-pub fn extract_share_from_seed(length: usize, seed: &[u8]) -> Vec<Field> {
+pub fn extract_share_from_seed<F: FieldElement>(length: usize, seed: &[u8]) -> Vec<F> {
     random_field_from_seed(seed, length)
 }
 
-fn random_field_and_seed(length: usize) -> (Vec<Field>, Vec<u8>) {
+fn random_field_and_seed<F: FieldElement>(length: usize) -> (Vec<F>, Vec<u8>) {
     let mut seed = vec![0u8; SEED_LENGTH];
     rand::thread_rng().fill_bytes(&mut seed);
     let data = random_field_from_seed(&seed, length);
     (data, seed)
 }
 
-fn random_field_from_seed(seed: &[u8], length: usize) -> Vec<Field> {
+fn random_field_from_seed<F: FieldElement>(seed: &[u8], length: usize) -> Vec<F> {
     let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
     let nonce = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
     let mut cipher = Aes128Ctr::new(&key, &nonce);
 
-    let mut output = super::util::vector_with_length(length);
+    let mut output = vec![F::zero(); length];
     let mut output_written = 0;
 
-    let length_in_blocks = length * std::mem::size_of::<Field>() / BLOCK_SIZE;
+    let length_in_blocks = length * F::BYTES / BLOCK_SIZE;
     // add one more block to account for rejection and roundoff errors
     let buffer_len_in_blocks = std::cmp::min(MAXIMUM_BUFFER_SIZE_IN_BLOCKS, length_in_blocks + 1);
     // Note: buffer_len must be a multiple of BLOCK_SIZE, so that different buffer
@@ -60,20 +59,17 @@ fn random_field_from_seed(seed: &[u8], length: usize) -> Vec<Field> {
 
         cipher.apply_keystream(&mut buffer);
 
-        // rejection sampling
-        //
-        // TODO(cjpatton): Once implemented, use FieldParameters::size() and
-        // FieldElement::form_bytes() to implement this loop.
-        let field_size = std::mem::size_of::<<Field as FieldElement>::Integer>();
-        for chunk in buffer.chunks_exact(field_size) {
-            let integer =
-                <Field as FieldElement>::Integer::from_le_bytes(chunk.try_into().unwrap());
-            if integer < Field::modulus() {
-                output[output_written] = Field::from(integer);
-                output_written += 1;
-                if output_written == length {
-                    break;
+        for chunk in buffer.chunks_exact(F::BYTES) {
+            match F::read_from(chunk) {
+                Ok(x) => {
+                    output[output_written] = x;
+                    output_written += 1;
+                    if output_written == length {
+                        break;
+                    }
                 }
+                Err(FieldError::FromBytesModulusOverflow) => (), // reject this sample
+                Err(err) => panic!("unexpected error: {}", err),
             }
         }
     }
@@ -86,10 +82,11 @@ fn random_field_from_seed(seed: &[u8], length: usize) -> Vec<Field> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::field::Field32;
 
     #[test]
     fn secret_sharing() {
-        let mut data = vec![Field::from(0); 123];
+        let mut data = vec![Field32::from(0); 123];
         data[3] = 23.into();
 
         let data_clone = data.clone();
@@ -125,7 +122,7 @@ mod tests {
             0xacb8b748, 0x6f5b9d49, 0x887d061b, 0x86db0c58,
         ];
 
-        let share2 = extract_share_from_seed(reference.len(), &seed);
+        let share2 = extract_share_from_seed::<Field32>(reference.len(), &seed);
 
         assert_eq!(share2, reference);
     }
@@ -133,7 +130,7 @@ mod tests {
     /// takes a seed and hash as base64 encoded strings
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = base64::decode(seed_base64).unwrap();
-        let random_data = extract_share_from_seed(len, &seed);
+        let random_data = extract_share_from_seed::<Field32>(len, &seed);
 
         let random_bytes = crate::util::serialize(&random_data);
 

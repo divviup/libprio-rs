@@ -3,7 +3,7 @@
 
 use prio::client::*;
 use prio::encrypt::*;
-use prio::finite_field::Field;
+use prio::field::Field32;
 use prio::server::*;
 
 #[test]
@@ -26,8 +26,8 @@ fn accumulation() {
 
     let mut reference_count = vec![0u32; dim];
 
-    let mut server1 = Server::new(dim, true, priv_key1);
-    let mut server2 = Server::new(dim, false, priv_key2);
+    let mut server1: Server<Field32> = Server::new(dim, true, priv_key1);
+    let mut server2: Server<Field32> = Server::new(dim, false, priv_key2);
 
     let mut client_mem = Client::new(dim, pub_key1, pub_key2).unwrap();
 
@@ -36,8 +36,8 @@ fn accumulation() {
     for _ in 0..number_of_clients {
         // some random data
         let data = (0..dim)
-            .map(|_| Field::from(rng.gen_range(0, 2)))
-            .collect::<Vec<Field>>();
+            .map(|_| Field32::from(rng.gen_range(0, 2)))
+            .collect::<Vec<Field32>>();
 
         // update reference count
         for (r, d) in reference_count.iter_mut().zip(data.iter()) {

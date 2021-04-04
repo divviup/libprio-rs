@@ -204,12 +204,6 @@ impl FieldParameters {
         modp(self.mul(x, 1), self.p)
     }
 
-    /// Returns the number of bytes required to encode field elements.
-    #[cfg(test)] // This code is only used by tests for now.
-    pub fn size(&self) -> usize {
-        (16 - (self.p.leading_zeros() / 8)) as usize
-    }
-
     #[cfg(test)]
     pub fn check(&self, p: u128, g: u128, order: u128) {
         use modinverse::modinverse;
@@ -404,7 +398,6 @@ mod tests {
         expected_p: u128,     // Expected fp.p
         expected_g: u128,     // Expected fp.from_elem(fp.g)
         expected_order: u128, // Expect fp.from_elem(fp.pow(fp.g, expected_order)) == 1
-        expected_size: usize, // expected fp.size()
     }
 
     #[test]
@@ -415,28 +408,24 @@ mod tests {
                 expected_p: 4293918721,
                 expected_g: 3925978153,
                 expected_order: 1 << 20,
-                expected_size: 4,
             },
             TestFieldParametersData {
                 fp: FP64,
                 expected_p: 15564440312192434177,
                 expected_g: 7450580596923828125,
                 expected_order: 1 << 59,
-                expected_size: 8,
             },
             TestFieldParametersData {
                 fp: FP80,
                 expected_p: 779190469673491460259841,
                 expected_g: 41782115852031095118226,
                 expected_order: 1 << 72,
-                expected_size: 10,
             },
             TestFieldParametersData {
                 fp: FP126,
                 expected_p: 74769074762901517850839147140769382401,
                 expected_g: 43421413544015439978138831414974882540,
                 expected_order: 1 << 118,
-                expected_size: 16,
             },
         ];
 
@@ -444,23 +433,15 @@ mod tests {
             //  Check that the field parameters have been constructed properly.
             t.fp.check(t.expected_p, t.expected_g, t.expected_order);
 
-            // Check that the field element size is computed correctly.
-            assert_eq!(
-                t.fp.size(),
-                t.expected_size,
-                "error for GF({})",
-                t.expected_p
-            );
-
             // Check that the generator has the correct order.
             assert_eq!(t.fp.from_elem(t.fp.pow(t.fp.g, t.expected_order)), 1);
 
             // Test arithmetic using the field parameters.
-            test_arithmetic(&t.fp);
+            arithmetic_test(&t.fp);
         }
     }
 
-    fn test_arithmetic(fp: &FieldParameters) {
+    fn arithmetic_test(fp: &FieldParameters) {
         let mut rng = rand::thread_rng();
         let big_p = &fp.p.to_bigint().unwrap();
 

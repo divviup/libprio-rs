@@ -13,7 +13,7 @@ pub mod benchmarked;
 pub mod client;
 pub mod encrypt;
 mod fft;
-pub mod finite_field;
+pub mod field;
 mod fp;
 mod polynomial;
 mod prng;

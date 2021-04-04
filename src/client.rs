@@ -4,36 +4,61 @@
 //! Prio client
 
 use crate::encrypt::*;
-use crate::finite_field::*;
+use crate::field::FieldElement;
 use crate::polynomial::*;
 use crate::util::*;
+
+use std::convert::TryFrom;
 
 /// The main object that can be used to create Prio shares
 ///
 /// Client is used to create Prio shares.
 #[derive(Debug)]
-pub struct Client {
+pub struct Client<F: FieldElement> {
     dimension: usize,
-    points_f: Vec<Field>,
-    points_g: Vec<Field>,
-    evals_f: Vec<Field>,
-    evals_g: Vec<Field>,
-    poly_mem: PolyAuxMemory,
+    points_f: Vec<F>,
+    points_g: Vec<F>,
+    evals_f: Vec<F>,
+    evals_g: Vec<F>,
+    poly_mem: PolyAuxMemory<F>,
     public_key1: PublicKey,
     public_key2: PublicKey,
 }
 
-impl Client {
+/// Errors that might be emitted by the client.
+#[derive(Debug, thiserror::Error)]
+pub enum ClientError {
+    /// Thes error is output by `Client<F>::new()` if the length of the proof would exceed the
+    /// number of roots of unity that can be generated in the field.
+    #[error("input size exceeds field capacity")]
+    InputSizeExceedsFieldCapacity,
+    /// Thes error is output by `Client<F>::new()` if the length of the proof would exceed the
+    /// ssytem's addressible memory.
+    #[error("input size exceeds field capacity")]
+    InputSizeExceedsMemoryCapacity,
+    /// Encryption/decryption error
+    #[error("encryption/decryption error")]
+    Encrypt(#[from] EncryptError),
+}
+
+impl<F: FieldElement> Client<F> {
     /// Construct a new Prio client
-    pub fn new(dimension: usize, public_key1: PublicKey, public_key2: PublicKey) -> Option<Self> {
+    pub fn new(
+        dimension: usize,
+        public_key1: PublicKey,
+        public_key2: PublicKey,
+    ) -> Result<Self, ClientError> {
         let n = (dimension + 1).next_power_of_two();
 
-        if 2 * n > Field::generator_order() as usize {
-            // too many elements for this field, not enough roots of unity
-            return None;
+        if let Ok(size) = F::Integer::try_from(2 * n) {
+            if size > F::generator_order() {
+                return Err(ClientError::InputSizeExceedsFieldCapacity);
+            }
+        } else {
+            return Err(ClientError::InputSizeExceedsMemoryCapacity);
         }
 
-        Some(Client {
+        Ok(Client {
             dimension,
             points_f: vector_with_length(n),
             points_g: vector_with_length(n),
@@ -46,20 +71,20 @@ impl Client {
     }
 
     /// Construct a pair of encrypted shares based on the input data.
-    pub fn encode_simple(&mut self, data: &[Field]) -> Result<(Vec<u8>, Vec<u8>), EncryptError> {
-        let copy_data = |share_data: &mut [Field]| {
+    pub fn encode_simple(&mut self, data: &[F]) -> Result<(Vec<u8>, Vec<u8>), ClientError> {
+        let copy_data = |share_data: &mut [F]| {
             share_data[..].clone_from_slice(data);
         };
-        self.encode_with(copy_data)
+        Ok(self.encode_with(copy_data)?)
     }
 
     /// Construct a pair of encrypted shares using a initilization function.
     ///
     /// This might be slightly more efficient on large vectors, because one can
     /// avoid copying the input data.
-    pub fn encode_with<F>(&mut self, init_function: F) -> Result<(Vec<u8>, Vec<u8>), EncryptError>
+    pub fn encode_with<G>(&mut self, init_function: G) -> Result<(Vec<u8>, Vec<u8>), EncryptError>
     where
-        F: FnOnce(&mut [Field]),
+        G: FnOnce(&mut [F]),
     {
         let mut proof = vector_with_length(proof_length(self.dimension));
         // unpack one long vector to different subparts
@@ -90,21 +115,21 @@ impl Client {
 
 /// Convenience function if one does not want to reuse
 /// [`Client`](struct.Client.html).
-pub fn encode_simple(
-    data: &[Field],
+pub fn encode_simple<F: FieldElement>(
+    data: &[F],
     public_key1: PublicKey,
     public_key2: PublicKey,
-) -> Option<(Vec<u8>, Vec<u8>)> {
+) -> Result<(Vec<u8>, Vec<u8>), ClientError> {
     let dimension = data.len();
     let mut client_memory = Client::new(dimension, public_key1, public_key2)?;
-    client_memory.encode_simple(data).ok()
+    client_memory.encode_simple(data)
 }
 
-fn interpolate_and_evaluate_at_2n(
+fn interpolate_and_evaluate_at_2n<F: FieldElement>(
     n: usize,
-    points_in: &[Field],
-    evals_out: &mut [Field],
-    mem: &mut PolyAuxMemory,
+    points_in: &[F],
+    evals_out: &mut [F],
+    mem: &mut PolyAuxMemory<F>,
 ) {
     // interpolate through roots of unity
     poly_fft(
@@ -130,20 +155,20 @@ fn interpolate_and_evaluate_at_2n(
 ///
 /// Based on Theorem 2.3.3 from Henry Corrigan-Gibbs' dissertation
 /// This constructs the output \pi by doing the necessesary calculations
-fn construct_proof(
-    data: &[Field],
+fn construct_proof<F: FieldElement>(
+    data: &[F],
     dimension: usize,
-    f0: &mut Field,
-    g0: &mut Field,
-    h0: &mut Field,
-    points_h_packed: &mut [Field],
-    mem: &mut Client,
+    f0: &mut F,
+    g0: &mut F,
+    h0: &mut F,
+    points_h_packed: &mut [F],
+    mem: &mut Client<F>,
 ) {
     let n = (dimension + 1).next_power_of_two();
 
     // set zero terms to random
-    *f0 = Field::from(rand::random::<u32>());
-    *g0 = Field::from(rand::random::<u32>());
+    *f0 = F::rand();
+    *g0 = F::rand();
     mem.points_f[0] = *f0;
     mem.points_g[0] = *g0;
 
@@ -154,7 +179,7 @@ fn construct_proof(
     // set g_i = f_i - 1
     for i in 0..dimension {
         mem.points_f[i + 1] = data[i];
-        mem.points_g[i + 1] = data[i] - 1.into();
+        mem.points_g[i + 1] = data[i] - F::one();
     }
 
     // interpolate and evaluate at roots of unity
@@ -174,6 +199,8 @@ fn construct_proof(
 
 #[test]
 fn test_encode() {
+    use crate::field::Field32;
+
     let pub_key1 = PublicKey::from_base64(
         "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
     )
@@ -186,8 +213,8 @@ fn test_encode() {
     let data_u32 = [0u32, 1, 0, 1, 1, 0, 0, 0, 1];
     let data = data_u32
         .iter()
-        .map(|x| Field::from(*x))
-        .collect::<Vec<Field>>();
+        .map(|x| Field32::from(*x))
+        .collect::<Vec<Field32>>();
     let encoded_shares = encode_simple(&data, pub_key1, pub_key2);
-    assert_eq!(encoded_shares.is_some(), true);
+    assert_eq!(encoded_shares.is_ok(), true);
 }

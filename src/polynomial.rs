@@ -3,59 +3,60 @@
 
 //! Functions for polynomial interpolation and evaluation
 
-use crate::finite_field::*;
-use crate::util::*;
+use crate::field::FieldElement;
+
+use std::convert::TryFrom;
 
 /// Temporary memory used for FFT
 #[derive(Debug)]
-pub struct PolyFFTTempMemory {
-    fft_tmp: Vec<Field>,
-    fft_y_sub: Vec<Field>,
-    fft_roots_sub: Vec<Field>,
+pub struct PolyFFTTempMemory<F: FieldElement> {
+    fft_tmp: Vec<F>,
+    fft_y_sub: Vec<F>,
+    fft_roots_sub: Vec<F>,
 }
 
-impl PolyFFTTempMemory {
+impl<F: FieldElement> PolyFFTTempMemory<F> {
     fn new(length: usize) -> Self {
         PolyFFTTempMemory {
-            fft_tmp: vector_with_length(length),
-            fft_y_sub: vector_with_length(length),
-            fft_roots_sub: vector_with_length(length),
+            fft_tmp: vec![F::zero(); length],
+            fft_y_sub: vec![F::zero(); length],
+            fft_roots_sub: vec![F::zero(); length],
         }
     }
 }
 
 /// Auxiliary memory for polynomial interpolation and evaluation
 #[derive(Debug)]
-pub struct PolyAuxMemory {
-    pub roots_2n: Vec<Field>,
-    pub roots_2n_inverted: Vec<Field>,
-    pub roots_n: Vec<Field>,
-    pub roots_n_inverted: Vec<Field>,
-    pub coeffs: Vec<Field>,
-    pub fft_memory: PolyFFTTempMemory,
+pub struct PolyAuxMemory<F: FieldElement> {
+    pub roots_2n: Vec<F>,
+    pub roots_2n_inverted: Vec<F>,
+    pub roots_n: Vec<F>,
+    pub roots_n_inverted: Vec<F>,
+    pub coeffs: Vec<F>,
+    pub fft_memory: PolyFFTTempMemory<F>,
 }
 
-impl PolyAuxMemory {
+impl<F: FieldElement> PolyAuxMemory<F> {
     pub fn new(n: usize) -> Self {
         PolyAuxMemory {
             roots_2n: fft_get_roots(2 * n, false),
             roots_2n_inverted: fft_get_roots(2 * n, true),
             roots_n: fft_get_roots(n, false),
             roots_n_inverted: fft_get_roots(n, true),
-            coeffs: vector_with_length(2 * n),
+            coeffs: vec![F::zero(); 2 * n],
             fft_memory: PolyFFTTempMemory::new(2 * n),
         }
     }
 }
 
-fn fft_recurse(
-    out: &mut [Field],
+fn fft_recurse<F: FieldElement>(
+    out: &mut [F],
     n: usize,
-    roots: &[Field],
-    ys: &[Field],
-    tmp: &mut [Field],
-    y_sub: &mut [Field],
-    roots_sub: &mut [Field],
+    roots: &[F],
+    ys: &[F],
+    tmp: &mut [F],
+    y_sub: &mut [F],
+    roots_sub: &mut [F],
 ) {
     if n == 1 {
         out[0] = ys[0];
@@ -106,17 +107,17 @@ fn fft_recurse(
 }
 
 /// Calculate `count` number of roots of unity of order `count`
-fn fft_get_roots(count: usize, invert: bool) -> Vec<Field> {
-    let mut roots = vec![Field::from(0); count];
-    let mut gen = Field::generator();
+fn fft_get_roots<F: FieldElement>(count: usize, invert: bool) -> Vec<F> {
+    let mut roots = vec![F::zero(); count];
+    let mut gen = F::generator();
     if invert {
         gen = gen.inv();
     }
 
-    roots[0] = 1.into();
-    let step_size: u32 = (Field::generator_order() as u32) / (count as u32);
+    roots[0] = F::one();
+    let step_size = F::generator_order() / F::Integer::try_from(count).unwrap();
     // generator for subgroup of order count
-    gen = gen.pow(step_size.into());
+    gen = gen.pow(step_size);
 
     roots[1] = gen;
 
@@ -127,13 +128,13 @@ fn fft_get_roots(count: usize, invert: bool) -> Vec<Field> {
     roots
 }
 
-fn fft_interpolate_raw(
-    out: &mut [Field],
-    ys: &[Field],
+fn fft_interpolate_raw<F: FieldElement>(
+    out: &mut [F],
+    ys: &[F],
     n_points: usize,
-    roots: &[Field],
+    roots: &[F],
     invert: bool,
-    mem: &mut PolyFFTTempMemory,
+    mem: &mut PolyFFTTempMemory<F>,
 ) {
     fft_recurse(
         out,
@@ -145,25 +146,25 @@ fn fft_interpolate_raw(
         &mut mem.fft_roots_sub,
     );
     if invert {
-        let n_inverse = Field::from(n_points as u32).inv();
+        let n_inverse = F::from(F::Integer::try_from(n_points).unwrap()).inv();
         for i in 0..n_points {
             out[i] *= n_inverse;
         }
     }
 }
 
-pub fn poly_fft(
-    points_out: &mut [Field],
-    points_in: &[Field],
-    scaled_roots: &[Field],
+pub fn poly_fft<F: FieldElement>(
+    points_out: &mut [F],
+    points_in: &[F],
+    scaled_roots: &[F],
     n_points: usize,
     invert: bool,
-    mem: &mut PolyFFTTempMemory,
+    mem: &mut PolyFFTTempMemory<F>,
 ) {
     fft_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
 }
 
-pub fn poly_horner_eval(poly: &[Field], eval_at: Field, len: usize) -> Field {
+pub fn poly_horner_eval<F: FieldElement>(poly: &[F], eval_at: F, len: usize) -> F {
     let mut result = poly[len - 1];
 
     for i in (0..(len - 1)).rev() {
@@ -174,33 +175,37 @@ pub fn poly_horner_eval(poly: &[Field], eval_at: Field, len: usize) -> Field {
     result
 }
 
-pub fn poly_interpret_eval(
-    points: &[Field],
-    roots: &[Field],
-    eval_at: Field,
-    tmp_coeffs: &mut [Field],
-    fft_memory: &mut PolyFFTTempMemory,
-) -> Field {
+pub fn poly_interpret_eval<F: FieldElement>(
+    points: &[F],
+    roots: &[F],
+    eval_at: F,
+    tmp_coeffs: &mut [F],
+    fft_memory: &mut PolyFFTTempMemory<F>,
+) -> F {
     poly_fft(tmp_coeffs, points, roots, points.len(), true, fft_memory);
     poly_horner_eval(&tmp_coeffs, eval_at, points.len())
 }
 
 #[test]
 fn test_roots() {
+    use crate::field::Field32;
+
     let count = 128;
-    let roots = fft_get_roots(count, false);
-    let roots_inv = fft_get_roots(count, true);
+    let roots = fft_get_roots::<Field32>(count, false);
+    let roots_inv = fft_get_roots::<Field32>(count, true);
 
     for i in 0..count {
         assert_eq!(roots[i] * roots_inv[i], 1);
-        assert_eq!(roots[i].pow(Field::from(count as u32)), 1);
-        assert_eq!(roots_inv[i].pow(Field::from(count as u32)), 1);
+        assert_eq!(roots[i].pow(u32::try_from(count).unwrap()), 1);
+        assert_eq!(roots_inv[i].pow(u32::try_from(count).unwrap()), 1);
     }
 }
 
 #[test]
 fn test_horner_eval() {
-    let mut poly = vec![Field::from(0); 4];
+    use crate::field::Field32;
+
+    let mut poly = vec![Field32::from(0); 4];
     poly[0] = 2.into();
     poly[1] = 1.into();
     poly[2] = 5.into();
@@ -213,18 +218,21 @@ fn test_horner_eval() {
 
 #[test]
 fn test_fft() {
+    use crate::field::Field32;
+
+    use rand::prelude::*;
+    use std::convert::TryFrom;
+
     let count = 128;
     let mut mem = PolyAuxMemory::new(count / 2);
 
-    use rand::prelude::*;
-
-    let mut poly = vec![Field::from(0); count];
-    let mut points2 = vec![Field::from(0); count];
+    let mut poly = vec![Field32::from(0); count];
+    let mut points2 = vec![Field32::from(0); count];
 
     let points = (0..count)
         .into_iter()
-        .map(|_| Field::from(random::<u32>()))
-        .collect::<Vec<Field>>();
+        .map(|_| Field32::from(random::<u32>()))
+        .collect::<Vec<Field32>>();
 
     // From points to coeffs and back
     poly_fft(
@@ -256,9 +264,9 @@ fn test_fft() {
         &mut mem.fft_memory,
     );
     for i in 0..count {
-        let mut should_be = Field::from(0);
+        let mut should_be = Field32::from(0);
         for j in 0..count {
-            should_be = mem.roots_2n[i].pow(Field::from(j as u32)) * points[j] + should_be;
+            should_be = mem.roots_2n[i].pow(u32::try_from(j).unwrap()) * points[j] + should_be;
         }
         assert_eq!(should_be, poly[i]);
     }
