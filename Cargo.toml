@@ -19,8 +19,13 @@ thiserror = "1.0"
 
 [dev-dependencies]
 assert_matches = "1.5.0"
+criterion = "0.3"
 modinverse = "0.1.0"
 num-bigint = "0.4.0"
+
+[[bench]]
+name = "fft"
+harness = false
 
 [[example]]
 name = "sum"

@@ -9,8 +9,10 @@
 //!
 //! For now we only support 0 / 1 vectors.
 
+pub mod benchmarked;
 pub mod client;
 pub mod encrypt;
+mod fft;
 pub mod finite_field;
 mod fp;
 mod polynomial;
