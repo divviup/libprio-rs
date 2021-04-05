@@ -8,42 +8,49 @@ use crate::fp::{log2, MAX_ROOTS};
 
 use std::convert::TryFrom;
 
-/// An error returned by DFT or DFT inverse computation.
-#[derive(Debug, thiserror::Error)]
+/// An error returned by an FFT operation.
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum FftError {
     /// The output is too small.
-    #[error("output slice is smaller than the input")]
+    #[error("output slice is smaller than specified size")]
     OutputTooSmall,
-    /// The input is too large.
-    #[error("input slice is larger than than maximum permitted")]
-    InputTooLarge,
-    /// The input length is not a power of 2.
-    #[error("input size is not a power of 2")]
-    InputSizeInvalid,
+    /// The specified size is too large.
+    #[error("size is larger than than maximum permitted")]
+    SizeTooLarge,
+    /// The specified size is not a power of 2.
+    #[error("size is not a power of 2")]
+    SizeInvalid,
 }
 
-/// Sets `outp` to the DFT of `inp`.
+/// Sets `outp` to the DFT of `inp`. Interpreting the input as the coefficients of a polynomial,
+/// the output is equal to the input evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is
+/// the `2^size`-th principal root of unity.
 pub fn discrete_fourier_transform<F: FieldElement>(
     outp: &mut [F],
     inp: &[F],
+    size: usize,
 ) -> Result<(), FftError> {
-    let n = inp.len();
-    let d = usize::try_from(log2(n as u128)).unwrap();
+    let d = usize::try_from(log2(size as u128)).unwrap();
 
-    if n > outp.len() {
+    if size > outp.len() {
         return Err(FftError::OutputTooSmall);
     }
 
-    if n > 1 << MAX_ROOTS {
-        return Err(FftError::InputTooLarge);
+    if size > 1 << MAX_ROOTS {
+        return Err(FftError::SizeTooLarge);
     }
 
-    if n != 1 << d {
-        return Err(FftError::InputSizeInvalid);
+    if size != 1 << d {
+        return Err(FftError::SizeInvalid);
     }
 
-    for i in 0..n {
-        outp[i] = inp[bitrev(d, i)];
+    for i in 0..size {
+        let j = bitrev(d, i);
+        if j < inp.len() {
+            outp[i] = inp[j];
+        } else {
+            outp[i] = F::zero();
+        }
     }
 
     let mut w: F;
@@ -52,7 +59,7 @@ pub fn discrete_fourier_transform<F: FieldElement>(
         let r = F::root(l).unwrap();
         let y = 1 << (l - 1);
         for i in 0..y {
-            for j in 0..(n / y) >> 1 {
+            for j in 0..(size / y) >> 1 {
                 let x = (1 << l) * j + i;
                 let u = outp[x];
                 let v = w * outp[x + y];
@@ -67,25 +74,32 @@ pub fn discrete_fourier_transform<F: FieldElement>(
 }
 
 /// Sets `outp` to the inverse of the DFT of `inp`.
-#[allow(dead_code)]
 pub fn discrete_fourier_transform_inv<F: FieldElement>(
     outp: &mut [F],
     inp: &[F],
+    size: usize,
 ) -> Result<(), FftError> {
-    discrete_fourier_transform(outp, inp)?;
-    let n = inp.len();
-    let m = F::from(F::Integer::try_from(n).unwrap()).inv();
-    let mut tmp: F;
-
-    outp[0] *= m;
-    outp[n >> 1] *= m;
-    for i in 1..n >> 1 {
-        tmp = outp[i] * m;
-        outp[i] = outp[n - i] * m;
-        outp[n - i] = tmp;
-    }
-
+    let size_inv = F::from(F::Integer::try_from(size).unwrap()).inv();
+    discrete_fourier_transform(outp, inp, size)?;
+    discrete_fourier_transform_inv_finish(outp, size, size_inv);
     Ok(())
+}
+
+/// An intermediate step in the computation of the inverse DFT. Exposing this function allows us to
+/// amortize the cost the modular inverse across multiple inverse DFT operations.
+pub(crate) fn discrete_fourier_transform_inv_finish<F: FieldElement>(
+    outp: &mut [F],
+    size: usize,
+    size_inv: F,
+) {
+    let mut tmp: F;
+    outp[0] *= size_inv;
+    outp[size >> 1] *= size_inv;
+    for i in 1..size >> 1 {
+        tmp = outp[i] * size_inv;
+        outp[i] = outp[size - i] * size_inv;
+        outp[size - i] = tmp;
+    }
 }
 
 // bitrev returns the first d bits of x in reverse order. (Thanks, OEIS! https://oeis.org/A030109)
@@ -114,8 +128,8 @@ mod tests {
                 want[i] = F::rand();
             }
 
-            discrete_fourier_transform(&mut tmp, &want)?;
-            discrete_fourier_transform_inv(&mut got, &tmp)?;
+            discrete_fourier_transform(&mut tmp, &want, want.len())?;
+            discrete_fourier_transform_inv(&mut got, &tmp, tmp.len())?;
             assert_eq!(got, want);
         }
 
@@ -154,7 +168,7 @@ mod tests {
             inp[i] = Field32::rand();
         }
 
-        discrete_fourier_transform::<Field32>(&mut want, &inp).expect("unexpected error");
+        discrete_fourier_transform::<Field32>(&mut want, &inp, inp.len()).unwrap();
 
         poly_fft(
             &mut got,

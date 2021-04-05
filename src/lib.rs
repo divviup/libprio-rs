@@ -12,9 +12,10 @@
 pub mod benchmarked;
 pub mod client;
 pub mod encrypt;
-mod fft;
+pub mod fft;
 pub mod field;
 mod fp;
+pub mod pcp;
 mod polynomial;
 mod prng;
 pub mod server;

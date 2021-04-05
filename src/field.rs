@@ -106,7 +106,7 @@ macro_rules! make_field {
         $elem:ident, $int:ident, $fp:ident, $bytes:literal
     ) => {
         $(#[$meta])*
-        #[derive(Clone, Copy, Debug, PartialOrd, Ord, Hash, Default, Deserialize, Serialize)]
+        #[derive(Clone, Copy, PartialOrd, Ord, Hash, Default, Deserialize, Serialize)]
         pub struct $elem(u128);
 
         impl PartialEq for $elem {
@@ -231,6 +231,12 @@ macro_rules! make_field {
 
         impl Display for $elem {
             fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+                write!(f, "{}", $fp.from_elem(self.0))
+            }
+        }
+
+        impl Debug for $elem {
+            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", $fp.from_elem(self.0))
             }
         }
@@ -362,6 +368,36 @@ pub fn merge_vector<F: FieldElement>(
     }
 
     Ok(())
+}
+
+pub(crate) fn rand_vec<F: FieldElement>(len: usize) -> Vec<F> {
+    let mut outp: Vec<F> = Vec::with_capacity(len);
+    for _ in 0..len {
+        outp.push(F::rand());
+    }
+    outp
+}
+
+/// Outputs an additive secret sharing of the input.
+pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec<Vec<F>> {
+    if num_shares == 0 {
+        return vec![];
+    }
+
+    let mut outp = vec![vec![F::zero(); inp.len()]; num_shares];
+    for j in 0..inp.len() {
+        outp[0][j] = inp[j];
+    }
+
+    for i in 1..num_shares {
+        for j in 0..inp.len() {
+            let r = F::rand();
+            outp[i][j] = r;
+            outp[0][j] -= r;
+        }
+    }
+
+    outp
 }
 
 #[cfg(test)]
