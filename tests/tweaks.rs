@@ -3,7 +3,7 @@
 
 use prio::client::*;
 use prio::encrypt::*;
-use prio::finite_field::Field;
+use prio::field::Field32;
 use prio::server::*;
 use prio::util::*;
 
@@ -42,8 +42,8 @@ fn tweaks(tweak: Tweak) {
     let priv_key1_clone = priv_key1.clone();
     let pub_key1_clone = pub_key1.clone();
 
-    let mut server1 = Server::new(dim, true, priv_key1);
-    let mut server2 = Server::new(dim, false, priv_key2);
+    let mut server1: Server<Field32> = Server::new(dim, true, priv_key1);
+    let mut server2: Server<Field32> = Server::new(dim, false, priv_key2);
 
     let mut client_mem = Client::new(dim, pub_key1, pub_key2).unwrap();
 
@@ -51,16 +51,16 @@ fn tweaks(tweak: Tweak) {
     let mut data = vector_with_length(dim);
 
     if let Tweak::WrongInput = tweak {
-        data[0] = Field::from(2);
+        data[0] = Field32::from(2);
     }
 
     let (share1_original, share2) = client_mem.encode_simple(&data).unwrap();
 
     let decrypted_share1 = decrypt_share(&share1_original, &priv_key1_clone).unwrap();
-    let mut share1_field = deserialize(&decrypted_share1);
+    let mut share1_field: Vec<Field32> = deserialize(&decrypted_share1).unwrap();
     let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
-    let one = Field::from(1);
+    let one = Field32::from(1);
 
     match tweak {
         Tweak::DataPartOfShare => unpacked_share1.data[0] += one,

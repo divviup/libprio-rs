@@ -3,7 +3,7 @@
 //! This module implements an iterative FFT algorithm for computing the (inverse) Discrete Fourier
 //! Transform (DFT) over a slice of field elements.
 
-use crate::finite_field::FieldElement;
+use crate::field::FieldElement;
 use crate::fp::{log2, MAX_ROOTS};
 
 use std::convert::TryFrom;
@@ -48,7 +48,7 @@ pub fn discrete_fourier_transform<F: FieldElement>(
 
     let mut w: F;
     for l in 1..d + 1 {
-        w = F::root(0).unwrap(); // one
+        w = F::one();
         let r = F::root(l).unwrap();
         let y = 1 << (l - 1);
         for i in 0..y {
@@ -100,11 +100,10 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::finite_field::{Field, Field126, Field64, Field80};
+    use crate::field::{Field126, Field32, Field64, Field80};
     use crate::polynomial::{poly_fft, PolyAuxMemory};
 
     fn discrete_fourier_transform_then_inv_test<F: FieldElement>() -> Result<(), FftError> {
-        let mut rng = rand::thread_rng();
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];
 
         for size in test_sizes.iter() {
@@ -112,7 +111,7 @@ mod tests {
             let mut tmp = vec![F::zero(); *size];
             let mut got = vec![F::zero(); *size];
             for i in 0..*size {
-                want[i] = F::rand(&mut rng);
+                want[i] = F::rand();
             }
 
             discrete_fourier_transform(&mut tmp, &want)?;
@@ -125,7 +124,7 @@ mod tests {
 
     #[test]
     fn test_field32() {
-        discrete_fourier_transform_then_inv_test::<Field>().expect("unexpected error");
+        discrete_fourier_transform_then_inv_test::<Field32>().expect("unexpected error");
     }
 
     #[test]
@@ -146,17 +145,16 @@ mod tests {
     #[test]
     fn test_recursive_fft() {
         let size = 128;
-        let mut rng = rand::thread_rng();
         let mut mem = PolyAuxMemory::new(size / 2);
 
-        let mut inp = vec![Field::zero(); size];
-        let mut want = vec![Field::zero(); size];
-        let mut got = vec![Field::zero(); size];
+        let mut inp = vec![Field32::zero(); size];
+        let mut want = vec![Field32::zero(); size];
+        let mut got = vec![Field32::zero(); size];
         for i in 0..size {
-            inp[i] = Field::rand(&mut rng);
+            inp[i] = Field32::rand();
         }
 
-        discrete_fourier_transform::<Field>(&mut want, &inp).expect("unexpected error");
+        discrete_fourier_transform::<Field32>(&mut want, &inp).expect("unexpected error");
 
         poly_fft(
             &mut got,
