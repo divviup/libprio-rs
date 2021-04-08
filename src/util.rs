@@ -12,6 +12,9 @@ pub enum SerializeError {
     /// element of the field.
     #[error("last chunk of bytes is incomplete")]
     IncompleteChunk,
+    /// Emitted by `unpack_proof[_mut]` if the serialized share+proof has the wrong length
+    #[error("serialized input has wrong length")]
+    UnpackInputSizeMismatch,
     /// Finite field operation error.
     #[error("finite field operation error")]
     Field(#[from] FieldError),
@@ -34,6 +37,7 @@ pub fn vector_with_length<F: FieldElement>(len: usize) -> Vec<F> {
 }
 
 /// Unpacked proof with subcomponents
+#[derive(Debug)]
 pub struct UnpackedProof<'a, F: FieldElement> {
     /// Data
     pub data: &'a [F],
@@ -48,6 +52,7 @@ pub struct UnpackedProof<'a, F: FieldElement> {
 }
 
 /// Unpacked proof with mutable subcomponents
+#[derive(Debug)]
 pub struct UnpackedProofMut<'a, F: FieldElement> {
     /// Data
     pub data: &'a mut [F],
@@ -62,51 +67,53 @@ pub struct UnpackedProofMut<'a, F: FieldElement> {
 }
 
 /// Unpacks the proof vector into subcomponents
-pub fn unpack_proof<F: FieldElement>(proof: &[F], dimension: usize) -> Option<UnpackedProof<F>> {
+pub(crate) fn unpack_proof<F: FieldElement>(
+    proof: &[F],
+    dimension: usize,
+) -> Result<UnpackedProof<F>, SerializeError> {
     // check the proof length
     if proof.len() != proof_length(dimension) {
-        return None;
+        return Err(SerializeError::UnpackInputSizeMismatch);
     }
     // split share into components
     let (data, rest) = proof.split_at(dimension);
-    let (zero_terms, points_h_packed) = rest.split_at(3);
-    if let [f0, g0, h0] = zero_terms {
-        let unpacked = UnpackedProof {
+    if let ([f0, g0, h0], points_h_packed) = rest.split_at(3) {
+        Ok(UnpackedProof {
             data,
             f0,
             g0,
             h0,
             points_h_packed,
-        };
-        Some(unpacked)
+        })
     } else {
-        None
+        Err(SerializeError::UnpackInputSizeMismatch)
     }
 }
 
 /// Unpacks a mutable proof vector into mutable subcomponents
+// TODO(timg): This is public because it is used by tests/tweaks.rs. We should
+// refactor that test so it doesn't require the crate to expose this function or
+// UnpackedProofMut.
 pub fn unpack_proof_mut<F: FieldElement>(
     proof: &mut [F],
     dimension: usize,
-) -> Option<UnpackedProofMut<F>> {
+) -> Result<UnpackedProofMut<F>, SerializeError> {
     // check the share length
     if proof.len() != proof_length(dimension) {
-        return None;
+        return Err(SerializeError::UnpackInputSizeMismatch);
     }
     // split share into components
     let (data, rest) = proof.split_at_mut(dimension);
-    let (zero_terms, points_h_packed) = rest.split_at_mut(3);
-    if let [f0, g0, h0] = zero_terms {
-        let unpacked = UnpackedProofMut {
+    if let ([f0, g0, h0], points_h_packed) = rest.split_at_mut(3) {
+        Ok(UnpackedProofMut {
             data,
             f0,
             g0,
             h0,
             points_h_packed,
-        };
-        Some(unpacked)
+        })
     } else {
-        None
+        Err(SerializeError::UnpackInputSizeMismatch)
     }
 }
 
@@ -154,7 +161,8 @@ pub fn reconstruct_shares<F: FieldElement>(share1: &[F], share2: &[F]) -> Option
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::field::Field32;
+    use crate::field::{Field32, Field64};
+    use assert_matches::assert_matches;
 
     pub fn secret_share(share: &mut [Field32]) -> Vec<Field32> {
         use rand::Rng;
@@ -176,7 +184,7 @@ pub mod tests {
     }
 
     #[test]
-    fn test_unpack_share() {
+    fn test_unpack_share_mut() {
         let dim = 15;
         let len = proof_length(dim);
 
@@ -184,6 +192,27 @@ pub mod tests {
         let unpacked = unpack_proof_mut(&mut share, dim).unwrap();
         *unpacked.f0 = Field32::from(12);
         assert_eq!(share[dim], 12);
+
+        let mut short_share = vec![Field32::from(0); len - 1];
+        assert_matches!(
+            unpack_proof_mut(&mut short_share, dim),
+            Err(SerializeError::UnpackInputSizeMismatch)
+        );
+    }
+
+    #[test]
+    fn test_unpack_share() {
+        let dim = 15;
+        let len = proof_length(dim);
+
+        let share = vec![Field64::from(0); len];
+        unpack_proof(&share, dim).unwrap();
+
+        let short_share = vec![Field64::from(0); len - 1];
+        assert_matches!(
+            unpack_proof(&short_share, dim),
+            Err(SerializeError::UnpackInputSizeMismatch)
+        );
     }
 
     #[test]

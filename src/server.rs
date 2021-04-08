@@ -97,8 +97,8 @@ impl<F: FieldElement> Server<F> {
         &mut self,
         eval_at: F,
         share: &[u8],
-    ) -> Option<VerificationMessage<F>> {
-        let share_field = self.deserialize_share(share).ok()?;
+    ) -> Result<VerificationMessage<F>, ServerError> {
+        let share_field = self.deserialize_share(share)?;
         generate_verification_message(
             self.dimension,
             eval_at,
@@ -182,7 +182,7 @@ pub fn generate_verification_message<F: FieldElement>(
     proof: &[F],
     is_first_server: bool,
     mem: &mut ValidationMemory<F>,
-) -> Option<VerificationMessage<F>> {
+) -> Result<VerificationMessage<F>, ServerError> {
     let unpacked = unpack_proof(proof, dimension)?;
     let proof_length = 2 * (dimension + 1).next_power_of_two();
 
@@ -235,8 +235,7 @@ pub fn generate_verification_message<F: FieldElement>(
         &mut mem.poly_mem.fft_memory,
     );
 
-    let vm = VerificationMessage { f_r, g_r, h_r };
-    Some(vm)
+    Ok(VerificationMessage { f_r, g_r, h_r })
 }
 
 /// Decides if the distributed proof is valid
