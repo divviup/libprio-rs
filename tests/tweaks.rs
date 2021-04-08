@@ -1,11 +1,13 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use prio::client::*;
-use prio::encrypt::*;
-use prio::field::Field32;
-use prio::server::*;
-use prio::util::*;
+use prio::{
+    client::Client,
+    encrypt::{decrypt_share, encrypt_share, PrivateKey, PublicKey},
+    field::Field32,
+    server::Server,
+    util::{deserialize, serialize, unpack_proof_mut, vector_with_length},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum Tweak {

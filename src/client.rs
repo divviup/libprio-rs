@@ -3,10 +3,12 @@
 
 //! Prio client
 
-use crate::encrypt::*;
-use crate::field::FieldElement;
-use crate::polynomial::*;
-use crate::util::*;
+use crate::{
+    encrypt::{encrypt_share, EncryptError, PublicKey},
+    field::FieldElement,
+    polynomial::{poly_fft, PolyAuxMemory},
+    util::{proof_length, serialize, unpack_proof_mut, vector_with_length},
+};
 
 use std::convert::TryFrom;
 
