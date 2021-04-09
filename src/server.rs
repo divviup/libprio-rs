@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Prio server
-
 use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FieldElement, FieldError},
