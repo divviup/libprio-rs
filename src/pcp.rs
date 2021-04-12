@@ -109,6 +109,7 @@
 //! PCPs.](https://eprint.iacr.org/2019/188)" CRYPTO 2019.
 
 use std::convert::TryFrom;
+use std::fmt::Debug;
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{rand_vec, FieldElement};
@@ -125,6 +126,10 @@ pub enum PcpError {
     /// occur when evaluating a validity circuit or gadget.
     #[error("wrong number of inputs to arithmetic circuit")]
     CircuitInLen,
+
+    /// The caller of an arithmetic circuit provided malformed input.
+    #[error("malformed input to circuit")]
+    CircuitIn(&'static str),
 
     /// This error is returned by `collect` if the input slice is empty.
     #[error("collect requires at least one input")]
@@ -146,17 +151,21 @@ pub enum PcpError {
 
     /// When evaluating a gadget on polynomials, this error is returned if the slice allocated for
     /// the output polynomial is too small.
-    #[error("sliice allocated for gadget output is too small")]
+    #[error("slice allocated for gadget output is too small")]
     GadgetPolyOutLen,
 
     /// The proof string is either too large or too short for the given type.
     #[error("attempted query on proof with invalid length")]
     QueryProofLen,
+
+    /// The validity circuit was called with the wrong amount of randomness.
+    #[error("incorrect amount of randomness")]
+    ValidRandLen,
 }
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value<F, G>: Sized
+pub trait Value<F, G>: Sized + PartialEq + Eq + Debug
 where
     F: FieldElement,
     G: Gadget<F>,
@@ -362,9 +371,6 @@ where
     let mut f_at_r = vec![F::zero(); l];
     let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
     for i in 0..l {
-        for j in 0..m {
-            f[j] = F::zero();
-        }
         discrete_fourier_transform(&mut f, &shim.f_vals[i], m)?;
         discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
         f_at_r[i] = poly_eval(&f, r);

@@ -2,42 +2,71 @@
 
 //! A collection of gadgets.
 
-use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv};
+use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
 use crate::field::FieldElement;
 use crate::pcp::{Gadget, GadgetCallOnly, PcpError};
+use crate::polynomial::{poly_deg, poly_eval, poly_mul};
+
+use std::convert::TryFrom;
+
+/// For input polynomials larger than or equal to this threshold, gadgets will use FFT for
+/// polynomial multiplication. Otherwise, the gadget uses direct multiplication.
+const FFT_THRESHOLD: usize = 60;
 
 /// An arity-2 gadget that multiples its inputs.
 pub struct Mul<F: FieldElement> {
-    buf: Vec<F>,
+    /// Size of buffer for FFT operations.
+    n: usize,
+    /// Inverse of `n` in `F`.
+    n_inv: F,
 }
 
 impl<F: FieldElement> Mul<F> {
     /// Return a new multiplier gadget.
     pub fn new(in_len: usize) -> Self {
-        Self {
-            buf: vec![F::zero(); 2 * in_len],
-        }
+        let n = (2 * in_len).next_power_of_two();
+        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
+        Self { n, n_inv }
     }
 
-    // Use FTT to multiply the polynomials. This method is much faster than naive multiplication
-    // for larger inputs.
-    fn fft_call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
-        let n = 2 * inp[0].as_ref().len();
+    // Multiply input polynomials directly.
+    pub(crate) fn call_poly_direct<V: AsRef<[F]>>(
+        &mut self,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        let v = poly_mul(inp[0].as_ref(), inp[1].as_ref());
+        for i in 0..v.len() {
+            outp[i] = v[i];
+        }
+        Ok(())
+    }
 
-        discrete_fourier_transform(&mut self.buf, inp[0].as_ref(), n)?;
+    // Multiply input polynomials using FFT.
+    pub(crate) fn call_poly_fft<V: AsRef<[F]>>(
+        &mut self,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        let n = self.n;
+        let mut buf = vec![F::zero(); n];
+
+        discrete_fourier_transform(&mut buf, inp[0].as_ref(), n)?;
         discrete_fourier_transform(outp, inp[1].as_ref(), n)?;
 
         for i in 0..n {
-            self.buf[i] *= outp[i];
+            buf[i] *= outp[i];
         }
 
-        Ok(discrete_fourier_transform_inv(outp, &self.buf, n)?)
+        discrete_fourier_transform(outp, &buf, n)?;
+        discrete_fourier_transform_inv_finish(outp, n, self.n_inv);
+        Ok(())
     }
 }
 
 impl<F: FieldElement> GadgetCallOnly<F> for Mul<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        gadget_call_check(self, inp)?;
+        gadget_call_check(self, inp.len())?;
         Ok(inp[0] * inp[1])
     }
 
@@ -49,9 +78,11 @@ impl<F: FieldElement> GadgetCallOnly<F> for Mul<F> {
 impl<F: FieldElement> Gadget<F> for Mul<F> {
     fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
         gadget_call_poly_check(self, outp, inp)?;
-        // TODO(cjpatton): For samll enough inputs, naive multiplication is actually faster than
-        // using FFT. Figutre out what this threshold is.
-        self.fft_call_poly(outp, inp)
+        if inp[0].as_ref().len() >= FFT_THRESHOLD {
+            self.call_poly_fft(outp, inp)
+        } else {
+            self.call_poly_direct(outp, inp)
+        }
     }
 
     fn call_poly_out_len(&self, in_len: usize) -> usize {
@@ -59,13 +90,119 @@ impl<F: FieldElement> Gadget<F> for Mul<F> {
     }
 }
 
+/// An arity-1 gadget that evaluates its input on some polynomial.
+pub struct PolyEval<F: FieldElement> {
+    poly: Vec<F>,
+    /// Size of buffer for FFT operations.
+    n: usize,
+    /// Inverse of `n` in `F`.
+    n_inv: F,
+}
+
+impl<F: FieldElement> PolyEval<F> {
+    /// Returns a gadget that evaluates its input on `poly`. The parameter `in_len` denotes the
+    /// length of each input passed to `call_poly`.
+    pub fn new(poly: Vec<F>, in_len: usize) -> Self {
+        let n = (in_len * poly_deg(&poly)).next_power_of_two();
+        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
+        Self { poly, n, n_inv }
+    }
+}
+
+impl<F: FieldElement> PolyEval<F> {
+    // Multiply input polynomials directly.
+    fn call_poly_direct<V: AsRef<[F]>>(
+        &mut self,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        outp[0] = self.poly[0];
+        let mut x = inp[0].as_ref().to_vec();
+        for i in 1..self.poly.len() {
+            for j in 0..x.len() {
+                outp[j] += self.poly[i] * x[j];
+            }
+
+            if i < self.poly.len() - 1 {
+                x = poly_mul(&x, inp[0].as_ref());
+            }
+        }
+        Ok(())
+    }
+
+    // Multiply input polynomials using FFT.
+    fn call_poly_fft<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
+        let n = self.n;
+        let inp = inp[0].as_ref();
+
+        let mut inp_vals = vec![F::zero(); n];
+        discrete_fourier_transform(&mut inp_vals, inp, n)?;
+
+        let mut x_vals = inp_vals.clone();
+        let mut x = vec![F::zero(); n];
+        x[..inp.len()].clone_from_slice(inp);
+
+        outp[0] = self.poly[0];
+        for i in 1..self.poly.len() {
+            for j in 0..outp.len() {
+                outp[j] += self.poly[i] * x[j];
+            }
+
+            if i < self.poly.len() - 1 {
+                for j in 0..n {
+                    x_vals[j] *= inp_vals[j];
+                }
+
+                discrete_fourier_transform(&mut x, &x_vals, n)?;
+                discrete_fourier_transform_inv_finish(&mut x, n, self.n_inv);
+            }
+        }
+        Ok(())
+    }
+}
+
+impl<F: FieldElement> GadgetCallOnly<F> for PolyEval<F> {
+    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+        gadget_call_check(self, inp.len())?;
+        Ok(poly_eval(&self.poly, inp[0]))
+    }
+
+    fn call_in_len(&self) -> usize {
+        1
+    }
+}
+
+impl<F: FieldElement> Gadget<F> for PolyEval<F> {
+    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
+        gadget_call_poly_check(self, outp, inp)?;
+
+        for i in 0..outp.len() {
+            outp[i] = F::zero();
+        }
+
+        if inp[0].as_ref().len() >= FFT_THRESHOLD {
+            self.call_poly_fft(outp, inp)
+        } else {
+            self.call_poly_direct(outp, inp)
+        }
+    }
+
+    fn call_poly_out_len(&self, in_len: usize) -> usize {
+        poly_deg(&self.poly) * in_len
+    }
+}
+
 // Check that the input parameters of g.call() are wll-formed.
 fn gadget_call_check<F: FieldElement, G: GadgetCallOnly<F>>(
     g: &G,
-    inp: &[F],
+    in_len: usize,
 ) -> Result<(), PcpError> {
-    if inp.len() != g.call_in_len() {
+    if in_len != g.call_in_len() {
         return Err(PcpError::CircuitInLen);
+    }
+
+    if in_len == 0 {
+        return Err(PcpError::CircuitIn("can't call an arity-0 gadget"));
     }
 
     Ok(())
@@ -80,13 +217,7 @@ fn gadget_call_poly_check<F: FieldElement, G: GadgetCallOnly<F>, V: AsRef<[F]>>(
 where
     G: Gadget<F>,
 {
-    if inp.len() != g.call_in_len() {
-        return Err(PcpError::CircuitInLen);
-    }
-
-    if inp.len() == 0 {
-        return Ok(());
-    }
+    gadget_call_check(g, inp.len())?;
 
     for i in 1..inp.len() {
         if inp[i].as_ref().len() != inp[0].as_ref().len() {
@@ -105,11 +236,38 @@ where
 mod tests {
     use super::*;
 
-    use crate::field::Field80 as TestField;
-    use crate::polynomial::poly_eval;
+    use crate::field::{rand_vec, Field80 as TestField};
+
+    #[test]
+    fn test_mul() {
+        // Test the gadget with input polynomials shorter than `FFT_THRESHOLD`. This exercises the
+        // naive multiplication code path.
+        let in_len = FFT_THRESHOLD - 1;
+        let mut g: Mul<TestField> = Mul::new(in_len);
+        gadget_test(&mut g, in_len);
+
+        // Test the gadget with input polynomials longer than `FFT_THRESHOLD`. This exercises
+        // FFT-based polynomial multiplication.
+        let in_len = FFT_THRESHOLD.next_power_of_two();
+        let mut g: Mul<TestField> = Mul::new(in_len);
+        gadget_test(&mut g, in_len);
+    }
+
+    #[test]
+    fn test_poly_eval() {
+        let poly = rand_vec(10);
+
+        let in_len = FFT_THRESHOLD - 1;
+        let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), in_len);
+        gadget_test(&mut g, in_len);
+
+        let in_len = FFT_THRESHOLD.next_power_of_two();
+        let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), in_len);
+        gadget_test(&mut g, in_len);
+    }
 
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
-    // to evaluating each of the inputs at the same point and aplying g.call() on the results.
+    // to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FieldElement, G: GadgetCallOnly<F>>(g: &mut G, in_len: usize)
     where
         G: Gadget<F>,
@@ -130,12 +288,10 @@ mod tests {
         let got = poly_eval(&poly_outp, r);
         let want = g.call(&inp).unwrap();
         assert_eq!(got, want);
-    }
 
-    #[test]
-    fn test_mul_gadget() {
-        let in_len = 128;
-        let mut g: Mul<TestField> = Mul::new(in_len);
-        gadget_test(&mut g, in_len);
+        // Repeat the call to make sure that the gadget's memory is reset properly between calls.
+        g.call_poly(&mut poly_outp, &poly_inp).unwrap();
+        let got = poly_eval(&poly_outp, r);
+        assert_eq!(got, want);
     }
 }
