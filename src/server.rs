@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Prio server
-
 use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FieldElement, FieldError},
@@ -10,6 +9,7 @@ use crate::{
     prng::extract_share_from_seed,
     util::{deserialize, proof_length, unpack_proof, vector_with_length, SerializeError},
 };
+use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations
 #[derive(Debug, thiserror::Error)]
@@ -165,6 +165,7 @@ impl<F: FieldElement> Server<F> {
 }
 
 /// Verification message for proof validation
+#[derive(Debug, Serialize, Deserialize)]
 pub struct VerificationMessage<F: FieldElement> {
     /// f evaluated at random point
     pub f_r: F,
@@ -256,6 +257,7 @@ mod tests {
     use super::*;
     use crate::field::Field32;
     use crate::util;
+    use serde_json;
 
     #[test]
     fn test_validation() {
@@ -277,5 +279,32 @@ mod tests {
         let v2 = generate_verification_message(dim, eval_at, &share2, false, &mut validation_mem)
             .unwrap();
         assert_eq!(is_valid_share(&v1, &v2), true);
+    }
+
+    #[test]
+    fn test_verification_message_serde() {
+        let dim = 8;
+        let proof_u32: Vec<u32> = vec![
+            1, 0, 0, 0, 0, 0, 0, 0, 2052337230, 3217065186, 1886032198, 2533724497, 397524722,
+            3820138372, 1535223968, 4291254640, 3565670552, 2447741959, 163741941, 335831680,
+            2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
+        ];
+
+        let mut proof: Vec<Field32> = proof_u32.iter().map(|x| Field32::from(*x)).collect();
+        let share2 = util::tests::secret_share(&mut proof);
+        let eval_at = Field32::from(12313);
+
+        let mut validation_mem = ValidationMemory::new(dim);
+
+        let v1 =
+            generate_verification_message(dim, eval_at, &proof, true, &mut validation_mem).unwrap();
+        let v2 = generate_verification_message(dim, eval_at, &share2, false, &mut validation_mem)
+            .unwrap();
+
+        // serialize and deserialize the first verification message
+        let serialized = serde_json::to_string(&v1).unwrap();
+        let deserialized: VerificationMessage<Field32> = serde_json::from_str(&serialized).unwrap();
+
+        assert_eq!(is_valid_share(&deserialized, &v2), true);
     }
 }

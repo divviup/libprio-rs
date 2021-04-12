@@ -4,6 +4,7 @@
 //! Finite field arithmetic over a prime field using a 32bit prime.
 
 use crate::fp::{FP126, FP32, FP64, FP80};
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::min,
     convert::TryFrom,
@@ -104,7 +105,7 @@ macro_rules! make_field {
         $elem:ident, $int:ident, $fp:ident, $bytes:literal
     ) => {
         $(#[$meta])*
-        #[derive(Clone, Copy, Debug, PartialOrd, Ord, Hash, Default)]
+        #[derive(Clone, Copy, Debug, PartialOrd, Ord, Hash, Default, Deserialize, Serialize)]
         pub struct $elem(u128);
 
         impl PartialEq for $elem {
