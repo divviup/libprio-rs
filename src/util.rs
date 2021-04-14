@@ -4,6 +4,9 @@
 //! Utility functions for handling Prio stuff.
 
 use crate::field::{FieldElement, FieldError};
+use bincode;
+use serde;
+use serde::{Deserialize, Serialize};
 
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]
@@ -18,6 +21,9 @@ pub enum SerializeError {
     /// Finite field operation error.
     #[error("finite field operation error")]
     Field(#[from] FieldError),
+
+    #[error("miscellaneous serialization error")]
+    Bincode(#[from] bincode::ErrorKind),
 }
 
 /// Returns the number of field elements in the proof for given dimension of
@@ -37,31 +43,41 @@ pub fn vector_with_length<F: FieldElement>(len: usize) -> Vec<F> {
 }
 
 /// Unpacked proof with subcomponents
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UnpackedProof<'a, F: FieldElement> {
     /// Data
+    #[serde(bound(deserialize = "&'a [F]: Deserialize<'de>"))]
     pub data: &'a [F],
+    #[serde(bound(deserialize = "&'a F: Deserialize<'de>"))]
     /// Zeroth coefficient of polynomial f
     pub f0: &'a F,
+    #[serde(bound(deserialize = "&'a F: Deserialize<'de>"))]
     /// Zeroth coefficient of polynomial g
     pub g0: &'a F,
+    #[serde(bound(deserialize = "&'a F: Deserialize<'de>"))]
     /// Zeroth coefficient of polynomial h
     pub h0: &'a F,
+    #[serde(bound(deserialize = "&'a [F]: Deserialize<'de>"))]
     /// Non-zero points of polynomial h
     pub points_h_packed: &'a [F],
 }
 
 /// Unpacked proof with mutable subcomponents
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct UnpackedProofMut<'a, F: FieldElement> {
+    #[serde(bound(deserialize = "&'a mut [F]: Deserialize<'de>"))]
     /// Data
     pub data: &'a mut [F],
+    #[serde(bound(deserialize = "&'a mut F: Deserialize<'de>"))]
     /// Zeroth coefficient of polynomial f
     pub f0: &'a mut F,
+    #[serde(bound(deserialize = "&'a mut F: Deserialize<'de>"))]
     /// Zeroth coefficient of polynomial g
     pub g0: &'a mut F,
+    #[serde(bound(deserialize = "&'a mut F: Deserialize<'de>"))]
     /// Zeroth coefficient of polynomial h
     pub h0: &'a mut F,
+    #[serde(bound(deserialize = "&'a mut [F]: Deserialize<'de>"))]
     /// Non-zero points of polynomial h
     pub points_h_packed: &'a mut [F],
 }
@@ -70,24 +86,9 @@ pub struct UnpackedProofMut<'a, F: FieldElement> {
 pub(crate) fn unpack_proof<F: FieldElement>(
     proof: &[F],
     dimension: usize,
-) -> Result<UnpackedProof<F>, SerializeError> {
-    // check the proof length
-    if proof.len() != proof_length(dimension) {
-        return Err(SerializeError::UnpackInputSizeMismatch);
-    }
-    // split share into components
-    let (data, rest) = proof.split_at(dimension);
-    if let ([f0, g0, h0], points_h_packed) = rest.split_at(3) {
-        Ok(UnpackedProof {
-            data,
-            f0,
-            g0,
-            h0,
-            points_h_packed,
-        })
-    } else {
-        Err(SerializeError::UnpackInputSizeMismatch)
-    }
+) -> Result<UnpackedProof<F>, Box<bincode::ErrorKind>> {
+    let bytes = bincode::serialize(proof).unwrap();
+    bincode::deserialize(&bytes)
 }
 
 /// Unpacks a mutable proof vector into mutable subcomponents
@@ -97,45 +98,19 @@ pub(crate) fn unpack_proof<F: FieldElement>(
 pub fn unpack_proof_mut<F: FieldElement>(
     proof: &mut [F],
     dimension: usize,
-) -> Result<UnpackedProofMut<F>, SerializeError> {
-    // check the share length
-    if proof.len() != proof_length(dimension) {
-        return Err(SerializeError::UnpackInputSizeMismatch);
-    }
-    // split share into components
-    let (data, rest) = proof.split_at_mut(dimension);
-    if let ([f0, g0, h0], points_h_packed) = rest.split_at_mut(3) {
-        Ok(UnpackedProofMut {
-            data,
-            f0,
-            g0,
-            h0,
-            points_h_packed,
-        })
-    } else {
-        Err(SerializeError::UnpackInputSizeMismatch)
-    }
+) -> Result<UnpackedProofMut<F>, Box<bincode::ErrorKind>> {
+    let bytes = bincode::serialize(proof).unwrap();
+    bincode::deserialize(&bytes)
 }
 
 /// Get a byte array from a slice of field elements
 pub fn serialize<F: FieldElement>(data: &[F]) -> Vec<u8> {
-    let mut vec = Vec::<u8>::with_capacity(data.len() * F::BYTES);
-    for elem in data.iter() {
-        elem.append_to(&mut vec);
-    }
-    vec
+    bincode::serialize(data).unwrap()
 }
 
 /// Get a vector of field elements from a byte slice
-pub fn deserialize<F: FieldElement>(data: &[u8]) -> Result<Vec<F>, SerializeError> {
-    if data.len() % F::BYTES != 0 {
-        return Err(SerializeError::IncompleteChunk);
-    }
-    let mut vec = Vec::<F>::with_capacity(data.len() / F::BYTES);
-    for chunk in data.chunks_exact(F::BYTES) {
-        vec.push(F::read_from(chunk).or_else(|err| Err(SerializeError::Field(err)))?);
-    }
-    Ok(vec)
+pub fn deserialize<F: FieldElement>(data: &[u8]) -> Result<Vec<F>, Box<bincode::ErrorKind>> {
+    bincode::deserialize(data)
 }
 
 /// Add two field element arrays together elementwise.

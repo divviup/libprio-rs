@@ -166,6 +166,7 @@ impl<F: FieldElement> Server<F> {
 
 /// Verification message for proof validation
 #[derive(Debug, Serialize, Deserialize)]
+#[serde(bound(deserialize = ""))]
 pub struct VerificationMessage<F: FieldElement> {
     /// f evaluated at random point
     pub f_r: F,

@@ -34,6 +34,8 @@ pub trait FieldElement:
     + Copy
     + PartialEq
     + Eq
+    + Serialize
+    + for<'de> Deserialize<'de>
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
