@@ -7,8 +7,9 @@ use crate::{
     field::{merge_vector, FieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
     prng::extract_share_from_seed,
-    util::{deserialize, proof_length, unpack_proof, vector_with_length, SerializeError},
+    util::{deserialize, proof_length, unpack_proof, vector_with_length},
 };
+use bincode;
 use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations
@@ -22,7 +23,7 @@ pub enum ServerError {
     Field(#[from] FieldError),
     /// Serialization/deserialization error
     #[error("serialization/deserialization error")]
-    Serialize(#[from] SerializeError),
+    Serialize(#[from] bincode::ErrorKind),
 }
 
 /// Auxiliary memory for constructing a
@@ -79,12 +80,12 @@ impl<F: FieldElement> Server<F> {
     /// Decrypt and deserialize
     fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<F>, ServerError> {
         let share = decrypt_share(encrypted_share, &self.private_key)?;
-        Ok(if self.is_first_server {
-            deserialize(&share)?
+        if self.is_first_server {
+            deserialize(&share).or_else(|err| Err(ServerError::Serialize(*err)))
         } else {
             let len = proof_length(self.dimension);
-            extract_share_from_seed(len, &share)
-        })
+            Ok(extract_share_from_seed(len, &share))
+        }
     }
 
     /// Generate verification message from an encrypted share
@@ -185,13 +186,13 @@ pub fn generate_verification_message<F: FieldElement>(
     is_first_server: bool,
     mem: &mut ValidationMemory<F>,
 ) -> Result<VerificationMessage<F>, ServerError> {
-    let unpacked = unpack_proof(proof, dimension)?;
+    let unpacked = unpack_proof(proof).or_else(|err| Err(ServerError::Serialize(*err)))?;
     let proof_length = 2 * (dimension + 1).next_power_of_two();
 
     // set zero terms
-    mem.points_f[0] = *unpacked.f0;
-    mem.points_g[0] = *unpacked.g0;
-    mem.points_h[0] = *unpacked.h0;
+    mem.points_f[0] = unpacked.f0;
+    mem.points_g[0] = unpacked.g0;
+    mem.points_h[0] = unpacked.h0;
 
     // set points_f and points_g
     for (i, x) in unpacked.data.iter().enumerate() {

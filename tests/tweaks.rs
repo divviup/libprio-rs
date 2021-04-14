@@ -60,15 +60,15 @@ fn tweaks(tweak: Tweak) {
 
     let decrypted_share1 = decrypt_share(&share1_original, &priv_key1_clone).unwrap();
     let mut share1_field: Vec<Field32> = deserialize(&decrypted_share1).unwrap();
-    let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
+    let mut unpacked_share1 = unpack_proof_mut(&mut share1_field).unwrap();
 
     let one = Field32::from(1);
 
     match tweak {
         Tweak::DataPartOfShare => unpacked_share1.data[0] += one,
-        Tweak::ZeroTermF => *unpacked_share1.f0 += one,
-        Tweak::ZeroTermG => *unpacked_share1.g0 += one,
-        Tweak::ZeroTermH => *unpacked_share1.h0 += one,
+        Tweak::ZeroTermF => unpacked_share1.f0 += one,
+        Tweak::ZeroTermG => unpacked_share1.g0 += one,
+        Tweak::ZeroTermH => unpacked_share1.h0 += one,
         Tweak::PointsH => unpacked_share1.points_h_packed[0] += one,
         _ => (),
     };

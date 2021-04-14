@@ -380,6 +380,7 @@ mod tests {
     use crate::fp::MAX_ROOTS;
     use crate::util::vector_with_length;
     use assert_matches::assert_matches;
+    use bincode;
 
     #[test]
     fn test_accumulate() {
@@ -472,9 +473,8 @@ mod tests {
         // serialization
         let test_inputs = vec![zero, one, F::rand(), F::from(int_modulus - int_one)];
         for want in test_inputs.iter() {
-            let mut bytes = vec![];
-            want.append_to(&mut bytes);
-            let got = F::read_from(&bytes).unwrap();
+            let bytes = bincode::serialize(want).unwrap();
+            let got: F = bincode::deserialize(&bytes).unwrap();
             assert_eq!(got, *want);
             assert_eq!(bytes.len(), F::BYTES);
         }

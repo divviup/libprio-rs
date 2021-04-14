@@ -21,9 +21,6 @@ pub enum SerializeError {
     /// Finite field operation error.
     #[error("finite field operation error")]
     Field(#[from] FieldError),
-
-    #[error("miscellaneous serialization error")]
-    Bincode(#[from] bincode::ErrorKind),
 }
 
 /// Returns the number of field elements in the proof for given dimension of
@@ -44,48 +41,39 @@ pub fn vector_with_length<F: FieldElement>(len: usize) -> Vec<F> {
 
 /// Unpacked proof with subcomponents
 #[derive(Debug, Serialize, Deserialize)]
-pub struct UnpackedProof<'a, F: FieldElement> {
+#[serde(bound(deserialize = ""))]
+pub struct UnpackedProof<F: FieldElement> {
     /// Data
-    #[serde(bound(deserialize = "&'a [F]: Deserialize<'de>"))]
-    pub data: &'a [F],
-    #[serde(bound(deserialize = "&'a F: Deserialize<'de>"))]
+    pub data: Vec<F>,
     /// Zeroth coefficient of polynomial f
-    pub f0: &'a F,
-    #[serde(bound(deserialize = "&'a F: Deserialize<'de>"))]
+    pub f0: F,
     /// Zeroth coefficient of polynomial g
-    pub g0: &'a F,
-    #[serde(bound(deserialize = "&'a F: Deserialize<'de>"))]
+    pub g0: F,
     /// Zeroth coefficient of polynomial h
-    pub h0: &'a F,
-    #[serde(bound(deserialize = "&'a [F]: Deserialize<'de>"))]
+    pub h0: F,
     /// Non-zero points of polynomial h
-    pub points_h_packed: &'a [F],
+    pub points_h_packed: Vec<F>,
 }
 
 /// Unpacked proof with mutable subcomponents
 #[derive(Debug, Serialize, Deserialize)]
-pub struct UnpackedProofMut<'a, F: FieldElement> {
-    #[serde(bound(deserialize = "&'a mut [F]: Deserialize<'de>"))]
+#[serde(bound(deserialize = ""))]
+pub struct UnpackedProofMut<F: FieldElement> {
     /// Data
-    pub data: &'a mut [F],
-    #[serde(bound(deserialize = "&'a mut F: Deserialize<'de>"))]
+    pub data: Vec<F>,
     /// Zeroth coefficient of polynomial f
-    pub f0: &'a mut F,
-    #[serde(bound(deserialize = "&'a mut F: Deserialize<'de>"))]
+    pub f0: F,
     /// Zeroth coefficient of polynomial g
-    pub g0: &'a mut F,
-    #[serde(bound(deserialize = "&'a mut F: Deserialize<'de>"))]
+    pub g0: F,
     /// Zeroth coefficient of polynomial h
-    pub h0: &'a mut F,
-    #[serde(bound(deserialize = "&'a mut [F]: Deserialize<'de>"))]
+    pub h0: F,
     /// Non-zero points of polynomial h
-    pub points_h_packed: &'a mut [F],
+    pub points_h_packed: Vec<F>,
 }
 
 /// Unpacks the proof vector into subcomponents
 pub(crate) fn unpack_proof<F: FieldElement>(
     proof: &[F],
-    dimension: usize,
 ) -> Result<UnpackedProof<F>, Box<bincode::ErrorKind>> {
     let bytes = bincode::serialize(proof).unwrap();
     bincode::deserialize(&bytes)
@@ -97,7 +85,6 @@ pub(crate) fn unpack_proof<F: FieldElement>(
 // UnpackedProofMut.
 pub fn unpack_proof_mut<F: FieldElement>(
     proof: &mut [F],
-    dimension: usize,
 ) -> Result<UnpackedProofMut<F>, Box<bincode::ErrorKind>> {
     let bytes = bincode::serialize(proof).unwrap();
     bincode::deserialize(&bytes)
@@ -138,6 +125,7 @@ pub mod tests {
     use super::*;
     use crate::field::{Field32, Field64};
     use assert_matches::assert_matches;
+    use std::io::ErrorKind;
 
     pub fn secret_share(share: &mut [Field32]) -> Vec<Field32> {
         use rand::Rng;
@@ -164,15 +152,15 @@ pub mod tests {
         let len = proof_length(dim);
 
         let mut share = vec![Field32::from(0); len];
-        let unpacked = unpack_proof_mut(&mut share, dim).unwrap();
-        *unpacked.f0 = Field32::from(12);
+        let mut unpacked = unpack_proof_mut(&mut share).unwrap();
+        unpacked.f0 = Field32::from(12);
         assert_eq!(share[dim], 12);
 
         let mut short_share = vec![Field32::from(0); len - 1];
-        assert_matches!(
-            unpack_proof_mut(&mut short_share, dim),
-            Err(SerializeError::UnpackInputSizeMismatch)
-        );
+        match *unpack_proof_mut(&mut short_share).err().unwrap() {
+            bincode::ErrorKind::Io(err) => assert_matches!(err.kind(), ErrorKind::UnexpectedEof),
+            _ => panic!(),
+        }
     }
 
     #[test]
@@ -181,13 +169,13 @@ pub mod tests {
         let len = proof_length(dim);
 
         let share = vec![Field64::from(0); len];
-        unpack_proof(&share, dim).unwrap();
+        unpack_proof(&share).unwrap();
 
         let short_share = vec![Field64::from(0); len - 1];
-        assert_matches!(
-            unpack_proof(&short_share, dim),
-            Err(SerializeError::UnpackInputSizeMismatch)
-        );
+        match *unpack_proof(&short_share).err().unwrap() {
+            bincode::ErrorKind::Io(err) => assert_matches!(err.kind(), ErrorKind::UnexpectedEof),
+            _ => panic!(),
+        }
     }
 
     #[test]

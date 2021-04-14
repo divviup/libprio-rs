@@ -1,11 +1,12 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-use super::field::{FieldElement, FieldError};
+use super::field::FieldElement;
 use aes_ctr::stream_cipher::generic_array::GenericArray;
 use aes_ctr::stream_cipher::NewStreamCipher;
 use aes_ctr::stream_cipher::SyncStreamCipher;
 use aes_ctr::Aes128Ctr;
+use bincode;
 use rand::RngCore;
 
 const BLOCK_SIZE: usize = 16;
@@ -60,7 +61,7 @@ fn random_field_from_seed<F: FieldElement>(seed: &[u8], length: usize) -> Vec<F>
         cipher.apply_keystream(&mut buffer);
 
         for chunk in buffer.chunks_exact(F::BYTES) {
-            match F::read_from(chunk) {
+            match bincode::deserialize(chunk) {
                 Ok(x) => {
                     output[output_written] = x;
                     output_written += 1;
@@ -68,7 +69,6 @@ fn random_field_from_seed<F: FieldElement>(seed: &[u8], length: usize) -> Vec<F>
                         break;
                     }
                 }
-                Err(FieldError::FromBytesModulusOverflow) => (), // reject this sample
                 Err(err) => panic!("unexpected error: {}", err),
             }
         }

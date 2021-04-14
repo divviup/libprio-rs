@@ -90,7 +90,7 @@ impl<F: FieldElement> Client<F> {
     {
         let mut proof = vector_with_length(proof_length(self.dimension));
         // unpack one long vector to different subparts
-        let mut unpacked = unpack_proof_mut(&mut proof, self.dimension).unwrap();
+        let mut unpacked = unpack_proof_mut(&mut proof).unwrap();
         // initialize the data part
         init_function(&mut unpacked.data);
         // fill in the rest
