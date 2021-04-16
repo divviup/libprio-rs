@@ -1,7 +1,8 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Finite field arithmetic over a prime field using a 32bit prime.
+//! Finite field arithmetic. Each field has an associated parameter called the "generator" that
+//! generates a multiplicative subgroup of order `2^n` for some `n`.
 
 use crate::fp::{FP126, FP32, FP64, FP80};
 use serde::{Deserialize, Serialize};
@@ -317,7 +318,8 @@ make_field!(
 );
 
 make_field!(
-    /// `GF(15564440312192434177)`, a 64-bit field. The generator has order `2^59`.
+    /// **(NOTE: These parameters are experimental. Applications should expect them to
+    /// change.)** `GF(15564440312192434177)`, a 64-bit field. The generator has order `2^59`.
     Field64,
     u64,
     FP64,
@@ -325,7 +327,8 @@ make_field!(
 );
 
 make_field!(
-    /// `GF(779190469673491460259841)`, an 80-bit field. The generator has order `2^72`.
+    ///  **(NOTE: These parameters are experimental. Applications should expect them to
+    ///  change.)** `GF(779190469673491460259841)`, an 80-bit field. The generator has order `2^72`.
     Field80,
     u128,
     FP80,
@@ -333,7 +336,9 @@ make_field!(
 );
 
 make_field!(
-    /// `GF(74769074762901517850839147140769382401)`, a 126-bit field. The generator has order `2^118`.
+    ///  **(NOTE: These parameters are experimental. Applications should expect them to
+    ///  change.)** `GF(74769074762901517850839147140769382401)`, a 126-bit field. The generator
+    ///  has order `2^118`.
     Field126,
     u128,
     FP126,
