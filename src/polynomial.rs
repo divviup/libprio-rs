@@ -164,15 +164,42 @@ pub fn poly_fft<F: FieldElement>(
     fft_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
 }
 
-pub fn poly_horner_eval<F: FieldElement>(poly: &[F], eval_at: F, len: usize) -> F {
-    let mut result = poly[len - 1];
+// Evaluate a polynomial using Horner's method.
+pub fn poly_eval<F: FieldElement>(poly: &[F], eval_at: F) -> F {
+    if poly.len() == 0 {
+        return F::zero();
+    }
 
-    for i in (0..(len - 1)).rev() {
+    let mut result = poly[poly.len() - 1];
+    for i in (0..poly.len() - 1).rev() {
         result *= eval_at;
         result += poly[i];
     }
 
     result
+}
+
+// Returns the degree of polynomial `p`.
+pub fn poly_deg<F: FieldElement>(p: &[F]) -> usize {
+    let mut d = p.len();
+    while d > 0 && p[d - 1] == F::zero() {
+        d -= 1;
+    }
+    d.saturating_sub(1)
+}
+
+// Multiplies polynomials `p` and `q` and returns the result.
+pub fn poly_mul<F: FieldElement>(p: &[F], q: &[F]) -> Vec<F> {
+    let p_size = poly_deg(p) + 1;
+    let q_size = poly_deg(q) + 1;
+    let mut out = vec![F::zero(); p_size + q_size];
+    for i in 0..p_size {
+        for j in 0..q_size {
+            out[i + j] += p[i] * q[j];
+        }
+    }
+    out.truncate(poly_deg(&out) + 1);
+    out
 }
 
 pub fn poly_interpret_eval<F: FieldElement>(
@@ -183,7 +210,18 @@ pub fn poly_interpret_eval<F: FieldElement>(
     fft_memory: &mut PolyFFTTempMemory<F>,
 ) -> F {
     poly_fft(tmp_coeffs, points, roots, points.len(), true, fft_memory);
-    poly_horner_eval(&tmp_coeffs, eval_at, points.len())
+    poly_eval(&tmp_coeffs[..points.len()], eval_at)
+}
+
+// Returns a polynomial `p` for which `p(x) = 0` if in `[start, end)` and `p(x) != 0` otherwise.
+pub(crate) fn poly_range_check<F: FieldElement>(start: usize, end: usize) -> Vec<F> {
+    let mut p = vec![F::one()];
+    let mut q = [F::zero(), F::one()];
+    for i in start..end {
+        q[0] = -F::from(F::Integer::try_from(i).unwrap());
+        p = poly_mul(&p, &q);
+    }
+    p
 }
 
 #[test]
@@ -202,7 +240,7 @@ fn test_roots() {
 }
 
 #[test]
-fn test_horner_eval() {
+fn test_eval() {
     use crate::field::Field32;
 
     let mut poly = vec![Field32::from(0); 4];
@@ -210,10 +248,78 @@ fn test_horner_eval() {
     poly[1] = 1.into();
     poly[2] = 5.into();
     // 5*3^2 + 3 + 2 = 50
-    assert_eq!(poly_horner_eval(&poly, 3.into(), 3), 50);
+    assert_eq!(poly_eval(&poly[..3], 3.into()), 50);
     poly[3] = 4.into();
     // 4*3^3 + 5*3^2 + 3 + 2 = 158
-    assert_eq!(poly_horner_eval(&poly, 3.into(), 4), 158);
+    assert_eq!(poly_eval(&poly[..4], 3.into()), 158);
+}
+
+#[test]
+fn test_poly_deg() {
+    use crate::field::Field32;
+
+    let zero = Field32::zero();
+    let one = Field32::root(0).unwrap();
+    assert_eq!(poly_deg(&[zero]), 0);
+    assert_eq!(poly_deg(&[one]), 0);
+    assert_eq!(poly_deg(&[zero, one]), 1);
+    assert_eq!(poly_deg(&[zero, zero, one]), 2);
+    assert_eq!(poly_deg(&[zero, one, one]), 2);
+    assert_eq!(poly_deg(&[zero, one, one, one]), 3);
+    assert_eq!(poly_deg(&[zero, one, one, one, zero]), 3);
+    assert_eq!(poly_deg(&[zero, one, one, one, zero, zero]), 3);
+}
+
+#[test]
+fn test_poly_mul() {
+    use crate::field::Field64;
+
+    let p = [
+        Field64::from(u64::try_from(2).unwrap()),
+        Field64::from(u64::try_from(3).unwrap()),
+    ];
+
+    let q = [
+        Field64::one(),
+        Field64::zero(),
+        Field64::from(u64::try_from(5).unwrap()),
+    ];
+
+    let want = [
+        Field64::from(u64::try_from(2).unwrap()),
+        Field64::from(u64::try_from(3).unwrap()),
+        Field64::from(u64::try_from(10).unwrap()),
+        Field64::from(u64::try_from(15).unwrap()),
+    ];
+
+    let got = poly_mul(&p, &q);
+    assert_eq!(&got, &want);
+}
+
+#[test]
+fn test_poly_range_check() {
+    use crate::field::Field64;
+
+    let start = 74;
+    let end = 112;
+    let p = poly_range_check(start, end);
+
+    // Check each number in the range.
+    for i in start..end {
+        let x = Field64::from(i as u64);
+        let y = poly_eval(&p, x);
+        assert_eq!(y, Field64::zero(), "range check failed for {}", i);
+    }
+
+    // Check the number below the range.
+    let x = Field64::from((start - 1) as u64);
+    let y = poly_eval(&p, x);
+    assert_ne!(y, Field64::zero());
+
+    // Check a number above the range.
+    let x = Field64::from(end as u64);
+    let y = poly_eval(&p, x);
+    assert_ne!(y, Field64::zero());
 }
 
 #[test]

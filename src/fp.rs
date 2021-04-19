@@ -272,11 +272,6 @@ fn modp(x: u128, p: u128) -> u128 {
     z.wrapping_add(m & p)
 }
 
-// Compute the ceiling of the base-2 logarithm of `x`.
-pub(crate) fn log2(x: u128) -> u128 {
-    (128 - x.leading_zeros() - 1) as u128
-}
-
 pub(crate) const FP32: FieldParameters = FieldParameters {
     p: 4293918721, // 32-bit prime
     p2: 8587837442,
@@ -387,11 +382,31 @@ pub(crate) const FP126: FieldParameters = FieldParameters {
     ],
 };
 
+// Compute the ceiling of the base-2 logarithm of `x`.
+pub(crate) fn log2(x: u128) -> u128 {
+    let y = (127 - x.leading_zeros()) as u128;
+    y + ((x > 1 << y) as u128)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use modinverse::modinverse;
     use num_bigint::ToBigInt;
+
+    #[test]
+    fn test_log2() {
+        assert_eq!(log2(1), 0);
+        assert_eq!(log2(2), 1);
+        assert_eq!(log2(3), 2);
+        assert_eq!(log2(4), 2);
+        assert_eq!(log2(15), 4);
+        assert_eq!(log2(16), 4);
+        assert_eq!(log2(30), 5);
+        assert_eq!(log2(32), 5);
+        assert_eq!(log2(1 << 127), 127);
+        assert_eq!(log2((1 << 127) + 13), 128);
+    }
 
     struct TestFieldParametersData {
         fp: FieldParameters,  // The paramters being tested

@@ -9,7 +9,7 @@ use crate::polynomial::{poly_fft, PolyAuxMemory};
 
 /// Sets `outp` to the Discrete Fourier Transform (DFT) using an iterative FFT algorithm.
 pub fn benchmarked_iterative_fft<F: FieldElement>(outp: &mut [F], inp: &[F]) {
-    discrete_fourier_transform(outp, inp).expect("encountered unexpected error");
+    discrete_fourier_transform(outp, inp, inp.len()).unwrap();
 }
 
 /// Sets `outp` to the Discrete Fourier Transform (DFT) using a recursive FFT algorithm.
