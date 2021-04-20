@@ -88,6 +88,22 @@ impl<F: FieldElement> Client<F> {
     where
         G: FnOnce(&mut [F]),
     {
+        let mut proof = self.prove_with(init_function);
+
+        // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
+        // in-place
+        let share2 = crate::prng::secret_share(&mut proof);
+        let share1 = serialize(&proof);
+        // encrypt shares with respective keys
+        let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
+        let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
+        Ok((encrypted_share1, encrypted_share2))
+    }
+
+    pub(crate) fn prove_with<G>(&mut self, init_function: G) -> Vec<F>
+    where
+        G: FnOnce(&mut [F]),
+    {
         let mut proof = vector_with_length(proof_length(self.dimension));
         // unpack one long vector to different subparts
         let mut unpacked = unpack_proof_mut(&mut proof, self.dimension).unwrap();
@@ -104,14 +120,7 @@ impl<F: FieldElement> Client<F> {
             self,
         );
 
-        // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
-        // in-place
-        let share2 = crate::prng::secret_share(&mut proof);
-        let share1 = serialize(&proof);
-        // encrypt shares with respective keys
-        let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
-        let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
-        Ok((encrypted_share1, encrypted_share2))
+        proof
     }
 }
 

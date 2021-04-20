@@ -3,8 +3,11 @@
 //! This package provides wrappers around internal components of this crate that we want to
 //! benchmark, but which we don't want to expose in the public API.
 
+use crate::client::Client;
 use crate::fft::discrete_fourier_transform;
 use crate::field::FieldElement;
+use crate::pcp::gadgets::Mul;
+use crate::pcp::PcpError;
 use crate::polynomial::{poly_fft, PolyAuxMemory};
 
 /// Sets `outp` to the Discrete Fourier Transform (DFT) using an iterative FFT algorithm.
@@ -23,4 +26,32 @@ pub fn benchmarked_recursive_fft<F: FieldElement>(outp: &mut [F], inp: &[F]) {
         false,
         &mut mem.fft_memory,
     )
+}
+
+/// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
+/// uses FFT for multiplication.
+pub fn benchmarked_gadget_mul_call_poly_fft<F: FieldElement, V: AsRef<[F]>>(
+    g: &mut Mul<F>,
+    outp: &mut [F],
+    inp: &[V],
+) -> Result<(), PcpError> {
+    g.call_poly_fft(outp, inp)
+}
+
+/// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
+/// does the multiplication directly.
+pub fn benchmarked_gadget_mul_call_poly_direct<F: FieldElement, V: AsRef<[F]>>(
+    g: &mut Mul<F>,
+    outp: &mut [F],
+    inp: &[V],
+) -> Result<(), PcpError> {
+    g.call_poly_direct(outp, inp)
+}
+
+/// Returns a Prio v2 proof that `data` is a valid boolean vector.
+pub fn benchmarked_v2_prove<F: FieldElement>(data: &[F], client: &mut Client<F>) -> Vec<F> {
+    let copy_data = |share_data: &mut [F]| {
+        share_data[..].clone_from_slice(data);
+    };
+    client.prove_with(copy_data)
 }
