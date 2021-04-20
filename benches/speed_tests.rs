@@ -7,7 +7,7 @@ use prio::client::Client;
 use prio::encrypt::PublicKey;
 use prio::field::{Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
-use prio::pcp::types::PolyCheckedVector;
+use prio::pcp::types::{ParallelPolyCheckedVector, PolyCheckedVector};
 use prio::pcp::{prove, query, Gadget, Value};
 use prio::server::{generate_verification_message, ValidationMemory};
 
@@ -128,6 +128,32 @@ pub fn bool_vec(c: &mut Criterion) {
                 query(&x, &pf, &query_rand, &joint_rand).unwrap();
             })
         });
+
+        // v3 (parallel)
+        let x: ParallelPolyCheckedVector<F> =
+            ParallelPolyCheckedVector::new_range_checked(data.clone(), 0, 2);
+        let (query_rand, joint_rand) = gen_rand(&x);
+
+        c.bench_function(
+            &format!("bool vec v3 parallel prove, size={}", *size),
+            |b| {
+                b.iter(|| {
+                    prove(&x, &joint_rand).unwrap();
+                })
+            },
+        );
+
+        let pf = prove(&x, &joint_rand).unwrap();
+        println!("bool vec v3 parallel proof size={}\n", pf.as_slice().len());
+
+        c.bench_function(
+            &format!("bool vec v3 parallel query, size={}", *size),
+            |b| {
+                b.iter(|| {
+                    query(&x, &pf, &query_rand, &joint_rand).unwrap();
+                })
+            },
+        );
     }
 }
 

@@ -3,7 +3,7 @@
 //! A collection of data types.
 
 use crate::field::FieldElement;
-use crate::pcp::gadgets::{Mul, PolyEval};
+use crate::pcp::gadgets::{BlindPolyEval, Mul, ParallelSum, PolyEval};
 use crate::pcp::{GadgetCallOnly, PcpError, Value};
 use crate::polynomial::poly_range_check;
 
@@ -151,6 +151,100 @@ impl<F: FieldElement> Value<F, PolyEval<F>> for PolyCheckedVector<F> {
     }
 }
 
+/// Like `PolyCheckedVector`, but the proof that is generated uses the `ParallelSum` gadget in
+/// order to reduce the proof size from `O(n)` to `O(sqrt(n))`.
+#[derive(Debug, PartialEq, Eq)]
+pub struct ParallelPolyCheckedVector<F: FieldElement> {
+    data: Vec<F>,
+    poly: Vec<F>,
+    chunk_len: usize,
+}
+
+impl<F: FieldElement> ParallelPolyCheckedVector<F> {
+    /// Returns a `poly`-checked vector where `poly(x) == 0` if and only if `x` is in range
+    /// `[start, end)`. The degree of `poly` is equal to `end`.
+    pub fn new_range_checked(data: Vec<F>, start: usize, end: usize) -> Self {
+        // The optimal chunk length is the square root of the input length. If the input length is
+        // not a perfect square, then round down. If the result is 0, then let the chunk length be
+        // 1 so that the underlying gadget can still be called.
+        let chunk_len = std::cmp::max(1, (data.len() as f64).sqrt() as usize);
+        Self {
+            data,
+            poly: poly_range_check(start, end),
+            chunk_len,
+        }
+    }
+}
+
+impl<F: FieldElement> Value<F, ParallelSum<F, BlindPolyEval<F>>> for ParallelPolyCheckedVector<F> {
+    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
+        if rand.len() != self.valid_rand_len() {
+            return Err(PcpError::ValidRandLen);
+        }
+
+        if self.data.len() == 0 {
+            return Ok(F::zero());
+        }
+
+        let mut r = rand[0];
+        let mut outp = F::zero();
+        let mut inp = vec![F::zero(); 2 * self.chunk_len];
+        for chunk in self.data.chunks(self.chunk_len) {
+            let d = chunk.len();
+            for i in 0..self.chunk_len {
+                if i < d {
+                    inp[2 * i] = chunk[i];
+                } else {
+                    // If the chunk is smaller than the chunk length, then copy the last element of
+                    // the chunk into the remaining slots.
+                    inp[2 * i] = chunk[d - 1];
+                }
+                inp[2 * i + 1] = r;
+                r *= rand[0];
+            }
+
+            outp += g.call(&inp)?;
+        }
+
+        Ok(outp)
+    }
+
+    fn valid_gadget_calls(&self) -> usize {
+        if self.data.len() == 0 {
+            return 0;
+        }
+
+        let mut g_calls = self.data.len() / self.chunk_len;
+        if self.data.len() % self.chunk_len != 0 {
+            g_calls += 1;
+        }
+        g_calls
+    }
+
+    fn valid_rand_len(&self) -> usize {
+        1
+    }
+
+    fn gadget(&self, in_len: usize) -> ParallelSum<F, BlindPolyEval<F>> {
+        ParallelSum::new(
+            BlindPolyEval::new(self.poly.clone(), in_len),
+            self.chunk_len,
+        )
+    }
+
+    fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    fn new_with(&self, data: Vec<F>) -> Self {
+        Self {
+            data,
+            poly: self.poly.clone(),
+            chunk_len: self.chunk_len,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,6 +259,7 @@ mod tests {
     struct ValidityTestCase {
         expect_valid: bool,
         expected_proof_len: usize,
+        joint_rand_leader_only: bool,
     }
 
     #[test]
@@ -175,6 +270,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 9,
+                joint_rand_leader_only: false,
             },
         );
         pcp_validity_test(
@@ -182,6 +278,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 9,
+                joint_rand_leader_only: false,
             },
         );
 
@@ -194,6 +291,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: false,
                 expected_proof_len: 9,
+                joint_rand_leader_only: false,
             },
         );
 
@@ -234,6 +332,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 137,
+                joint_rand_leader_only: false,
             },
         );
         pcp_validity_test(
@@ -244,6 +343,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 2,
+                joint_rand_leader_only: false,
             },
         );
         pcp_validity_test(
@@ -254,6 +354,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 4,
+                joint_rand_leader_only: false,
             },
         );
         pcp_validity_test(
@@ -264,6 +365,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 32,
+                joint_rand_leader_only: false,
             },
         );
 
@@ -276,6 +378,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: false,
                 expected_proof_len: 8,
+                joint_rand_leader_only: false,
             },
         );
         pcp_validity_test(
@@ -286,6 +389,90 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: false,
                 expected_proof_len: 16,
+                joint_rand_leader_only: false,
+            },
+        );
+    }
+
+    #[test]
+    fn test_parallel_poly_checked_vector() {
+        let one = TestField::one();
+        let zero = TestField::zero();
+        let nine = TestField::from(<TestField as FieldElement>::Integer::try_from(9).unwrap());
+
+        // Test PCP on valid input.
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField>::new_range_checked(
+                vec![zero, one, one, one, one, one, one, one, one],
+                0,
+                2,
+            ),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 16,
+                joint_rand_leader_only: true,
+            },
+        );
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField>::new_range_checked(vec![], 0, 2),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 3,
+                joint_rand_leader_only: true,
+            },
+        );
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField>::new_range_checked(vec![nine], 0, 13),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 17,
+                joint_rand_leader_only: true,
+            },
+        );
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField> {
+                data: vec![one, zero, one, one, zero],
+                poly: poly_range_check(0, 2),
+                chunk_len: 4,
+            },
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 18,
+                joint_rand_leader_only: true,
+            },
+        );
+
+        // Test PCP on invalid data.
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField>::new_range_checked(vec![zero, nine, one], 0, 2),
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 12,
+                joint_rand_leader_only: true,
+            },
+        );
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField> {
+                data: vec![one, zero, one, one, nine],
+                poly: poly_range_check(0, 2),
+                chunk_len: 4,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 18,
+                joint_rand_leader_only: true,
+            },
+        );
+        pcp_validity_test(
+            &ParallelPolyCheckedVector::<TestField> {
+                data: vec![one, zero, one, nine, zero],
+                poly: poly_range_check(0, 2),
+                chunk_len: 4,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 18,
+                joint_rand_leader_only: true,
             },
         );
     }
@@ -341,8 +528,24 @@ mod tests {
             .collect();
 
         let mut vf_shares: Vec<Verifier<F>> = Vec::with_capacity(NUM_SHARES);
+        let mut joint_rand_shares = vec![joint_rand.clone()];
+        for _ in 1..NUM_SHARES {
+            if t.joint_rand_leader_only {
+                joint_rand_shares.push(vec![F::zero(); rand_len]);
+            } else {
+                joint_rand_shares.push(joint_rand.clone());
+            }
+        }
         for i in 0..NUM_SHARES {
-            vf_shares.push(query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap());
+            vf_shares.push(
+                query(
+                    &x_shares[i],
+                    &pf_shares[i],
+                    &query_rand,
+                    &joint_rand_shares[i],
+                )
+                .unwrap(),
+            );
         }
 
         let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
