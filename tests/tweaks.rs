@@ -4,9 +4,9 @@
 use prio::{
     client::Client,
     encrypt::{decrypt_share, encrypt_share, PrivateKey, PublicKey},
-    field::Field32,
+    field::{Field32, FieldElement},
     server::Server,
-    util::{deserialize, serialize, unpack_proof_mut, vector_with_length},
+    util::{deserialize, serialize, unpack_proof_mut},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -50,7 +50,7 @@ fn tweaks(tweak: Tweak) {
     let mut client_mem = Client::new(dim, pub_key1, pub_key2).unwrap();
 
     // all zero data
-    let mut data = vector_with_length(dim);
+    let mut data = vec![Field32::zero(); dim];
 
     if let Tweak::WrongInput = tweak {
         data[0] = Field32::from(2);

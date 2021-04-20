@@ -7,7 +7,7 @@ use crate::{
     field::{merge_vector, FieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
     prng::extract_share_from_seed,
-    util::{deserialize, proof_length, unpack_proof, vector_with_length, SerializeError},
+    util::{deserialize, proof_length, unpack_proof, SerializeError},
 };
 use serde::{Deserialize, Serialize};
 
@@ -41,9 +41,9 @@ impl<F: FieldElement> ValidationMemory<F> {
     pub fn new(dimension: usize) -> Self {
         let n: usize = (dimension + 1).next_power_of_two();
         ValidationMemory {
-            points_f: vector_with_length(n),
-            points_g: vector_with_length(n),
-            points_h: vector_with_length(2 * n),
+            points_f: vec![F::zero(); n],
+            points_g: vec![F::zero(); n],
+            points_h: vec![F::zero(); 2 * n],
             poly_mem: PolyAuxMemory::new(n),
         }
     }
@@ -70,7 +70,7 @@ impl<F: FieldElement> Server<F> {
         Server {
             dimension,
             is_first_server,
-            accumulator: vector_with_length(dimension),
+            accumulator: vec![F::zero(); dimension],
             validation_mem: ValidationMemory::new(dimension),
             private_key,
         }

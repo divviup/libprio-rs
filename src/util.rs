@@ -31,11 +31,6 @@ pub fn proof_length(dimension: usize) -> usize {
     dimension + 3 + (dimension + 1).next_power_of_two()
 }
 
-/// Convenience function for initializing fixed sized vectors of Field elements.
-pub fn vector_with_length<F: FieldElement>(len: usize) -> Vec<F> {
-    vec![F::zero(); len]
-}
-
 /// Unpacked proof with subcomponents
 #[derive(Debug)]
 pub struct UnpackedProof<'a, F: FieldElement> {
@@ -146,7 +141,7 @@ pub fn reconstruct_shares<F: FieldElement>(share1: &[F], share2: &[F]) -> Option
         return None;
     }
 
-    let mut reconstructed: Vec<F> = vector_with_length(share1.len());
+    let mut reconstructed: Vec<F> = vec![F::zero(); share1.len()];
 
     for (r, (s1, s2)) in reconstructed
         .iter_mut()
