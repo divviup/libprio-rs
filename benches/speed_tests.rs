@@ -8,7 +8,7 @@ use prio::encrypt::PublicKey;
 use prio::field::{Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::pcp::types::PolyCheckedVector;
-use prio::pcp::{prove, query, Value};
+use prio::pcp::{prove, query, Gadget, Value};
 use prio::server::{generate_verification_message, ValidationMemory};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
@@ -74,13 +74,15 @@ const PUBKEY2: &str =
 
 /// Benchmark generation and verification of boolean vectors.
 pub fn bool_vec(c: &mut Criterion) {
-    let test_sizes = [1, 10, 100, 1_000, 10_000];
+    let test_sizes = [1, 10, 100, 1_000, 10_000, 100_000];
     for size in test_sizes.iter() {
         let data = vec![F::zero(); *size];
 
+        // v2
         let pk1 = PublicKey::from_base64(PUBKEY1).unwrap();
         let pk2 = PublicKey::from_base64(PUBKEY2).unwrap();
         let mut client: Client<F> = Client::new(data.len(), pk1.clone(), pk2.clone()).unwrap();
+
         c.bench_function(&format!("bool vec v2 prove, size={}", *size), |b| {
             b.iter(|| {
                 benchmarked_v2_prove(&data, &mut client);
@@ -94,6 +96,7 @@ pub fn bool_vec(c: &mut Criterion) {
         let data_and_proof = benchmarked_v2_prove(&data, &mut client);
         let mut validator: ValidationMemory<F> = ValidationMemory::new(data.len());
         let eval_at = F::rand();
+
         c.bench_function(&format!("bool vec v2 query, size={}", *size), |b| {
             b.iter(|| {
                 generate_verification_message(
@@ -107,29 +110,40 @@ pub fn bool_vec(c: &mut Criterion) {
             })
         });
 
-        let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data, 0, 2);
+        // v3
+        let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data.clone(), 0, 2);
+        let (query_rand, joint_rand) = gen_rand(&x);
+
         c.bench_function(&format!("bool vec v3 prove, size={}", *size), |b| {
             b.iter(|| {
-                prove(&x).unwrap();
+                prove(&x, &joint_rand).unwrap();
             })
         });
-        println!(
-            "bool vec v3 proof size={}\n",
-            prove(&x).unwrap().as_slice().len()
-        );
 
-        let pf = prove(&x).unwrap();
-        let rand_len = 1 + x.valid_rand_len();
-        let mut rand: Vec<F> = Vec::with_capacity(rand_len);
-        for _ in 0..rand_len {
-            rand.push(F::rand());
-        }
+        let pf = prove(&x, &joint_rand).unwrap();
+        println!("bool vec v3 proof size={}\n", pf.as_slice().len());
+
         c.bench_function(&format!("bool vec v3 query, size={}", *size), |b| {
             b.iter(|| {
-                query(&x, &pf, &rand).unwrap();
+                query(&x, &pf, &query_rand, &joint_rand).unwrap();
             })
         });
     }
+}
+
+fn gen_rand<F, G, V>(x: &V) -> (Vec<F>, Vec<F>)
+where
+    F: FieldElement,
+    G: Gadget<F>,
+    V: Value<F, G>,
+{
+    let query_rand = vec![F::rand()];
+    let rand_len = x.valid_rand_len();
+    let mut joint_rand: Vec<F> = Vec::with_capacity(rand_len);
+    for _ in 0..rand_len {
+        joint_rand.push(F::rand());
+    }
+    (query_rand, joint_rand)
 }
 
 criterion_group!(benches, bool_vec, poly_mul, fft);

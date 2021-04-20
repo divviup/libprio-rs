@@ -370,6 +370,7 @@ pub fn merge_vector<F: FieldElement>(
     Ok(())
 }
 
+#[cfg(test)]
 pub(crate) fn rand_vec<F: FieldElement>(len: usize) -> Vec<F> {
     let mut outp: Vec<F> = Vec::with_capacity(len);
     for _ in 0..len {

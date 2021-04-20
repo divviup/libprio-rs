@@ -16,16 +16,25 @@
 //! use prio::pcp::{decide, prove, query};
 //! use prio::field::{FieldElement, Field64};
 //!
+//! // The randomness shared by the prover and verifier. In proof systems like [BCG+19, Theorem
+//! // 5.3], the verifier sends the prover a random challenge in the first round, which the
+//! // prover uses to construct the proof. (This is not used for this example, so `joint_rand'
+//! // is empty.)
+//! let joint_rand = [];
+//!
+//! // The randomness used by the verifier.
+//! let query_rand = [Field64::rand()];
+//!
 //! // The prover generates a proof pf that its input x is a valid encoding
 //! // of a boolean (either "true" or "false"). Both the input and proof are
 //! // vectors over the finite field specified by Field64.
 //! let x: Boolean<Field64> = Boolean::new(false);
-//! let pf = prove(&x).unwrap();
+//! let pf = prove(&x, &joint_rand).unwrap();
 //!
 //! // The verifier "queries" the proof pf and input x, getting a "verification
 //! // message" in response. It uses this message to decide if the input is
 //! // valid.
-//! let vf = query(&x, &pf, &[Field64::rand()]).unwrap();
+//! let vf = query(&x, &pf, &query_rand, &joint_rand).unwrap();
 //! let res = decide(&x, &vf).unwrap();
 //! assert_eq!(res, true);
 //! ```
@@ -37,9 +46,11 @@
 //! use prio::pcp::{decide, prove, query, Value};
 //! use prio::field::{FieldElement, Field64};
 //!
+//! let joint_rand = [];
+//! let query_rand = [Field64::rand()];
 //! let x = Boolean::from(Field64::from(23));
-//! let pf = prove(&x).unwrap();
-//! let vf = query(&x, &pf, &[Field64::rand()]).unwrap();
+//! let pf = prove(&x, &joint_rand).unwrap();
+//! let vf = query(&x, &pf, &query_rand, &joint_rand).unwrap();
 //! let res = decide(&x, &vf).unwrap();
 //! assert_eq!(res, false);
 //! ```
@@ -58,6 +69,9 @@
 //!
 //! use std::convert::TryFrom;
 //!
+//! let joint_rand = [];
+//! let query_rand = [Field64::rand()];
+//!
 //! // The prover encodes its input and splits it into two secret shares. It
 //! // sends each share to two aggregators.
 //! let x: Boolean<Field64>= Boolean::new(true);
@@ -68,21 +82,17 @@
 //!
 //! // The prover generates a proof of its input's validity and splits the proof
 //! // into two shares. It sends each share to one of two aggregators.
-//! let pf = prove(&x).unwrap();
+//! let pf = prove(&x, &joint_rand).unwrap();
 //! let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
 //!     .into_iter()
 //!     .map(|data| Proof::from(data))
 //!     .collect();
 //!
-//! // The verifiers agree on the randomness they'll use to jointly verify the
-//! // proof.
-//! let rand = [Field64::rand()];
-//!
 //! // Each verifier queries its shares of the input and proof and sends its
 //! // share of the verification message to the leader.
 //! let vf_shares = vec![
-//!     query(&x_shares[0], &pf_shares[0], &rand).unwrap(),
-//!     query(&x_shares[1], &pf_shares[1], &rand).unwrap(),
+//!     query(&x_shares[0], &pf_shares[0], &query_rand, &joint_rand).unwrap(),
+//!     query(&x_shares[1], &pf_shares[1], &query_rand, &joint_rand).unwrap(),
 //! ];
 //!
 //! // The leader collects the verifier shares and decides if the input is valid.
@@ -112,7 +122,7 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
-use crate::field::{rand_vec, FieldElement};
+use crate::field::FieldElement;
 use crate::fp::log2;
 use crate::polynomial::{poly_deg, poly_eval};
 
@@ -154,9 +164,9 @@ pub enum PcpError {
     #[error("slice allocated for gadget output is too small")]
     GadgetPolyOutLen,
 
-    /// The proof string is either too large or too short for the given type.
-    #[error("attempted query on proof with invalid length")]
-    QueryProofLen,
+    /// Calling `query` returned an error.
+    #[error("query error")]
+    Query(&'static str),
 
     /// The validity circuit was called with the wrong amount of randomness.
     #[error("incorrect amount of randomness")]
@@ -234,7 +244,7 @@ pub trait Gadget<F: FieldElement>: GadgetCallOnly<F> {
 }
 
 /// Generate a proof of an input's validity.
-pub fn prove<F, G, V>(x: &V) -> Result<Proof<F>, PcpError>
+pub fn prove<F, G, V>(x: &V, joint_rand: &[F]) -> Result<Proof<F>, PcpError>
 where
     F: FieldElement,
     G: Gadget<F>,
@@ -250,10 +260,10 @@ where
     // Run the validity circuit with a "shim" gadget that records the value of each input wire of
     // each gadget evaluation.
     let mut shim = ProveShimGadget::new(&mut g, g_calls);
-    let _ = x.valid(&mut shim, &rand_vec(x.valid_rand_len()));
+    let _ = x.valid(&mut shim, joint_rand);
 
     // Construct the intermediate proof polynomials `f[0], ..., f[l-1]`. Also, record in the slice
-    // `data[...l]` the value of `f[i](1)`, i.e., the first point at which polynomial `f[i]` was
+    // `data[..l]` the value of `f[i](1)`, i.e., the first point at which polynomial `f[i]` was
     // interpolated.
     let mut f = vec![vec![F::zero(); m]; l];
     let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
@@ -343,17 +353,31 @@ impl<F: FieldElement> From<Vec<F>> for Proof<F> {
 
 /// Generate the verifier for an input and proof (or the verifier share for an input share and
 /// proof share).
-pub fn query<F, G, V>(x: &V, pf: &Proof<F>, rand: &[F]) -> Result<Verifier<F>, PcpError>
+///
+/// Parameters:
+/// * `x` is the input.
+/// * `pf` is the proof.
+/// * `query_rand` is the verifier's randomness.
+/// * `joint_rand` is the randomness shared by the prover and verifier.
+pub fn query<F, G, V>(
+    x: &V,
+    pf: &Proof<F>,
+    query_rand: &[F],
+    joint_rand: &[F],
+) -> Result<Verifier<F>, PcpError>
 where
     F: FieldElement,
     G: Gadget<F>,
     V: Value<F, G>,
 {
+    if query_rand.len() != 1 {
+        return Err(PcpError::Query("incorrect length of verifier randomness"));
+    }
+
     let g_calls = x.valid_gadget_calls();
     let m = (g_calls + 1).next_power_of_two();
     let g = x.gadget(m);
     let l = g.call_in_len();
-    let r = rand[0];
 
     // Run the validity circuit with a "shim" gadget that records each input to each gadget.
     // Record the output of the circuit.
@@ -363,7 +387,7 @@ where
     // should be ok, since it's possible to transform any circuit into one that for which this is
     // true. (Needs security analysis.)
     let mut shim = QueryShimGadget::new(&g, g_calls, pf)?;
-    let v = x.valid(&mut shim, &rand[1..])?;
+    let v = x.valid(&mut shim, joint_rand)?;
 
     // Reconstruct the intermediate proof polynomials `f[0], ..., f[l-1]` and evaluate each
     // polynomial at input `r`.
@@ -373,7 +397,7 @@ where
     for i in 0..l {
         discrete_fourier_transform(&mut f, &shim.f_vals[i], m)?;
         discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
-        f_at_r[i] = poly_eval(&f, r);
+        f_at_r[i] = poly_eval(&f, query_rand[0]);
     }
 
     // Evaluate `p` at `r`.
@@ -382,7 +406,7 @@ where
     // 4.3] requires that r be sampled from the set of field elements *minus* the roots of unity at
     // which the polynomials are interpolated. This relaxation is fine, but results in a modest
     // loss of concrete security. (Needs security analysis.)
-    let p_at_r = poly_eval(&pf.data[l..], r);
+    let p_at_r = poly_eval(&pf.data[l..], query_rand[0]);
 
     Ok(Verifier { v, p_at_r, f_at_r })
 }
@@ -409,7 +433,7 @@ impl<F: FieldElement> QueryShimGadget<F> {
         let l = inner.call_in_len();
 
         if pf.data.len() < l || pf.data.len() > l + p {
-            return Err(PcpError::QueryProofLen);
+            return Err(PcpError::Query("incorrect proof length"));
         }
 
         // Record the intermediate polynomial seeds.
@@ -520,22 +544,24 @@ mod tests {
         type F = Field126;
         type T = Boolean<F>;
 
+        let query_rand = vec![F::rand()];
+        let joint_rand = vec![];
+
         let x: T = Boolean::new(false);
         let x_shares: Vec<T> = split(x.as_slice(), 2)
             .into_iter()
             .map(|data| x.new_with(data))
             .collect();
 
-        let pf = prove(&x).unwrap();
+        let pf = prove(&x, &joint_rand).unwrap();
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), 2)
             .into_iter()
             .map(|data| Proof::from(data))
             .collect();
 
-        let rand = rand_vec(1 + x.valid_rand_len());
         let vf_shares = vec![
-            query(&x_shares[0], &pf_shares[0], &rand).unwrap(),
-            query(&x_shares[1], &pf_shares[1], &rand).unwrap(),
+            query(&x_shares[0], &pf_shares[0], &query_rand, &joint_rand).unwrap(),
+            query(&x_shares[1], &pf_shares[1], &query_rand, &joint_rand).unwrap(),
         ];
 
         let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
