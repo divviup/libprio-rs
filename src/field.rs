@@ -404,14 +404,13 @@ pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec<Vec<F>> {
 mod tests {
     use super::*;
     use crate::fp::MAX_ROOTS;
-    use crate::util::vector_with_length;
     use assert_matches::assert_matches;
 
     #[test]
     fn test_accumulate() {
-        let mut lhs = vector_with_length(10);
+        let mut lhs = vec![Field32::zero(); 10];
         lhs.iter_mut().for_each(|f| *f = Field32(1));
-        let mut rhs = vector_with_length(10);
+        let mut rhs = vec![Field32::zero(); 10];
         rhs.iter_mut().for_each(|f| *f = Field32(2));
 
         merge_vector(&mut lhs, &rhs).unwrap();
@@ -419,7 +418,7 @@ mod tests {
         lhs.iter().for_each(|f| assert_eq!(*f, Field32(3)));
         rhs.iter().for_each(|f| assert_eq!(*f, Field32(2)));
 
-        let wrong_len = vector_with_length(9);
+        let wrong_len = vec![Field32::zero(); 9];
         let result = merge_vector(&mut lhs, &wrong_len);
         assert_matches!(result, Err(FieldError::InputSizeMismatch));
     }

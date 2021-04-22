@@ -7,7 +7,7 @@ use crate::{
     encrypt::{encrypt_share, EncryptError, PublicKey},
     field::FieldElement,
     polynomial::{poly_fft, PolyAuxMemory},
-    util::{proof_length, serialize, unpack_proof_mut, vector_with_length},
+    util::{proof_length, serialize, unpack_proof_mut},
 };
 
 use std::convert::TryFrom;
@@ -62,10 +62,10 @@ impl<F: FieldElement> Client<F> {
 
         Ok(Client {
             dimension,
-            points_f: vector_with_length(n),
-            points_g: vector_with_length(n),
-            evals_f: vector_with_length(2 * n),
-            evals_g: vector_with_length(2 * n),
+            points_f: vec![F::zero(); n],
+            points_g: vec![F::zero(); n],
+            evals_f: vec![F::zero(); 2 * n],
+            evals_g: vec![F::zero(); 2 * n],
             poly_mem: PolyAuxMemory::new(n),
             public_key1,
             public_key2,
@@ -104,7 +104,7 @@ impl<F: FieldElement> Client<F> {
     where
         G: FnOnce(&mut [F]),
     {
-        let mut proof = vector_with_length(proof_length(self.dimension));
+        let mut proof = vec![F::zero(); proof_length(self.dimension)];
         // unpack one long vector to different subparts
         let mut unpacked = unpack_proof_mut(&mut proof, self.dimension).unwrap();
         // initialize the data part
