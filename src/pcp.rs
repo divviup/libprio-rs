@@ -234,9 +234,13 @@ pub trait GadgetCallOnly<F: FieldElement> {
 
 /// The sub-circuit associated with some validity circuit. A gadget is called either on a sequence
 /// of finite field elements or a sequence of polynomials over a finite field.
-pub trait Gadget<F: FieldElement>: GadgetCallOnly<F> {
+pub trait Gadget<F: FieldElement>: GadgetCallOnly<F> + Clone + Sync + Send {
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError>;
+    fn call_poly<V: Sync + AsRef<[F]>>(
+        &mut self,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError>;
 
     /// The maximum degree of the polynomial output by `call_poly` as a function of the maximum
     /// degree of each input polynomial.

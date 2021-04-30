@@ -30,6 +30,8 @@ pub enum FieldError {
 /// Objects with this trait represent an element of `GF(p)` for some prime `p`.
 pub trait FieldElement:
     Sized
+    + Send
+    + Sync
     + Debug
     + Copy
     + PartialEq

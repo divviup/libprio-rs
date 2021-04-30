@@ -14,6 +14,7 @@ aes-ctr = "0.4.0"
 aes-gcm = "0.6.0"
 base64 = "0.12.3"
 rand = "0.7"
+rayon = "1.5"
 ring = "0.16.15"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
