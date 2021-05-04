@@ -7,7 +7,7 @@ use prio::client::Client;
 use prio::encrypt::PublicKey;
 use prio::field::{Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
-use prio::pcp::types::PolyCheckedVector;
+use prio::pcp::types::{MeanVarUnsignedVector, PolyCheckedVector};
 use prio::pcp::{prove, query, Gadget, Value};
 use prio::server::{generate_verification_message, ValidationMemory};
 
@@ -74,7 +74,7 @@ const PUBKEY2: &str =
 
 /// Benchmark generation and verification of boolean vectors.
 pub fn bool_vec(c: &mut Criterion) {
-    let test_sizes = [1, 10, 100, 1_000, 10_000, 100_000];
+    let test_sizes = [1, 10, 100, 1_000, 10_000];
     for size in test_sizes.iter() {
         let data = vec![F::zero(); *size];
 
@@ -131,6 +131,43 @@ pub fn bool_vec(c: &mut Criterion) {
     }
 }
 
+/// Benchmark proof generation and verification for the MeanVarUnsignedVector type.
+pub fn mean_var_int_vec(c: &mut Criterion) {
+    let bits = 12;
+    let test_sizes = [1, 10, 20, 100, 1_000, 10_000];
+    for size in test_sizes.iter() {
+        let data = vec![0; *size];
+
+        let x: MeanVarUnsignedVector<F> = MeanVarUnsignedVector::new(bits, &data).unwrap();
+        let (query_rand, joint_rand) = gen_rand(&x);
+
+        c.bench_function(
+            &format!("{}-bit mean var int vec prove, size={}", bits, *size),
+            |b| {
+                b.iter(|| {
+                    prove(&x, &joint_rand).unwrap();
+                })
+            },
+        );
+
+        let pf = prove(&x, &joint_rand).unwrap();
+        println!(
+            "{}-bit mean var int vec proof size={}\n",
+            bits,
+            pf.as_slice().len()
+        );
+
+        c.bench_function(
+            &format!("{}-bit mean var int vec query, size={}", bits, *size),
+            |b| {
+                b.iter(|| {
+                    query(&x, &pf, &query_rand, &joint_rand).unwrap();
+                })
+            },
+        );
+    }
+}
+
 fn gen_rand<F, G, V>(x: &V) -> (Vec<F>, Vec<F>)
 where
     F: FieldElement,
@@ -139,6 +176,7 @@ where
 {
     let query_rand = vec![F::rand()];
     let rand_len = x.valid_rand_len();
+
     let mut joint_rand: Vec<F> = Vec::with_capacity(rand_len);
     for _ in 0..rand_len {
         joint_rand.push(F::rand());
@@ -146,5 +184,5 @@ where
     (query_rand, joint_rand)
 }
 
-criterion_group!(benches, bool_vec, poly_mul, fft);
+criterion_group!(benches, bool_vec, mean_var_int_vec, poly_mul, fft);
 criterion_main!(benches);

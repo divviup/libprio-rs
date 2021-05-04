@@ -10,11 +10,11 @@ use std::{
     cmp::min,
     convert::TryFrom,
     fmt::{Debug, Display, Formatter},
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign},
+    ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign},
 };
 
 /// Possible errors from finite field operations.
-#[derive(Debug, thiserror::Error)]
+#[derive(Debug, PartialEq, thiserror::Error)]
 pub enum FieldError {
     /// Input sizes do not match
     #[error("input sizes do not match")]
@@ -56,6 +56,7 @@ pub trait FieldElement:
     type Integer: Copy
         + Debug
         + PartialOrd
+        + BitAnd<Output = <Self as FieldElement>::Integer>
         + Div<Output = <Self as FieldElement>::Integer>
         + Shr<Output = <Self as FieldElement>::Integer>
         + Sub<Output = <Self as FieldElement>::Integer>

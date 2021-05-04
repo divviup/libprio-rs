@@ -86,7 +86,7 @@
 //! let pf = prove(&x, &joint_rand).unwrap();
 //! let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
 //!     .into_iter()
-//!     .map(|data| Proof::from(data))
+//!     .map(Proof::from)
 //!     .collect();
 //!
 //! // Each verifier queries its shares of the input and proof and sends its
@@ -123,7 +123,7 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
-use crate::field::FieldElement;
+use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
 use crate::polynomial::{poly_deg, poly_eval};
 
@@ -176,6 +176,14 @@ pub enum PcpError {
     /// The validity circuit was called with the wrong amount of randomness.
     #[error("incorrect amount of randomness")]
     ValidRandLen,
+
+    /// Encountered an error while evaluating a validity circuit.
+    #[error("failed to run validity circuit: {0}")]
+    Valid(&'static str),
+
+    /// Returned if a field operation encountered an error.
+    #[error("Field error")]
+    Field(#[from] FieldError),
 }
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
@@ -240,7 +248,47 @@ where
     /// "leader" share from the others. This is useful, for example, when some of the gadget inputs
     /// are constants used for both proof generation and verification.
     ///
-    /// TODO(cjpatton) Add an example once we have implemented a data type that uses this method.
+    /// ```
+    /// use prio::pcp::types::MeanVarUnsignedVector;
+    /// use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
+    /// use prio::field::{split, FieldElement, Field64};
+    ///
+    /// use std::convert::TryFrom;
+    ///
+    /// let measurement = [1, 2, 3];
+    /// let bits = 8;
+    ///
+    /// let joint_rand = [Field64::rand(), Field64::rand(), Field64::rand()];
+    /// let query_rand = [Field64::rand()];
+    ///
+    /// let x: MeanVarUnsignedVector<Field64> =
+    ///     MeanVarUnsignedVector::new(bits, &measurement).unwrap();
+    /// let x_shares: Vec<MeanVarUnsignedVector<Field64>> = split(x.as_slice(), 2)
+    ///     .into_iter()
+    ///     .enumerate()
+    ///     .map(|(i, data)| {
+    ///         let mut share =
+    ///             MeanVarUnsignedVector::try_from((x.param(), data)).unwrap();
+    ///         share.set_leader(i == 0);
+    ///         share
+    ///     })
+    ///     .collect();
+    ///
+    /// let pf = prove(&x, &joint_rand).unwrap();
+    /// let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
+    ///     .into_iter()
+    ///     .map(Proof::from)
+    ///     .collect();
+    ///
+    /// let vf_shares = vec![
+    ///     query(&x_shares[0], &pf_shares[0], &query_rand, &joint_rand).unwrap(),
+    ///     query(&x_shares[1], &pf_shares[1], &query_rand, &joint_rand).unwrap(),
+    /// ];
+    ///
+    /// let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
+    /// let res = decide(&x_shares[0], &vf).unwrap();
+    /// assert_eq!(res, true);
+    /// ```
     fn set_leader(&mut self, _is_leader: bool) {
         // No-op by default.
     }
@@ -618,7 +666,7 @@ mod tests {
         let pf = prove(&x, &joint_rand).unwrap();
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), 2)
             .into_iter()
-            .map(|data| Proof::from(data))
+            .map(Proof::from)
             .collect();
 
         let vf_shares = vec![
