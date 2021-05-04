@@ -215,6 +215,8 @@ pub fn poly_interpret_eval<F: FieldElement>(
 
 // Returns a polynomial that evaluates to `0` if the input is in range `[start, end)`. Otherwise,
 // the output is not `0`.
+//
+// TODO(cjpatton): Pass a range here instead of a pair `(start, end)`.
 pub(crate) fn poly_range_check<F: FieldElement>(start: usize, end: usize) -> Vec<F> {
     let mut p = vec![F::one()];
     let mut q = [F::zero(), F::one()];

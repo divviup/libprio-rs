@@ -77,7 +77,7 @@
 //! let x: Boolean<Field64>= Boolean::new(true);
 //! let x_shares: Vec<Boolean<Field64>> = split(x.as_slice(), 2)
 //!     .into_iter()
-//!     .map(|data| x.new_with(data))
+//!     .map(|data| Boolean::try_from(((), data)).unwrap())
 //!     .collect();
 //!
 //! // The prover generates a proof of its input's validity and splits the proof
@@ -122,8 +122,9 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
-use crate::field::FieldElement;
+use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
+use crate::pcp::types::TypeError;
 use crate::polynomial::{poly_deg, poly_eval};
 
 pub mod gadgets;
@@ -171,15 +172,22 @@ pub enum PcpError {
     /// The validity circuit was called with the wrong amount of randomness.
     #[error("incorrect amount of randomness")]
     ValidRandLen,
+
+    #[error("Field error")]
+    Field(#[from] FieldError),
 }
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value<F, G>: Sized + PartialEq + Eq + Debug
+pub trait Value<F, G>:
+    Sized + PartialEq + Eq + Debug + TryFrom<(<Self as Value<F, G>>::Param, Vec<F>), Error = TypeError>
 where
     F: FieldElement,
     G: Gadget<F>,
 {
+    /// Parameters used to construct this type from a vector of field elements.
+    type Param;
+
     /// Evalauates the validity circuit on the given input (i.e., `self`) and returns the output.
     /// Slice `rand` is the random input consumed by the validity circuit.
     ///
@@ -206,10 +214,6 @@ where
     /// Returns a reference to the underlying data.
     fn as_slice(&self) -> &[F];
 
-    /// Constructs a value of this type from the given data without checking whether the data is
-    /// valid. This method takes ownership of `data`.
-    fn new_with(&self, data: Vec<F>) -> Self;
-
     /// The length of the random input expected by the validity circuit.
     fn valid_rand_len(&self) -> usize;
 
@@ -220,6 +224,15 @@ where
     /// maximum degree of each of the polynomials passed into `call_poly`. If `call_poly` is never
     /// used by the caller, then it is safe to set `in_len == 0`.
     fn gadget(&self, in_len: usize) -> G;
+
+    /// XXX Associated parameters needed to construct this type.
+    fn param(&self) -> Self::Param;
+
+    /// XXX Figure out why, for types that pass joint randomness into gadgets, each random input
+    /// needs to be 0 for helper shares.
+    fn set_leader(&mut self, _is_leader: bool) {
+        // No-op by default.
+    }
 }
 
 /// The gadget functionality required for evaluating a validity circuit. The `Gadget` trait
@@ -379,6 +392,8 @@ where
     let g = x.gadget(m);
     let l = g.call_in_len();
 
+    let mut verifier_data = Vec::with_capacity(2 + l);
+
     // Run the validity circuit with a "shim" gadget that records each input to each gadget.
     // Record the output of the circuit.
     //
@@ -387,17 +402,16 @@ where
     // should be ok, since it's possible to transform any circuit into one that for which this is
     // true. (Needs security analysis.)
     let mut shim = QueryShimGadget::new(&g, g_calls, pf)?;
-    let v = x.valid(&mut shim, joint_rand)?;
+    verifier_data.push(x.valid(&mut shim, joint_rand)?);
 
     // Reconstruct the intermediate proof polynomials `f[0], ..., f[l-1]` and evaluate each
     // polynomial at input `r`.
     let mut f = vec![F::zero(); m];
-    let mut f_at_r = vec![F::zero(); l];
     let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
     for i in 0..l {
         discrete_fourier_transform(&mut f, &shim.f_vals[i], m)?;
         discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
-        f_at_r[i] = poly_eval(&f, query_rand[0]);
+        verifier_data.push(poly_eval(&f, query_rand[0]));
     }
 
     // Evaluate `p` at `r`.
@@ -406,9 +420,11 @@ where
     // 4.3] requires that r be sampled from the set of field elements *minus* the roots of unity at
     // which the polynomials are interpolated. This relaxation is fine, but results in a modest
     // loss of concrete security. (Needs security analysis.)
-    let p_at_r = poly_eval(&pf.data[l..], query_rand[0]);
+    verifier_data.push(poly_eval(&pf.data[l..], query_rand[0]));
 
-    Ok(Verifier { v, p_at_r, f_at_r })
+    Ok(Verifier {
+        data: verifier_data,
+    })
 }
 
 // A "shim" gadget used during proof verification to record the points at which the intermediate
@@ -476,12 +492,20 @@ impl<F: FieldElement> GadgetCallOnly<F> for QueryShimGadget<F> {
 /// The output of `query`, the verifier message generated for a proof.
 #[derive(Debug)]
 pub struct Verifier<F: FieldElement> {
-    /// Output of the validity circuit.
-    v: F,
-    /// The proof polynomial evluated at `r`.
-    p_at_r: F,
-    /// The intermediate proof polynomials evaluated at `r`.
-    f_at_r: Vec<F>,
+    data: Vec<F>,
+}
+
+impl<F: FieldElement> Verifier<F> {
+    /// Returns a reference to the underlying data.
+    pub fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+}
+
+impl<F: FieldElement> From<Vec<F>> for Verifier<F> {
+    fn from(data: Vec<F>) -> Self {
+        Self { data }
+    }
 }
 
 impl<F: FieldElement> TryFrom<&[Verifier<F>]> for Verifier<F> {
@@ -493,22 +517,17 @@ impl<F: FieldElement> TryFrom<&[Verifier<F>]> for Verifier<F> {
             return Err(PcpError::CollectInLen);
         }
 
-        let l = vf_shares[0].f_at_r.len();
         let mut vf = Verifier {
-            v: F::zero(),
-            p_at_r: F::zero(),
-            f_at_r: vec![F::zero(); l],
+            data: vec![F::zero(); vf_shares[0].data.len()],
         };
 
         for i in 0..vf_shares.len() {
-            if vf_shares[i].f_at_r.len() != l {
+            if vf_shares[i].data.len() != vf.data.len() {
                 return Err(PcpError::CollectGadgetInLenMismatch);
             }
 
-            vf.v += vf_shares[i].v;
-            vf.p_at_r += vf_shares[i].p_at_r;
-            for j in 0..l {
-                vf.f_at_r[j] += vf_shares[i].f_at_r[j];
+            for j in 0..vf.data.len() {
+                vf.data[j] += vf_shares[i].data[j];
             }
         }
 
@@ -523,8 +542,12 @@ where
     G: Gadget<F>,
     V: Value<F, G>,
 {
-    let e = x.gadget(0).call(&vf.f_at_r)?;
-    if e == vf.p_at_r && vf.v == F::zero() {
+    let vf_len = vf.data.len();
+    let v = vf.data[0];
+    let f_at_r = &vf.data[1..vf_len - 1];
+    let p_at_r = vf.data[vf_len - 1];
+    let e = x.gadget(0).call(f_at_r)?;
+    if e == p_at_r && v == F::zero() {
         Ok(true)
     } else {
         Ok(false)
@@ -550,7 +573,7 @@ mod tests {
         let x: T = Boolean::new(false);
         let x_shares: Vec<T> = split(x.as_slice(), 2)
             .into_iter()
-            .map(|data| x.new_with(data))
+            .map(|data| Boolean::try_from(((), data)).unwrap())
             .collect();
 
         let pf = prove(&x, &joint_rand).unwrap();
