@@ -220,6 +220,12 @@ where
     /// maximum degree of each of the polynomials passed into `call_poly`. If `call_poly` is never
     /// used by the caller, then it is safe to set `in_len == 0`.
     fn gadget(&self, in_len: usize) -> G;
+
+    /// XXX Figure out why, for types that pass joint randomness into gadgets, each random input
+    /// needs to be 0 for helper shares.
+    fn set_leader(&mut self, _is_leader: bool) {
+        // No-op by default.
+    }
 }
 
 /// The gadget functionality required for evaluating a validity circuit. The `Gadget` trait

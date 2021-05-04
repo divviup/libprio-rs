@@ -18,5 +18,6 @@ mod fp;
 pub mod pcp;
 mod polynomial;
 mod prng;
+pub mod proto;
 pub mod server;
 pub mod util;
