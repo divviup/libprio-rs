@@ -7,6 +7,9 @@ use crate::pcp::gadgets::{Mul, PolyEval};
 use crate::pcp::{GadgetCallOnly, PcpError, Value};
 use crate::polynomial::poly_range_check;
 
+use std::convert::Infallible;
+use std::convert::TryFrom;
+
 /// Values of this type encode a simple boolean (either `true` or `false`).
 #[derive(Debug, PartialEq, Eq)]
 pub struct Boolean<F: FieldElement> {
@@ -36,6 +39,9 @@ impl<F: FieldElement> Boolean<F> {
 }
 
 impl<F: FieldElement> Value<F, Mul<F>> for Boolean<F> {
+    type Param = ();
+    type TryFromError = Infallible;
+
     fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.valid_rand_len() {
             return Err(PcpError::ValidRandLen);
@@ -71,11 +77,19 @@ impl<F: FieldElement> Value<F, Mul<F>> for Boolean<F> {
         &self.data
     }
 
-    fn new_with(&self, data: Vec<F>) -> Self {
-        Self {
-            data,
+    fn param(&self) -> Self::Param {
+        ()
+    }
+}
+
+impl<F: FieldElement> TryFrom<((), Vec<F>)> for Boolean<F> {
+    type Error = Infallible;
+
+    fn try_from(val: ((), Vec<F>)) -> Result<Self, Infallible> {
+        Ok(Self {
+            data: val.1,
             range: poly_range_check(0, 2),
-        }
+        })
     }
 }
 
@@ -112,6 +126,9 @@ impl<F: FieldElement> PolyCheckedVector<F> {
 }
 
 impl<F: FieldElement> Value<F, PolyEval<F>> for PolyCheckedVector<F> {
+    type Param = Vec<F>; // A polynomial
+    type TryFromError = Infallible;
+
     fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.valid_rand_len() {
             return Err(PcpError::ValidRandLen);
@@ -143,11 +160,19 @@ impl<F: FieldElement> Value<F, PolyEval<F>> for PolyCheckedVector<F> {
         &self.data
     }
 
-    fn new_with(&self, data: Vec<F>) -> Self {
-        Self {
-            data,
-            poly: self.poly.clone(),
-        }
+    fn param(&self) -> Self::Param {
+        self.poly.clone()
+    }
+}
+
+impl<F: FieldElement> TryFrom<(Vec<F>, Vec<F>)> for PolyCheckedVector<F> {
+    type Error = Infallible;
+
+    fn try_from(val: (Vec<F>, Vec<F>)) -> Result<Self, Infallible> {
+        Ok(Self {
+            data: val.1,
+            poly: val.0,
+        })
     }
 }
 
@@ -156,8 +181,6 @@ mod tests {
     use super::*;
     use crate::field::{rand_vec, split, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Gadget, Proof, Value, Verifier};
-
-    use std::convert::TryFrom;
 
     // Number of shares to split input and proofs into in `pcp_test`.
     const NUM_SHARES: usize = 3;
@@ -222,7 +245,7 @@ mod tests {
     fn test_poly_checked_vector() {
         let zero = TestField::zero();
         let one = TestField::one();
-        let nine = TestField::from(<TestField as FieldElement>::Integer::try_from(9).unwrap());
+        let nine = TestField::from(9);
 
         // Test PCP on valid input.
         pcp_validity_test(
@@ -302,7 +325,7 @@ mod tests {
         let query_rand = vec![F::rand()];
 
         // Ensure that `new_with` properly clones the value's parameters.
-        assert_eq!(x, &x.new_with(x.as_slice().to_vec()));
+        assert_eq!(x, &V::try_from((x.param(), x.as_slice().to_vec())).unwrap());
 
         // Run the validity circuit.
         let v = x.valid(&mut x.gadget(0), &joint_rand).unwrap();
@@ -332,7 +355,7 @@ mod tests {
         // Run distributed PCP.
         let x_shares: Vec<V> = split(x.as_slice(), NUM_SHARES)
             .into_iter()
-            .map(|data| x.new_with(data))
+            .map(|data| V::try_from((x.param(), data)).unwrap())
             .collect();
 
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
