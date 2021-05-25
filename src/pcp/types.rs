@@ -154,13 +154,18 @@ impl<F: FieldElement> Value<F, PolyEval<F>> for PolyCheckedVector<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{split, Field64 as TestField};
-    use crate::pcp::{decide, prove, query, rand_vec, Gadget, Proof, Value, Verifier};
+    use crate::field::{rand_vec, split, Field64 as TestField};
+    use crate::pcp::{decide, prove, query, Gadget, Proof, Value, Verifier};
 
     use std::convert::TryFrom;
 
     // Number of shares to split input and proofs into in `pcp_test`.
     const NUM_SHARES: usize = 3;
+
+    struct ValidityTestCase {
+        expect_valid: bool,
+        expected_proof_len: usize,
+    }
 
     #[test]
     fn test_boolean() {
@@ -191,9 +196,6 @@ mod tests {
                 expected_proof_len: 9,
             },
         );
-
-        // Try verifying mutated proofs.
-        pcp_mutant_test(&Boolean::<TestField>::new(true));
 
         // Try running the validity circuit on an input that's too short.
         let malformed_x = Boolean::<TestField> {
@@ -286,13 +288,6 @@ mod tests {
                 expected_proof_len: 16,
             },
         );
-
-        // Try verifying mutated proofs.
-        pcp_mutant_test(&PolyCheckedVector::<TestField>::new_range_checked(
-            vec![one, one, one],
-            0,
-            2,
-        ));
     }
 
     fn pcp_validity_test<F, G, V>(x: &V, t: &ValidityTestCase)
@@ -301,15 +296,16 @@ mod tests {
         G: Gadget<F>,
         V: Value<F, G>,
     {
-        let rand = rand_vec(1 + x.valid_rand_len());
+        let l = x.gadget(0).call_in_len();
+        let rand_len = x.valid_rand_len();
+        let joint_rand = rand_vec(rand_len);
+        let query_rand = vec![F::rand()];
 
         // Ensure that `new_with` properly clones the value's parameters.
         assert_eq!(x, &x.new_with(x.as_slice().to_vec()));
 
         // Run the validity circuit.
-        let v = x
-            .valid(&mut x.gadget(0), &rand_vec(x.valid_rand_len()))
-            .unwrap();
+        let v = x.valid(&mut x.gadget(0), &joint_rand).unwrap();
         assert_eq!(
             v == F::zero(),
             t.expect_valid,
@@ -319,8 +315,8 @@ mod tests {
         );
 
         // Generate and verify a PCP.
-        let pf = prove(x).unwrap();
-        let vf = query(x, &pf, &rand).unwrap();
+        let pf = prove(x, &joint_rand).unwrap();
+        let vf = query(x, &pf, &query_rand, &joint_rand).unwrap();
         let res = decide(x, &vf).unwrap();
         assert_eq!(
             res,
@@ -330,7 +326,7 @@ mod tests {
             vf
         );
 
-        // CHeck that the proof size is as expected.
+        // Check that the proof size is as expected.
         assert_eq!(pf.as_slice().len(), t.expected_proof_len);
 
         // Run distributed PCP.
@@ -346,7 +342,7 @@ mod tests {
 
         let mut vf_shares: Vec<Verifier<F>> = Vec::with_capacity(NUM_SHARES);
         for i in 0..NUM_SHARES {
-            vf_shares.push(query(&x_shares[i], &pf_shares[i], &rand).unwrap());
+            vf_shares.push(query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap());
         }
 
         let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
@@ -356,46 +352,15 @@ mod tests {
             t.expect_valid,
             "{:?} sum of of verifier shares is {:?}",
             x.as_slice(),
-            &vf_shares[0]
+            &vf
         );
-    }
-
-    fn pcp_mutant_test<F, G, V>(x: &V)
-    where
-        F: FieldElement,
-        G: Gadget<F>,
-        V: Value<F, G>,
-    {
-        let l = x.gadget(0).call_in_len();
-        let rand = rand_vec(1 + x.valid_rand_len());
-        let pf = prove(x).unwrap();
 
         // Try verifying a proof with an invalid seed for one of the intermediate polynomials.
         // Verification should fail regardless of whether the input is valid.
         let mut mutated_pf = pf.clone();
         mutated_pf.data[0] += F::one();
         assert_eq!(
-            decide(x, &query(x, &mutated_pf, &rand).unwrap()).unwrap(),
-            false,
-            "{:?} proof mutant verified",
-            x.as_slice(),
-        );
-
-        // Try verifying a proof with an invalid proof polynomial.
-        let mut mutated_pf = pf.clone();
-        mutated_pf.data[l + 1] += F::one();
-        assert_eq!(
-            decide(x, &query(x, &mutated_pf, &rand).unwrap()).unwrap(),
-            false,
-            "{:?} proof mutant verified",
-            x.as_slice(),
-        );
-
-        // Try verifying a proof with a short proof polynomial.
-        let mut mutated_pf = pf.clone();
-        mutated_pf.data.truncate(l + 1);
-        assert_eq!(
-            decide(x, &query(x, &mutated_pf, &rand).unwrap()).unwrap(),
+            decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
             false,
             "{:?} proof mutant verified",
             x.as_slice(),
@@ -404,26 +369,41 @@ mod tests {
         // Try verifying a proof that is too short.
         let mut mutated_pf = pf.clone();
         mutated_pf.data.truncate(l - 1);
-        assert_eq!(
-            query(x, &mutated_pf, &rand).err(),
-            Some(PcpError::QueryProofLen),
+        assert!(
+            query(x, &mutated_pf, &query_rand, &joint_rand).is_err(),
             "{:?} proof mutant verified",
             x.as_slice(),
         );
 
-        // Try verifying a proof that is too long
+        // Try verifying a proof that is too long.
         let mut mutated_pf = pf.clone();
         mutated_pf.data.extend_from_slice(&[F::one(); 17]);
-        assert_eq!(
-            query(x, &mutated_pf, &rand).err(),
-            Some(PcpError::QueryProofLen),
+        assert!(
+            query(x, &mutated_pf, &query_rand, &joint_rand).is_err(),
             "{:?} proof mutant verified",
             x.as_slice(),
         );
-    }
 
-    struct ValidityTestCase {
-        expect_valid: bool,
-        expected_proof_len: usize,
+        if x.as_slice().len() > l {
+            // Try verifying a proof with an invalid proof polynomial.
+            let mut mutated_pf = pf.clone();
+            mutated_pf.data[l] += F::one();
+            assert_eq!(
+                decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
+                false,
+                "{:?} proof mutant verified",
+                x.as_slice(),
+            );
+
+            // Try verifying a proof with a short proof polynomial.
+            let mut mutated_pf = pf.clone();
+            mutated_pf.data.truncate(l);
+            assert_eq!(
+                decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
+                false,
+                "{:?} proof mutant verified",
+                x.as_slice(),
+            );
+        }
     }
 }
