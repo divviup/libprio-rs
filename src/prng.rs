@@ -8,6 +8,8 @@ use aes_ctr::stream_cipher::SyncStreamCipher;
 use aes_ctr::Aes128Ctr;
 use rand::RngCore;
 
+use std::marker::PhantomData;
+
 const BLOCK_SIZE: usize = 16;
 const MAXIMUM_BUFFER_SIZE_IN_BLOCKS: usize = 4096;
 pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
@@ -35,48 +37,94 @@ fn random_field_and_seed<F: FieldElement>(length: usize) -> (Vec<F>, Vec<u8>) {
     (data, seed)
 }
 
-fn random_field_from_seed<F: FieldElement>(seed: &[u8], length: usize) -> Vec<F> {
-    let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
-    let nonce = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
-    let mut cipher = Aes128Ctr::new(&key, &nonce);
+/// Errors propagated by methods in this module.
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub(crate) enum PrngError {
+    #[error("invalid seed length")]
+    SeedLen,
+}
 
-    let mut output = vec![F::zero(); length];
-    let mut output_written = 0;
+/// This type implements an iterator that generates a pseudorandom sequence of field elements. The
+/// sequence is derived from the key stream of AES-128 in CTR mode with a random IV.
+pub(crate) struct Prng<F: FieldElement> {
+    phantom: PhantomData<F>,
+    cipher: Aes128Ctr,
+    length: usize,
+    buffer: Vec<u8>,
+    buffer_index: usize,
+    output_written: usize,
+}
 
-    let length_in_blocks = length * F::BYTES / BLOCK_SIZE;
-    // add one more block to account for rejection and roundoff errors
-    let buffer_len_in_blocks = std::cmp::min(MAXIMUM_BUFFER_SIZE_IN_BLOCKS, length_in_blocks + 1);
-    // Note: buffer_len must be a multiple of BLOCK_SIZE, so that different buffer
-    // lengths return the same data
-    let buffer_len = buffer_len_in_blocks * BLOCK_SIZE;
-    let mut buffer = vec![0; buffer_len];
-
-    while output_written < length {
-        // zero the buffer
-        for b in &mut buffer {
-            *b = 0;
+impl<F: FieldElement> Prng<F> {
+    /// Constructs an iterator over a pseudorandom sequence of field elements of length `length`.
+    /// `seed` is used to seed the underlying pseudorandom number generator.
+    pub(crate) fn new_with_length(seed: &[u8], length: usize) -> Result<Self, PrngError> {
+        if seed.len() != 2 * BLOCK_SIZE {
+            return Err(PrngError::SeedLen);
         }
 
+        let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
+        let iv = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
+
+        let length_in_blocks = length * F::BYTES / BLOCK_SIZE;
+        // add one more block to account for rejection and roundoff errors
+        let buffer_len_in_blocks =
+            std::cmp::min(MAXIMUM_BUFFER_SIZE_IN_BLOCKS, length_in_blocks + 1);
+        // Note: buffer_len must be a multiple of BLOCK_SIZE, so that different buffer
+        // lengths return the same data
+        let buffer_len = buffer_len_in_blocks * BLOCK_SIZE;
+
+        let mut cipher = Aes128Ctr::new(&key, &iv);
+        let mut buffer = vec![0; buffer_len];
         cipher.apply_keystream(&mut buffer);
 
-        for chunk in buffer.chunks_exact(F::BYTES) {
-            match F::read_from(chunk) {
-                Ok(x) => {
-                    output[output_written] = x;
-                    output_written += 1;
-                    if output_written == length {
-                        break;
-                    }
+        Ok(Self {
+            phantom: PhantomData::<F>,
+            cipher,
+            length,
+            buffer,
+            buffer_index: 0,
+            output_written: 0,
+        })
+    }
+}
+
+impl<F: FieldElement> Iterator for Prng<F> {
+    type Item = F;
+
+    fn next(&mut self) -> Option<F> {
+        if self.output_written >= self.length {
+            return None;
+        }
+
+        loop {
+            // Seek to the next chunk of the buffer that encodes an element of F.
+            for i in (self.buffer_index..self.buffer.len()).step_by(F::BYTES) {
+                let j = i + F::BYTES;
+                if let Some(x) = match F::read_from(&self.buffer[i..j]) {
+                    Ok(x) => Some(x),
+                    Err(FieldError::FromBytesModulusOverflow) => None, // reject this sample
+                    Err(err) => panic!("unexpected error: {}", err),
+                } {
+                    // Set the buffer index to the next chunk.
+                    self.buffer_index = j;
+                    self.output_written += 1;
+                    return Some(x);
                 }
-                Err(FieldError::FromBytesModulusOverflow) => (), // reject this sample
-                Err(err) => panic!("unexpected error: {}", err),
             }
+
+            // Refresh buffer with the next chunk of PRG output.
+            for b in &mut self.buffer {
+                *b = 0;
+            }
+            self.cipher.apply_keystream(&mut self.buffer);
+            self.buffer_index = 0;
         }
     }
+}
 
-    assert_eq!(output_written, length);
-
-    output
+fn random_field_from_seed<F: FieldElement>(seed: &[u8], length: usize) -> Vec<F> {
+    Prng::new_with_length(seed, length).unwrap().collect()
 }
 
 #[cfg(test)]
