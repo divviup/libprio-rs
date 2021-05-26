@@ -75,9 +75,10 @@
 //! // The prover encodes its input and splits it into two secret shares. It
 //! // sends each share to two aggregators.
 //! let x: Boolean<Field64>= Boolean::new(true);
+//! let x_par = x.param();
 //! let x_shares: Vec<Boolean<Field64>> = split(x.as_slice(), 2)
 //!     .into_iter()
-//!     .map(|data| x.new_with(data))
+//!     .map(|data| Boolean::try_from((x_par, data)).unwrap())
 //!     .collect();
 //!
 //! // The prover generates a proof of its input's validity and splits the proof
@@ -179,12 +180,23 @@ pub enum PcpError {
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value<F, G>: Sized + PartialEq + Eq + Debug
+pub trait Value<F, G>:
+    Sized
+    + PartialEq
+    + Eq
+    + Debug
+    + TryFrom<(<Self as Value<F, G>>::Param, Vec<F>), Error = <Self as Value<F, G>>::TryFromError>
 where
     F: FieldElement,
     G: Gadget<F>,
 {
-    /// Evalauates the validity circuit on the given input (i.e., `self`) and returns the output.
+    /// Parameters used to construct a value of this type from a vector of field elements.
+    type Param;
+
+    /// Error returned when converting a `(Vec<F>, Param)` to a `Value<F, G>` fails.
+    type TryFromError: Debug;
+
+    /// Evaluates the validity circuit on the given input (i.e., `self`) and returns the output.
     /// Slice `rand` is the random input consumed by the validity circuit.
     ///
     /// ```
@@ -210,10 +222,6 @@ where
     /// Returns a reference to the underlying data.
     fn as_slice(&self) -> &[F];
 
-    /// Constructs a value of this type from the given data without checking whether the data is
-    /// valid. This method takes ownership of `data`.
-    fn new_with(&self, data: Vec<F>) -> Self;
-
     /// The length of the random input expected by the validity circuit.
     fn valid_rand_len(&self) -> usize;
 
@@ -224,6 +232,9 @@ where
     /// maximum degree of each of the polynomials passed into `call_poly`. If `call_poly` is never
     /// used by the caller, then it is safe to set `in_len == 0`.
     fn gadget(&self, in_len: usize) -> G;
+
+    /// Returns a copy of the associated type parameters for this value.
+    fn param(&self) -> Self::Param;
 }
 
 /// The gadget functionality required for evaluating a validity circuit. The `Gadget` trait
@@ -589,9 +600,10 @@ mod tests {
         let joint_rand = vec![];
 
         let x: T = Boolean::new(false);
+        let x_par = x.param();
         let x_shares: Vec<T> = split(x.as_slice(), 2)
             .into_iter()
-            .map(|data| x.new_with(data))
+            .map(|data| Boolean::try_from((x_par, data)).unwrap())
             .collect();
 
         let pf = prove(&x, &joint_rand).unwrap();

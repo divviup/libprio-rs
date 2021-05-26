@@ -50,7 +50,7 @@ pub trait FieldElement:
     const BYTES: usize;
 
     /// The error returned if converting `usize` to an `Int` fails.
-    type IntegerTryFromError: std::fmt::Debug;
+    type IntegerTryFromError: Debug;
 
     /// The integer representation of the field element.
     type Integer: Copy
