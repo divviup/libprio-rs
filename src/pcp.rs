@@ -165,8 +165,12 @@ pub enum PcpError {
     GadgetPolyOutLen,
 
     /// Calling `query` returned an error.
-    #[error("query error")]
+    #[error("query error: {0}")]
     Query(&'static str),
+
+    /// Calling `decide` returned an error.
+    #[error("decide error: {0}")]
+    Decide(&'static str),
 
     /// The validity circuit was called with the wrong amount of randomness.
     #[error("incorrect amount of randomness")]
@@ -379,6 +383,11 @@ where
     let g = x.gadget(m);
     let l = g.call_in_len();
 
+    // Allocate space for the verifier data. This includes the output of the validity circuit, the
+    // intermediate polynomials evaluated at the query randomness `r`, and the proof polynomial
+    // evaluated at `r`.
+    let mut verifier_data = Vec::with_capacity(2 + l);
+
     // Run the validity circuit with a "shim" gadget that records each input to each gadget.
     // Record the output of the circuit.
     //
@@ -387,28 +396,29 @@ where
     // should be ok, since it's possible to transform any circuit into one that for which this is
     // true. (Needs security analysis.)
     let mut shim = QueryShimGadget::new(&g, g_calls, pf)?;
-    let v = x.valid(&mut shim, joint_rand)?;
+    verifier_data.push(x.valid(&mut shim, joint_rand)?);
 
     // Reconstruct the intermediate proof polynomials `f[0], ..., f[l-1]` and evaluate each
     // polynomial at input `r`.
     let mut f = vec![F::zero(); m];
-    let mut f_at_r = vec![F::zero(); l];
     let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
     for i in 0..l {
         discrete_fourier_transform(&mut f, &shim.f_vals[i], m)?;
         discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
-        f_at_r[i] = poly_eval(&f, query_rand[0]);
+        verifier_data.push(poly_eval(&f, query_rand[0]));
     }
 
-    // Evaluate `p` at `r`.
+    // Evaluate the proof polynomial `p` at `r`.
     //
     // NOTE Usually `r` is sampled uniformly form the field. Technically speaking, [BBC+19, Theorem
     // 4.3] requires that r be sampled from the set of field elements *minus* the roots of unity at
     // which the polynomials are interpolated. This relaxation is fine, but results in a modest
     // loss of concrete security. (Needs security analysis.)
-    let p_at_r = poly_eval(&pf.data[l..], query_rand[0]);
+    verifier_data.push(poly_eval(&pf.data[l..], query_rand[0]));
 
-    Ok(Verifier { v, p_at_r, f_at_r })
+    Ok(Verifier {
+        data: verifier_data,
+    })
 }
 
 // A "shim" gadget used during proof verification to record the points at which the intermediate
@@ -476,12 +486,42 @@ impl<F: FieldElement> GadgetCallOnly<F> for QueryShimGadget<F> {
 /// The output of `query`, the verifier message generated for a proof.
 #[derive(Debug)]
 pub struct Verifier<F: FieldElement> {
-    /// Output of the validity circuit.
-    v: F,
-    /// The proof polynomial evluated at `r`.
-    p_at_r: F,
-    /// The intermediate proof polynomials evaluated at `r`.
-    f_at_r: Vec<F>,
+    /// `data` consists of the following values:
+    ///
+    ///  * `data[0]` is the output of the validity circuit;
+    ///  * `data[1..l+1]` are the outputs of the intermediate proof polynomials evaluated at the
+    ///     query randomness `r` (`l` denotes the arity of the gadget); and
+    ///  * `data[l+1]` is the output of the proof polynomial evaluated at `r`.
+    data: Vec<F>,
+}
+
+impl<F: FieldElement> Verifier<F> {
+    /// Returns a reference to the underlying data.
+    pub fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    /// Returns the output of the validity circuit.
+    fn validity(&self) -> F {
+        self.data[0]
+    }
+
+    /// Returns the outputs of the intermediate proof polynomials evaluated at the query
+    /// randomness.
+    fn f_at_r(&self) -> &[F] {
+        &self.data[1..self.data.len() - 1]
+    }
+
+    /// Returns the output of the proof polynomial evaluated at the query randomness.
+    fn p_at_r(&self) -> F {
+        self.data[self.data.len() - 1]
+    }
+}
+
+impl<F: FieldElement> From<Vec<F>> for Verifier<F> {
+    fn from(data: Vec<F>) -> Self {
+        Self { data }
+    }
 }
 
 impl<F: FieldElement> TryFrom<&[Verifier<F>]> for Verifier<F> {
@@ -493,22 +533,17 @@ impl<F: FieldElement> TryFrom<&[Verifier<F>]> for Verifier<F> {
             return Err(PcpError::CollectInLen);
         }
 
-        let l = vf_shares[0].f_at_r.len();
         let mut vf = Verifier {
-            v: F::zero(),
-            p_at_r: F::zero(),
-            f_at_r: vec![F::zero(); l],
+            data: vec![F::zero(); vf_shares[0].data.len()],
         };
 
         for i in 0..vf_shares.len() {
-            if vf_shares[i].f_at_r.len() != l {
+            if vf_shares[i].data.len() != vf.data.len() {
                 return Err(PcpError::CollectGadgetInLenMismatch);
             }
 
-            vf.v += vf_shares[i].v;
-            vf.p_at_r += vf_shares[i].p_at_r;
-            for j in 0..l {
-                vf.f_at_r[j] += vf_shares[i].f_at_r[j];
+            for j in 0..vf.data.len() {
+                vf.data[j] += vf_shares[i].data[j];
             }
         }
 
@@ -523,8 +558,14 @@ where
     G: Gadget<F>,
     V: Value<F, G>,
 {
-    let e = x.gadget(0).call(&vf.f_at_r)?;
-    if e == vf.p_at_r && vf.v == F::zero() {
+    let mut g = x.gadget(0);
+    let vf_len = vf.data.len();
+    if vf_len < 2 + g.call_in_len() {
+        return Err(PcpError::Decide("short verifier message"));
+    }
+
+    let e = g.call(vf.f_at_r())?;
+    if e == vf.p_at_r() && vf.validity() == F::zero() {
         Ok(true)
     } else {
         Ok(false)
@@ -567,5 +608,32 @@ mod tests {
         let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
         let res = decide(&x, &vf).unwrap();
         assert_eq!(res, true);
+    }
+
+    #[test]
+    fn test_decide() {
+        let query_rand = vec![Field126::rand()];
+        let joint_rand = vec![];
+        let x: Boolean<Field126> = Boolean::new(true);
+
+        let ok_vf = query(
+            &x,
+            &prove(&x, &joint_rand).unwrap(),
+            &query_rand,
+            &joint_rand,
+        )
+        .unwrap();
+        assert!(decide(&x, &ok_vf).is_ok());
+
+        let vf_len = ok_vf.as_slice().len();
+
+        let bad_vf = Verifier::from(ok_vf.as_slice()[..vf_len - 1].to_vec());
+        assert!(decide(&x, &bad_vf).is_err());
+
+        let bad_vf = Verifier::from(ok_vf.as_slice()[..2].to_vec());
+        assert!(decide(&x, &bad_vf).is_err());
+
+        let bad_vf = Verifier::from(vec![]);
+        assert!(decide(&x, &bad_vf).is_err());
     }
 }
