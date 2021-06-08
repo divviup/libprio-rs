@@ -114,7 +114,7 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{Field126, Field32, Field64, Field80};
+    use crate::field::{rand_vec, split, Field126, Field32, Field64, Field80};
     use crate::polynomial::{poly_fft, PolyAuxMemory};
 
     fn discrete_fourier_transform_then_inv_test<F: FieldElement>() -> Result<(), FftError> {
@@ -178,6 +178,45 @@ mod tests {
             false,
             &mut mem.fft_memory,
         );
+
+        assert_eq!(got, want);
+    }
+
+    // This test demonstrates a consequence of \[BBG+19, Fact 4.4\]: interpolating a polynomial
+    // over secret shares and summing up the coefficients is equivalent to interpolating a
+    // polynomial over the plaintext data.
+    #[test]
+    fn test_fft_linearity() {
+        let len = 16;
+        let num_shares = 3;
+        let x: Vec<Field64> = rand_vec(len);
+        let mut x_shares = split(&x, num_shares);
+
+        // Just for fun, let's do something different with a subset of the inputs. For the first
+        // share, every odd element is set to the plaintext value. For all shares but the first,
+        // every odd element is set to 0.
+        for i in 0..len {
+            if i % 2 != 0 {
+                x_shares[0][i] = x[i];
+            }
+            for j in 1..num_shares {
+                if i % 2 != 0 {
+                    x_shares[j][i] = Field64::zero();
+                }
+            }
+        }
+
+        let mut got = vec![Field64::zero(); len];
+        let mut buf = vec![Field64::zero(); len];
+        for j in 0..num_shares {
+            discrete_fourier_transform_inv(&mut buf, &x_shares[j], len).unwrap();
+            for i in 0..len {
+                got[i] += buf[i];
+            }
+        }
+
+        let mut want = vec![Field64::zero(); len];
+        discrete_fourier_transform_inv(&mut want, &x, len).unwrap();
 
         assert_eq!(got, want);
     }
