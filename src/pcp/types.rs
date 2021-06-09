@@ -355,7 +355,12 @@ mod tests {
         // Run distributed PCP.
         let x_shares: Vec<V> = split(x.as_slice(), NUM_SHARES)
             .into_iter()
-            .map(|data| V::try_from((x.param(), data)).unwrap())
+            .enumerate()
+            .map(|(i, data)| {
+                let mut share = V::try_from((x.param(), data)).unwrap();
+                share.set_leader(i == 0);
+                share
+            })
             .collect();
 
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)

@@ -235,6 +235,15 @@ where
 
     /// Returns a copy of the associated type parameters for this value.
     fn param(&self) -> Self::Param;
+
+    /// When verifying a proof over secret shared data, this method may be used to distinguish the
+    /// "leader" share from the others. This is useful, for example, when some of the gadget inputs
+    /// are constants used for both proof generation and verification.
+    ///
+    /// TODO(cjpatton) Add an example once we have implemented a data type that uses this method.
+    fn set_leader(&mut self, _is_leader: bool) {
+        // No-op by default.
+    }
 }
 
 /// The gadget functionality required for evaluating a validity circuit. The `Gadget` trait
@@ -403,9 +412,9 @@ where
     // Record the output of the circuit.
     //
     // NOTE The proof of [BBC+19, Theorem 4.3] assumes that the output of the validity circuit is
-    // equal to the output of the last gadget evaluation. Here we relax this assumption, This
-    // should be ok, since it's possible to transform any circuit into one that for which this is
-    // true. (Needs security analysis.)
+    // equal to the output of the last gadget evaluation. Here we relax this assumption. This
+    // should be OK, since it's possible to transform any circuit into one for which this is true.
+    // (Needs security analysis.)
     let mut shim = QueryShimGadget::new(&g, g_calls, pf)?;
     verifier_data.push(x.valid(&mut shim, joint_rand)?);
 
@@ -421,10 +430,10 @@ where
 
     // Evaluate the proof polynomial `p` at `r`.
     //
-    // NOTE Usually `r` is sampled uniformly form the field. Technically speaking, [BBC+19, Theorem
-    // 4.3] requires that r be sampled from the set of field elements *minus* the roots of unity at
-    // which the polynomials are interpolated. This relaxation is fine, but results in a modest
-    // loss of concrete security. (Needs security analysis.)
+    // NOTE Usually `r` is sampled uniformly from the field. Strictly speaking, [BBC+19, Theorem
+    // 4.3] requires that `r` be sampled from the set of field elements *minus* the roots of unity
+    // at which the polynomials are interpolated. This relaxation is fine, but results in a
+    // modest loss of concrete security. (Needs security analysis.)
     verifier_data.push(poly_eval(&pf.data[l..], query_rand[0]));
 
     Ok(Verifier {
