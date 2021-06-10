@@ -67,7 +67,7 @@ impl<F: FieldElement> Prng<F> {
         let iv = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
         let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(&key), &iv);
 
-        let buf_len_in_elems = std::cmp::min(length, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS);
+        let buf_len_in_elems = std::cmp::min(length + 1, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS);
         let mut buffer = vec![0; buf_len_in_elems * F::BYTES];
         cipher.apply_keystream(&mut buffer);
 
