@@ -3,12 +3,21 @@
 //! A collection of data types.
 
 use crate::field::FieldElement;
-use crate::pcp::gadgets::{Mul, PolyEval};
+use crate::pcp::gadgets::{MeanVarUnsigned, Mul, PolyEval};
 use crate::pcp::{GadgetCallOnly, PcpError, Value};
 use crate::polynomial::poly_range_check;
 
 use std::convert::Infallible;
 use std::convert::TryFrom;
+use std::mem::size_of;
+
+/// Errors propagated by methods in this module.
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum TypeError {
+    /// Encountered an error while trying to construct an instance of some type.
+    #[error("failed to instantiate type: {0}")]
+    Instantiate(&'static str),
+}
 
 /// Values of this type encode a simple boolean (either `true` or `false`).
 #[derive(Debug, PartialEq, Eq)]
@@ -176,6 +185,165 @@ impl<F: FieldElement> TryFrom<(Vec<F>, Vec<F>)> for PolyCheckedVector<F> {
     }
 }
 
+/// This type is used to compute the mean and variance of a sequence of integers in range `[0,
+/// 2^bits)` for some length parameter `bits`.
+///
+/// Each integer is encoded using `bits + 1` field elements. The encoding has two parts: `x_vec`,
+/// the representation of the integer as a boolean vector (i.e., a sequence of 0s and 1s); and
+/// `xx`, which is the integer raised to the power of two. The validity circuit checks that the
+/// integer represented by `x_vec` is the square root of `xx`. It is based on the SIMD circuit of
+/// \[BBG+19, Theorem 5.3\].
+#[derive(Debug, PartialEq, Eq)]
+pub struct MeanVarUnsignedVector<F: FieldElement> {
+    data: Vec<F>,
+    /// The maximum length of each integer.
+    bits: usize,
+    /// The number of integers encoded by `data`.
+    len: usize,
+    /// Whether `data` corresponds to the leader's share.
+    is_leader: bool,
+}
+
+impl<F: FieldElement> MeanVarUnsignedVector<F> {
+    /// Encodes `measurement` as an instance of the MeanVarUnsignedVector type. `bits` specifies
+    /// the maximum length of each integer in bits.
+    pub fn new(bits: usize, measurement: &[F::Integer]) -> Result<Self, TypeError> {
+        if bits > (size_of::<F::Integer>() << 3) {
+            return Err(TypeError::Instantiate(
+                "MeanVarUnsignedVector: bits exceeds bit length of the field's integer representation",
+            ));
+        }
+
+        let one = F::Integer::try_from(1).unwrap();
+        let max = F::Integer::try_from(1 << bits).unwrap();
+        let mut data: Vec<F> = Vec::with_capacity((bits + 1) * measurement.len());
+        for &int in measurement {
+            if int >= max {
+                return Err(TypeError::Instantiate(
+                    "MeanVarUnsignedVector: input overflow",
+                ));
+            }
+
+            for l in 0..bits {
+                let l = F::Integer::try_from(l).unwrap();
+                let w = F::from((int >> l) & one);
+                data.push(w);
+            }
+
+            let x = F::from(int);
+            data.push(x * x);
+        }
+
+        Ok(Self {
+            data,
+            bits,
+            len: measurement.len(),
+            is_leader: true,
+        })
+    }
+}
+
+impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> {
+    type Param = usize; // Length of each integer in bits
+    type TryFromError = TypeError;
+
+    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
+        let bits = self.bits;
+        let mut inp = vec![F::zero(); 2 * bits + 1];
+        let mut outp = F::zero();
+
+        for (i, chunk) in self.data.chunks(bits + 1).enumerate() {
+            if chunk.len() < bits + 1 {
+                return Err(PcpError::Valid(
+                    "MeanVarUnsignedVector: length of data not divisible by chunk size",
+                ));
+            }
+
+            let mut pr = rand[i];
+            let x_vec = &chunk[..bits];
+            let xx = chunk[bits];
+
+            // Sets `x` to the `bits`-bit integer encoded by `x_vec`.
+            let mut x = F::zero();
+            for l in 0..bits {
+                let w = F::from(F::Integer::try_from(1 << l).unwrap());
+                x += w * x_vec[l];
+            }
+
+            // The first `bits` inputs to the gadget are are `r, r^2, ..., r^bits`.
+            for l in 0..bits {
+                // The prover and verifier use joint randomness to generate and verify the proof.
+                // In order to ensure the gadget inputs are the same in the distributed setting,
+                // only the leader will use the joint randomness here.
+                inp[l] = if self.is_leader { pr } else { F::zero() };
+                pr *= rand[i];
+            }
+
+            // The next `bits` inputs to the gadget comprise the bit-vector representation of `x`.
+            &inp[bits..2 * bits].clone_from_slice(x_vec);
+
+            // The last input to the gadget is `x`.
+            inp[2 * bits] = x;
+
+            // Sets `yy = x^2` if `x_vec` is a bit vector. Otherwise, if `x_vec` is not a bit
+            // vector, then `yy != x^2` with high probability.
+            let yy = g.call(&inp)?;
+
+            outp += pr * (yy - xx);
+            pr *= rand[i];
+        }
+
+        Ok(outp)
+    }
+
+    fn valid_gadget_calls(&self) -> usize {
+        self.len
+    }
+
+    fn valid_rand_len(&self) -> usize {
+        self.len
+    }
+
+    fn gadget(&self, in_len: usize) -> MeanVarUnsigned<F> {
+        MeanVarUnsigned::new(self.bits, in_len)
+    }
+
+    fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    fn param(&self) -> Self::Param {
+        self.bits
+    }
+
+    fn set_leader(&mut self, is_leader: bool) {
+        self.is_leader = is_leader;
+    }
+}
+
+impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for MeanVarUnsignedVector<F> {
+    type Error = TypeError;
+
+    fn try_from(val: (usize, Vec<F>)) -> Result<Self, TypeError> {
+        let bits = val.0;
+        let data = val.1;
+        let len = data.len() / (bits + 1);
+
+        if data.len() % (bits + 1) != 0 {
+            return Err(TypeError::Instantiate(
+                "MeanVarUnsignedVector: length of data not divisible by chunk size",
+            ));
+        }
+
+        Ok(Self {
+            data,
+            bits,
+            len,
+            is_leader: true,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -242,7 +410,7 @@ mod tests {
     }
 
     #[test]
-    fn test_poly_checked_vector() {
+    fn test_poly_checked_vec() {
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -313,6 +481,105 @@ mod tests {
         );
     }
 
+    #[test]
+    fn test_mean_var_uint_vec() {
+        let zero = TestField::zero();
+        let one = TestField::one();
+        let nine = TestField::from(9);
+
+        // Can't encode an integer that is larger than 2^bits.
+        assert!(MeanVarUnsignedVector::<TestField>::new(8, &[256]).is_err());
+
+        // Can't instantiate this type if bits > 64.
+        assert!(MeanVarUnsignedVector::<TestField>::new(65, &[]).is_err());
+
+        let bits = 7;
+        let ints = [1, 61, 27, 17, 0];
+        let x: MeanVarUnsignedVector<TestField> = MeanVarUnsignedVector::new(bits, &ints).unwrap();
+        assert_eq!(x.data.len(), ints.len() * (1 + bits));
+        for chunk in x.data.chunks(1 + bits) {
+            let x_vec = &chunk[..bits];
+            let xx = chunk[bits];
+
+            let mut x = TestField::zero();
+            for l in 0..bits {
+                x += TestField::from(1 << l) * x_vec[l];
+            }
+            assert_eq!(x * x, xx);
+        }
+
+        // Test PCP on valid input.
+        pcp_validity_test(
+            &x,
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 37,
+            },
+        );
+        pcp_validity_test(
+            &MeanVarUnsignedVector::<TestField>::new(bits, &[]).unwrap(),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 16,
+            },
+        );
+        pcp_validity_test(
+            &MeanVarUnsignedVector::<TestField>::new(bits, &[0]).unwrap(),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 19,
+            },
+        );
+        pcp_validity_test(
+            &MeanVarUnsignedVector::<TestField>::new(bits, &vec![61; 100]).unwrap(),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 397,
+            },
+        );
+
+        // Test PCP on invalid input.
+        pcp_validity_test(
+            &MeanVarUnsignedVector::<TestField> {
+                // x_vec is incorrect
+                data: vec![/* x_vec */ one, zero, one, /* xx */ one],
+                len: 1,
+                bits: 3,
+                is_leader: true,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 11,
+            },
+        );
+        pcp_validity_test(
+            &MeanVarUnsignedVector::<TestField> {
+                // x_vec is malformed
+                data: vec![/* x_vec */ nine, zero, zero, /* xx */ one],
+                len: 1,
+                bits: 3,
+                is_leader: true,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 11,
+            },
+        );
+        pcp_validity_test(
+            &MeanVarUnsignedVector::<TestField> {
+                // xx is incorrect
+                data: vec![/* x_vec */ one, zero, zero, /* xx */ nine],
+                len: 1,
+                bits: 3,
+                is_leader: true,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 11,
+            },
+        );
+    }
+
     fn pcp_validity_test<F, G, V>(x: &V, t: &ValidityTestCase)
     where
         F: FieldElement,
@@ -365,7 +632,7 @@ mod tests {
 
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
             .into_iter()
-            .map(|data| Proof::from(data))
+            .map(Proof::from)
             .collect();
 
         let mut vf_shares: Vec<Verifier<F>> = Vec::with_capacity(NUM_SHARES);
