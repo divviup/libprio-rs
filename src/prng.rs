@@ -2,10 +2,12 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use super::field::{FieldElement, FieldError};
-use aes_ctr::stream_cipher::generic_array::GenericArray;
-use aes_ctr::stream_cipher::NewStreamCipher;
-use aes_ctr::stream_cipher::SyncStreamCipher;
-use aes_ctr::Aes128Ctr;
+use aes::{
+    cipher::{
+        generic_array::GenericArray, BlockCipher, FromBlockCipher, NewBlockCipher, StreamCipher,
+    },
+    Aes128, Aes128Ctr,
+};
 use rand::RngCore;
 
 use std::marker::PhantomData;
@@ -74,7 +76,8 @@ impl<F: FieldElement> Prng<F> {
         // lengths return the same data
         let buffer_len = buffer_len_in_blocks * BLOCK_SIZE;
 
-        let mut cipher = Aes128Ctr::new(&key, &iv);
+        let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(&key), &iv);
+
         let mut buffer = vec![0; buffer_len];
         cipher.apply_keystream(&mut buffer);
 
