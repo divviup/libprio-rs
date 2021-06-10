@@ -26,6 +26,8 @@ pub(crate) struct FieldParameters {
     pub g: u128,
     /// The number of principal roots of unity in `roots`.
     pub num_roots: usize,
+    /// Equal to `2^b - 1`, where `b` is the length of `p` in bits.
+    pub bit_mask: u128,
     /// `roots[l]` is the `2^l`-th principal root of unity, i.e., `roots[l]` has order `2^l` in the
     /// multiplicative group. `root[l]` is equal to one by definition.
     pub roots: [u128; MAX_ROOTS + 1],
@@ -257,6 +259,10 @@ impl FieldParameters {
         }
         assert_eq!(&self.roots, &roots[..MAX_ROOTS + 1], "roots mismatch");
         assert_eq!(self.from_elem(self.roots[0]), 1, "first root is not one");
+
+        let bit_mask: u128 = (1 << (129 - p.leading_zeros())) - 1;
+        assert_eq!(p, p & bit_mask, "bit mask not computed correctly");
+        assert_eq!(self.bit_mask, bit_mask, "bit_mask mismatch");
     }
 }
 
@@ -281,6 +287,7 @@ pub(crate) const FP32: FieldParameters = FieldParameters {
     r2: 1676699750,
     g: 1074114499,
     num_roots: 20,
+    bit_mask: 8589934591,
     roots: [
         2564090464, 1729828257, 306605458, 2294308040, 1648889905, 57098624, 2788941825,
         2779858277, 368200145, 2760217336, 594450960, 4255832533, 1372848488, 721329415,
@@ -295,6 +302,7 @@ pub(crate) const FP64: FieldParameters = FieldParameters {
     r2: 13031533328350459868,
     g: 8693478717884812021,
     num_roots: 59,
+    bit_mask: 36893488147419103231,
     roots: [
         3501465310287461188,
         12062975001904972989,
@@ -327,6 +335,7 @@ pub(crate) const FP80: FieldParameters = FieldParameters {
     r2: 699883506621195336351723,
     g: 470015708362303528848629,
     num_roots: 72,
+    bit_mask: 2417851639229258349412351,
     roots: [
         146393360532246310485619,
         632797109141245149774222,
@@ -359,6 +368,7 @@ pub(crate) const FP126: FieldParameters = FieldParameters {
     r2: 27801541991839173768379182336352451464,
     g: 63245316532470582112420298384754157617,
     num_roots: 118,
+    bit_mask: 170141183460469231731687303715884105727,
     roots: [
         41206067869332392060018018868690681852,
         33563006893569125790821128272078700549,

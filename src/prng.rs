@@ -114,7 +114,7 @@ impl<F: FieldElement> Iterator for Prng<F> {
             // Seek to the next chunk of the buffer that encodes an element of F.
             for i in (self.buffer_index..self.buffer.len()).step_by(F::BYTES) {
                 let j = i + F::BYTES;
-                if let Some(x) = match F::read_from(&self.buffer[i..j]) {
+                if let Some(x) = match F::try_from_random(&self.buffer[i..j]) {
                     Ok(x) => Some(x),
                     Err(FieldError::FromBytesModulusOverflow) => None, // reject this sample
                     Err(err) => panic!("unexpected error: {}", err),
