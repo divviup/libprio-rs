@@ -6,7 +6,7 @@ use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
-    prng::extract_share_from_seed,
+    prng::{extract_share_from_seed, Prng, PrngError},
     util::{deserialize, proof_length, unpack_proof, SerializeError},
 };
 use serde::{Deserialize, Serialize};
@@ -23,6 +23,20 @@ pub enum ServerError {
     /// Serialization/deserialization error
     #[error("serialization/deserialization error")]
     Serialize(#[from] SerializeError),
+    /// Failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
+    /// Decrypted a share seed of the incorrect length.
+    #[error("invalid seed length")]
+    SeedLen,
+}
+
+impl From<PrngError> for ServerError {
+    fn from(err: PrngError) -> Self {
+        match err {
+            PrngError::SeedLen => ServerError::SeedLen,
+        }
+    }
 }
 
 /// Auxiliary memory for constructing a
@@ -52,6 +66,7 @@ impl<F: FieldElement> ValidationMemory<F> {
 /// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server<F: FieldElement> {
+    prng: Prng<F>,
     dimension: usize,
     is_first_server: bool,
     accumulator: Vec<F>,
@@ -66,14 +81,19 @@ impl<F: FieldElement> Server<F> {
     ///  * `dimension`: the number of elements in the aggregation vector.
     ///  * `is_first_server`: only one of the servers should have this true.
     ///  * `private_key`: the private key for decrypting the share of the proof.
-    pub fn new(dimension: usize, is_first_server: bool, private_key: PrivateKey) -> Server<F> {
-        Server {
+    pub fn new(
+        dimension: usize,
+        is_first_server: bool,
+        private_key: PrivateKey,
+    ) -> Result<Server<F>, ServerError> {
+        Ok(Server {
+            prng: Prng::new()?,
             dimension,
             is_first_server,
             accumulator: vec![F::zero(); dimension],
             validation_mem: ValidationMemory::new(dimension),
             private_key,
-        }
+        })
     }
 
     /// Decrypt and deserialize
@@ -83,7 +103,7 @@ impl<F: FieldElement> Server<F> {
             deserialize(&share)?
         } else {
             let len = proof_length(self.dimension);
-            extract_share_from_seed(len, &share)
+            extract_share_from_seed(len, &share)?
         })
     }
 
@@ -154,9 +174,9 @@ impl<F: FieldElement> Server<F> {
     ///
     /// The point returned is not one of the roots used for polynomial
     /// evaluation.
-    pub fn choose_eval_at(&self) -> F {
+    pub fn choose_eval_at(&mut self) -> F {
         loop {
-            let eval_at = F::rand();
+            let eval_at = self.prng.next().unwrap();
             if !self.validation_mem.poly_mem.roots_2n.contains(&eval_at) {
                 break eval_at;
             }

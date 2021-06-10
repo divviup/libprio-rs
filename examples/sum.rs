@@ -45,8 +45,8 @@ fn main() {
     let (share2_1, share2_2) = client2.encode_simple(&data2).unwrap();
     let eval_at = Field32::from(12313);
 
-    let mut server1 = Server::new(dim, true, priv_key1.clone());
-    let mut server2 = Server::new(dim, false, priv_key2.clone());
+    let mut server1 = Server::new(dim, true, priv_key1.clone()).unwrap();
+    let mut server2 = Server::new(dim, false, priv_key2.clone()).unwrap();
 
     let v1_1 = server1
         .generate_verification_message(eval_at, &share1_1)

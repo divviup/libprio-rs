@@ -2,6 +2,7 @@
 
 //! Finite field arithmetic for any field GF(p) for which p < 2^126.
 
+#[cfg(test)]
 use rand::{prelude::*, Rng};
 
 /// For each set of field parameters we pre-compute the 1st, 2nd, 4th, ..., 2^20-th principal roots
@@ -189,6 +190,7 @@ impl FieldParameters {
     }
 
     /// Returns a random field element mapped.
+    #[cfg(test)]
     pub fn rand_elem<R: Rng + ?Sized>(&self, rng: &mut R) -> u128 {
         let uniform = rand::distributions::Uniform::from(0..self.p);
         self.elem(uniform.sample(rng))

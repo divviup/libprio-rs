@@ -34,6 +34,9 @@ pub enum EncryptError {
     /// Input ciphertext was too small
     #[error("input ciphertext was too small")]
     DecryptionLength,
+    /// Failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 /// NIST P-256, public key in X9.62 uncompressed format

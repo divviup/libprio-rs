@@ -407,7 +407,8 @@ where
 mod tests {
     use super::*;
 
-    use crate::field::{rand_vec, Field80 as TestField};
+    use crate::field::{rand, Field80 as TestField};
+    use crate::prng::Prng;
 
     #[test]
     fn test_mul() {
@@ -426,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_poly_eval() {
-        let poly = rand_vec(10);
+        let poly = rand(10);
 
         let in_len = FFT_THRESHOLD - 1;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), in_len);
@@ -454,14 +455,15 @@ mod tests {
     where
         G: Gadget<F>,
     {
+        let mut prng = Prng::new().unwrap();
         let mut inp = vec![F::zero(); g.call_in_len()];
         let mut poly_outp = vec![F::zero(); g.call_poly_out_len(in_len)];
         let mut poly_inp = vec![vec![F::zero(); in_len]; g.call_in_len()];
 
-        let r = F::rand();
+        let r = prng.next().unwrap();
         for i in 0..g.call_in_len() {
             for j in 0..in_len {
-                poly_inp[i][j] = F::rand();
+                poly_inp[i][j] = prng.next().unwrap();
             }
             inp[i] = poly_eval(&poly_inp[i], r);
         }

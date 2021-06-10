@@ -14,7 +14,7 @@ aes = { version = "0.7.3", features = ["ctr"] }
 cipher = "0.3.0"
 aes-gcm = "0.6.0"
 base64 = "0.12.3"
-rand = "0.7"
+getrandom = { version = "0.2.3", features = ["std"] }
 ring = "0.16.15"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -24,6 +24,7 @@ assert_matches = "1.5.0"
 criterion = "0.3"
 modinverse = "0.1.0"
 num-bigint = "0.4.0"
+rand = "0.7"
 serde_json = "1.0"
 
 [[bench]]

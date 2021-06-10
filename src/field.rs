@@ -5,6 +5,7 @@
 //! generates a multiplicative subgroup of order `2^n` for some `n`.
 
 use crate::fp::{FP126, FP32, FP64, FP80};
+use crate::prng::Prng;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::min,
@@ -90,9 +91,6 @@ pub trait FieldElement:
     /// Returns the `2^l`-th principal root of unity for any `l <= 20`. Note that the `2^0`-th
     /// prinicpal root of unity is 1 by definition.
     fn root(l: usize) -> Option<Self>;
-
-    /// Returns a random field element distributed uniformly over all field elements.
-    fn rand() -> Self;
 
     /// Returns the additive identity.
     fn zero() -> Self;
@@ -300,11 +298,6 @@ macro_rules! make_field {
                 }
             }
 
-            fn rand() -> Self {
-                let mut rng = rand::thread_rng();
-                Self($fp.rand_elem(&mut rng))
-            }
-
             fn zero() -> Self {
                 Self(0)
             }
@@ -371,19 +364,18 @@ pub fn merge_vector<F: FieldElement>(
     Ok(())
 }
 
-#[cfg(test)]
-pub(crate) fn rand_vec<F: FieldElement>(len: usize) -> Vec<F> {
-    let mut outp: Vec<F> = Vec::with_capacity(len);
-    for _ in 0..len {
-        outp.push(F::rand());
-    }
-    outp
+/// Generate a vector of uniform random field elements.
+pub fn rand<F: FieldElement>(len: usize) -> Vec<F> {
+    Prng::new_with_length(len).unwrap().collect()
 }
 
 /// Outputs an additive secret sharing of the input.
-pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec<Vec<F>> {
+pub fn split<F: FieldElement>(
+    inp: &[F],
+    num_shares: usize,
+) -> Result<Vec<Vec<F>>, getrandom::Error> {
     if num_shares == 0 {
-        return vec![];
+        return Ok(vec![]);
     }
 
     let mut outp = vec![vec![F::zero(); inp.len()]; num_shares];
@@ -391,15 +383,16 @@ pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec<Vec<F>> {
         outp[0][j] = inp[j];
     }
 
+    let mut prng = Prng::new()?;
     for i in 1..num_shares {
         for j in 0..inp.len() {
-            let r = F::rand();
+            let r = prng.next().unwrap();
             outp[i][j] = r;
             outp[0][j] -= r;
         }
     }
 
-    outp
+    Ok(outp)
 }
 
 #[cfg(test)]
@@ -426,6 +419,7 @@ mod tests {
     }
 
     fn field_element_test<F: FieldElement>() {
+        let mut prng: Prng<F> = Prng::new().unwrap();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();
@@ -446,8 +440,8 @@ mod tests {
 
         // add + sub
         for _ in 0..100 {
-            let f = F::rand();
-            let g = F::rand();
+            let f = prng.next().unwrap();
+            let g = prng.next().unwrap();
             assert_eq!(f + g - f - g, zero);
             assert_eq!(f + g - g, f);
             assert_eq!(f + g - f, g);
@@ -468,7 +462,7 @@ mod tests {
 
         // mul + div
         for _ in 0..100 {
-            let f = F::rand();
+            let f = prng.next().unwrap();
             if f == zero {
                 println!("skipped zero");
                 continue;
@@ -497,7 +491,12 @@ mod tests {
         }
 
         // serialization
-        let test_inputs = vec![zero, one, F::rand(), F::from(int_modulus - int_one)];
+        let test_inputs = vec![
+            zero,
+            one,
+            prng.next().unwrap(),
+            F::from(int_modulus - int_one),
+        ];
         for want in test_inputs.iter() {
             let mut bytes = vec![];
             want.append_to(&mut bytes);

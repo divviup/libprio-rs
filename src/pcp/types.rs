@@ -347,7 +347,7 @@ impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for MeanVarUnsignedVector<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{rand_vec, split, Field64 as TestField};
+    use crate::field::{rand, split, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Gadget, Proof, Value, Verifier};
 
     // Number of shares to split input and proofs into in `pcp_test`.
@@ -379,7 +379,7 @@ mod tests {
         // Test PCP on invalid input.
         pcp_validity_test(
             &Boolean {
-                data: vec![TestField::rand()],
+                data: vec![TestField::from(1337)],
                 range: poly_range_check(0, 2),
             },
             &ValidityTestCase {
@@ -588,8 +588,8 @@ mod tests {
     {
         let l = x.gadget(0).call_in_len();
         let rand_len = x.valid_rand_len();
-        let joint_rand = rand_vec(rand_len);
-        let query_rand = vec![F::rand()];
+        let joint_rand = rand(rand_len);
+        let query_rand = rand(1);
 
         // Ensure that `new_with` properly clones the value's parameters.
         assert_eq!(x, &V::try_from((x.param(), x.as_slice().to_vec())).unwrap());
@@ -621,6 +621,7 @@ mod tests {
 
         // Run distributed PCP.
         let x_shares: Vec<V> = split(x.as_slice(), NUM_SHARES)
+            .unwrap()
             .into_iter()
             .enumerate()
             .map(|(i, data)| {
@@ -631,6 +632,7 @@ mod tests {
             .collect();
 
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
+            .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();

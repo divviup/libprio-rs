@@ -26,8 +26,8 @@ fn accumulation() {
 
     let mut reference_count = vec![0u32; dim];
 
-    let mut server1: Server<Field32> = Server::new(dim, true, priv_key1);
-    let mut server2: Server<Field32> = Server::new(dim, false, priv_key2);
+    let mut server1: Server<Field32> = Server::new(dim, true, priv_key1).unwrap();
+    let mut server2: Server<Field32> = Server::new(dim, false, priv_key2).unwrap();
 
     let mut client_mem = Client::new(dim, pub_key1, pub_key2).unwrap();
 
