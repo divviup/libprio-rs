@@ -3,9 +3,7 @@
 
 use super::field::{FieldElement, FieldError};
 use aes::{
-    cipher::{
-        generic_array::GenericArray, BlockCipher, FromBlockCipher, NewBlockCipher, StreamCipher,
-    },
+    cipher::{generic_array::GenericArray, FromBlockCipher, NewBlockCipher, StreamCipher},
     Aes128, Aes128Ctr,
 };
 use rand::RngCore;
@@ -13,7 +11,7 @@ use rand::RngCore;
 use std::marker::PhantomData;
 
 const BLOCK_SIZE: usize = 16;
-const MAXIMUM_BUFFER_SIZE_IN_BLOCKS: usize = 4096;
+const MAXIMUM_BUFFER_SIZE_IN_ELEMENTS: usize = 4096;
 pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
 
 pub fn secret_share<F: FieldElement>(share1: &mut [F]) -> Vec<u8> {
@@ -67,18 +65,10 @@ impl<F: FieldElement> Prng<F> {
 
         let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
         let iv = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
-
-        let length_in_blocks = length * F::BYTES / BLOCK_SIZE;
-        // add one more block to account for rejection and roundoff errors
-        let buffer_len_in_blocks =
-            std::cmp::min(MAXIMUM_BUFFER_SIZE_IN_BLOCKS, length_in_blocks + 1);
-        // Note: buffer_len must be a multiple of BLOCK_SIZE, so that different buffer
-        // lengths return the same data
-        let buffer_len = buffer_len_in_blocks * BLOCK_SIZE;
-
         let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(&key), &iv);
 
-        let mut buffer = vec![0; buffer_len];
+        let buf_len_in_elems = std::cmp::min(length, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS);
+        let mut buffer = vec![0; buf_len_in_elems * F::BYTES];
         cipher.apply_keystream(&mut buffer);
 
         Ok(Self {
