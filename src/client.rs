@@ -7,6 +7,7 @@ use crate::{
     encrypt::{encrypt_share, EncryptError, PublicKey},
     field::FieldElement,
     polynomial::{poly_fft, PolyAuxMemory},
+    prng::Prng,
     util::{proof_length, serialize, unpack_proof_mut},
 };
 
@@ -92,7 +93,7 @@ impl<F: FieldElement> Client<F> {
 
         // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
         // in-place
-        let share2 = crate::prng::secret_share(&mut proof);
+        let share2 = crate::prng::secret_share(&mut proof)?;
         let share1 = serialize(&proof);
         // encrypt shares with respective keys
         let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
@@ -176,10 +177,11 @@ fn construct_proof<F: FieldElement>(
     mem: &mut Client<F>,
 ) {
     let n = (dimension + 1).next_power_of_two();
+    let mut prng = Prng::new_with_length(2).unwrap();
 
     // set zero terms to random
-    *f0 = F::rand();
-    *g0 = F::rand();
+    *f0 = prng.next().unwrap();
+    *g0 = prng.next().unwrap();
     mem.points_f[0] = *f0;
     mem.points_g[0] = *g0;
 

@@ -6,35 +6,39 @@ use aes::{
     cipher::{generic_array::GenericArray, FromBlockCipher, NewBlockCipher, StreamCipher},
     Aes128, Aes128Ctr,
 };
-use rand::RngCore;
+use getrandom::getrandom;
 
 use std::marker::PhantomData;
 
 const BLOCK_SIZE: usize = 16;
+const DEFAULT_BUFFER_SIZE_IN_ELEMENTS: usize = 128;
 const MAXIMUM_BUFFER_SIZE_IN_ELEMENTS: usize = 4096;
 pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
 
-pub fn secret_share<F: FieldElement>(share1: &mut [F]) -> Vec<u8> {
+pub(crate) fn secret_share<F: FieldElement>(share1: &mut [F]) -> Result<Vec<u8>, getrandom::Error> {
+    let mut seed = vec![0; SEED_LENGTH];
+    getrandom(seed.as_mut_slice())?;
+
     // get prng array
-    let (data, seed) = random_field_and_seed(share1.len());
+    let data: Vec<F> = Prng::new_with_seed_and_optional_length(&seed, Some(share1.len())).collect();
 
     // secret share
     for (s1, d) in share1.iter_mut().zip(data.iter()) {
         *s1 -= *d;
     }
 
-    seed
+    Ok(seed)
 }
 
-pub fn extract_share_from_seed<F: FieldElement>(length: usize, seed: &[u8]) -> Vec<F> {
-    random_field_from_seed(seed, length)
-}
+pub(crate) fn extract_share_from_seed<F: FieldElement>(
+    length: usize,
+    seed: &[u8],
+) -> Result<Vec<F>, PrngError> {
+    if seed.len() != 2 * BLOCK_SIZE {
+        return Err(PrngError::SeedLen);
+    }
 
-fn random_field_and_seed<F: FieldElement>(length: usize) -> (Vec<F>, Vec<u8>) {
-    let mut seed = vec![0u8; SEED_LENGTH];
-    rand::thread_rng().fill_bytes(&mut seed);
-    let data = random_field_from_seed(&seed, length);
-    (data, seed)
+    Ok(Prng::new_with_seed_and_optional_length(seed, Some(length)).collect())
 }
 
 /// Errors propagated by methods in this module.
@@ -46,39 +50,53 @@ pub(crate) enum PrngError {
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
 /// sequence is derived from the key stream of AES-128 in CTR mode with a random IV.
+#[derive(Debug)]
 pub(crate) struct Prng<F: FieldElement> {
     phantom: PhantomData<F>,
     cipher: Aes128Ctr,
-    length: usize,
+    length: Option<usize>,
     buffer: Vec<u8>,
     buffer_index: usize,
     output_written: usize,
 }
 
 impl<F: FieldElement> Prng<F> {
-    /// Constructs an iterator over a pseudorandom sequence of field elements of length `length`.
-    /// `seed` is used to seed the underlying pseudorandom number generator.
-    pub(crate) fn new_with_length(seed: &[u8], length: usize) -> Result<Self, PrngError> {
-        if seed.len() != 2 * BLOCK_SIZE {
-            return Err(PrngError::SeedLen);
-        }
+    /// Generates a seed and constructs an iterator over an infinite sequence of pseudorandom field
+    /// elements.
+    pub(crate) fn new() -> Result<Self, getrandom::Error> {
+        let mut seed = [0; SEED_LENGTH];
+        getrandom(&mut seed)?;
+        Ok(Self::new_with_seed_and_optional_length(&seed, None))
+    }
 
+    /// Generates a seed and constructs an iterator over a pseudorandom sequence of field elements
+    /// of length `length`.
+    pub(crate) fn new_with_length(length: usize) -> Result<Self, getrandom::Error> {
+        let mut seed = [0; SEED_LENGTH];
+        getrandom(&mut seed)?;
+        Ok(Self::new_with_seed_and_optional_length(&seed, Some(length)))
+    }
+
+    fn new_with_seed_and_optional_length(seed: &[u8], length: Option<usize>) -> Self {
         let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
         let iv = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
         let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(&key), &iv);
 
-        let buf_len_in_elems = std::cmp::min(length, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS);
+        let buf_len_in_elems = match length {
+            Some(length) => std::cmp::min(length + 1, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS),
+            None => DEFAULT_BUFFER_SIZE_IN_ELEMENTS,
+        };
         let mut buffer = vec![0; buf_len_in_elems * F::BYTES];
         cipher.apply_keystream(&mut buffer);
 
-        Ok(Self {
+        Self {
             phantom: PhantomData::<F>,
             cipher,
             length,
             buffer,
             buffer_index: 0,
             output_written: 0,
-        })
+        }
     }
 }
 
@@ -86,8 +104,10 @@ impl<F: FieldElement> Iterator for Prng<F> {
     type Item = F;
 
     fn next(&mut self) -> Option<F> {
-        if self.output_written >= self.length {
-            return None;
+        if let Some(length) = self.length {
+            if self.output_written >= length {
+                return None;
+            }
         }
 
         loop {
@@ -116,10 +136,6 @@ impl<F: FieldElement> Iterator for Prng<F> {
     }
 }
 
-fn random_field_from_seed<F: FieldElement>(seed: &[u8], length: usize) -> Vec<F> {
-    Prng::new_with_length(seed, length).unwrap().collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -132,10 +148,10 @@ mod tests {
 
         let data_clone = data.clone();
 
-        let seed = secret_share(&mut data);
+        let seed = secret_share(&mut data).unwrap();
         assert_ne!(data, data_clone);
 
-        let share2 = extract_share_from_seed(data.len(), &seed);
+        let share2 = extract_share_from_seed(data.len(), &seed).unwrap();
 
         assert_eq!(data.len(), share2.len());
 
@@ -163,7 +179,7 @@ mod tests {
             0xacb8b748, 0x6f5b9d49, 0x887d061b, 0x86db0c58,
         ];
 
-        let share2 = extract_share_from_seed::<Field32>(reference.len(), &seed);
+        let share2 = extract_share_from_seed::<Field32>(reference.len(), &seed).unwrap();
 
         assert_eq!(share2, reference);
     }
@@ -171,7 +187,7 @@ mod tests {
     /// takes a seed and hash as base64 encoded strings
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = base64::decode(seed_base64).unwrap();
-        let random_data = extract_share_from_seed::<Field32>(len, &seed);
+        let random_data = extract_share_from_seed::<Field32>(len, &seed).unwrap();
 
         let random_bytes = crate::util::serialize(&random_data);
 

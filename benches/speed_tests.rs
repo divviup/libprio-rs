@@ -5,21 +5,18 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use prio::benchmarked::*;
 use prio::client::Client;
 use prio::encrypt::PublicKey;
-use prio::field::{Field126 as F, FieldElement};
+use prio::field::{rand, Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::pcp::types::{MeanVarUnsignedVector, PolyCheckedVector};
-use prio::pcp::{prove, query, Gadget, Value};
+use prio::pcp::{prove, query, Value};
 use prio::server::{generate_verification_message, ValidationMemory};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
 pub fn fft(c: &mut Criterion) {
     let test_sizes = [16, 256, 1024, 4096];
     for size in test_sizes.iter() {
-        let mut inp = vec![F::zero(); *size];
+        let inp = rand(*size);
         let mut outp = vec![F::zero(); *size];
-        for i in 0..*size {
-            inp[i] = F::rand();
-        }
 
         c.bench_function(&format!("iterative FFT, size={}", *size), |b| {
             b.iter(|| {
@@ -35,6 +32,16 @@ pub fn fft(c: &mut Criterion) {
     }
 }
 
+/// Speed test for generating a seed and deriving a pseudorandom sequence of field elements.
+pub fn prng(c: &mut Criterion) {
+    let test_sizes = [16, 256, 1024, 4096];
+    for size in test_sizes.iter() {
+        c.bench_function(&format!("rand, size={}", *size), |b| {
+            b.iter(|| rand::<F>(*size))
+        });
+    }
+}
+
 /// The asymptotic cost of polynomial multiplication is `O(n log n)` using FFT and `O(n^2)` using
 /// the naive method. This benchmark demonstrates that the latter has better concrete performance
 /// for small polynomials. The result is used to pick the `FFT_THRESHOLD` constant in
@@ -45,11 +52,9 @@ pub fn poly_mul(c: &mut Criterion) {
         let m = size.next_power_of_two();
         let mut g: Mul<F> = Mul::new(m);
         let mut outp = vec![F::zero(); 2 * m];
-        let mut inp = vec![vec![F::zero(); m]; 2];
+        let mut inp = vec![vec![]; 2];
         for i in 0..2 {
-            for j in 0..*size {
-                inp[i][j] = F::rand();
-            }
+            inp[i] = rand(m);
         }
 
         c.bench_function(&format!("poly mul FFT, size={}", *size), |b| {
@@ -95,7 +100,7 @@ pub fn bool_vec(c: &mut Criterion) {
 
         let data_and_proof = benchmarked_v2_prove(&data, &mut client);
         let mut validator: ValidationMemory<F> = ValidationMemory::new(data.len());
-        let eval_at = F::rand();
+        let eval_at = rand(1)[0];
 
         c.bench_function(&format!("bool vec v2 query, size={}", *size), |b| {
             b.iter(|| {
@@ -112,7 +117,8 @@ pub fn bool_vec(c: &mut Criterion) {
 
         // v3
         let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data.clone(), 0, 2);
-        let (query_rand, joint_rand) = gen_rand(&x);
+        let query_rand = rand(1);
+        let joint_rand = rand(x.valid_rand_len());
 
         c.bench_function(&format!("bool vec v3 prove, size={}", *size), |b| {
             b.iter(|| {
@@ -139,7 +145,8 @@ pub fn mean_var_int_vec(c: &mut Criterion) {
         let data = vec![0; *size];
 
         let x: MeanVarUnsignedVector<F> = MeanVarUnsignedVector::new(bits, &data).unwrap();
-        let (query_rand, joint_rand) = gen_rand(&x);
+        let query_rand = rand(1);
+        let joint_rand = rand(x.valid_rand_len());
 
         c.bench_function(
             &format!("{}-bit mean var int vec prove, size={}", bits, *size),
@@ -168,21 +175,5 @@ pub fn mean_var_int_vec(c: &mut Criterion) {
     }
 }
 
-fn gen_rand<F, G, V>(x: &V) -> (Vec<F>, Vec<F>)
-where
-    F: FieldElement,
-    G: Gadget<F>,
-    V: Value<F, G>,
-{
-    let query_rand = vec![F::rand()];
-    let rand_len = x.valid_rand_len();
-
-    let mut joint_rand: Vec<F> = Vec::with_capacity(rand_len);
-    for _ in 0..rand_len {
-        joint_rand.push(F::rand());
-    }
-    (query_rand, joint_rand)
-}
-
-criterion_group!(benches, bool_vec, mean_var_int_vec, poly_mul, fft);
+criterion_group!(benches, bool_vec, mean_var_int_vec, poly_mul, prng, fft);
 criterion_main!(benches);

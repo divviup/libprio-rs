@@ -114,19 +114,16 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{rand_vec, split, Field126, Field32, Field64, Field80};
+    use crate::field::{rand, split, Field126, Field32, Field64, Field80};
     use crate::polynomial::{poly_fft, PolyAuxMemory};
 
     fn discrete_fourier_transform_then_inv_test<F: FieldElement>() -> Result<(), FftError> {
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];
 
         for size in test_sizes.iter() {
-            let mut want = vec![F::zero(); *size];
             let mut tmp = vec![F::zero(); *size];
             let mut got = vec![F::zero(); *size];
-            for i in 0..*size {
-                want[i] = F::rand();
-            }
+            let want = rand(*size);
 
             discrete_fourier_transform(&mut tmp, &want, want.len())?;
             discrete_fourier_transform_inv(&mut got, &tmp, tmp.len())?;
@@ -161,12 +158,9 @@ mod tests {
         let size = 128;
         let mut mem = PolyAuxMemory::new(size / 2);
 
-        let mut inp = vec![Field32::zero(); size];
+        let inp = rand(size);
         let mut want = vec![Field32::zero(); size];
         let mut got = vec![Field32::zero(); size];
-        for i in 0..size {
-            inp[i] = Field32::rand();
-        }
 
         discrete_fourier_transform::<Field32>(&mut want, &inp, inp.len()).unwrap();
 
@@ -189,8 +183,8 @@ mod tests {
     fn test_fft_linearity() {
         let len = 16;
         let num_shares = 3;
-        let x: Vec<Field64> = rand_vec(len);
-        let mut x_shares = split(&x, num_shares);
+        let x: Vec<Field64> = rand(len);
+        let mut x_shares = split(&x, num_shares).unwrap();
 
         // Just for fun, let's do something different with a subset of the inputs. For the first
         // share, every odd element is set to the plaintext value. For all shares but the first,

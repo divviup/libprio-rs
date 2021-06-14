@@ -14,7 +14,7 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query};
-//! use prio::field::{FieldElement, Field64};
+//! use prio::field::{rand, FieldElement, Field64};
 //!
 //! // The randomness shared by the prover and verifier. In proof systems like [BCG+19, Theorem
 //! // 5.3], the verifier sends the prover a random challenge in the first round, which the
@@ -23,7 +23,7 @@
 //! let joint_rand = [];
 //!
 //! // The randomness used by the verifier.
-//! let query_rand = [Field64::rand()];
+//! let query_rand = rand(1);
 //!
 //! // The prover generates a proof pf that its input x is a valid encoding
 //! // of a boolean (either "true" or "false"). Both the input and proof are
@@ -44,10 +44,10 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value};
-//! use prio::field::{FieldElement, Field64};
+//! use prio::field::{rand, FieldElement, Field64};
 //!
 //! let joint_rand = [];
-//! let query_rand = [Field64::rand()];
+//! let query_rand = rand(1);
 //! let x = Boolean::from(Field64::from(23));
 //! let pf = prove(&x, &joint_rand).unwrap();
 //! let vf = query(&x, &pf, &query_rand, &joint_rand).unwrap();
@@ -65,18 +65,19 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-//! use prio::field::{split, FieldElement, Field64};
+//! use prio::field::{rand, split, FieldElement, Field64};
 //!
 //! use std::convert::TryFrom;
 //!
 //! let joint_rand = [];
-//! let query_rand = [Field64::rand()];
+//! let query_rand = rand(1);
 //!
 //! // The prover encodes its input and splits it into two secret shares. It
 //! // sends each share to two aggregators.
 //! let x: Boolean<Field64>= Boolean::new(true);
 //! let x_par = x.param();
 //! let x_shares: Vec<Boolean<Field64>> = split(x.as_slice(), 2)
+//!     .unwrap()
 //!     .into_iter()
 //!     .map(|data| Boolean::try_from((x_par, data)).unwrap())
 //!     .collect();
@@ -85,6 +86,7 @@
 //! // into two shares. It sends each share to one of two aggregators.
 //! let pf = prove(&x, &joint_rand).unwrap();
 //! let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
+//!     .unwrap()
 //!     .into_iter()
 //!     .map(Proof::from)
 //!     .collect();
@@ -126,6 +128,7 @@ use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_fini
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
 use crate::polynomial::{poly_deg, poly_eval};
+use crate::prng::Prng;
 
 pub mod gadgets;
 pub mod types;
@@ -210,19 +213,15 @@ where
     /// ```
     /// use prio::pcp::types::Boolean;
     /// use prio::pcp::Value;
-    /// use prio::field::{FieldElement, Field64};
+    /// use prio::field::{rand, FieldElement, Field64};
     ///
     /// type F = Field64;
     /// type T = Boolean<F>;
     ///
     /// let x = T::new(false);
     ///
-    /// let mut rand: Vec<F> = Vec::with_capacity(x.valid_rand_len());
-    /// for _ in 0..rand.len() {
-    ///     rand.push(F::rand());
-    /// }
-    ///
-    /// let v = x.valid(&mut x.gadget(0), &rand).unwrap();
+    /// let joint_rand = rand(x.valid_rand_len());
+    /// let v = x.valid(&mut x.gadget(0), &joint_rand).unwrap();
     /// assert_eq!(v, F::zero());
     /// ```
     fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError>;
@@ -251,19 +250,20 @@ where
     /// ```
     /// use prio::pcp::types::MeanVarUnsignedVector;
     /// use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-    /// use prio::field::{split, FieldElement, Field64};
+    /// use prio::field::{split, rand, FieldElement, Field64};
     ///
     /// use std::convert::TryFrom;
     ///
     /// let measurement = [1, 2, 3];
     /// let bits = 8;
     ///
-    /// let joint_rand = [Field64::rand(), Field64::rand(), Field64::rand()];
-    /// let query_rand = [Field64::rand()];
+    /// let joint_rand = rand(3);
+    /// let query_rand = rand(1);
     ///
     /// let x: MeanVarUnsignedVector<Field64> =
     ///     MeanVarUnsignedVector::new(bits, &measurement).unwrap();
     /// let x_shares: Vec<MeanVarUnsignedVector<Field64>> = split(x.as_slice(), 2)
+    ///     .unwrap()
     ///     .into_iter()
     ///     .enumerate()
     ///     .map(|(i, data)| {
@@ -276,6 +276,7 @@ where
     ///
     /// let pf = prove(&x, &joint_rand).unwrap();
     /// let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
+    ///     .unwrap()
     ///     .into_iter()
     ///     .map(Proof::from)
     ///     .collect();
@@ -374,9 +375,10 @@ where
 {
     fn new(inner: &'a mut G, gadget_calls: usize) -> Self {
         let mut f_vals = vec![vec![F::zero(); gadget_calls + 1]; inner.call_in_len()];
+        let mut prng = Prng::new_with_length(f_vals.len()).unwrap();
         for i in 0..f_vals.len() {
             // Choose a random field element as first point on the i-th proof polynomial.
-            f_vals[i][0] = F::rand();
+            f_vals[i][0] = prng.next().unwrap();
         }
         Self {
             inner,
@@ -643,7 +645,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{split, Field126};
+    use crate::field::{rand, split, Field126};
     use crate::pcp::types::Boolean;
 
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
@@ -653,18 +655,20 @@ mod tests {
         type F = Field126;
         type T = Boolean<F>;
 
-        let query_rand = vec![F::rand()];
+        let query_rand = rand(1);
         let joint_rand = vec![];
 
         let x: T = Boolean::new(false);
         let x_par = x.param();
         let x_shares: Vec<T> = split(x.as_slice(), 2)
+            .unwrap()
             .into_iter()
             .map(|data| Boolean::try_from((x_par, data)).unwrap())
             .collect();
 
         let pf = prove(&x, &joint_rand).unwrap();
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), 2)
+            .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();
@@ -681,7 +685,7 @@ mod tests {
 
     #[test]
     fn test_decide() {
-        let query_rand = vec![Field126::rand()];
+        let query_rand = rand(1);
         let joint_rand = vec![];
         let x: Boolean<Field126> = Boolean::new(true);
 
