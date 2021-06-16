@@ -15,7 +15,7 @@ use prio::server::{generate_verification_message, ValidationMemory};
 pub fn fft(c: &mut Criterion) {
     let test_sizes = [16, 256, 1024, 4096];
     for size in test_sizes.iter() {
-        let inp = rand(*size);
+        let inp = rand(*size).unwrap();
         let mut outp = vec![F::zero(); *size];
 
         c.bench_function(&format!("iterative FFT, size={}", *size), |b| {
@@ -54,7 +54,7 @@ pub fn poly_mul(c: &mut Criterion) {
         let mut outp = vec![F::zero(); 2 * m];
         let mut inp = vec![vec![]; 2];
         for i in 0..2 {
-            inp[i] = rand(m);
+            inp[i] = rand(m).unwrap();
         }
 
         c.bench_function(&format!("poly mul FFT, size={}", *size), |b| {
@@ -100,7 +100,7 @@ pub fn bool_vec(c: &mut Criterion) {
 
         let data_and_proof = benchmarked_v2_prove(&data, &mut client);
         let mut validator: ValidationMemory<F> = ValidationMemory::new(data.len());
-        let eval_at = rand(1)[0];
+        let eval_at = rand(1).unwrap()[0];
 
         c.bench_function(&format!("bool vec v2 query, size={}", *size), |b| {
             b.iter(|| {
@@ -117,8 +117,8 @@ pub fn bool_vec(c: &mut Criterion) {
 
         // v3
         let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data.clone(), 0, 2);
-        let query_rand = rand(1);
-        let joint_rand = rand(x.valid_rand_len());
+        let query_rand = rand(1).unwrap();
+        let joint_rand = rand(x.valid_rand_len()).unwrap();
 
         c.bench_function(&format!("bool vec v3 prove, size={}", *size), |b| {
             b.iter(|| {
@@ -145,8 +145,8 @@ pub fn mean_var_int_vec(c: &mut Criterion) {
         let data = vec![0; *size];
 
         let x: MeanVarUnsignedVector<F> = MeanVarUnsignedVector::new(bits, &data).unwrap();
-        let query_rand = rand(1);
-        let joint_rand = rand(x.valid_rand_len());
+        let query_rand = rand(1).unwrap();
+        let joint_rand = rand(x.valid_rand_len()).unwrap();
 
         c.bench_function(
             &format!("{}-bit mean var int vec prove, size={}", bits, *size),
