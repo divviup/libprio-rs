@@ -18,6 +18,7 @@ use std::convert::TryFrom;
 /// Client is used to create Prio shares.
 #[derive(Debug)]
 pub struct Client<F: FieldElement> {
+    prng: Prng<F>,
     dimension: usize,
     points_f: Vec<F>,
     points_g: Vec<F>,
@@ -42,6 +43,9 @@ pub enum ClientError {
     /// Encryption/decryption error
     #[error("encryption/decryption error")]
     Encrypt(#[from] EncryptError),
+    /// Failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 impl<F: FieldElement> Client<F> {
@@ -62,6 +66,7 @@ impl<F: FieldElement> Client<F> {
         }
 
         Ok(Client {
+            prng: Prng::new()?,
             dimension,
             points_f: vec![F::zero(); n],
             points_g: vec![F::zero(); n],
@@ -177,11 +182,10 @@ fn construct_proof<F: FieldElement>(
     mem: &mut Client<F>,
 ) {
     let n = (dimension + 1).next_power_of_two();
-    let mut prng = Prng::new_with_length(2).unwrap();
 
     // set zero terms to random
-    *f0 = prng.next().unwrap();
-    *g0 = prng.next().unwrap();
+    *f0 = mem.prng.next().unwrap();
+    *g0 = mem.prng.next().unwrap();
     mem.points_f[0] = *f0;
     mem.points_g[0] = *g0;
 

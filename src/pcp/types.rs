@@ -588,8 +588,8 @@ mod tests {
     {
         let l = x.gadget(0).call_in_len();
         let rand_len = x.valid_rand_len();
-        let joint_rand = rand(rand_len);
-        let query_rand = rand(1);
+        let joint_rand = rand(rand_len).unwrap();
+        let query_rand = rand(1).unwrap();
 
         // Ensure that `new_with` properly clones the value's parameters.
         assert_eq!(x, &V::try_from((x.param(), x.as_slice().to_vec())).unwrap());

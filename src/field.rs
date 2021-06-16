@@ -365,8 +365,8 @@ pub fn merge_vector<F: FieldElement>(
 }
 
 /// Generate a vector of uniform random field elements.
-pub fn rand<F: FieldElement>(len: usize) -> Vec<F> {
-    Prng::new_with_length(len).unwrap().collect()
+pub fn rand<F: FieldElement>(len: usize) -> Result<Vec<F>, getrandom::Error> {
+    Ok(Prng::new_with_length(len)?.collect())
 }
 
 /// Outputs an additive secret sharing of the input.
