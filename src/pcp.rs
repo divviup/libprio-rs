@@ -23,7 +23,7 @@
 //! let joint_rand = [];
 //!
 //! // The randomness used by the verifier.
-//! let query_rand = rand(1);
+//! let query_rand = rand(1).unwrap();
 //!
 //! // The prover generates a proof pf that its input x is a valid encoding
 //! // of a boolean (either "true" or "false"). Both the input and proof are
@@ -47,7 +47,7 @@
 //! use prio::field::{rand, FieldElement, Field64};
 //!
 //! let joint_rand = [];
-//! let query_rand = rand(1);
+//! let query_rand = rand(1).unwrap();
 //! let x = Boolean::from(Field64::from(23));
 //! let pf = prove(&x, &joint_rand).unwrap();
 //! let vf = query(&x, &pf, &query_rand, &joint_rand).unwrap();
@@ -70,7 +70,7 @@
 //! use std::convert::TryFrom;
 //!
 //! let joint_rand = [];
-//! let query_rand = rand(1);
+//! let query_rand = rand(1).unwrap();
 //!
 //! // The prover encodes its input and splits it into two secret shares. It
 //! // sends each share to two aggregators.
@@ -187,6 +187,10 @@ pub enum PcpError {
     /// Returned if a field operation encountered an error.
     #[error("Field error")]
     Field(#[from] FieldError),
+
+    /// Failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
@@ -220,7 +224,7 @@ where
     ///
     /// let x = T::new(false);
     ///
-    /// let joint_rand = rand(x.valid_rand_len());
+    /// let joint_rand = rand(x.valid_rand_len()).unwrap();
     /// let v = x.valid(&mut x.gadget(0), &joint_rand).unwrap();
     /// assert_eq!(v, F::zero());
     /// ```
@@ -257,8 +261,8 @@ where
     /// let measurement = [1, 2, 3];
     /// let bits = 8;
     ///
-    /// let joint_rand = rand(3);
-    /// let query_rand = rand(1);
+    /// let joint_rand = rand(3).unwrap();
+    /// let query_rand = rand(1).unwrap();
     ///
     /// let x: MeanVarUnsignedVector<Field64> =
     ///     MeanVarUnsignedVector::new(bits, &measurement).unwrap();
@@ -332,7 +336,7 @@ where
 
     // Run the validity circuit with a "shim" gadget that records the value of each input wire of
     // each gadget evaluation.
-    let mut shim = ProveShimGadget::new(&mut g, g_calls);
+    let mut shim = ProveShimGadget::new(&mut g, g_calls)?;
     let _ = x.valid(&mut shim, joint_rand);
 
     // Construct the intermediate proof polynomials `f[0], ..., f[l-1]`. Also, record in the slice
@@ -373,18 +377,18 @@ where
     F: FieldElement,
     G: Gadget<F>,
 {
-    fn new(inner: &'a mut G, gadget_calls: usize) -> Self {
+    fn new(inner: &'a mut G, gadget_calls: usize) -> Result<Self, getrandom::Error> {
         let mut f_vals = vec![vec![F::zero(); gadget_calls + 1]; inner.call_in_len()];
-        let mut prng = Prng::new_with_length(f_vals.len()).unwrap();
+        let mut prng = Prng::new_with_length(f_vals.len())?;
         for i in 0..f_vals.len() {
             // Choose a random field element as first point on the i-th proof polynomial.
             f_vals[i][0] = prng.next().unwrap();
         }
-        Self {
+        Ok(Self {
             inner,
             f_vals,
             ct: 1,
-        }
+        })
     }
 }
 
@@ -655,7 +659,7 @@ mod tests {
         type F = Field126;
         type T = Boolean<F>;
 
-        let query_rand = rand(1);
+        let query_rand = rand(1).unwrap();
         let joint_rand = vec![];
 
         let x: T = Boolean::new(false);
@@ -685,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_decide() {
-        let query_rand = rand(1);
+        let query_rand = rand(1).unwrap();
         let joint_rand = vec![];
         let x: Boolean<Field126> = Boolean::new(true);
 

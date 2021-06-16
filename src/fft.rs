@@ -123,7 +123,7 @@ mod tests {
         for size in test_sizes.iter() {
             let mut tmp = vec![F::zero(); *size];
             let mut got = vec![F::zero(); *size];
-            let want = rand(*size);
+            let want = rand(*size).unwrap();
 
             discrete_fourier_transform(&mut tmp, &want, want.len())?;
             discrete_fourier_transform_inv(&mut got, &tmp, tmp.len())?;
@@ -158,7 +158,7 @@ mod tests {
         let size = 128;
         let mut mem = PolyAuxMemory::new(size / 2);
 
-        let inp = rand(size);
+        let inp = rand(size).unwrap();
         let mut want = vec![Field32::zero(); size];
         let mut got = vec![Field32::zero(); size];
 
@@ -183,7 +183,7 @@ mod tests {
     fn test_fft_linearity() {
         let len = 16;
         let num_shares = 3;
-        let x: Vec<Field64> = rand(len);
+        let x: Vec<Field64> = rand(len).unwrap();
         let mut x_shares = split(&x, num_shares).unwrap();
 
         // Just for fun, let's do something different with a subset of the inputs. For the first

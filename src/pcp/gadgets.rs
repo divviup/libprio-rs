@@ -427,7 +427,7 @@ mod tests {
 
     #[test]
     fn test_poly_eval() {
-        let poly = rand(10);
+        let poly = rand(10).unwrap();
 
         let in_len = FFT_THRESHOLD - 1;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), in_len);
