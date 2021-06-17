@@ -252,14 +252,15 @@ impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> 
         let mut inp = vec![F::zero(); 2 * bits + 1];
         let mut outp = F::zero();
 
-        for (i, chunk) in self.data.chunks(bits + 1).enumerate() {
+        let r = rand[0];
+        let mut pr = r;
+        for chunk in self.data.chunks(bits + 1) {
             if chunk.len() < bits + 1 {
                 return Err(PcpError::Valid(
                     "MeanVarUnsignedVector: length of data not divisible by chunk size",
                 ));
             }
 
-            let mut pr = rand[i];
             let x_vec = &chunk[..bits];
             let xx = chunk[bits];
 
@@ -276,7 +277,7 @@ impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> 
                 // In order to ensure the gadget inputs are the same in the distributed setting,
                 // only the leader will use the joint randomness here.
                 inp[l] = if self.is_leader { pr } else { F::zero() };
-                pr *= rand[i];
+                pr *= r;
             }
 
             // The next `bits` inputs to the gadget comprise the bit-vector representation of `x`.
@@ -290,7 +291,7 @@ impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> 
             let yy = g.call(&inp)?;
 
             outp += pr * (yy - xx);
-            pr *= rand[i];
+            pr *= r;
         }
 
         Ok(outp)
@@ -301,7 +302,7 @@ impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> 
     }
 
     fn valid_rand_len(&self) -> usize {
-        self.len
+        1
     }
 
     fn gadget(&self, in_len: usize) -> MeanVarUnsigned<F> {
