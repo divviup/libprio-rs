@@ -1,8 +1,10 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Finite field arithmetic. Each field has an associated parameter called the "generator" that
-//! generates a multiplicative subgroup of order `2^n` for some `n`.
+//! Finite field arithmetic.
+//!
+//! Each field has an associated parameter called the "generator" that generates a multiplicative
+//! subgroup of order `2^n` for some `n`.
 
 use crate::fp::{FP126, FP32, FP64, FP80};
 use crate::prng::Prng;
