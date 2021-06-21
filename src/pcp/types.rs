@@ -4,11 +4,10 @@
 
 use crate::field::FieldElement;
 use crate::pcp::gadgets::{MeanVarUnsigned, Mul, PolyEval};
-use crate::pcp::{GadgetCallOnly, PcpError, Value};
+use crate::pcp::{Gadget, PcpError, Value};
 use crate::polynomial::poly_range_check;
 
-use std::convert::Infallible;
-use std::convert::TryFrom;
+use std::convert::{Infallible, TryFrom};
 use std::mem::size_of;
 
 /// Errors propagated by methods in this module.
@@ -37,21 +36,13 @@ impl<F: FieldElement> Boolean<F> {
             }],
         }
     }
-
-    /// Construct a boolean from an arbitrary field element. (The result may be invalid.)
-    pub fn from(val: F) -> Self {
-        Self {
-            range: poly_range_check(0, 2),
-            data: vec![val],
-        }
-    }
 }
 
-impl<F: FieldElement> Value<F, Mul<F>> for Boolean<F> {
+impl<F: FieldElement> Value<F> for Boolean<F> {
     type Param = ();
     type TryFromError = Infallible;
 
-    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
+    fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.valid_rand_len() {
             return Err(PcpError::ValidRandLen);
         }
@@ -64,22 +55,26 @@ impl<F: FieldElement> Value<F, Mul<F>> for Boolean<F> {
         let mut v = self.range[0];
         for c in &self.range[1..] {
             v += *c * inp[0];
-            inp[0] = g.call(&inp)?;
+            inp[0] = g[0].call(&inp)?;
         }
 
         Ok(v)
     }
 
-    fn valid_gadget_calls(&self) -> usize {
-        2
+    fn valid_gadget_calls(&self) -> Vec<usize> {
+        vec![2]
     }
 
     fn valid_rand_len(&self) -> usize {
         0
     }
 
-    fn gadget(&self, in_len: usize) -> Mul<F> {
-        Mul::new(in_len)
+    fn valid_gadget_len(&self) -> usize {
+        1
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(Mul::new(2))]
     }
 
     fn as_slice(&self) -> &[F] {
@@ -134,11 +129,11 @@ impl<F: FieldElement> PolyCheckedVector<F> {
     }
 }
 
-impl<F: FieldElement> Value<F, PolyEval<F>> for PolyCheckedVector<F> {
+impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
     type Param = Vec<F>; // A polynomial
     type TryFromError = Infallible;
 
-    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
+    fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.valid_rand_len() {
             return Err(PcpError::ValidRandLen);
         }
@@ -146,23 +141,27 @@ impl<F: FieldElement> Value<F, PolyEval<F>> for PolyCheckedVector<F> {
         let mut outp = F::zero();
         let mut r = rand[0];
         for chunk in self.data.chunks(1) {
-            outp += r * g.call(chunk)?;
+            outp += r * g[0].call(chunk)?;
             r *= rand[0];
         }
 
         Ok(outp)
     }
 
-    fn valid_gadget_calls(&self) -> usize {
-        self.data.len()
+    fn valid_gadget_calls(&self) -> Vec<usize> {
+        vec![self.data.len()]
     }
 
     fn valid_rand_len(&self) -> usize {
         1
     }
 
-    fn gadget(&self, in_len: usize) -> PolyEval<F> {
-        PolyEval::new(self.poly.clone(), in_len)
+    fn valid_gadget_len(&self) -> usize {
+        1
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(self.poly.clone(), self.data.len()))]
     }
 
     fn as_slice(&self) -> &[F] {
@@ -243,11 +242,11 @@ impl<F: FieldElement> MeanVarUnsignedVector<F> {
     }
 }
 
-impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> {
+impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
     type Param = usize; // Length of each integer in bits
     type TryFromError = TypeError;
 
-    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError> {
+    fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         let bits = self.bits;
         let mut inp = vec![F::zero(); 2 * bits + 1];
         let mut outp = F::zero();
@@ -288,7 +287,7 @@ impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> 
 
             // Sets `yy = x^2` if `x_vec` is a bit vector. Otherwise, if `x_vec` is not a bit
             // vector, then `yy != x^2` with high probability.
-            let yy = g.call(&inp)?;
+            let yy = g[0].call(&inp)?;
 
             outp += pr * (yy - xx);
             pr *= r;
@@ -297,16 +296,20 @@ impl<F: FieldElement> Value<F, MeanVarUnsigned<F>> for MeanVarUnsignedVector<F> 
         Ok(outp)
     }
 
-    fn valid_gadget_calls(&self) -> usize {
-        self.len
+    fn valid_gadget_calls(&self) -> Vec<usize> {
+        vec![self.len]
     }
 
     fn valid_rand_len(&self) -> usize {
         1
     }
 
-    fn gadget(&self, in_len: usize) -> MeanVarUnsigned<F> {
-        MeanVarUnsigned::new(self.bits, in_len)
+    fn valid_gadget_len(&self) -> usize {
+        1
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(MeanVarUnsigned::new(self.bits, self.len))]
     }
 
     fn as_slice(&self) -> &[F] {
@@ -349,7 +352,7 @@ impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for MeanVarUnsignedVector<F> {
 mod tests {
     use super::*;
     use crate::field::{rand, split, Field64 as TestField};
-    use crate::pcp::{decide, prove, query, Gadget, Proof, Value, Verifier};
+    use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
 
     // Number of shares to split input and proofs into in `pcp_test`.
     const NUM_SHARES: usize = 3;
@@ -395,7 +398,7 @@ mod tests {
             range: poly_range_check(0, 2),
         };
         assert_eq!(
-            malformed_x.valid(&mut malformed_x.gadget(0), &[]).err(),
+            malformed_x.valid(&mut malformed_x.gadget(), &[]).err(),
             Some(PcpError::CircuitInLen),
         );
 
@@ -405,7 +408,7 @@ mod tests {
             range: poly_range_check(0, 2),
         };
         assert_eq!(
-            malformed_x.valid(&mut malformed_x.gadget(0), &[]).err(),
+            malformed_x.valid(&mut malformed_x.gadget(), &[]).err(),
             Some(PcpError::CircuitInLen),
         );
     }
@@ -581,22 +584,24 @@ mod tests {
         );
     }
 
-    fn pcp_validity_test<F, G, V>(x: &V, t: &ValidityTestCase)
+    fn pcp_validity_test<F, V>(x: &V, t: &ValidityTestCase)
     where
         F: FieldElement,
-        G: Gadget<F>,
-        V: Value<F, G>,
+        V: Value<F>,
     {
-        let l = x.gadget(0).call_in_len();
-        let rand_len = x.valid_rand_len();
-        let joint_rand = rand(rand_len).unwrap();
-        let query_rand = rand(1).unwrap();
+        let mut g = x.gadget();
+        let joint_rand = rand(x.valid_rand_len()).unwrap();
+        let query_rand = rand(x.valid_gadget_len()).unwrap();
 
-        // Ensure that `new_with` properly clones the value's parameters.
+        // Check that the output of valid_gadgets_len() is correct.
+        assert_eq!(x.valid_gadget_len(), g.len());
+
+        // Ensure that the input can be constructed from its parameters and its encoding as a
+        // sequence of field elements.
         assert_eq!(x, &V::try_from((x.param(), x.as_slice().to_vec())).unwrap());
 
         // Run the validity circuit.
-        let v = x.valid(&mut x.gadget(0), &joint_rand).unwrap();
+        let v = x.valid(&mut g, &joint_rand).unwrap();
         assert_eq!(
             v == F::zero(),
             t.expect_valid,
@@ -666,7 +671,7 @@ mod tests {
 
         // Try verifying a proof that is too short.
         let mut mutated_pf = pf.clone();
-        mutated_pf.data.truncate(l - 1);
+        mutated_pf.data.truncate(g[0].arity() - 1);
         assert!(
             query(x, &mutated_pf, &query_rand, &joint_rand).is_err(),
             "{:?} proof mutant verified",
@@ -682,10 +687,11 @@ mod tests {
             x.as_slice(),
         );
 
-        if x.as_slice().len() > l {
+        let g_arity = g[0].arity();
+        if x.as_slice().len() > g_arity {
             // Try verifying a proof with an invalid proof polynomial.
             let mut mutated_pf = pf.clone();
-            mutated_pf.data[l] += F::one();
+            mutated_pf.data[g_arity] += F::one();
             assert_eq!(
                 decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
                 false,
@@ -695,13 +701,8 @@ mod tests {
 
             // Try verifying a proof with a short proof polynomial.
             let mut mutated_pf = pf.clone();
-            mutated_pf.data.truncate(l);
-            assert_eq!(
-                decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
-                false,
-                "{:?} proof mutant verified",
-                x.as_slice(),
-            );
+            mutated_pf.data.truncate(g_arity);
+            assert!(query(x, &mutated_pf, &query_rand, &joint_rand).is_err());
         }
     }
 }

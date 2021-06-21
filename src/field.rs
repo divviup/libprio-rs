@@ -48,6 +48,7 @@ pub trait FieldElement:
     + Neg<Output = Self>
     + Display
     + From<<Self as FieldElement>::Integer>
+    + 'static // NOTE This bound is needed for downcasting a `dyn Gadget<F>>` to a concrete type.
 {
     /// Size of each field element in bytes.
     const BYTES: usize;

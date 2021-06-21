@@ -30,20 +30,20 @@ pub fn benchmarked_recursive_fft<F: FieldElement>(outp: &mut [F], inp: &[F]) {
 
 /// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
 /// uses FFT for multiplication.
-pub fn benchmarked_gadget_mul_call_poly_fft<F: FieldElement, V: AsRef<[F]>>(
+pub fn benchmarked_gadget_mul_call_poly_fft<F: FieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
-    inp: &[V],
+    inp: &Vec<Vec<F>>,
 ) -> Result<(), PcpError> {
     g.call_poly_fft(outp, inp)
 }
 
 /// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
 /// does the multiplication directly.
-pub fn benchmarked_gadget_mul_call_poly_direct<F: FieldElement, V: AsRef<[F]>>(
+pub fn benchmarked_gadget_mul_call_poly_direct<F: FieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
-    inp: &[V],
+    inp: &Vec<Vec<F>>,
 ) -> Result<(), PcpError> {
     g.call_poly_direct(outp, inp)
 }

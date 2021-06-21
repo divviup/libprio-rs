@@ -49,8 +49,8 @@ pub fn prng(c: &mut Criterion) {
 pub fn poly_mul(c: &mut Criterion) {
     let test_sizes = [1_usize, 30, 60, 90, 120, 150];
     for size in test_sizes.iter() {
-        let m = size.next_power_of_two();
-        let mut g: Mul<F> = Mul::new(m);
+        let m = (*size + 1).next_power_of_two();
+        let mut g: Mul<F> = Mul::new(*size);
         let mut outp = vec![F::zero(); 2 * m];
         let mut inp = vec![vec![]; 2];
         for i in 0..2 {
@@ -140,7 +140,7 @@ pub fn bool_vec(c: &mut Criterion) {
 /// Benchmark proof generation and verification for the MeanVarUnsignedVector type.
 pub fn mean_var_int_vec(c: &mut Criterion) {
     let bits = 12;
-    let test_sizes = [1, 10, 20, 100, 1_000, 10_000];
+    let test_sizes = [1, 10, 20, 100, 1_000];
     for size in test_sizes.iter() {
         let data = vec![0; *size];
 
