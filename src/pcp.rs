@@ -127,7 +127,7 @@ use std::fmt::Debug;
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
-use crate::polynomial::{poly_deg, poly_eval};
+use crate::polynomial::poly_eval;
 use crate::prng::Prng;
 
 pub mod gadgets;
@@ -225,10 +225,10 @@ where
     /// let x = T::new(false);
     ///
     /// let joint_rand = rand(x.valid_rand_len()).unwrap();
-    /// let v = x.valid(&mut x.gadget(0), &joint_rand).unwrap();
+    /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, F::zero());
     /// ```
-    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, rand: &[F]) -> Result<F, PcpError>;
+    fn valid(&self, g: &mut dyn GadgetCallOnly<F>, joint_rand: &[F]) -> Result<F, PcpError>;
 
     /// Returns a reference to the underlying data.
     fn as_slice(&self) -> &[F];
@@ -237,12 +237,12 @@ where
     fn valid_rand_len(&self) -> usize;
 
     /// The number of calls to the gadget made when evaluating the validity circuit.
-    fn valid_gadget_calls(&self) -> usize;
+    fn valid_gadget_calls(&self, idx: usize) -> usize;
 
     /// Returns an instance of the gadget associated with the validity circuit. `in_len` is the
     /// maximum degree of each of the polynomials passed into `call_poly`. If `call_poly` is never
     /// used by the caller, then it is safe to set `in_len == 0`.
-    fn gadget(&self, in_len: usize) -> G;
+    fn gadget(&self) -> G;
 
     /// Returns a copy of the associated type parameters for this value.
     fn param(&self) -> Self::Param;
@@ -302,22 +302,31 @@ where
 /// The gadget functionality required for evaluating a validity circuit. The `Gadget` trait
 /// inherits this trait.
 pub trait GadgetCallOnly<F: FieldElement> {
-    /// Evaluates the gadget on input `inp` and returns the output.
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError>;
+    /// Evaluates the gadget at index `idx` on input `inp` and returns the output.
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError>;
 
-    /// Returns the circuit's arity, i.e., the expected length of the input to `call`.
-    fn call_in_len(&self) -> usize;
+    /// Returns the arity of the gadget at index `idx`, i.e., the expected length of the input to
+    /// the corresponding call to `call`.
+    fn arity(&self, idx: usize) -> usize;
+
+    /// XXX
+    fn len(&self) -> usize;
+
+    /// XXX
+    fn deg(&self, idx: usize) -> usize;
 }
 
 /// The sub-circuit associated with some validity circuit. A gadget is called either on a sequence
 /// of finite field elements or a sequence of polynomials over a finite field.
 pub trait Gadget<F: FieldElement>: GadgetCallOnly<F> {
-    /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError>;
-
-    /// The maximum degree of the polynomial output by `call_poly` as a function of the maximum
-    /// degree of each input polynomial.
-    fn call_poly_out_len(&self, in_len: usize) -> usize;
+    /// Evaluate the gadget at index `idx` on input of a sequence of polynomials. The output is
+    /// written to `outp`.
+    fn call_poly<V: AsRef<[F]>>(
+        &mut self,
+        idx: usize,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError>;
 }
 
 /// Generate a proof of an input's validity.
@@ -327,34 +336,44 @@ where
     G: Gadget<F>,
     V: Value<F, G>,
 {
-    let g_calls = x.valid_gadget_calls();
-    let m = (g_calls + 1).next_power_of_two();
-    let mut g = x.gadget(m);
-    let p = g.call_poly_out_len(m);
-    let l = g.call_in_len();
-    let mut data = vec![F::zero(); l + p];
-
     // Run the validity circuit with a "shim" gadget that records the value of each input wire of
     // each gadget evaluation.
-    let mut shim = ProveShimGadget::new(&mut g, g_calls)?;
+    let mut g = x.gadget();
+    let mut shim = ProveShimGadget::new(&mut g, x)?;
     let _ = x.valid(&mut shim, joint_rand);
 
-    // Construct the intermediate proof polynomials `f[0], ..., f[l-1]`. Also, record in the slice
-    // `data[..l]` the value of `f[i](1)`, i.e., the first point at which polynomial `f[i]` was
-    // interpolated.
-    let mut f = vec![vec![F::zero(); m]; l];
-    let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
-    for i in 0..l {
-        data[i] = shim.f_vals[i][0];
-        discrete_fourier_transform(&mut f[i], &shim.f_vals[i], m)?;
-        discrete_fourier_transform_inv_finish(&mut f[i], m, m_inv);
+    let data_len = (0..shim.len())
+        .map(|idx| {
+            shim.arity(idx) + shim.deg(idx) * (x.valid_gadget_calls(idx) + 1).next_power_of_two()
+        })
+        .reduce(|a, b| a + b)
+        .unwrap();
+    let mut data = vec![F::zero(); data_len];
+
+    let mut proof_len = 0;
+    for idx in 0..shim.len() {
+        let g_deg = shim.deg(idx);
+        let g_arity = shim.arity(idx);
+        let g_calls = x.valid_gadget_calls(idx);
+
+        // Construct the intermediate proof polynomials `f[0], ..., f[g_arity-1]`. Also, append
+        // the value of `f[j](1)` for each `0 <= j < g_arity[i]` to `data`.
+        let m = (g_calls + 1).next_power_of_two();
+        let mut f = vec![vec![F::zero(); m]; g_arity];
+        let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
+        for wire in 0..g_arity {
+            data[proof_len + wire] = shim.f_vals[idx][wire][0];
+            discrete_fourier_transform(&mut f[wire], &shim.f_vals[idx][wire], m)?;
+            discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
+        }
+
+        // Construct the proof polynomial G(f[0], ..., f[g_arity-1])` and append it to `data`.
+        shim.inner
+            .call_poly(idx, &mut data[proof_len + g_arity..], &f)?;
+        proof_len += g_arity + g_deg * (m - 1) + 1;
     }
 
-    // Construct the proof polynomial `data[l..] = G(f[0], ..., f[l-1])`.
-    g.call_poly(&mut data[l..], &f)?;
-
-    let poly_len = poly_deg(&data[l..]);
-    data.truncate(l + poly_len + 1);
+    data.truncate(proof_len);
     Ok(Proof { data })
 }
 
@@ -366,10 +385,12 @@ where
     G: Gadget<F>,
 {
     inner: &'a mut G,
+
     /// Points at which intermediate proof polynomials are interpolated.
-    f_vals: Vec<Vec<F>>,
-    /// The number of times the gadget has been called so far.
-    ct: usize,
+    f_vals: Vec<Vec<Vec<F>>>,
+
+    /// The number of times each subgadget has been called so far.
+    ct: Vec<usize>,
 }
 
 impl<'a, F, G> ProveShimGadget<'a, F, G>
@@ -377,18 +398,22 @@ where
     F: FieldElement,
     G: Gadget<F>,
 {
-    fn new(inner: &'a mut G, gadget_calls: usize) -> Result<Self, getrandom::Error> {
-        let mut f_vals = vec![vec![F::zero(); gadget_calls + 1]; inner.call_in_len()];
-        let mut prng = Prng::new_with_length(f_vals.len())?;
-        for i in 0..f_vals.len() {
-            // Choose a random field element as first point on the i-th proof polynomial.
-            f_vals[i][0] = prng.next().unwrap();
+    fn new<V: Value<F, G>>(inner: &'a mut G, x: &V) -> Result<Self, getrandom::Error> {
+        let mut f_vals: Vec<Vec<Vec<F>>> = (0..inner.len())
+            .map(|idx| vec![vec![F::zero(); x.valid_gadget_calls(idx) + 1]; inner.arity(idx)])
+            .collect();
+
+        let ct = vec![1; inner.len()];
+
+        let mut prng = Prng::new()?;
+        for idx in 0..f_vals.len() {
+            for wire in 0..f_vals[idx].len() {
+                // Choose a random field element as first point on the proof polynomial.
+                f_vals[idx][wire][0] = prng.next().unwrap();
+            }
         }
-        Ok(Self {
-            inner,
-            f_vals,
-            ct: 1,
-        })
+
+        Ok(Self { inner, f_vals, ct })
     }
 }
 
@@ -397,16 +422,24 @@ where
     F: FieldElement,
     G: Gadget<F>,
 {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        for i in 0..inp.len() {
-            self.f_vals[i][self.ct] = inp[i];
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError> {
+        for wire in 0..inp.len() {
+            self.f_vals[idx][wire][self.ct[idx]] = inp[wire];
         }
-        self.ct += 1;
-        self.inner.call(inp)
+        self.ct[idx] += 1;
+        self.inner.call(idx, inp)
     }
 
-    fn call_in_len(&self) -> usize {
-        self.inner.call_in_len()
+    fn arity(&self, idx: usize) -> usize {
+        self.inner.arity(idx)
+    }
+
+    fn len(&self) -> usize {
+        self.inner.len()
+    }
+
+    fn deg(&self, idx: usize) -> usize {
+        self.inner.deg(idx)
     }
 }
 
@@ -448,112 +481,182 @@ where
     G: Gadget<F>,
     V: Value<F, G>,
 {
-    if query_rand.len() != 1 {
-        return Err(PcpError::Query("incorrect length of verifier randomness"));
-    }
-
-    let g_calls = x.valid_gadget_calls();
-    let m = (g_calls + 1).next_power_of_two();
-    let g = x.gadget(m);
-    let l = g.call_in_len();
-
-    // Allocate space for the verifier data. This includes the output of the validity circuit, the
-    // intermediate polynomials evaluated at the query randomness `r`, and the proof polynomial
-    // evaluated at `r`.
-    let mut verifier_data = Vec::with_capacity(2 + l);
-
     // Run the validity circuit with a "shim" gadget that records each input to each gadget.
-    // Record the output of the circuit.
     //
     // NOTE The proof of [BBC+19, Theorem 4.3] assumes that the output of the validity circuit is
     // equal to the output of the last gadget evaluation. Here we relax this assumption. This
     // should be OK, since it's possible to transform any circuit into one for which this is true.
     // (Needs security analysis.)
-    let mut shim = QueryShimGadget::new(&g, g_calls, pf)?;
-    verifier_data.push(x.valid(&mut shim, joint_rand)?);
+    let mut g = x.gadget();
+    let mut shim = QueryShimGadget::new(&mut g, x, pf)?;
+    let v = x.valid(&mut shim, joint_rand)?;
 
-    // Reconstruct the intermediate proof polynomials `f[0], ..., f[l-1]` and evaluate each
-    // polynomial at input `r`.
-    let mut f = vec![F::zero(); m];
-    let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
-    for i in 0..l {
-        discrete_fourier_transform(&mut f, &shim.f_vals[i], m)?;
-        discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
-        verifier_data.push(poly_eval(&f, query_rand[0]));
+    if query_rand.len() != shim.len() {
+        return Err(PcpError::Query("incorrect length of query randomness"));
     }
 
-    // Evaluate the proof polynomial `p` at `r`.
-    //
-    // NOTE Usually `r` is sampled uniformly from the field. Strictly speaking, [BBC+19, Theorem
-    // 4.3] requires that `r` be sampled from the set of field elements *minus* the roots of unity
-    // at which the polynomials are interpolated. This relaxation is fine, but results in a
-    // modest loss of concrete security. (Needs security analysis.)
-    verifier_data.push(poly_eval(&pf.data[l..], query_rand[0]));
+    // Allocate space for the verifier data. This includes the output of the validity circuit, the
+    // intermediate polynomials evaluated at the query randomness `r`, and the proof polynomial
+    // evaluated at `r`.
+    let data_len = (0..shim.len())
+        .map(|idx| shim.arity(idx) + 2)
+        .reduce(|a, b| a + b)
+        .unwrap();
+    let mut data = Vec::with_capacity(data_len);
 
-    Ok(Verifier {
-        data: verifier_data,
-    })
+    // Record the output of the circuit.
+    data.push(v);
+
+    let mut proof_len = 0;
+    for idx in 0..shim.len() {
+        let g_deg = shim.deg(idx);
+        let g_arity = shim.arity(idx);
+        let g_calls = x.valid_gadget_calls(idx);
+
+        // Reconstruct the intermediate proof polynomials `f[0], ..., f[l-1]` and evaluate each
+        // polynomial at input `r`.
+        let m = (g_calls + 1).next_power_of_two();
+        let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
+        let mut f = vec![F::zero(); m];
+        for wire in 0..g_arity {
+            discrete_fourier_transform(&mut f, &shim.f_vals[idx][wire], m)?;
+            discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
+            data.push(poly_eval(&f, query_rand[idx]));
+        }
+
+        // Evaluate the proof polynomial `p` at `r`.
+        //
+        // NOTE Usually `r` is sampled uniformly from the field. Strictly speaking, [BBC+19, Theorem
+        // 4.3] requires that `r` be sampled from the set of field elements *minus* the roots of unity
+        // at which the polynomials are interpolated. This relaxation is fine, but results in a
+        // modest loss of concrete security. (Needs security analysis.)
+        let next_len = g_arity + g_deg * (m - 1) + 1;
+        data.push(poly_eval(
+            &pf.data[proof_len + g_arity..proof_len + next_len],
+            query_rand[idx],
+        ));
+        proof_len += next_len;
+    }
+
+    Ok(Verifier { data })
 }
 
 // A "shim" gadget used during proof verification to record the points at which the intermediate
 // proof polynomials are evaluated.
-struct QueryShimGadget<F: FieldElement> {
+struct QueryShimGadget<'a, F, G>
+where
+    F: FieldElement,
+    G: Gadget<F>,
+{
+    inner: &'a mut G,
+
     /// Points at which intermediate proof polynomials are interpolated.
-    f_vals: Vec<Vec<F>>,
+    f_vals: Vec<Vec<Vec<F>>>,
+
     /// Points at which the proof polynomial is interpolated.
-    p_vals: Vec<F>,
+    p_vals: Vec<Vec<F>>,
+
     /// Used to compute an index into `p_val`.
-    step: usize,
+    step: Vec<usize>,
+
     /// The number of times the gadget has been called so far.
-    ct: usize,
-    /// The arity of the inner gadget.
-    l: usize,
+    ct: Vec<usize>,
 }
 
-impl<F: FieldElement> QueryShimGadget<F> {
-    fn new<G: Gadget<F>>(inner: &G, g_calls: usize, pf: &Proof<F>) -> Result<Self, PcpError> {
-        let m = (g_calls + 1).next_power_of_two();
-        let p = inner.call_poly_out_len(m);
-        let l = inner.call_in_len();
+impl<'a, F, G> QueryShimGadget<'a, F, G>
+where
+    F: FieldElement,
+    G: Gadget<F>,
+{
+    fn new<V: Value<F, G>>(inner: &'a mut G, x: &V, pf: &Proof<F>) -> Result<Self, PcpError> {
+        let mut f_vals: Vec<Vec<Vec<F>>> = (0..inner.len())
+            .map(|i| vec![vec![F::zero(); x.valid_gadget_calls(i) + 1]; inner.arity(i)])
+            .collect();
 
-        if pf.data.len() < l || pf.data.len() > l + p {
-            return Err(PcpError::Query("incorrect proof length"));
+        let mut p_vals: Vec<Vec<F>> = (0..inner.len())
+            .map(|idx| {
+                let g_calls = x.valid_gadget_calls(idx);
+                let g_deg = inner.deg(idx);
+                let m = (g_calls + 1).next_power_of_two();
+                let p = m * g_deg;
+                let size = p.next_power_of_two();
+                vec![F::zero(); size]
+            })
+            .collect();
+
+        let mut step: Vec<usize> = vec![0; inner.len()];
+
+        let ct: Vec<usize> = vec![1; inner.len()];
+
+        let mut proof_len = 0;
+        for idx in 0..inner.len() {
+            let g_calls = x.valid_gadget_calls(idx);
+            let g_arity = inner.arity(idx);
+            let g_deg = inner.deg(idx);
+            let m = (g_calls + 1).next_power_of_two();
+            let p = m * g_deg;
+
+            let next_len = g_arity + g_deg * (m - 1) + 1;
+            if pf.data.len() < proof_len + next_len {
+                return Err(PcpError::Query("proof too short"));
+            }
+
+            // Record the intermediate polynomial seeds.
+            for wire in 0..g_arity {
+                f_vals[idx][wire][0] = pf.data[proof_len + wire];
+            }
+
+            // Evaluate the proof polynomial at roots of unity.
+            let size = p_vals[idx].len();
+            discrete_fourier_transform(
+                &mut p_vals[idx],
+                &pf.data[proof_len + g_arity..proof_len + next_len],
+                size,
+            )?;
+
+            step[idx] = (1 << (log2(p as u128) - log2(m as u128))) as usize;
+
+            proof_len += next_len;
         }
 
-        // Record the intermediate polynomial seeds.
-        let mut f_vals = vec![vec![F::zero(); g_calls + 1]; l];
-        for i in 0..l {
-            f_vals[i][0] = pf.data[i]
+        if proof_len < pf.data.len() {
+            return Err(PcpError::Query("proof too long"));
         }
 
-        // Evaluate the proof polynomial at roots of unity.
-        let size = p.next_power_of_two();
-        let mut p_vals = vec![F::zero(); size];
-        discrete_fourier_transform(&mut p_vals, &pf.data[l..], size)?;
-
-        let step = (1 << (log2(p as u128) - log2(m as u128))) as usize;
         Ok(QueryShimGadget {
+            inner,
             f_vals,
             p_vals,
             step,
-            ct: 1,
-            l,
+            ct,
         })
     }
 }
 
-impl<F: FieldElement> GadgetCallOnly<F> for QueryShimGadget<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        for i in 0..inp.len() {
-            self.f_vals[i][self.ct] = inp[i];
+impl<'a, F, G> GadgetCallOnly<F> for QueryShimGadget<'a, F, G>
+where
+    F: FieldElement,
+    G: Gadget<F>,
+{
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError> {
+        for j in 0..inp.len() {
+            self.f_vals[idx][j][self.ct[idx]] = inp[j];
         }
-        let outp = self.p_vals[self.ct * self.step];
-        self.ct += 1;
+        let outp = self.p_vals[idx][self.ct[idx] * self.step[idx]];
+        self.ct[idx] += 1;
         Ok(outp)
     }
 
-    fn call_in_len(&self) -> usize {
-        self.l
+    fn arity(&self, idx: usize) -> usize {
+        self.inner.arity(idx)
+    }
+
+    fn deg(&self, idx: usize) -> usize {
+        self.inner.deg(idx)
+    }
+
+    fn len(&self) -> usize {
+        self.inner.len()
     }
 }
 
@@ -573,22 +676,6 @@ impl<F: FieldElement> Verifier<F> {
     /// Returns a reference to the underlying data.
     pub fn as_slice(&self) -> &[F] {
         &self.data
-    }
-
-    /// Returns the output of the validity circuit.
-    fn validity(&self) -> F {
-        self.data[0]
-    }
-
-    /// Returns the outputs of the intermediate proof polynomials evaluated at the query
-    /// randomness.
-    fn f_at_r(&self) -> &[F] {
-        &self.data[1..self.data.len() - 1]
-    }
-
-    /// Returns the output of the proof polynomial evaluated at the query randomness.
-    fn p_at_r(&self) -> F {
-        self.data[self.data.len() - 1]
     }
 }
 
@@ -632,59 +719,88 @@ where
     G: Gadget<F>,
     V: Value<F, G>,
 {
-    let mut g = x.gadget(0);
-    let vf_len = vf.data.len();
-    if vf_len < 2 + g.call_in_len() {
-        return Err(PcpError::Decide("short verifier message"));
+    let mut g = x.gadget();
+
+    if vf.data.len() == 0 {
+        return Err(PcpError::Decide("zero-length verifier"));
     }
 
-    let e = g.call(vf.f_at_r())?;
-    if e == vf.p_at_r() && vf.validity() == F::zero() {
-        Ok(true)
-    } else {
-        Ok(false)
+    // Check if the output of the circuit is 0.
+    if vf.data[0] != F::zero() {
+        return Ok(false);
     }
+
+    // Check that each of the proof polynomials are well-formed.
+    let mut verifier_len = 1;
+    for i in 0..g.len() {
+        let next_len = 1 + g.arity(i);
+        if verifier_len + next_len > vf.data.len() {
+            return Err(PcpError::Decide("short verifier"));
+        }
+
+        let e = g.call(i, &vf.data[verifier_len..verifier_len + next_len - 1])?;
+        println!("{}", e - vf.data[verifier_len + next_len - 1]);
+        if e != vf.data[verifier_len + next_len - 1] {
+            return Ok(false);
+        }
+
+        verifier_len += next_len;
+    }
+
+    if verifier_len != vf.data.len() {
+        return Err(PcpError::Decide("long verifier"));
+    }
+
+    Ok(true)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::field::{rand, split, Field126};
-    use crate::pcp::types::Boolean;
+    use crate::pcp::gadgets::{Mul, Pair, PolyEval};
+    use crate::pcp::types::{call_poly_out_len, Boolean};
+    use crate::polynomial::poly_range_check;
+
+    use std::convert::Infallible;
 
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
     #[test]
     fn test_pcp() {
         type F = Field126;
-        type T = Boolean<F>;
+        type T = TestValue<F>;
+        const NUM_SHARES: usize = 2;
 
-        let query_rand = rand(1).unwrap();
-        let joint_rand = vec![];
-
-        let x: T = Boolean::new(false);
+        let inp = F::from(3);
+        let x: T = TestValue::new(inp);
         let x_par = x.param();
-        let x_shares: Vec<T> = split(x.as_slice(), 2)
+        let x_shares: Vec<T> = split(x.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
-            .map(|data| Boolean::try_from((x_par, data)).unwrap())
+            .enumerate()
+            .map(|(i, data)| {
+                let mut share = T::try_from((x_par, data)).unwrap();
+                share.set_leader(i == 0);
+                share
+            })
             .collect();
 
+        let joint_rand = rand(x.valid_rand_len()).unwrap();
         let pf = prove(&x, &joint_rand).unwrap();
-        let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), 2)
+        let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();
 
-        let vf_shares = vec![
-            query(&x_shares[0], &pf_shares[0], &query_rand, &joint_rand).unwrap(),
-            query(&x_shares[1], &pf_shares[1], &query_rand, &joint_rand).unwrap(),
-        ];
-
+        let query_rand = rand(2).unwrap(); // Length is the same as the length of the gadget
+        let vf_shares: Vec<Verifier<F>> = (0..NUM_SHARES)
+            .map(|i| query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap())
+            .collect();
         let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
         let res = decide(&x, &vf).unwrap();
-        assert_eq!(res, true);
+        assert_eq!(res, true, "{:?}", vf);
     }
 
     #[test]
@@ -712,5 +828,96 @@ mod tests {
 
         let bad_vf = Verifier::from(vec![]);
         assert!(decide(&x, &bad_vf).is_err());
+    }
+
+    #[derive(Debug, PartialEq, Eq)]
+    pub struct TestValue<F: FieldElement> {
+        is_leader: bool, // Whether this is the leader's input share XXX delete me?
+        data: Vec<F>,    // The encoded input
+    }
+
+    impl<F: FieldElement> TestValue<F> {
+        pub fn new(inp: F) -> Self {
+            Self {
+                is_leader: true,
+                data: vec![inp, inp * inp * inp],
+            }
+        }
+    }
+
+    impl<F: FieldElement> Value<F, Pair<F, Mul<F>, PolyEval<F>>> for TestValue<F> {
+        type Param = ();
+        type TryFromError = Infallible;
+
+        fn valid(&self, g: &mut dyn GadgetCallOnly<F>, joint_rand: &[F]) -> Result<F, PcpError> {
+            if joint_rand.len() != self.valid_rand_len() {
+                return Err(PcpError::ValidRandLen);
+            }
+
+            if self.data.len() != 2 {
+                return Err(PcpError::CircuitInLen);
+            }
+
+            let r = joint_rand[0];
+            let mut res = F::zero();
+
+            // Check that `data[0] == data[1]^3`.
+            let mut inp = [self.data[0], self.data[0]];
+            inp[0] = g.call(0, &inp)?;
+            inp[0] = g.call(0, &inp)?;
+            let x3_diff = inp[0] - self.data[1];
+            res += r * x3_diff;
+
+            // Check that `data[0]` is in the correct range.
+            let x_checked = g.call(1, &[self.data[0]])?;
+            res += (r * r) * x_checked;
+
+            Ok(res)
+        }
+
+        fn valid_gadget_calls(&self, idx: usize) -> usize {
+            match idx {
+                0 => 2,
+                1 => 1,
+                _ => 0,
+            }
+        }
+
+        fn valid_rand_len(&self) -> usize {
+            1
+        }
+
+        fn gadget(&self) -> Pair<F, Mul<F>, PolyEval<F>> {
+            Pair::new(
+                Mul::new(call_poly_out_len(self.valid_gadget_calls(0))),
+                PolyEval::new(
+                    poly_range_check(2, 5),
+                    call_poly_out_len(self.valid_gadget_calls(1)),
+                ),
+            )
+        }
+
+        fn as_slice(&self) -> &[F] {
+            &self.data
+        }
+
+        fn param(&self) -> Self::Param {
+            ()
+        }
+
+        fn set_leader(&mut self, is_leader: bool) {
+            self.is_leader = is_leader
+        }
+    }
+
+    impl<F: FieldElement> TryFrom<((), Vec<F>)> for TestValue<F> {
+        type Error = Infallible;
+
+        fn try_from(val: ((), Vec<F>)) -> Result<Self, Infallible> {
+            Ok(Self {
+                is_leader: true,
+                data: val.1,
+            })
+        }
     }
 }

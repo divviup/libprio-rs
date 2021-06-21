@@ -8,6 +8,7 @@ use crate::pcp::{Gadget, GadgetCallOnly, PcpError};
 use crate::polynomial::{poly_deg, poly_eval, poly_mul, poly_range_check};
 
 use std::convert::TryFrom;
+use std::marker::PhantomData;
 
 /// For input polynomials larger than or equal to this threshold, gadgets will use FFT for
 /// polynomial multiplication. Otherwise, the gadget uses direct multiplication.
@@ -65,28 +66,45 @@ impl<F: FieldElement> Mul<F> {
 }
 
 impl<F: FieldElement> GadgetCallOnly<F> for Mul<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        gadget_call_check(self, inp.len())?;
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError> {
+        gadget_call_check(self, idx, inp.len())?;
         Ok(inp[0] * inp[1])
     }
 
-    fn call_in_len(&self) -> usize {
+    fn arity(&self, idx: usize) -> usize {
+        if idx >= self.len() {
+            return 0;
+        }
+
         2
+    }
+
+    fn deg(&self, idx: usize) -> usize {
+        if idx >= self.len() {
+            return 0;
+        }
+
+        2
+    }
+
+    fn len(&self) -> usize {
+        1
     }
 }
 
 impl<F: FieldElement> Gadget<F> for Mul<F> {
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly<V: AsRef<[F]>>(
+        &mut self,
+        idx: usize,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        gadget_call_poly_check(self, idx, outp, inp)?;
         if inp[0].as_ref().len() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
-    }
-
-    fn call_poly_out_len(&self, in_len: usize) -> usize {
-        2 * in_len
     }
 }
 
@@ -162,19 +180,40 @@ impl<F: FieldElement> PolyEval<F> {
 }
 
 impl<F: FieldElement> GadgetCallOnly<F> for PolyEval<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        gadget_call_check(self, inp.len())?;
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError> {
+        gadget_call_check(self, idx, inp.len())?;
         Ok(poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_in_len(&self) -> usize {
+    fn arity(&self, idx: usize) -> usize {
+        if idx >= self.len() {
+            return 0;
+        }
+
+        1
+    }
+
+    fn deg(&self, idx: usize) -> usize {
+        if idx >= self.len() {
+            return 0;
+        }
+
+        poly_deg(&self.poly)
+    }
+
+    fn len(&self) -> usize {
         1
     }
 }
 
 impl<F: FieldElement> Gadget<F> for PolyEval<F> {
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly<V: AsRef<[F]>>(
+        &mut self,
+        idx: usize,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        gadget_call_poly_check(self, idx, outp, inp)?;
 
         for i in 0..outp.len() {
             outp[i] = F::zero();
@@ -185,10 +224,6 @@ impl<F: FieldElement> Gadget<F> for PolyEval<F> {
         } else {
             self.call_poly_direct(outp, inp)
         }
-    }
-
-    fn call_poly_out_len(&self, in_len: usize) -> usize {
-        poly_deg(&self.poly) * in_len
     }
 }
 
@@ -326,8 +361,8 @@ impl<F: FieldElement> MeanVarUnsigned<F> {
 }
 
 impl<F: FieldElement> GadgetCallOnly<F> for MeanVarUnsigned<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        gadget_call_check(self, inp.len())?;
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError> {
+        gadget_call_check(self, idx, inp.len())?;
         let bits = self.bits;
         let r_vec = &inp[..bits];
         let x_vec = &inp[bits..2 * bits];
@@ -343,32 +378,133 @@ impl<F: FieldElement> GadgetCallOnly<F> for MeanVarUnsigned<F> {
         Ok(res)
     }
 
-    fn call_in_len(&self) -> usize {
+    fn arity(&self, idx: usize) -> usize {
+        if idx >= self.len() {
+            return 0;
+        }
+
         2 * self.bits + 1
+    }
+
+    fn deg(&self, idx: usize) -> usize {
+        if idx >= self.len() {
+            return 0;
+        }
+
+        3
+    }
+
+    fn len(&self) -> usize {
+        1
     }
 }
 
 impl<F: FieldElement> Gadget<F> for MeanVarUnsigned<F> {
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly<V: AsRef<[F]>>(
+        &mut self,
+        idx: usize,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        gadget_call_poly_check(self, idx, outp, inp)?;
         if inp[0].as_ref().len() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
     }
+}
 
-    fn call_poly_out_len(&self, in_len: usize) -> usize {
-        in_len * 3
+/// XXX
+/// XXX Constructor should check that G1 and G2 have output size of 1
+pub struct Pair<F: FieldElement, G1: Gadget<F>, G2: Gadget<F>> {
+    g1: G1,
+    g2: G2,
+    phantom: PhantomData<F>,
+}
+
+impl<F, G1, G2> Pair<F, G1, G2>
+where
+    F: FieldElement,
+    G1: Gadget<F>,
+    G2: Gadget<F>,
+{
+    /// XXX
+    pub fn new(g1: G1, g2: G2) -> Self {
+        Self {
+            g1,
+            g2,
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<F, G1, G2> GadgetCallOnly<F> for Pair<F, G1, G2>
+where
+    F: FieldElement,
+    G1: Gadget<F>,
+    G2: Gadget<F>,
+{
+    fn call(&mut self, idx: usize, inp: &[F]) -> Result<F, PcpError> {
+        match idx {
+            0 => self.g1.call(0, inp),
+            1 => self.g2.call(0, inp),
+            _ => panic!("XXX"),
+        }
+    }
+
+    fn arity(&self, idx: usize) -> usize {
+        match idx {
+            0 => self.g1.arity(0),
+            1 => self.g2.arity(0),
+            _ => 0,
+        }
+    }
+
+    fn deg(&self, idx: usize) -> usize {
+        match idx {
+            0 => self.g1.deg(0),
+            1 => self.g2.deg(0),
+            _ => 0,
+        }
+    }
+
+    fn len(&self) -> usize {
+        2
+    }
+}
+
+impl<F, G1, G2> Gadget<F> for Pair<F, G1, G2>
+where
+    F: FieldElement,
+    G1: Gadget<F>,
+    G2: Gadget<F>,
+{
+    fn call_poly<V: AsRef<[F]>>(
+        &mut self,
+        idx: usize,
+        outp: &mut [F],
+        inp: &[V],
+    ) -> Result<(), PcpError> {
+        match idx {
+            0 => self.g1.call_poly(0, outp, inp),
+            1 => self.g2.call_poly(0, outp, inp),
+            _ => panic!("XXX"),
+        }
     }
 }
 
 // Check that the input parameters of g.call() are wll-formed.
 fn gadget_call_check<F: FieldElement, G: GadgetCallOnly<F>>(
     g: &G,
+    idx: usize,
     in_len: usize,
 ) -> Result<(), PcpError> {
-    if in_len != g.call_in_len() {
+    if idx >= g.len() {
+        panic!("XXX index check");
+    }
+
+    if in_len != g.arity(idx) {
         return Err(PcpError::CircuitInLen);
     }
 
@@ -382,13 +518,14 @@ fn gadget_call_check<F: FieldElement, G: GadgetCallOnly<F>>(
 // Check that the input parameters of g.call_poly() are well-formed.
 fn gadget_call_poly_check<F: FieldElement, G: GadgetCallOnly<F>, V: AsRef<[F]>>(
     g: &G,
+    idx: usize,
     outp: &[F],
     inp: &[V],
 ) -> Result<(), PcpError>
 where
     G: Gadget<F>,
 {
-    gadget_call_check(g, inp.len())?;
+    gadget_call_check(g, idx, inp.len())?;
 
     for i in 1..inp.len() {
         if inp[i].as_ref().len() != inp[0].as_ref().len() {
@@ -396,7 +533,7 @@ where
         }
     }
 
-    if outp.len() < g.call_poly_out_len(inp[0].as_ref().len()) {
+    if outp.len() < g.deg(idx) * inp[0].as_ref().len() {
         return Err(PcpError::GadgetPolyOutLen);
     }
 
@@ -449,33 +586,49 @@ mod tests {
         gadget_test(&mut g, in_len);
     }
 
+    #[test]
+    fn test_pair() {
+        let poly = rand(10).unwrap();
+        let in_len = FFT_THRESHOLD - 1;
+
+        let mut g = Pair::new(
+            Mul::<TestField>::new(in_len),
+            PolyEval::<TestField>::new(poly.clone(), in_len),
+        );
+        gadget_test(&mut g, in_len);
+    }
+
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     // to evaluating each of the inputs at the same point and applying g.call() on the results.
-    fn gadget_test<F: FieldElement, G: GadgetCallOnly<F>>(g: &mut G, in_len: usize)
-    where
-        G: Gadget<F>,
-    {
+    fn gadget_test<F: FieldElement, G: Gadget<F>>(g: &mut G, in_len: usize) {
         let mut prng = Prng::new().unwrap();
-        let mut inp = vec![F::zero(); g.call_in_len()];
-        let mut poly_outp = vec![F::zero(); g.call_poly_out_len(in_len)];
-        let mut poly_inp = vec![vec![F::zero(); in_len]; g.call_in_len()];
 
-        let r = prng.next().unwrap();
-        for i in 0..g.call_in_len() {
-            for j in 0..in_len {
-                poly_inp[i][j] = prng.next().unwrap();
+        // Calling arity or deg on an out-of-range index should always return 0.
+        assert_eq!(g.arity(g.len()), 0);
+        assert_eq!(g.deg(g.len()), 0);
+
+        for idx in 0..g.len() {
+            let mut inp = vec![F::zero(); g.arity(idx)];
+            let mut poly_outp = vec![F::zero(); g.deg(idx) * in_len];
+            let mut poly_inp = vec![vec![F::zero(); in_len]; g.arity(idx)];
+
+            let r = prng.next().unwrap();
+            for i in 0..g.arity(idx) {
+                for j in 0..in_len {
+                    poly_inp[i][j] = prng.next().unwrap();
+                }
+                inp[i] = poly_eval(&poly_inp[i], r);
             }
-            inp[i] = poly_eval(&poly_inp[i], r);
+
+            g.call_poly(idx, &mut poly_outp, &poly_inp).unwrap();
+            let got = poly_eval(&poly_outp, r);
+            let want = g.call(idx, &inp).unwrap();
+            assert_eq!(got, want);
+
+            // Repeat the call to make sure that the gadget's memory is reset properly between calls.
+            g.call_poly(idx, &mut poly_outp, &poly_inp).unwrap();
+            let got = poly_eval(&poly_outp, r);
+            assert_eq!(got, want);
         }
-
-        g.call_poly(&mut poly_outp, &poly_inp).unwrap();
-        let got = poly_eval(&poly_outp, r);
-        let want = g.call(&inp).unwrap();
-        assert_eq!(got, want);
-
-        // Repeat the call to make sure that the gadget's memory is reset properly between calls.
-        g.call_poly(&mut poly_outp, &poly_inp).unwrap();
-        let got = poly_eval(&poly_outp, r);
-        assert_eq!(got, want);
     }
 }
