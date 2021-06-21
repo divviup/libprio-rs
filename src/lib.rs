@@ -5,9 +5,8 @@
 
 //! Libprio-rs
 //!
-//! Implementation of Prio: https://crypto.stanford.edu/prio/
-//!
-//! For now we only support 0 / 1 vectors.
+//! Implementation of the [Prio](https://crypto.stanford.edu/prio/) private data aggregation
+//! protocol. For now we only support 0 / 1 vectors.
 
 pub mod benchmarked;
 pub mod client;

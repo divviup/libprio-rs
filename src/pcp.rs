@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module implements the fully linear PCP ("Probabilistically Checkable Proof") system
-//! described in \[BBG+19, Theorem 4.3\]. This is the core component of Prio's input-validation
-//! protocol \[GB17\].
+//! **(NOTE: This module is experimental. Applications should not use it yet.)** This
+//! module implements the fully linear PCP ("Probabilistically Checkable Proof") system described
+//! in \[[BBC+19](https://eprint.iacr.org/2019/188), Theorem 4.3\].
 //!
 //! # Overview
 //!
@@ -104,7 +104,7 @@
 //! assert_eq!(res, true);
 //! ```
 //!
-//! The fully linear PCP system of [BBG+19, Theorem 4.3] applies to languages recognized by
+//! The fully linear PCP system of [BBC+19, Theorem 4.3] applies to languages recognized by
 //! arithmetic circuits over finite fields that have a particular structure. Namely, all gates in
 //! the circuit are either affine (i.e., addition or scalar multiplication) or invoke a special
 //! sub-circuit, called the "gadget", which may contain non-affine operations (i.e.,
@@ -118,7 +118,7 @@
 //!
 //! - \[GB17\] H. Corrigan-Gibbs and D. Boneh. "[Prio: Private, Robust, and Scalable Computation of
 //! Aggregate Statistics.](https://crypto.stanford.edu/prio/paper.pdf)" NSDI 2017.
-//! - \[BBG+19\] Boneh et al. "[Zero-Knowledge Proofs on Secret-Shared Data via Fully Linear
+//! - \[BBC+19\] Boneh et al. "[Zero-Knowledge Proofs on Secret-Shared Data via Fully Linear
 //! PCPs.](https://eprint.iacr.org/2019/188)" CRYPTO 2019.
 
 use std::convert::TryFrom;

@@ -22,9 +22,11 @@ pub enum FftError {
     SizeInvalid,
 }
 
-/// Sets `outp` to the DFT of `inp`. Interpreting the input as the coefficients of a polynomial,
-/// the output is equal to the input evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is
-/// the `2^size`-th principal root of unity.
+/// Sets `outp` to the DFT of `inp`.
+///
+/// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
+/// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `2^size`-th principal root of
+/// unity.
 pub fn discrete_fourier_transform<F: FieldElement>(
     outp: &mut [F],
     inp: &[F],

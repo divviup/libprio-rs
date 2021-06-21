@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! Utilities for ECIES encryption / decryption
+//! Utilities for ECIES encryption / decryption used by the Prio client and server.
 
 use aes_gcm::aead::generic_array::typenum::U16;
 use aes_gcm::aead::generic_array::GenericArray;

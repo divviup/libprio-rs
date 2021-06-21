@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This package provides wrappers around internal components of this crate that we want to
+//! This module provides wrappers around internal components of this crate that we want to
 //! benchmark, but which we don't want to expose in the public API.
 
 use crate::client::Client;
