@@ -604,6 +604,7 @@ mod tests {
         G: Gadget<F>,
         V: Value<F, G>,
     {
+        // XXX This test won't work if x.gadget().len() > 1.
         let l = x.gadget().arity(0);
         let rand_len = x.valid_rand_len();
         let joint_rand = rand(rand_len).unwrap();
