@@ -4,9 +4,10 @@
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
 use crate::field::FieldElement;
-use crate::pcp::{Gadget, GadgetCallOnly, PcpError};
+use crate::pcp::{Gadget, PcpError};
 use crate::polynomial::{poly_deg, poly_eval, poly_mul, poly_range_check};
 
+use std::any::Any;
 use std::convert::TryFrom;
 
 /// For input polynomials larger than or equal to this threshold, gadgets will use FFT for
@@ -22,20 +23,24 @@ pub struct Mul<F: FieldElement> {
 }
 
 impl<F: FieldElement> Mul<F> {
-    /// Return a new multiplier gadget.
-    pub fn new(in_len: usize) -> Self {
-        let n = (2 * in_len).next_power_of_two();
+    /// Return a new multiplier gadget. `num_calls` is the number of times this gadget will be
+    /// called by the validity circuit.
+    pub fn new(num_calls: usize) -> Self {
+        // Compute the amount of memory that will be needed for the output of `call_poly`. The
+        // degree of this gadget is `2`, so this is `2 * (1 + num_calls).next_power_of_two()`.
+        // (We round up to the next power of two in order to make room for FFT.)
+        let n = (2 * (1 + num_calls).next_power_of_two()).next_power_of_two();
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self { n, n_inv }
     }
 
     // Multiply input polynomials directly.
-    pub(crate) fn call_poly_direct<V: AsRef<[F]>>(
+    pub(crate) fn call_poly_direct(
         &mut self,
         outp: &mut [F],
-        inp: &[V],
+        inp: &Vec<Vec<F>>,
     ) -> Result<(), PcpError> {
-        let v = poly_mul(inp[0].as_ref(), inp[1].as_ref());
+        let v = poly_mul(&inp[0], &inp[1]);
         for i in 0..v.len() {
             outp[i] = v[i];
         }
@@ -43,16 +48,16 @@ impl<F: FieldElement> Mul<F> {
     }
 
     // Multiply input polynomials using FFT.
-    pub(crate) fn call_poly_fft<V: AsRef<[F]>>(
+    pub(crate) fn call_poly_fft(
         &mut self,
         outp: &mut [F],
-        inp: &[V],
+        inp: &Vec<Vec<F>>,
     ) -> Result<(), PcpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
-        discrete_fourier_transform(&mut buf, inp[0].as_ref(), n)?;
-        discrete_fourier_transform(outp, inp[1].as_ref(), n)?;
+        discrete_fourier_transform(&mut buf, &inp[0], n)?;
+        discrete_fourier_transform(outp, &inp[1], n)?;
 
         for i in 0..n {
             buf[i] *= outp[i];
@@ -64,29 +69,31 @@ impl<F: FieldElement> Mul<F> {
     }
 }
 
-impl<F: FieldElement> GadgetCallOnly<F> for Mul<F> {
+impl<F: FieldElement> Gadget<F> for Mul<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
         gadget_call_check(self, inp.len())?;
         Ok(inp[0] * inp[1])
     }
 
-    fn call_in_len(&self) -> usize {
-        2
-    }
-}
-
-impl<F: FieldElement> Gadget<F> for Mul<F> {
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &Vec<Vec<F>>) -> Result<(), PcpError> {
         gadget_call_poly_check(self, outp, inp)?;
-        if inp[0].as_ref().len() >= FFT_THRESHOLD {
+        if inp[0].len() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
     }
 
-    fn call_poly_out_len(&self, in_len: usize) -> usize {
-        2 * in_len
+    fn arity(&self) -> usize {
+        2
+    }
+
+    fn deg(&self) -> usize {
+        2
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -100,10 +107,10 @@ pub struct PolyEval<F: FieldElement> {
 }
 
 impl<F: FieldElement> PolyEval<F> {
-    /// Returns a gadget that evaluates its input on `poly`. The parameter `in_len` denotes the
-    /// length of each input passed to `call_poly`.
-    pub fn new(poly: Vec<F>, in_len: usize) -> Self {
-        let n = (in_len * poly_deg(&poly)).next_power_of_two();
+    /// Returns a gadget that evaluates its input on `poly`. `num_calls` is the number of times
+    /// this gadget is called by the validity circuit.
+    pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
+        let n = (poly_deg(&poly) * (1 + num_calls).next_power_of_two()).next_power_of_two();
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self { poly, n, n_inv }
     }
@@ -111,29 +118,25 @@ impl<F: FieldElement> PolyEval<F> {
 
 impl<F: FieldElement> PolyEval<F> {
     // Multiply input polynomials directly.
-    fn call_poly_direct<V: AsRef<[F]>>(
-        &mut self,
-        outp: &mut [F],
-        inp: &[V],
-    ) -> Result<(), PcpError> {
+    fn call_poly_direct(&mut self, outp: &mut [F], inp: &Vec<Vec<F>>) -> Result<(), PcpError> {
         outp[0] = self.poly[0];
-        let mut x = inp[0].as_ref().to_vec();
+        let mut x = inp[0].to_vec();
         for i in 1..self.poly.len() {
             for j in 0..x.len() {
                 outp[j] += self.poly[i] * x[j];
             }
 
             if i < self.poly.len() - 1 {
-                x = poly_mul(&x, inp[0].as_ref());
+                x = poly_mul(&x, &inp[0]);
             }
         }
         Ok(())
     }
 
     // Multiply input polynomials using FFT.
-    fn call_poly_fft<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
+    fn call_poly_fft(&mut self, outp: &mut [F], inp: &Vec<Vec<F>>) -> Result<(), PcpError> {
         let n = self.n;
-        let inp = inp[0].as_ref();
+        let inp = &inp[0];
 
         let mut inp_vals = vec![F::zero(); n];
         discrete_fourier_transform(&mut inp_vals, inp, n)?;
@@ -161,34 +164,36 @@ impl<F: FieldElement> PolyEval<F> {
     }
 }
 
-impl<F: FieldElement> GadgetCallOnly<F> for PolyEval<F> {
+impl<F: FieldElement> Gadget<F> for PolyEval<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
         gadget_call_check(self, inp.len())?;
         Ok(poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_in_len(&self) -> usize {
-        1
-    }
-}
-
-impl<F: FieldElement> Gadget<F> for PolyEval<F> {
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &Vec<Vec<F>>) -> Result<(), PcpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         for i in 0..outp.len() {
             outp[i] = F::zero();
         }
 
-        if inp[0].as_ref().len() >= FFT_THRESHOLD {
+        if inp[0].len() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
     }
 
-    fn call_poly_out_len(&self, in_len: usize) -> usize {
-        poly_deg(&self.poly) * in_len
+    fn arity(&self) -> usize {
+        1
+    }
+
+    fn deg(&self) -> usize {
+        poly_deg(&self.poly)
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
@@ -220,10 +225,11 @@ pub struct MeanVarUnsigned<F: FieldElement> {
 }
 
 impl<F: FieldElement> MeanVarUnsigned<F> {
-    /// Constructs a MeanVarUnsigned gadget with parameter `bits`.
-    pub fn new(bits: usize, in_len: usize) -> Self {
+    /// Constructs a MeanVarUnsigned gadget with parameter `bits`. `num_calls` is the number of
+    /// times this gadget is called by the validity circuit.
+    pub fn new(bits: usize, num_calls: usize) -> Self {
         let poly: Vec<F> = poly_range_check(0, 2);
-        let n = (in_len * 3).next_power_of_two();
+        let n = (3 * (1 + num_calls).next_power_of_two()).next_power_of_two();
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
 
         Self {
@@ -234,15 +240,15 @@ impl<F: FieldElement> MeanVarUnsigned<F> {
         }
     }
 
-    pub(crate) fn call_poly_direct<V: AsRef<[F]>>(
+    pub(crate) fn call_poly_direct(
         &mut self,
         outp: &mut [F],
-        inp: &[V],
+        inp: &Vec<Vec<F>>,
     ) -> Result<(), PcpError> {
         let bits = self.bits;
         let r_vec = &inp[..bits];
         let x_vec = &inp[bits..2 * bits];
-        let x = inp[2 * bits].as_ref();
+        let x = &inp[2 * bits];
 
         let z = poly_mul(x, x);
         for i in 0..z.len() {
@@ -253,14 +259,14 @@ impl<F: FieldElement> MeanVarUnsigned<F> {
         }
 
         for l in 0..bits {
-            let mut z = r_vec[l].as_ref().to_vec();
+            let mut z = r_vec[l].to_vec();
             for i in 0..3 {
                 for j in 0..z.len() {
                     outp[j] += self.poly[i] * z[j];
                 }
 
                 if i < 2 {
-                    z = poly_mul(&z, x_vec[l].as_ref());
+                    z = poly_mul(&z, &x_vec[l]);
                 }
             }
         }
@@ -268,16 +274,16 @@ impl<F: FieldElement> MeanVarUnsigned<F> {
         Ok(())
     }
 
-    pub(crate) fn call_poly_fft<V: AsRef<[F]>>(
+    pub(crate) fn call_poly_fft(
         &mut self,
         outp: &mut [F],
-        inp: &[V],
+        inp: &Vec<Vec<F>>,
     ) -> Result<(), PcpError> {
         let bits = self.bits;
         let n = self.n;
         let r_vec = &inp[..bits];
         let x_vec = &inp[bits..2 * bits];
-        let x = inp[2 * bits].as_ref();
+        let x = &inp[2 * bits];
 
         let mut x_vals = vec![F::zero(); n];
         let mut z_vals = vec![F::zero(); n];
@@ -296,9 +302,9 @@ impl<F: FieldElement> MeanVarUnsigned<F> {
         }
 
         for l in 0..bits {
-            let x = x_vec[l].as_ref();
-            let y = r_vec[l].as_ref();
-            z[..y.len()].clone_from_slice(y);
+            let x = &x_vec[l];
+            let y = &r_vec[l];
+            z[..y.len()].clone_from_slice(&y);
 
             discrete_fourier_transform(&mut x_vals, x, n)?;
             discrete_fourier_transform(&mut z_vals, y, n)?;
@@ -325,7 +331,7 @@ impl<F: FieldElement> MeanVarUnsigned<F> {
     }
 }
 
-impl<F: FieldElement> GadgetCallOnly<F> for MeanVarUnsigned<F> {
+impl<F: FieldElement> Gadget<F> for MeanVarUnsigned<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
         gadget_call_check(self, inp.len())?;
         let bits = self.bits;
@@ -343,32 +349,31 @@ impl<F: FieldElement> GadgetCallOnly<F> for MeanVarUnsigned<F> {
         Ok(res)
     }
 
-    fn call_in_len(&self) -> usize {
-        2 * self.bits + 1
-    }
-}
-
-impl<F: FieldElement> Gadget<F> for MeanVarUnsigned<F> {
-    fn call_poly<V: AsRef<[F]>>(&mut self, outp: &mut [F], inp: &[V]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &Vec<Vec<F>>) -> Result<(), PcpError> {
         gadget_call_poly_check(self, outp, inp)?;
-        if inp[0].as_ref().len() >= FFT_THRESHOLD {
+        if inp[0].len() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
     }
 
-    fn call_poly_out_len(&self, in_len: usize) -> usize {
-        in_len * 3
+    fn arity(&self) -> usize {
+        2 * self.bits + 1
+    }
+
+    fn deg(&self) -> usize {
+        3
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
     }
 }
 
 // Check that the input parameters of g.call() are wll-formed.
-fn gadget_call_check<F: FieldElement, G: GadgetCallOnly<F>>(
-    g: &G,
-    in_len: usize,
-) -> Result<(), PcpError> {
-    if in_len != g.call_in_len() {
+fn gadget_call_check<F: FieldElement, G: Gadget<F>>(g: &G, in_len: usize) -> Result<(), PcpError> {
+    if in_len != g.arity() {
         return Err(PcpError::CircuitInLen);
     }
 
@@ -380,10 +385,10 @@ fn gadget_call_check<F: FieldElement, G: GadgetCallOnly<F>>(
 }
 
 // Check that the input parameters of g.call_poly() are well-formed.
-fn gadget_call_poly_check<F: FieldElement, G: GadgetCallOnly<F>, V: AsRef<[F]>>(
+fn gadget_call_poly_check<F: FieldElement, G: Gadget<F>>(
     g: &G,
     outp: &[F],
-    inp: &[V],
+    inp: &Vec<Vec<F>>,
 ) -> Result<(), PcpError>
 where
     G: Gadget<F>,
@@ -391,12 +396,12 @@ where
     gadget_call_check(g, inp.len())?;
 
     for i in 1..inp.len() {
-        if inp[i].as_ref().len() != inp[0].as_ref().len() {
+        if inp[i].len() != inp[0].len() {
             return Err(PcpError::GadgetPolyInLen);
         }
     }
 
-    if outp.len() < g.call_poly_out_len(inp[0].as_ref().len()) {
+    if outp.len() < g.deg() * inp[0].len() {
         return Err(PcpError::GadgetPolyOutLen);
     }
 
@@ -414,55 +419,52 @@ mod tests {
     fn test_mul() {
         // Test the gadget with input polynomials shorter than `FFT_THRESHOLD`. This exercises the
         // naive multiplication code path.
-        let in_len = FFT_THRESHOLD - 1;
-        let mut g: Mul<TestField> = Mul::new(in_len);
-        gadget_test(&mut g, in_len);
+        let num_calls = FFT_THRESHOLD / 2;
+        let mut g: Mul<TestField> = Mul::new(num_calls);
+        gadget_test(&mut g, num_calls);
 
         // Test the gadget with input polynomials longer than `FFT_THRESHOLD`. This exercises
         // FFT-based polynomial multiplication.
-        let in_len = FFT_THRESHOLD.next_power_of_two();
-        let mut g: Mul<TestField> = Mul::new(in_len);
-        gadget_test(&mut g, in_len);
+        let num_calls = FFT_THRESHOLD;
+        let mut g: Mul<TestField> = Mul::new(num_calls);
+        gadget_test(&mut g, num_calls);
     }
 
     #[test]
     fn test_poly_eval() {
         let poly = rand(10).unwrap();
 
-        let in_len = FFT_THRESHOLD - 1;
-        let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), in_len);
-        gadget_test(&mut g, in_len);
+        let num_calls = FFT_THRESHOLD / 2;
+        let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
+        gadget_test(&mut g, num_calls);
 
-        let in_len = FFT_THRESHOLD.next_power_of_two();
-        let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), in_len);
-        gadget_test(&mut g, in_len);
+        let num_calls = FFT_THRESHOLD;
+        let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
+        gadget_test(&mut g, num_calls);
     }
 
     #[test]
     fn test_mean_var_unsigned() {
-        let in_len = FFT_THRESHOLD - 1;
-        let mut g: MeanVarUnsigned<TestField> = MeanVarUnsigned::new(12, in_len);
-        gadget_test(&mut g, in_len);
+        let num_calls = FFT_THRESHOLD / 2;
+        let mut g: MeanVarUnsigned<TestField> = MeanVarUnsigned::new(12, num_calls);
+        gadget_test(&mut g, num_calls);
 
-        let in_len = FFT_THRESHOLD.next_power_of_two();
-        let mut g: MeanVarUnsigned<TestField> = MeanVarUnsigned::new(5, in_len);
-        gadget_test(&mut g, in_len);
+        let num_calls = FFT_THRESHOLD;
+        let mut g: MeanVarUnsigned<TestField> = MeanVarUnsigned::new(5, num_calls);
+        gadget_test(&mut g, num_calls);
     }
 
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     // to evaluating each of the inputs at the same point and applying g.call() on the results.
-    fn gadget_test<F: FieldElement, G: GadgetCallOnly<F>>(g: &mut G, in_len: usize)
-    where
-        G: Gadget<F>,
-    {
+    fn gadget_test<F: FieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
         let mut prng = Prng::new().unwrap();
-        let mut inp = vec![F::zero(); g.call_in_len()];
-        let mut poly_outp = vec![F::zero(); g.call_poly_out_len(in_len)];
-        let mut poly_inp = vec![vec![F::zero(); in_len]; g.call_in_len()];
+        let mut inp = vec![F::zero(); g.arity()];
+        let mut poly_outp = vec![F::zero(); (g.deg() * (1 + num_calls)).next_power_of_two()];
+        let mut poly_inp = vec![vec![F::zero(); 1 + num_calls]; g.arity()];
 
         let r = prng.next().unwrap();
-        for i in 0..g.call_in_len() {
-            for j in 0..in_len {
+        for i in 0..g.arity() {
+            for j in 0..num_calls {
                 poly_inp[i][j] = prng.next().unwrap();
             }
             inp[i] = poly_eval(&poly_inp[i], r);
