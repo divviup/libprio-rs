@@ -343,15 +343,15 @@ where
         .collect::<Result<Vec<_>, _>>()?;
 
     // Create a buffer for storing the proof. The buffer is longer than the proof itself; the extra
-    // length is to accommodate the computation of each of the proof polynomials.
+    // length is to accommodate the computation of each gadget polynomial.
     let data_len = (0..shim.len())
         .map(|idx| shim[idx].arity() + shim[idx].deg() * (1 + g_calls[idx]).next_power_of_two())
         .sum();
     let mut data = vec![F::zero(); data_len];
 
     // Run the validity circuit with a sequence of "shim" gadgets that record the value of each
-    // input wire of each gadget evaluation. These values are used to construct the intermediate
-    // proof polynomials in the next step.
+    // input wire of each gadget evaluation. These values are used to construct the wire
+    // polynomials for each gadget in the next step.
     let _ = x.valid(&mut shim, joint_rand);
 
     // Fill the buffer with the proof. `proof_len` keeps track of the amount of data written to the
@@ -366,8 +366,8 @@ where
         let g_deg = g.deg();
         let g_arity = g.arity();
 
-        // Interpolate the intermediate proof polynomials `f[0], ..., f[g_arity-1]` from the gadget
-        // inputs.
+        // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
+        // evaluation of the gadget.
         let m = (1 + g_calls[idx]).next_power_of_two();
         let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
         let mut f = vec![vec![F::zero(); m]; g_arity];
@@ -375,13 +375,13 @@ where
             discrete_fourier_transform(&mut f[wire], &g.f_vals[wire], m)?;
             discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
 
-            // The first point on each intermediate polynomial is a random value chosen by the
-            // prover. This point is stored in the proof so that the verifier can reconstruct the
-            // polynomial.
+            // The first point on each wire polynomial is a random value chosen by the prover. This
+            // point is stored in the proof so that the verifier can reconstruct the wire
+            // polynomials.
             data[proof_len + wire] = g.f_vals[wire][0];
         }
 
-        // Construct the proof polynomial `G(f[0], ..., f[g_arity-1])` and append it to `data`.
+        // Construct the gadget polynomial `G(f[0], ..., f[g_arity-1])` and append it to `data`.
         g.call_poly(&mut data[proof_len + g_arity..], &f)?;
         proof_len += g_arity + g_deg * (m - 1) + 1;
     }
@@ -391,12 +391,12 @@ where
     Ok(Proof { data })
 }
 
-// A "shim" gadget used during proof generation to record the points at which the intermediate
-// proof polynomials are interpolated.
+// A "shim" gadget used during proof generation to record the input wires each time a gadget is
+// evaluated.
 struct ProveShimGadget<F: FieldElement> {
     inner: Box<dyn Gadget<F>>,
 
-    /// Points at which intermediate proof polynomials are interpolated.
+    /// Points at which the wire polynomials are interpolated.
     f_vals: Vec<Vec<F>>,
 
     /// The number of times the gadget has been called so far.
@@ -412,8 +412,7 @@ impl<F: FieldElement> ProveShimGadget<F> {
         let mut prng = Prng::new_with_length(f_vals.len())?;
 
         for wire in 0..f_vals.len() {
-            // Choose a random field element as the first point on the intermediate proof
-            // polynomial.
+            // Choose a random field element as the first point on the wire polynomial.
             f_vals[wire][0] = prng.next().unwrap();
         }
 
@@ -525,9 +524,9 @@ where
         return Err(PcpError::Query("long joint randomness"));
     }
 
-    // Create a buffer for the verifier data. This includes the output of the validity circuit as
-    // well as the intermediate polynomials evaluated at the query randomness `query_rand[idx]`,
-    // and the proof polynomial evaluated at `query_rand[idx]` for the `idx`-th gadget.
+    // Create a buffer for the verifier data. This includes the output of the validity circuit and,
+    // for each gadget `shim[idx].inner`, the wire polynomials evaluated at the query randomness
+    // `query_rand[idx]` and the gadget polynomial evaluated at `query_rand[idx]`.
     let data_len = 1
         + (0..shim.len())
             .map(|idx| shim[idx].arity() + 1)
@@ -553,8 +552,8 @@ where
             .downcast_ref::<QueryShimGadget<F>>()
             .unwrap();
 
-        // Reconstruct the intermediate proof polynomials `f[0], ..., f[g_arity-1]` and evaluate
-        // each polynomial at input `r`.
+        // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
+        // polynomial at input `r`.
         let m = (1 + g_calls[idx]).next_power_of_two();
         let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
         let mut f = vec![F::zero(); m];
@@ -564,7 +563,7 @@ where
             data.push(poly_eval(&f, r));
         }
 
-        // Add the value of the proof polynomial evaluated at `r`.
+        // Add the value of the gadget polynomial evaluated at `r`.
         data.push(g.p_at_r);
     }
 
@@ -579,10 +578,10 @@ struct QueryShimGadget<F: FieldElement> {
     /// Points at which intermediate proof polynomials are interpolated.
     f_vals: Vec<Vec<F>>,
 
-    /// Points at which the proof polynomial is interpolated.
+    /// Points at which the gadget polynomial is interpolated.
     p_vals: Vec<F>,
 
-    /// The proof polynomial evaluated on a random input `r`.
+    /// The gadget polynomial evaluated on a random input `r`.
     p_at_r: F,
 
     /// Used to compute an index into `p_val`.
@@ -612,7 +611,7 @@ impl<F: FieldElement> QueryShimGadget<F> {
             f_vals[wire][0] = proof_data[wire];
         }
 
-        // Evaluate the proof polynomial at roots of unity.
+        // Evaluate the gadget polynomial at roots of unity.
         let size = p.next_power_of_two();
         let mut p_vals = vec![F::zero(); size];
         discrete_fourier_transform(&mut p_vals, &proof_data[g_arity..], size)?;
@@ -621,7 +620,7 @@ impl<F: FieldElement> QueryShimGadget<F> {
         // the gadget.
         let step = (1 << (log2(p as u128) - log2(m as u128))) as usize;
 
-        // Evaluate the proof polynomial `p` at `r`.
+        // Evaluate the gadget polynomial `p` at `r`.
         //
         // NOTE Usually `r` is sampled uniformly from the field. Strictly speaking, [BBC+19, Theorem
         // 4.3] requires that `r` be sampled from the set of field elements *minus* the roots of unity
@@ -677,7 +676,7 @@ impl<F: FieldElement> Verifier<F> {
     /// Returns a reference to the underlying data. The first element of the output is the output
     /// of the validity circuit. The remainder is a sequence of chunks, where the `idx`-th chunk
     /// corresponds to the `idx`-th gadget for the validity circuit. The last element of a chunk is
-    /// the proof polynomial evaluated on a random input `r`; the rest are the intermediate proof
+    /// the gadget polynomial evaluated on a random input `r`; the rest are the intermediate proof
     /// polynomials evaluated at `r`.
     pub fn as_slice(&self) -> &[F] {
         &self.data
