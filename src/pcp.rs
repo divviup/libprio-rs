@@ -174,6 +174,14 @@ pub enum PcpError {
     #[error("query error: {0}")]
     Query(&'static str),
 
+    /// Returned by `query` if one of the elements of the query randomness vector is invalid. An
+    /// element is invalid if using it to generate the verification message would result in a
+    /// privacy violation.
+    ///
+    /// If this error is returned, the caller may generate fresh randomness and retry.
+    #[error("query error: invalid query randomness")]
+    QueryRandInvalid,
+
     /// Calling `decide` returned an error.
     #[error("decide error: {0}")]
     Decide(&'static str),
@@ -502,6 +510,14 @@ where
             let g_deg = g.deg();
             let g_arity = g.arity();
             let m = (1 + g_calls[idx]).next_power_of_two();
+            let r = query_rand[idx];
+
+            // Make sure the query randomness isn't a root of unity. Evaluating the gadget
+            // polynomial at any of these points would be a privacy violation, since these points
+            // were used by the prover to construct the wire polynomials.
+            if r.pow(F::Integer::try_from(m).unwrap()) == F::one() {
+                return Err(PcpError::QueryRandInvalid);
+            }
 
             // Compute the length of the sub-proof corresponding to the `idx`-th gadget.
             let next_len = g_arity + g_deg * (m - 1) + 1;
@@ -512,7 +528,7 @@ where
             let proof_data = &pf.data[proof_len..proof_len + next_len];
             proof_len += next_len;
 
-            QueryShimGadget::new(g, query_rand[idx], proof_data, g_calls[idx])
+            QueryShimGadget::new(g, r, proof_data, g_calls[idx])
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -553,7 +569,7 @@ where
             .unwrap();
 
         // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
-        // polynomial at input `r`.
+        // polynomial at query randomness `r`.
         let m = (1 + g_calls[idx]).next_power_of_two();
         let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
         let mut f = vec![F::zero(); m];
@@ -620,12 +636,7 @@ impl<F: FieldElement> QueryShimGadget<F> {
         // the gadget.
         let step = (1 << (log2(p as u128) - log2(m as u128))) as usize;
 
-        // Evaluate the gadget polynomial `p` at `r`.
-        //
-        // NOTE Usually `r` is sampled uniformly from the field. Strictly speaking, [BBC+19, Theorem
-        // 4.3] requires that `r` be sampled from the set of field elements *minus* the roots of unity
-        // at which the polynomials are interpolated. This relaxation is fine, but results in a
-        // modest loss of concrete security. (Needs security analysis.)
+        // Evaluate the gadget polynomial `p` at query randomness `r`.
         let p_at_r = poly_eval(&proof_data[g_arity..], r);
 
         Ok(Box::new(QueryShimGadget {
