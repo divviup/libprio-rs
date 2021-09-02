@@ -10,12 +10,12 @@ repository = "https://github.com/abetterinternet/libprio-rs"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-aes = { version = "0.7.3", features = ["ctr"] }
+aes = { version = "0.7.5", features = ["ctr"] }
 cipher = "0.3.0"
-aes-gcm = "0.6.0"
+aes-gcm = "^0.9"
 base64 = "0.12.3"
 getrandom = { version = "0.2.3", features = ["std"] }
-ring = "0.16.15"
+ring = "0.16.20"
 thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 
