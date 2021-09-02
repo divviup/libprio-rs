@@ -52,10 +52,7 @@ pub fn poly_mul(c: &mut Criterion) {
         let m = (*size + 1).next_power_of_two();
         let mut g: Mul<F> = Mul::new(*size);
         let mut outp = vec![F::zero(); 2 * m];
-        let mut inp = vec![vec![]; 2];
-        for i in 0..2 {
-            inp[i] = rand(m).unwrap();
-        }
+        let inp = vec![rand(m).unwrap(); 2];
 
         c.bench_function(&format!("poly mul FFT, size={}", *size), |b| {
             b.iter(|| {

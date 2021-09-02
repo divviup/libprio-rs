@@ -81,9 +81,7 @@ impl<F: FieldElement> Value<F> for Boolean<F> {
         &self.data
     }
 
-    fn param(&self) -> Self::Param {
-        ()
-    }
+    fn param(&self) -> Self::Param {}
 }
 
 impl<F: FieldElement> TryFrom<((), Vec<F>)> for Boolean<F> {
@@ -265,12 +263,13 @@ impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
 
             // Sets `x` to the `bits`-bit integer encoded by `x_vec`.
             let mut x = F::zero();
-            for l in 0..bits {
+            for (l, bit) in x_vec.iter().enumerate() {
                 let w = F::from(F::Integer::try_from(1 << l).unwrap());
-                x += w * x_vec[l];
+                x += w * *bit;
             }
 
             // The first `bits` inputs to the gadget are are `r, r^2, ..., r^bits`.
+            #[allow(clippy::needless_range_loop)]
             for l in 0..bits {
                 // The prover and verifier use joint randomness to generate and verify the proof.
                 // In order to ensure the gadget inputs are the same in the distributed setting,
@@ -280,7 +279,7 @@ impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
             }
 
             // The next `bits` inputs to the gadget comprise the bit-vector representation of `x`.
-            &inp[bits..2 * bits].clone_from_slice(x_vec);
+            inp[bits..2 * bits].clone_from_slice(x_vec);
 
             // The last input to the gadget is `x`.
             inp[2 * bits] = x;
@@ -506,8 +505,8 @@ mod tests {
             let xx = chunk[bits];
 
             let mut x = TestField::zero();
-            for l in 0..bits {
-                x += TestField::from(1 << l) * x_vec[l];
+            for (l, bit) in x_vec.iter().enumerate() {
+                x += TestField::from(1 << l) * *bit;
             }
             assert_eq!(x * x, xx);
         }
@@ -662,9 +661,8 @@ mod tests {
         // Verification should fail regardless of whether the input is valid.
         let mut mutated_pf = pf.clone();
         mutated_pf.data[0] += F::one();
-        assert_eq!(
-            decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
-            false,
+        assert!(
+            !decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
             "{:?} proof mutant verified",
             x.as_slice(),
         );
@@ -692,15 +690,14 @@ mod tests {
             // Try verifying a proof with an invalid proof polynomial.
             let mut mutated_pf = pf.clone();
             mutated_pf.data[g_arity] += F::one();
-            assert_eq!(
-                decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
-                false,
+            assert!(
+                !decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
                 "{:?} proof mutant verified",
                 x.as_slice(),
             );
 
             // Try verifying a proof with a short proof polynomial.
-            let mut mutated_pf = pf.clone();
+            let mut mutated_pf = pf;
             mutated_pf.data.truncate(g_arity);
             assert!(query(x, &mutated_pf, &query_rand, &joint_rand).is_err());
         }

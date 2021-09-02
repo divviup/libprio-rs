@@ -27,12 +27,13 @@ pub enum FftError {
 /// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
 /// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `2^size`-th principal root of
 /// unity.
+#[allow(clippy::many_single_char_names)]
 pub fn discrete_fourier_transform<F: FieldElement>(
     outp: &mut [F],
     inp: &[F],
     size: usize,
 ) -> Result<(), FftError> {
-    let d = usize::try_from(log2(size as u128)).unwrap();
+    let d = usize::try_from(log2(size as u128)).map_err(|_| FftError::SizeTooLarge)?;
 
     if size > outp.len() {
         return Err(FftError::OutputTooSmall);
@@ -46,13 +47,10 @@ pub fn discrete_fourier_transform<F: FieldElement>(
         return Err(FftError::SizeInvalid);
     }
 
+    #[allow(clippy::needless_range_loop)]
     for i in 0..size {
         let j = bitrev(d, i);
-        if j < inp.len() {
-            outp[i] = inp[j];
-        } else {
-            outp[i] = F::zero();
-        }
+        outp[i] = if j < inp.len() { inp[j] } else { F::zero() }
     }
 
     let mut w: F;
@@ -191,6 +189,7 @@ mod tests {
         // Just for fun, let's do something different with a subset of the inputs. For the first
         // share, every odd element is set to the plaintext value. For all shares but the first,
         // every odd element is set to 0.
+        #[allow(clippy::needless_range_loop)]
         for i in 0..len {
             if i % 2 != 0 {
                 x_shares[0][i] = x[i];
@@ -204,8 +203,8 @@ mod tests {
 
         let mut got = vec![Field64::zero(); len];
         let mut buf = vec![Field64::zero(); len];
-        for j in 0..num_shares {
-            discrete_fourier_transform_inv(&mut buf, &x_shares[j], len).unwrap();
+        for share in x_shares {
+            discrete_fourier_transform_inv(&mut buf, &share, len).unwrap();
             for i in 0..len {
                 got[i] += buf[i];
             }

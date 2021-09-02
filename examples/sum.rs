@@ -23,7 +23,7 @@ fn main() {
     let dim = 8;
 
     let mut client1 = Client::new(dim, pub_key1.clone(), pub_key2.clone()).unwrap();
-    let mut client2 = Client::new(dim, pub_key1.clone(), pub_key2.clone()).unwrap();
+    let mut client2 = Client::new(dim, pub_key1, pub_key2).unwrap();
 
     let data1_u32 = [0, 0, 1, 0, 0, 0, 0, 0];
     println!("Client 1 Input: {:?}", data1_u32);
@@ -45,8 +45,8 @@ fn main() {
     let (share2_1, share2_2) = client2.encode_simple(&data2).unwrap();
     let eval_at = Field32::from(12313);
 
-    let mut server1 = Server::new(dim, true, priv_key1.clone()).unwrap();
-    let mut server2 = Server::new(dim, false, priv_key2.clone()).unwrap();
+    let mut server1 = Server::new(dim, true, priv_key1).unwrap();
+    let mut server2 = Server::new(dim, false, priv_key2).unwrap();
 
     let v1_1 = server1
         .generate_verification_message(eval_at, &share1_1)

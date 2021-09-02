@@ -298,7 +298,7 @@ mod tests {
             generate_verification_message(dim, eval_at, &proof, true, &mut validation_mem).unwrap();
         let v2 = generate_verification_message(dim, eval_at, &share2, false, &mut validation_mem)
             .unwrap();
-        assert_eq!(is_valid_share(&v1, &v2), true);
+        assert!(is_valid_share(&v1, &v2));
     }
 
     #[test]
@@ -325,6 +325,6 @@ mod tests {
         let serialized = serde_json::to_string(&v1).unwrap();
         let deserialized: VerificationMessage<Field32> = serde_json::from_str(&serialized).unwrap();
 
-        assert_eq!(is_valid_share(&deserialized, &v2), true);
+        assert!(is_valid_share(&deserialized, &v2));
     }
 }

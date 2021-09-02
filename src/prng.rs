@@ -80,7 +80,7 @@ impl<F: FieldElement> Prng<F> {
     fn new_with_seed_and_optional_length(seed: &[u8], length: Option<usize>) -> Self {
         let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
         let iv = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
-        let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(&key), &iv);
+        let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(key), iv);
 
         let buf_len_in_elems = match length {
             Some(length) => std::cmp::min(length + 1, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS),
