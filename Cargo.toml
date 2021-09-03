@@ -13,7 +13,7 @@ repository = "https://github.com/abetterinternet/libprio-rs"
 aes = { version = "0.7.5", features = ["ctr"] }
 cipher = "0.3.0"
 aes-gcm = "^0.9"
-base64 = "0.12.3"
+base64 = "0.13.0"
 getrandom = { version = "0.2.3", features = ["std"] }
 ring = "0.16.20"
 thiserror = "1.0"
