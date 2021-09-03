@@ -147,6 +147,7 @@ fn fft_interpolate_raw<F: FieldElement>(
     );
     if invert {
         let n_inverse = F::from(F::Integer::try_from(n_points).unwrap()).inv();
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n_points {
             out[i] *= n_inverse;
         }
@@ -166,7 +167,7 @@ pub fn poly_fft<F: FieldElement>(
 
 // Evaluate a polynomial using Horner's method.
 pub fn poly_eval<F: FieldElement>(poly: &[F], eval_at: F) -> F {
-    if poly.len() == 0 {
+    if poly.is_empty() {
         return F::zero();
     }
 
@@ -370,6 +371,8 @@ fn test_fft() {
         false,
         &mut mem.fft_memory,
     );
+
+    #[allow(clippy::needless_range_loop)]
     for i in 0..count {
         let mut should_be = Field32::from(0);
         for j in 0..count {

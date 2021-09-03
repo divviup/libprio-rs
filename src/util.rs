@@ -128,7 +128,7 @@ pub fn deserialize<F: FieldElement>(data: &[u8]) -> Result<Vec<F>, SerializeErro
     }
     let mut vec = Vec::<F>::with_capacity(data.len() / F::BYTES);
     for chunk in data.chunks_exact(F::BYTES) {
-        vec.push(F::read_from(chunk).or_else(|err| Err(SerializeError::Field(err)))?);
+        vec.push(F::read_from(chunk).map_err(SerializeError::Field)?);
     }
     Ok(vec)
 }

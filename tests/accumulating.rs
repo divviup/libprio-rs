@@ -55,8 +55,8 @@ fn accumulation() {
             .generate_verification_message(eval_at, &share2)
             .unwrap();
 
-        assert_eq!(server1.aggregate(&share1, &v1, &v2).unwrap(), true);
-        assert_eq!(server2.aggregate(&share2, &v1, &v2).unwrap(), true);
+        assert!(server1.aggregate(&share1, &v1, &v2).unwrap());
+        assert!(server2.aggregate(&share2, &v1, &v2).unwrap());
     }
 
     let total1 = server1.total_shares();

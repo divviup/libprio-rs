@@ -92,10 +92,7 @@ fn tweaks(tweak: Tweak) {
         _ => (),
     }
 
-    let should_be_valid = match tweak {
-        Tweak::None => true,
-        _ => false,
-    };
+    let should_be_valid = matches!(tweak, Tweak::None);
     assert_eq!(
         server1.aggregate(&share1_modified, &v1, &v2).unwrap(),
         should_be_valid

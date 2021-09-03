@@ -13,6 +13,7 @@ use std::{
     cmp::min,
     convert::TryFrom,
     fmt::{Debug, Display, Formatter},
+    hash::{Hash, Hasher},
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign},
 };
 
@@ -118,7 +119,7 @@ macro_rules! make_field {
         $elem:ident, $int:ident, $fp:ident, $bytes:literal
     ) => {
         $(#[$meta])*
-        #[derive(Clone, Copy, PartialOrd, Ord, Hash, Default, Deserialize, Serialize)]
+        #[derive(Clone, Copy, PartialOrd, Ord, Default, Deserialize, Serialize)]
         pub struct $elem(u128);
 
         impl $elem {
@@ -143,7 +144,19 @@ macro_rules! make_field {
 
         impl PartialEq for $elem {
             fn eq(&self, rhs: &Self) -> bool {
+                // The fields included in this comparison MUST match the fields
+                // used in Hash::hash
+                // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
                 $fp.from_elem(self.0) == $fp.from_elem(rhs.0)
+            }
+        }
+
+        impl Hash for $elem {
+            fn hash<H: Hasher>(&self, state: &mut H) {
+                // The fields included in this hash MUST match the fields used
+                // in PartialEq::eq
+                // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
+                $fp.from_elem(self.0).hash(state);
             }
         }
 
@@ -211,6 +224,7 @@ macro_rules! make_field {
 
         impl Div for $elem {
             type Output = $elem;
+            #[allow(clippy::suspicious_arithmetic_impl)]
             fn div(self, rhs: Self) -> Self {
                 self * rhs.inv()
             }
@@ -404,9 +418,7 @@ pub fn split<F: FieldElement>(
     }
 
     let mut outp = vec![vec![F::zero(); inp.len()]; num_shares];
-    for j in 0..inp.len() {
-        outp[0][j] = inp[j];
-    }
+    outp[0][..inp.len()].clone_from_slice(inp);
 
     let mut prng = Prng::new()?;
     for i in 1..num_shares {
@@ -443,6 +455,12 @@ mod tests {
         assert_matches!(result, Err(FieldError::InputSizeMismatch));
     }
 
+    // Some of the checks in this function, like `assert_eq!(one - one, zero)`
+    // or `assert_eq!(two / two, one)` trip this clippy lint for tautological
+    // comparisons, but we have a legitimate need to verify these basics. We put
+    // the #[allow] on the whole function since "attributes on expressions are
+    // experimental" https://github.com/rust-lang/rust/issues/15701
+    #[allow(clippy::eq_op)]
     fn field_element_test<F: FieldElement>() {
         let mut prng: Prng<F> = Prng::new().unwrap();
         let int_modulus = F::modulus();

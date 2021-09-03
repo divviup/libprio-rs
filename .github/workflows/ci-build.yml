@@ -23,3 +23,5 @@ jobs:
       run: cargo test --verbose
     - name: Build benchmarks
       run: cargo bench --no-run
+    - name: clippy
+      run: cargo clippy --all-targets -- -D warnings

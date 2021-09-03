@@ -117,7 +117,7 @@ impl<F: FieldElement> Client<F> {
         init_function(&mut unpacked.data);
         // fill in the rest
         construct_proof(
-            &unpacked.data,
+            unpacked.data,
             self.dimension,
             &mut unpacked.f0,
             &mut unpacked.g0,
@@ -194,6 +194,7 @@ fn construct_proof<F: FieldElement>(
 
     // set f_i = data_(i - 1)
     // set g_i = f_i - 1
+    #[allow(clippy::needless_range_loop)]
     for i in 0..dimension {
         mem.points_f[i + 1] = data[i];
         mem.points_g[i + 1] = data[i] - F::one();
@@ -233,5 +234,5 @@ fn test_encode() {
         .map(|x| Field32::from(*x))
         .collect::<Vec<Field32>>();
     let encoded_shares = encode_simple(&data, pub_key1, pub_key2);
-    assert_eq!(encoded_shares.is_ok(), true);
+    assert!(encoded_shares.is_ok());
 }
