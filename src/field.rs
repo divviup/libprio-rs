@@ -14,21 +14,35 @@ use std::{
     convert::TryFrom,
     fmt::{Debug, Display, Formatter},
     hash::{Hash, Hasher},
+    io::{Cursor, Read},
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign},
 };
 
 /// Possible errors from finite field operations.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum FieldError {
-    /// Input sizes do not match
+    /// Input sizes do not match.
     #[error("input sizes do not match")]
     InputSizeMismatch,
-    /// Returned by `FieldElement::read_from()` if the input buffer is too short.
-    #[error("short read from byte slice")]
-    FromBytesShortRead,
-    /// Returned by `FieldElement::read_from()` if the input is larger than the modulus.
+    /// Returned when decoding a `FieldElement` from a short byte string.
+    #[error("short read from bytes")]
+    ShortRead,
+    /// Returned when decoding a `FieldElement` from a byte string encoding an integer larger than
+    /// or equal to the field modulus.
     #[error("read from byte slice exceeds modulus")]
-    FromBytesModulusOverflow,
+    ModulusOverflow,
+    /// Error while performing I/O.
+    #[error("I/O error")]
+    Io(#[from] std::io::Error),
+}
+
+/// Byte order for encoding FieldElement values into byte sequences.
+#[derive(Clone, Copy, Debug)]
+enum ByteOrder {
+    /// Big endian byte order.
+    BigEndian,
+    /// Little endian byte order.
+    LittleEndian,
 }
 
 /// Objects with this trait represent an element of `GF(p)` for some prime `p`.
@@ -49,10 +63,16 @@ pub trait FieldElement:
     + Neg<Output = Self>
     + Display
     + From<<Self as FieldElement>::Integer>
+    + for<'a> TryFrom<&'a [u8], Error = FieldError>
+    // NOTE Ideally we would require `Into<[u8; Self::ENCODED_SIZE]>` instead of `Into<Vec<u8>>`,
+    // since the former avoids a heap allocation and can easily be converted into Vec<u8>, but that
+    // isn't possible yet[1]. However we can provide the impl on FieldElement implementations.
+    // [1]: https://github.com/rust-lang/rust/issues/60551
+    + Into<Vec<u8>>
     + 'static // NOTE This bound is needed for downcasting a `dyn Gadget<F>>` to a concrete type.
 {
-    /// Size of each field element in bytes.
-    const BYTES: usize;
+    /// Size in bytes of the encoding of a value.
+    const ENCODED_SIZE: usize;
 
     /// The error returned if converting `usize` to an `Int` fails.
     type IntegerTryFromError: Debug;
@@ -76,25 +96,36 @@ pub trait FieldElement:
     /// Returns the prime modulus `p`.
     fn modulus() -> Self::Integer;
 
-    /// Writes the field element to the end of input buffer. Exactly `BYTES` bytes will be written.
+    /// Interprets the next [`Self::ENCODED_SIZE`] bytes from the input slice as an element of the
+    /// field. The `m` most significant bits are cleared, where `m` is equal to the length of
+    /// [`Self::Integer`] in bits minus the length of the modulus in bits.
     ///
-    /// TODO(acmiyaguchi) Replace this with an implementation of the corresponding serde trait
-    fn append_to(&self, bytes: &mut Vec<u8>);
-
-    /// Interprets the next `BYTES` bytes from the input buffer as an element of the field. An
-    /// error is returned if the bytes encode an integer larger than the field modulus.
+    /// # Errors
     ///
-    /// TODO(acmiyaguchi) Replace this with an implementation of the corresponding serde trait
-    fn read_from(bytes: &[u8]) -> Result<Self, FieldError>;
-
-    /// Interprets the next `BYTES` bytes from the input buffer as an element of the field. The `m`
-    /// most significant bits are cleared, where `m` is equal to the length of `Integer` in bits
-    /// minus the length of the modulus in bits. An error is returned if the result encodes an
-    /// integer larger than the field modulus.
+    /// An error is returned if the provided slice is too small to encode a field element or if the
+    /// result encodes an integer larger than the field modulus.
     ///
-    /// WARNING: This function is used to convert a random byte string into a field element. It
-    /// *should not* be used to deserialize field elements.
+    /// # Warnings
+    ///
+    /// This function should only be used within [`prng::Prng`] to convert a random byte string into
+    /// a field element. Use [`Self::try_from_reader`] to deserialize field elements. Use
+    /// [`field::rand`] or [`prng::Prng`] to randomly generate field elements.
+    #[doc(hidden)]
     fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError>;
+
+    /// Interprets the next [`Self::ENCODED_SIZE`] bytes from the input slice as an element of the
+    /// field.
+    ///
+    /// # Errors
+    ///
+    /// An error is returned if the provided slice is too small to encode a field element or if the
+    /// result encodes an integer larger than the field modulus.
+    ///
+    /// # Notes
+    ///
+    /// Ideally we would implement `TryFrom<R: Read> for FieldElement` but the stdlib's blanket
+    /// implementation of `TryFrom` forbids this: https://github.com/rust-lang/rust/issues/50133
+    fn try_from_reader<R: Read>(reader: &mut R) -> Result<Self, FieldError>;
 
     /// Returns the size of the multiplicative subgroup generated by `generator()`.
     fn generator_order() -> Self::Integer;
@@ -111,32 +142,93 @@ pub trait FieldElement:
 
     /// Returns the multiplicative identity.
     fn one() -> Self;
+
+    /// Convert a slice of field elements into a vector of bytes.
+    ///
+    /// # Notes
+    ///
+    /// Ideally we would implement `From<&[F: FieldElement]> for Vec<u8>` or the corresponding
+    /// `Into`, but the orphan rule and the stdlib's blanket implementations of `Into` make this
+    /// impossible.
+    fn slice_into_byte_vec(values: &[Self]) -> Vec<u8> {
+        let mut vec = Vec::with_capacity(values.len() * Self::ENCODED_SIZE);
+        for elem in values {
+            vec.append(&mut (*elem).into());
+        }
+        vec
+    }
+
+    /// Convert a slice of bytes into a vector of field elements. The slice is interpreted as a
+    /// sequence of [`Self::ENCODED_SIZE`]-byte sequences.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the length of the provided byte slice is not a multiple of the size of a
+    /// field element, or if any of the values in the byte slice are invalid encodings of a field
+    /// element as documented in [`Self::try_from_reader`].
+    ///
+    /// # Notes
+    ///
+    /// Ideally we would implement `From<&[u8]> for Vec<F: FieldElement>` or the corresponding
+    /// `Into`, but the orphan rule and the stdlib's blanket implementations of `Into` make this
+    /// impossible.
+    fn byte_slice_into_vec(bytes: &[u8]) -> Result<Vec<Self>, FieldError> {
+        if bytes.len() % Self::ENCODED_SIZE != 0 {
+            return Err(FieldError::ShortRead);
+        }
+        let mut vec = Vec::with_capacity(bytes.len() / Self::ENCODED_SIZE);
+        for chunk in bytes.chunks_exact(Self::ENCODED_SIZE) {
+            vec.push(Self::try_from_reader(&mut Cursor::new(chunk))?);
+        }
+        Ok(vec)
+    }
 }
 
 macro_rules! make_field {
     (
         $(#[$meta:meta])*
-        $elem:ident, $int:ident, $fp:ident, $bytes:literal
+        $elem:ident, $int:ident, $fp:ident, $encoding_size:literal, $encoding_order:expr,
     ) => {
         $(#[$meta])*
         #[derive(Clone, Copy, PartialOrd, Ord, Default, Deserialize, Serialize)]
         pub struct $elem(u128);
 
         impl $elem {
+            /// Attempts to instantiate an `$elem` from the first `Self::ENCODED_SIZE` bytes in the
+            /// provided slice. The decoded value will be bitwise-ANDed with `mask` before reducing
+            /// it using the field modulus.
+            ///
+            /// # Errors
+            ///
+            /// An error is returned if the provided slice is not long enough to encode a field
+            /// element or if the decoded value is greater than the field prime.
+            ///
+            /// # Notes
+            ///
+            /// We cannot use `u128::from_le_bytes` or `u128::from_be_bytes` because those functions
+            /// expect inputs to be exactly 16 bytes long. Our encoding of most field elements is
+            /// more compact, and does not have to correspond to the size of an integer type. For
+            /// instance,`Field80`'s encoding is 10 bytes, even though it is a 16 byte `u128` in
+            /// memory.
             fn try_from_bytes(bytes: &[u8], mask: u128) -> Result<Self, FieldError> {
-                if Self::BYTES > bytes.len() {
-                    return Err(FieldError::FromBytesShortRead);
+                if Self::ENCODED_SIZE > bytes.len() {
+                    return Err(FieldError::ShortRead);
                 }
 
                 let mut int = 0;
-                for i in 0..Self::BYTES {
-                    int |= (bytes[i] as u128) << (i << 3);
+                for i in 0..Self::ENCODED_SIZE {
+                    let j = match $encoding_order {
+                        ByteOrder::LittleEndian => i,
+                        ByteOrder::BigEndian => Self::ENCODED_SIZE - i - 1,
+                    };
+
+                    int |= (bytes[j] as u128) << (i << 3);
                 }
 
                 int &= mask;
 
                 if int >= $fp.p {
-                    return Err(FieldError::FromBytesModulusOverflow);
+                    return Err(FieldError::ModulusOverflow);
                 }
                 Ok(Self($fp.elem(int)))
             }
@@ -275,6 +367,36 @@ macro_rules! make_field {
             }
         }
 
+        impl<'a> TryFrom<&'a [u8]> for $elem {
+            type Error = FieldError;
+
+            fn try_from(bytes: &[u8]) -> Result<Self, FieldError> {
+                Self::try_from_bytes(bytes, u128::MAX)
+            }
+        }
+
+        impl From<$elem> for [u8; $elem::ENCODED_SIZE] {
+            fn from(elem: $elem) -> Self {
+                let int = $fp.from_elem(elem.0);
+                let mut slice = [0; $elem::ENCODED_SIZE];
+                for i in 0..$elem::ENCODED_SIZE {
+                    let j = match $encoding_order {
+                        ByteOrder::LittleEndian => i,
+                        ByteOrder::BigEndian => $elem::ENCODED_SIZE - i - 1,
+                    };
+
+                    slice[j] = ((int >> (i << 3)) & 0xff) as u8;
+                }
+                slice
+            }
+        }
+
+        impl From<$elem> for Vec<u8> {
+            fn from(elem: $elem) -> Self {
+                <[u8; $elem::ENCODED_SIZE]>::from(elem).to_vec()
+            }
+        }
+
         impl Display for $elem {
             fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
                 write!(f, "{}", $fp.from_elem(self.0))
@@ -288,7 +410,7 @@ macro_rules! make_field {
         }
 
         impl FieldElement for $elem {
-            const BYTES: usize = $bytes;
+            const ENCODED_SIZE: usize = $encoding_size;
             type Integer = $int;
             type IntegerTryFromError = <Self::Integer as TryFrom<usize>>::Error;
 
@@ -304,21 +426,14 @@ macro_rules! make_field {
                 $fp.p as $int
             }
 
-            fn append_to(&self, bytes: &mut Vec<u8>) {
-                let int = $fp.from_elem(self.0);
-                let mut slice = [0; Self::BYTES];
-                for i in 0..Self::BYTES {
-                    slice[i] = ((int >> (i << 3)) & 0xff) as u8;
-                }
-                bytes.extend_from_slice(&slice);
-            }
-
-            fn read_from(bytes: &[u8]) -> Result<Self, FieldError> {
-                $elem::try_from_bytes(bytes, u128::MAX)
-            }
-
             fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError> {
                 $elem::try_from_bytes(bytes, $fp.bit_mask)
+            }
+
+            fn try_from_reader<R: Read>(reader: &mut R) -> Result<Self, FieldError> {
+                let mut bytes = [0u8; $elem::ENCODED_SIZE];
+                reader.read_exact(&mut bytes)?;
+                $elem::try_from_bytes(&bytes, u128::MAX)
             }
 
             fn generator() -> Self {
@@ -353,7 +468,17 @@ make_field!(
     Field32,
     u32,
     FP32,
-    4
+    4,
+    ByteOrder::BigEndian,
+);
+
+make_field!(
+    /// Same as Field32, but encoded in little endian for compatibility with Prio v2/ENPA
+    FieldPriov2,
+    u32,
+    FP32,
+    4,
+    ByteOrder::LittleEndian,
 );
 
 make_field!(
@@ -362,7 +487,8 @@ make_field!(
     Field64,
     u64,
     FP64,
-    8
+    8,
+    ByteOrder::BigEndian,
 );
 
 make_field!(
@@ -371,7 +497,8 @@ make_field!(
     Field80,
     u128,
     FP80,
-    10
+    10,
+    ByteOrder::BigEndian,
 );
 
 make_field!(
@@ -381,7 +508,8 @@ make_field!(
     Field126,
     u128,
     FP126,
-    16
+    16,
+    ByteOrder::BigEndian,
 );
 
 /// Merge two vectors of fields by summing other_vector into accumulator.
@@ -437,13 +565,23 @@ mod tests {
     use super::*;
     use crate::fp::MAX_ROOTS;
     use assert_matches::assert_matches;
+    use std::io::{Cursor, Write};
+
+    #[test]
+    fn test_endianness() {
+        let little_endian_encoded: [u8; FieldPriov2::ENCODED_SIZE] =
+            FieldPriov2(0x12_34_56_78).into();
+
+        let mut big_endian_encoded: [u8; Field32::ENCODED_SIZE] = Field32(0x12_34_56_78).into();
+        big_endian_encoded.reverse();
+
+        assert_eq!(little_endian_encoded, big_endian_encoded);
+    }
 
     #[test]
     fn test_accumulate() {
-        let mut lhs = vec![Field32::zero(); 10];
-        lhs.iter_mut().for_each(|f| *f = Field32(1));
-        let mut rhs = vec![Field32::zero(); 10];
-        rhs.iter_mut().for_each(|f| *f = Field32(2));
+        let mut lhs = vec![Field32(1); 10];
+        let rhs = vec![Field32(2); 10];
 
         merge_vector(&mut lhs, &rhs).unwrap();
 
@@ -507,7 +645,6 @@ mod tests {
         for _ in 0..100 {
             let f = prng.next().unwrap();
             if f == zero {
-                println!("skipped zero");
                 continue;
             }
             assert_eq!(f * f.inv(), one);
@@ -541,17 +678,30 @@ mod tests {
             F::from(int_modulus - int_one),
         ];
         for want in test_inputs.iter() {
-            let mut bytes = vec![];
-            want.append_to(&mut bytes);
-            let got = F::read_from(&bytes).unwrap();
+            println!("check {:?}", want);
+            let mut bytes: Vec<u8> = vec![];
+            bytes.write_all(&(*want).into()).unwrap();
+
+            assert_eq!(bytes.len(), F::ENCODED_SIZE);
+
+            let got = F::try_from_reader(&mut Cursor::new(&bytes)).unwrap();
             assert_eq!(got, *want);
-            assert_eq!(bytes.len(), F::BYTES);
+            assert_eq!(bytes.len(), F::ENCODED_SIZE);
         }
+
+        let serialized_vec = F::slice_into_byte_vec(&test_inputs);
+        let deserialized = F::byte_slice_into_vec(&serialized_vec).unwrap();
+        assert_eq!(deserialized, test_inputs);
     }
 
     #[test]
     fn test_field32() {
         field_element_test::<Field32>();
+    }
+
+    #[test]
+    fn test_field_priov2() {
+        field_element_test::<FieldPriov2>();
     }
 
     #[test]

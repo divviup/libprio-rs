@@ -86,7 +86,7 @@ impl<F: FieldElement> Prng<F> {
             Some(length) => std::cmp::min(length + 1, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS),
             None => DEFAULT_BUFFER_SIZE_IN_ELEMENTS,
         };
-        let mut buffer = vec![0; buf_len_in_elems * F::BYTES];
+        let mut buffer = vec![0; buf_len_in_elems * F::ENCODED_SIZE];
         cipher.apply_keystream(&mut buffer);
 
         Self {
@@ -112,11 +112,11 @@ impl<F: FieldElement> Iterator for Prng<F> {
 
         loop {
             // Seek to the next chunk of the buffer that encodes an element of F.
-            for i in (self.buffer_index..self.buffer.len()).step_by(F::BYTES) {
-                let j = i + F::BYTES;
+            for i in (self.buffer_index..self.buffer.len()).step_by(F::ENCODED_SIZE) {
+                let j = i + F::ENCODED_SIZE;
                 if let Some(x) = match F::try_from_random(&self.buffer[i..j]) {
                     Ok(x) => Some(x),
-                    Err(FieldError::FromBytesModulusOverflow) => None, // reject this sample
+                    Err(FieldError::ModulusOverflow) => None, // reject this sample
                     Err(err) => panic!("unexpected error: {}", err),
                 } {
                     // Set the buffer index to the next chunk.
@@ -139,7 +139,7 @@ impl<F: FieldElement> Iterator for Prng<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field32;
+    use crate::field::{Field32, FieldPriov2};
 
     #[test]
     fn secret_sharing() {
@@ -179,7 +179,7 @@ mod tests {
             0xacb8b748, 0x6f5b9d49, 0x887d061b, 0x86db0c58,
         ];
 
-        let share2 = extract_share_from_seed::<Field32>(reference.len(), &seed).unwrap();
+        let share2 = extract_share_from_seed::<FieldPriov2>(reference.len(), &seed).unwrap();
 
         assert_eq!(share2, reference);
     }
@@ -187,9 +187,9 @@ mod tests {
     /// takes a seed and hash as base64 encoded strings
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = base64::decode(seed_base64).unwrap();
-        let random_data = extract_share_from_seed::<Field32>(len, &seed).unwrap();
+        let random_data = extract_share_from_seed::<FieldPriov2>(len, &seed).unwrap();
 
-        let random_bytes = crate::util::serialize(&random_data);
+        let random_bytes = FieldPriov2::slice_into_byte_vec(&random_data);
 
         let digest = ring::digest::digest(&ring::digest::SHA256, &random_bytes);
         assert_eq!(base64::encode(digest), hash_base64);

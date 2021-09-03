@@ -6,7 +6,7 @@ use prio::{
     encrypt::{decrypt_share, encrypt_share, PrivateKey, PublicKey},
     field::{Field32, FieldElement},
     server::Server,
-    util::{deserialize, serialize, unpack_proof_mut},
+    util::unpack_proof_mut,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -59,7 +59,7 @@ fn tweaks(tweak: Tweak) {
     let (share1_original, share2) = client_mem.encode_simple(&data).unwrap();
 
     let decrypted_share1 = decrypt_share(&share1_original, &priv_key1_clone).unwrap();
-    let mut share1_field: Vec<Field32> = deserialize(&decrypted_share1).unwrap();
+    let mut share1_field = Field32::byte_slice_into_vec(&decrypted_share1).unwrap();
     let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
     let one = Field32::from(1);
@@ -74,7 +74,11 @@ fn tweaks(tweak: Tweak) {
     };
 
     // reserialize altered share1
-    let share1_modified = encrypt_share(&serialize(&share1_field), &pub_key1_clone).unwrap();
+    let share1_modified = encrypt_share(
+        &Field32::slice_into_byte_vec(&share1_field),
+        &pub_key1_clone,
+    )
+    .unwrap();
 
     let eval_at = server1.choose_eval_at();
 

@@ -8,10 +8,6 @@ use crate::field::{FieldElement, FieldError};
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]
 pub enum SerializeError {
-    /// Emitted by `deserialize()` if the last chunk of input is not long enough to encode an
-    /// element of the field.
-    #[error("last chunk of bytes is incomplete")]
-    IncompleteChunk,
     /// Emitted by `unpack_proof[_mut]` if the serialized share+proof has the wrong length
     #[error("serialized input has wrong length")]
     UnpackInputSizeMismatch,
@@ -112,27 +108,6 @@ pub fn unpack_proof_mut<F: FieldElement>(
     }
 }
 
-/// Get a byte array from a slice of field elements
-pub fn serialize<F: FieldElement>(data: &[F]) -> Vec<u8> {
-    let mut vec = Vec::<u8>::with_capacity(data.len() * F::BYTES);
-    for elem in data.iter() {
-        elem.append_to(&mut vec);
-    }
-    vec
-}
-
-/// Get a vector of field elements from a byte slice
-pub fn deserialize<F: FieldElement>(data: &[u8]) -> Result<Vec<F>, SerializeError> {
-    if data.len() % F::BYTES != 0 {
-        return Err(SerializeError::IncompleteChunk);
-    }
-    let mut vec = Vec::<F>::with_capacity(data.len() / F::BYTES);
-    for chunk in data.chunks_exact(F::BYTES) {
-        vec.push(F::read_from(chunk).map_err(SerializeError::Field)?);
-    }
-    Ok(vec)
-}
-
 /// Add two field element arrays together elementwise.
 ///
 /// Returns None, when array lengths are not equal.
@@ -222,13 +197,5 @@ pub mod tests {
 
         let reconstructed = reconstruct_shares(&share1, &share2).unwrap();
         assert_eq!(reconstructed, original_data);
-    }
-
-    #[test]
-    fn serialization() {
-        let field = [Field32::from(1), Field32::from(0x99997)];
-        let bytes = serialize(&field);
-        let field_deserialized = deserialize::<Field32>(&bytes).unwrap();
-        assert_eq!(field_deserialized, field);
     }
 }

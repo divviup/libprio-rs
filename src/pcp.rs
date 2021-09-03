@@ -50,7 +50,7 @@
 //!
 //! use std::convert::TryFrom;
 //!
-//! let x = Boolean::try_from(((), vec![Field64::from(23)])).unwrap(); // Invalid input
+//! let x = Boolean::try_from(((), vec![Field64::from(23)].as_slice())).unwrap(); // Invalid input
 //! let joint_rand = rand(x.valid_rand_len()).unwrap();
 //! let query_rand = rand(x.valid_gadget_len()).unwrap();
 //! let pf = prove(&x, &joint_rand).unwrap();
@@ -80,7 +80,7 @@
 //! let x_shares: Vec<Boolean<Field64>> = split(x.as_slice(), 2)
 //!     .unwrap()
 //!     .into_iter()
-//!     .map(|data| Boolean::try_from((x_par, data)).unwrap())
+//!     .map(|data| Boolean::try_from((x_par, data.as_slice())).unwrap())
 //!     .collect();
 //!
 //! let joint_rand = rand(x.valid_rand_len()).unwrap();
@@ -136,7 +136,7 @@ pub mod gadgets;
 pub mod types;
 
 /// Errors propagated by methods in this module.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum PcpError {
     /// The caller of an arithmetic circuit provided the wrong number of inputs. This error may
     /// occur when evaluating a validity circuit or gadget.
@@ -205,12 +205,11 @@ pub enum PcpError {
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value<F: FieldElement>:
-    Sized
+pub trait Value<F: FieldElement>: Sized
     + PartialEq
     + Eq
     + Debug
-    + TryFrom<(<Self as Value<F>>::Param, Vec<F>), Error = <Self as Value<F>>::TryFromError>
+    + for<'a> TryFrom<(<Self as Value<F>>::Param, &'a [F]), Error = <Self as Value<F>>::TryFromError>
 {
     /// Parameters used to construct a value of this type from a vector of field elements.
     type Param;
@@ -283,7 +282,7 @@ pub trait Value<F: FieldElement>:
     ///     .enumerate()
     ///     .map(|(i, data)| {
     ///         let mut share =
-    ///             MeanVarUnsignedVector::try_from((x.param(), data)).unwrap();
+    ///             MeanVarUnsignedVector::try_from((x.param(), data.as_slice())).unwrap();
     ///         share.set_leader(i == 0);
     ///         share
     ///     })
@@ -475,6 +474,12 @@ impl<F: FieldElement> Proof<F> {
 impl<F: FieldElement> From<Vec<F>> for Proof<F> {
     fn from(data: Vec<F>) -> Self {
         Self { data }
+    }
+}
+
+impl<F: FieldElement> From<Proof<F>> for Vec<u8> {
+    fn from(proof: Proof<F>) -> Self {
+        F::slice_into_byte_vec(&proof.data)
     }
 }
 
@@ -801,7 +806,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(i, data)| {
-                let mut share = T::try_from((x_par, data)).unwrap();
+                let mut share = T::try_from((x_par, data.as_slice())).unwrap();
                 share.set_leader(i == 0);
                 share
             })
@@ -921,11 +926,13 @@ mod tests {
         fn param(&self) -> Self::Param {}
     }
 
-    impl<F: FieldElement> TryFrom<((), Vec<F>)> for TestValue<F> {
+    impl<F: FieldElement> TryFrom<((), &[F])> for TestValue<F> {
         type Error = Infallible;
 
-        fn try_from(val: ((), Vec<F>)) -> Result<Self, Infallible> {
-            Ok(Self { data: val.1 })
+        fn try_from(val: ((), &[F])) -> Result<Self, Infallible> {
+            Ok(Self {
+                data: val.1.to_vec(),
+            })
         }
     }
 }
