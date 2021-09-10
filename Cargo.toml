@@ -1,7 +1,7 @@
 [package]
 name = "prio"
 version = "0.4.0"
-authors = ["Josh Aas <jaas@kflag.net>", "Karl Tarbe <tarbe@apple.com>"]
+authors = ["Josh Aas <jaas@kflag.net>", "Tim Geoghegan <timg@letsencrypt.org>", "Christopher Patton <cpatton@cloudflare.com", "Karl Tarbe <tarbe@apple.com>"]
 edition = "2018"
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0"
