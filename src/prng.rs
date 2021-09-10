@@ -3,42 +3,95 @@
 
 use super::field::{FieldElement, FieldError};
 use aes::{
-    cipher::{generic_array::GenericArray, FromBlockCipher, NewBlockCipher, StreamCipher},
+    cipher::{
+        generic_array::GenericArray, FromBlockCipher, NewBlockCipher,
+        StreamCipher as AesStreamCipher,
+    },
     Aes128, Aes128Ctr,
 };
+use blake3;
 use getrandom::getrandom;
 
 use std::marker::PhantomData;
 
-const BLOCK_SIZE: usize = 16;
 const DEFAULT_BUFFER_SIZE_IN_ELEMENTS: usize = 128;
 const MAXIMUM_BUFFER_SIZE_IN_ELEMENTS: usize = 4096;
-pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
 
 pub(crate) fn secret_share<F: FieldElement>(share1: &mut [F]) -> Result<Vec<u8>, getrandom::Error> {
-    let mut seed = vec![0; SEED_LENGTH];
-    getrandom(seed.as_mut_slice())?;
+    let mut seed = [0; STREAM_CIPHER_AES128CTR_KEY_LENGTH];
+    getrandom(&mut seed)?;
 
     // get prng array
-    let data: Vec<F> = Prng::new_with_seed_and_optional_length(&seed, Some(share1.len())).collect();
+    let data: Vec<F> =
+        Prng::<_, Aes128Ctr, STREAM_CIPHER_AES128CTR_KEY_LENGTH>::new_with_seed_and_optional_length(
+            seed,
+            Some(share1.len()),
+        )
+        .collect();
 
     // secret share
     for (s1, d) in share1.iter_mut().zip(data.iter()) {
         *s1 -= *d;
     }
 
-    Ok(seed)
+    Ok(seed.to_vec())
 }
 
 pub(crate) fn extract_share_from_seed<F: FieldElement>(
     length: usize,
     seed: &[u8],
 ) -> Result<Vec<F>, PrngError> {
-    if seed.len() != 2 * BLOCK_SIZE {
+    if seed.len() != STREAM_CIPHER_AES128CTR_KEY_LENGTH {
         return Err(PrngError::SeedLen);
     }
 
-    Ok(Prng::new_with_seed_and_optional_length(seed, Some(length)).collect())
+    let mut seed_copy = [0; STREAM_CIPHER_AES128CTR_KEY_LENGTH];
+    seed_copy.clone_from_slice(seed);
+    Ok(
+        Prng::<_, Aes128Ctr, STREAM_CIPHER_AES128CTR_KEY_LENGTH>::new_with_seed_and_optional_length(
+            seed_copy,
+            Some(length),
+        )
+        .collect(),
+    )
+}
+
+/// A stream cipher maps a short key to a stream of pseudorandom bytes.
+pub(crate) trait StreamCipher<const KEY_LENGTH: usize> {
+    /// Returns a new stream ciphered keyed by `key`.
+    fn new(key: [u8; KEY_LENGTH]) -> Self;
+
+    /// Fills the input buffer `buf` with the next `buf.len()` bytes of the stream.
+    fn fill(&mut self, buf: &mut [u8]);
+}
+
+pub(crate) const STREAM_CIPHER_AES128CTR_KEY_LENGTH: usize = 2 * aes::BLOCK_SIZE;
+pub(crate) const STREAM_CIPHER_BLAKE3_KEY_LENGTH: usize = 32;
+
+impl StreamCipher<STREAM_CIPHER_AES128CTR_KEY_LENGTH> for Aes128Ctr {
+    fn new(key: [u8; STREAM_CIPHER_AES128CTR_KEY_LENGTH]) -> Self {
+        // The first 16 bytes of the key and the last 16 bytes of the key are used, respectively,
+        // for the key and initialization vector for AES128 in CTR mode.
+        let aes_ctr_key = GenericArray::from_slice(&key[..aes::BLOCK_SIZE]);
+        let aes_ctr_iv = GenericArray::from_slice(&key[aes::BLOCK_SIZE..]);
+        Self::from_block_cipher(Aes128::new(aes_ctr_key), aes_ctr_iv)
+    }
+
+    fn fill(&mut self, buf: &mut [u8]) {
+        self.apply_keystream(buf);
+    }
+}
+
+impl StreamCipher<STREAM_CIPHER_BLAKE3_KEY_LENGTH> for blake3::OutputReader {
+    fn new(key: [u8; STREAM_CIPHER_BLAKE3_KEY_LENGTH]) -> Self {
+        let mut hasher = blake3::Hasher::new_keyed(&key);
+        hasher.update(b"prio-v3-prng-stream-cipher");
+        hasher.finalize_xof()
+    }
+
+    fn fill(&mut self, buf: &mut [u8]) {
+        Self::fill(self, buf)
+    }
 }
 
 /// Errors propagated by methods in this module.
@@ -51,47 +104,53 @@ pub(crate) enum PrngError {
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
 /// sequence is derived from the key stream of AES-128 in CTR mode with a random IV.
 #[derive(Debug)]
-pub(crate) struct Prng<F: FieldElement> {
+pub(crate) struct Prng<F, X, const KEY_LENGTH: usize>
+where
+    F: FieldElement,
+    X: StreamCipher<KEY_LENGTH>,
+{
     phantom: PhantomData<F>,
-    cipher: Aes128Ctr,
+    key_stream: X,
     length: Option<usize>,
     buffer: Vec<u8>,
     buffer_index: usize,
     output_written: usize,
 }
 
-impl<F: FieldElement> Prng<F> {
+impl<F, X, const KEY_LENGTH: usize> Prng<F, X, KEY_LENGTH>
+where
+    F: FieldElement,
+    X: StreamCipher<KEY_LENGTH>,
+{
     /// Generates a seed and constructs an iterator over an infinite sequence of pseudorandom field
     /// elements.
     pub(crate) fn new() -> Result<Self, getrandom::Error> {
-        let mut seed = [0; SEED_LENGTH];
+        let mut seed = [0; KEY_LENGTH];
         getrandom(&mut seed)?;
-        Ok(Self::new_with_seed_and_optional_length(&seed, None))
+        Ok(Self::new_with_seed_and_optional_length(seed, None))
     }
 
     /// Generates a seed and constructs an iterator over a pseudorandom sequence of field elements
     /// of length `length`.
     pub(crate) fn new_with_length(length: usize) -> Result<Self, getrandom::Error> {
-        let mut seed = [0; SEED_LENGTH];
+        let mut seed = [0; KEY_LENGTH];
         getrandom(&mut seed)?;
-        Ok(Self::new_with_seed_and_optional_length(&seed, Some(length)))
+        Ok(Self::new_with_seed_and_optional_length(seed, Some(length)))
     }
 
-    fn new_with_seed_and_optional_length(seed: &[u8], length: Option<usize>) -> Self {
-        let key = GenericArray::from_slice(&seed[..BLOCK_SIZE]);
-        let iv = GenericArray::from_slice(&seed[BLOCK_SIZE..]);
-        let mut cipher = Aes128Ctr::from_block_cipher(Aes128::new(key), iv);
+    fn new_with_seed_and_optional_length(seed: [u8; KEY_LENGTH], length: Option<usize>) -> Self {
+        let mut key_stream = X::new(seed);
 
         let buf_len_in_elems = match length {
             Some(length) => std::cmp::min(length + 1, MAXIMUM_BUFFER_SIZE_IN_ELEMENTS),
             None => DEFAULT_BUFFER_SIZE_IN_ELEMENTS,
         };
         let mut buffer = vec![0; buf_len_in_elems * F::ENCODED_SIZE];
-        cipher.apply_keystream(&mut buffer);
+        key_stream.fill(&mut buffer);
 
         Self {
             phantom: PhantomData::<F>,
-            cipher,
+            key_stream,
             length,
             buffer,
             buffer_index: 0,
@@ -100,7 +159,11 @@ impl<F: FieldElement> Prng<F> {
     }
 }
 
-impl<F: FieldElement> Iterator for Prng<F> {
+impl<F, X, const KEY_LENGTH: usize> Iterator for Prng<F, X, KEY_LENGTH>
+where
+    F: FieldElement,
+    X: StreamCipher<KEY_LENGTH>,
+{
     type Item = F;
 
     fn next(&mut self) -> Option<F> {
@@ -130,7 +193,7 @@ impl<F: FieldElement> Iterator for Prng<F> {
             for b in &mut self.buffer {
                 *b = 0;
             }
-            self.cipher.apply_keystream(&mut self.buffer);
+            self.key_stream.fill(&mut self.buffer);
             self.buffer_index = 0;
         }
     }

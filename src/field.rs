@@ -8,6 +8,7 @@
 
 use crate::fp::{FP126, FP32, FP64, FP80};
 use crate::prng::Prng;
+use aes::Aes128Ctr;
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::min,
@@ -533,7 +534,8 @@ pub fn merge_vector<F: FieldElement>(
 
 /// Generate a vector of uniform random field elements.
 pub fn rand<F: FieldElement>(len: usize) -> Result<Vec<F>, getrandom::Error> {
-    Ok(Prng::new_with_length(len)?.collect())
+    // TODO(cjpatton) Don't hard-code the KeyStream implementation.
+    Ok(Prng::<_, Aes128Ctr, 32>::new_with_length(len)?.collect())
 }
 
 /// Outputs an additive secret sharing of the input.
@@ -548,7 +550,8 @@ pub fn split<F: FieldElement>(
     let mut outp = vec![vec![F::zero(); inp.len()]; num_shares];
     outp[0][..inp.len()].clone_from_slice(inp);
 
-    let mut prng = Prng::new()?;
+    // TODO(cjpatton) Don't hard-code the KeyStream implementation.
+    let mut prng = Prng::<_, Aes128Ctr, 32>::new()?;
     for i in 1..num_shares {
         for j in 0..inp.len() {
             let r = prng.next().unwrap();
@@ -564,6 +567,7 @@ pub fn split<F: FieldElement>(
 mod tests {
     use super::*;
     use crate::fp::MAX_ROOTS;
+    use crate::prng::STREAM_CIPHER_AES128CTR_KEY_LENGTH;
     use assert_matches::assert_matches;
     use std::io::{Cursor, Write};
 
@@ -600,7 +604,7 @@ mod tests {
     // experimental" https://github.com/rust-lang/rust/issues/15701
     #[allow(clippy::eq_op)]
     fn field_element_test<F: FieldElement>() {
-        let mut prng: Prng<F> = Prng::new().unwrap();
+        let mut prng: Prng<F, Aes128Ctr, STREAM_CIPHER_AES128CTR_KEY_LENGTH> = Prng::new().unwrap();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();

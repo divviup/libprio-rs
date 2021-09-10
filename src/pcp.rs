@@ -126,6 +126,8 @@ use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 
+use aes::Aes128Ctr;
+
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
@@ -415,7 +417,8 @@ struct ProveShimGadget<F: FieldElement> {
 impl<F: FieldElement> ProveShimGadget<F> {
     fn new(inner: Box<dyn Gadget<F>>, gadget_calls: usize) -> Result<Self, PcpError> {
         let mut f_vals = vec![vec![F::zero(); 1 + gadget_calls]; inner.arity()];
-        let mut prng = Prng::new_with_length(f_vals.len())?;
+        // TODO(cjpatton) Don't hard-code the KeyStream implementation.
+        let mut prng = Prng::<_, Aes128Ctr, 32>::new_with_length(f_vals.len())?;
 
         #[allow(clippy::needless_range_loop)]
         for wire in 0..f_vals.len() {

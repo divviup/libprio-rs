@@ -6,9 +6,10 @@ use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
-    prng::{extract_share_from_seed, Prng, PrngError},
+    prng::{extract_share_from_seed, Prng, PrngError, STREAM_CIPHER_AES128CTR_KEY_LENGTH},
     util::{proof_length, unpack_proof, SerializeError},
 };
+use aes::Aes128Ctr;
 use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations
@@ -66,7 +67,7 @@ impl<F: FieldElement> ValidationMemory<F> {
 /// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server<F: FieldElement> {
-    prng: Prng<F>,
+    prng: Prng<F, Aes128Ctr, STREAM_CIPHER_AES128CTR_KEY_LENGTH>,
     dimension: usize,
     is_first_server: bool,
     accumulator: Vec<F>,

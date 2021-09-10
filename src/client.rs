@@ -7,9 +7,11 @@ use crate::{
     encrypt::{encrypt_share, EncryptError, PublicKey},
     field::FieldElement,
     polynomial::{poly_fft, PolyAuxMemory},
-    prng::Prng,
+    prng::{Prng, STREAM_CIPHER_AES128CTR_KEY_LENGTH},
     util::{proof_length, unpack_proof_mut},
 };
+
+use aes::Aes128Ctr;
 
 use std::convert::TryFrom;
 
@@ -18,7 +20,7 @@ use std::convert::TryFrom;
 /// Client is used to create Prio shares.
 #[derive(Debug)]
 pub struct Client<F: FieldElement> {
-    prng: Prng<F>,
+    prng: Prng<F, Aes128Ctr, STREAM_CIPHER_AES128CTR_KEY_LENGTH>,
     dimension: usize,
     points_f: Vec<F>,
     points_g: Vec<F>,
