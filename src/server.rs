@@ -9,6 +9,7 @@ use crate::{
     prng::{extract_share_from_seed, Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
 };
+use aes::Aes128Ctr;
 use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations
@@ -58,7 +59,7 @@ impl<F: FieldElement> ValidationMemory<F> {
 /// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server<F: FieldElement> {
-    prng: Prng<F>,
+    prng: Prng<F, Aes128Ctr>,
     dimension: usize,
     is_first_server: bool,
     accumulator: Vec<F>,

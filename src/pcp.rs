@@ -14,7 +14,8 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value};
-//! use prio::field::{rand, FieldElement, Field64};
+//! use prio::field::{FieldElement, Field64};
+//! use prio::prng::random_vector;
 //!
 //! // The prover generates a proof `pf` that its input `x` is a valid encoding
 //! // of a boolean (either `true` or `false`). Both the input and proof are
@@ -25,11 +26,11 @@
 //! // generate and verify a proof of `x`'s validity. In proof systems like
 //! // [BBC+19, Theorem 5.3], the verifier sends the prover a random challenge
 //! // in the first round, which the prover uses to construct the proof.
-//! let joint_rand = rand(input.joint_rand_len()).unwrap();
+//! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
 //!
 //! // The prover and verifier choose local randomness it uses to check the proof.
-//! let prove_rand = rand(input.prove_rand_len()).unwrap();
-//! let query_rand = rand(input.query_rand_len()).unwrap();
+//! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
+//! let query_rand = random_vector(input.query_rand_len()).unwrap();
 //!
 //! // The prover generates the proof.
 //! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
@@ -47,14 +48,15 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value};
-//! use prio::field::{rand, FieldElement, Field64};
+//! use prio::field::{FieldElement, Field64};
+//! use prio::prng::random_vector;
 //!
 //! use std::convert::TryFrom;
 //!
 //! let input = Boolean::try_from(((), vec![Field64::from(23)].as_slice())).unwrap(); // Invalid input
-//! let joint_rand = rand(input.joint_rand_len()).unwrap();
-//! let prove_rand = rand(input.prove_rand_len()).unwrap();
-//! let query_rand = rand(input.query_rand_len()).unwrap();
+//! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
+//! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
+//! let query_rand = random_vector(input.query_rand_len()).unwrap();
 //! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
 //! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
 //! let res = decide(&input, &verifier).unwrap();
@@ -71,7 +73,8 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-//! use prio::field::{rand, split, FieldElement, Field64};
+//! use prio::field::{split, FieldElement, Field64};
+//! use prio::prng::random_vector;
 //!
 //! use std::convert::TryFrom;
 //!
@@ -84,9 +87,9 @@
 //!     .map(|data| Boolean::try_from((input.param(), data.as_slice())).unwrap())
 //!     .collect();
 //!
-//! let joint_rand = rand(input.joint_rand_len()).unwrap();
-//! let prove_rand = rand(input.prove_rand_len()).unwrap();
-//! let query_rand = rand(input.query_rand_len()).unwrap();
+//! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
+//! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
+//! let query_rand = random_vector(input.query_rand_len()).unwrap();
 //!
 //! // The prover generates a proof of its input's validity and splits the proof
 //! // into two shares. It sends each share to one of two aggregators.
@@ -224,10 +227,11 @@ pub trait Value<F: FieldElement>:
     /// ```
     /// use prio::pcp::types::Boolean;
     /// use prio::pcp::Value;
-    /// use prio::field::{rand, FieldElement, Field64};
+    /// use prio::field::{FieldElement, Field64};
+    /// use prio::prng::random_vector;
     ///
     /// let x: Boolean<Field64> = Boolean::new(false);
-    /// let joint_rand = rand(x.joint_rand_len()).unwrap();
+    /// let joint_rand = random_vector(x.joint_rand_len()).unwrap();
     /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, Field64::zero());
     /// ```
@@ -273,7 +277,8 @@ pub trait Value<F: FieldElement>:
     /// ```
     /// use prio::pcp::types::MeanVarUnsignedVector;
     /// use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-    /// use prio::field::{split, rand, FieldElement, Field64};
+    /// use prio::field::{split, FieldElement, Field64};
+    /// use prio::prng::random_vector;
     ///
     /// use std::convert::TryFrom;
     ///
@@ -293,9 +298,9 @@ pub trait Value<F: FieldElement>:
     ///     })
     ///     .collect();
     ///
-    /// let joint_rand = rand(input.joint_rand_len()).unwrap();
-    /// let prove_rand = rand(input.prove_rand_len()).unwrap();
-    /// let query_rand = rand(input.query_rand_len()).unwrap();
+    /// let joint_rand = random_vector(input.joint_rand_len()).unwrap();
+    /// let prove_rand = random_vector(input.prove_rand_len()).unwrap();
+    /// let query_rand = random_vector(input.query_rand_len()).unwrap();
     ///
     /// let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
     /// let proof_shares: Vec<Proof<Field64>> = split(proof.as_slice(), 2)
@@ -805,11 +810,12 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{rand, split, Field126};
+    use crate::field::{split, Field126};
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::pcp::types::Boolean;
     use crate::pcp::types::TypeError;
     use crate::polynomial::poly_range_check;
+    use crate::prng::random_vector;
 
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
@@ -833,9 +839,9 @@ mod tests {
             })
             .collect();
 
-        let joint_rand = rand(x.joint_rand_len()).unwrap();
-        let prove_rand = rand(x.prove_rand_len()).unwrap();
-        let query_rand = rand(x.query_rand_len()).unwrap();
+        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
+        let query_rand = random_vector(x.query_rand_len()).unwrap();
 
         let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
@@ -854,9 +860,9 @@ mod tests {
     #[test]
     fn test_decide() {
         let x: Boolean<Field126> = Boolean::new(true);
-        let joint_rand = rand(x.joint_rand_len()).unwrap();
-        let prove_rand = rand(x.prove_rand_len()).unwrap();
-        let query_rand = rand(x.query_rand_len()).unwrap();
+        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
+        let query_rand = random_vector(x.query_rand_len()).unwrap();
 
         let ok_vf = query(
             &x,

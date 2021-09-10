@@ -7,7 +7,7 @@
 //! subgroup of order `2^n` for some `n`.
 
 use crate::fp::{FP126, FP32, FP64, FP80};
-use crate::prng::Prng;
+use crate::prng::{random_vector, PrngError};
 use serde::{Deserialize, Serialize};
 use std::{
     cmp::min,
@@ -531,30 +531,21 @@ pub fn merge_vector<F: FieldElement>(
     Ok(())
 }
 
-/// Generate a vector of uniform random field elements.
-pub fn rand<F: FieldElement>(len: usize) -> Result<Vec<F>, getrandom::Error> {
-    Ok(Prng::new_with_length(len)?.collect())
-}
-
 /// Outputs an additive secret sharing of the input.
-pub fn split<F: FieldElement>(
-    inp: &[F],
-    num_shares: usize,
-) -> Result<Vec<Vec<F>>, getrandom::Error> {
+pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Result<Vec<Vec<F>>, PrngError> {
     if num_shares == 0 {
         return Ok(vec![]);
     }
 
-    let mut outp = vec![vec![F::zero(); inp.len()]; num_shares];
-    outp[0][..inp.len()].clone_from_slice(inp);
+    let mut outp = Vec::with_capacity(num_shares);
+    outp.push(inp.to_vec());
 
-    let mut prng = Prng::new()?;
-    for i in 1..num_shares {
-        for j in 0..inp.len() {
-            let r = prng.next().unwrap();
-            outp[i][j] = r;
-            outp[0][j] -= r;
+    for _ in 1..num_shares {
+        let share: Vec<F> = random_vector(inp.len())?;
+        for (x, y) in outp[0].iter_mut().zip(&share) {
+            *x -= *y;
         }
+        outp.push(share);
     }
 
     Ok(outp)
@@ -564,6 +555,8 @@ pub fn split<F: FieldElement>(
 mod tests {
     use super::*;
     use crate::fp::MAX_ROOTS;
+    use crate::prng::Prng;
+    use aes::Aes128Ctr;
     use assert_matches::assert_matches;
     use std::io::{Cursor, Write};
 
@@ -600,7 +593,7 @@ mod tests {
     // experimental" https://github.com/rust-lang/rust/issues/15701
     #[allow(clippy::eq_op)]
     fn field_element_test<F: FieldElement>() {
-        let mut prng: Prng<F> = Prng::new().unwrap();
+        let mut prng: Prng<F, Aes128Ctr> = Prng::new().unwrap();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();

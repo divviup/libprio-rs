@@ -359,8 +359,10 @@ impl<F: FieldElement> TryFrom<(usize, &[F])> for MeanVarUnsignedVector<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{rand, split, Field64 as TestField};
+    use crate::field::{split, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
+    use crate::prng::random_vector;
+
     use assert_matches::assert_matches;
 
     // Number of shares to split input and proofs into in `pcp_test`.
@@ -599,9 +601,9 @@ mod tests {
         V: Value<F>,
     {
         let mut gadgets = input.gadget();
-        let joint_rand = rand(input.joint_rand_len()).unwrap();
-        let prove_rand = rand(input.prove_rand_len()).unwrap();
-        let query_rand = rand(input.query_rand_len()).unwrap();
+        let joint_rand = random_vector(input.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(input.prove_rand_len()).unwrap();
+        let query_rand = random_vector(input.query_rand_len()).unwrap();
 
         assert_eq!(input.query_rand_len(), gadgets.len());
 

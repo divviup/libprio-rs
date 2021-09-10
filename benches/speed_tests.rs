@@ -5,17 +5,18 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use prio::benchmarked::*;
 use prio::client::Client;
 use prio::encrypt::PublicKey;
-use prio::field::{rand, Field126 as F, FieldElement};
+use prio::field::{Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::pcp::types::{MeanVarUnsignedVector, PolyCheckedVector};
 use prio::pcp::{prove, query, Value};
+use prio::prng::random_vector;
 use prio::server::{generate_verification_message, ValidationMemory};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
 pub fn fft(c: &mut Criterion) {
     let test_sizes = [16, 256, 1024, 4096];
     for size in test_sizes.iter() {
-        let inp = rand(*size).unwrap();
+        let inp = random_vector(*size).unwrap();
         let mut outp = vec![F::zero(); *size];
 
         c.bench_function(&format!("iterative FFT, size={}", *size), |b| {
@@ -37,7 +38,7 @@ pub fn prng(c: &mut Criterion) {
     let test_sizes = [16, 256, 1024, 4096];
     for size in test_sizes.iter() {
         c.bench_function(&format!("rand, size={}", *size), |b| {
-            b.iter(|| rand::<F>(*size))
+            b.iter(|| random_vector::<F>(*size))
         });
     }
 }
@@ -52,7 +53,7 @@ pub fn poly_mul(c: &mut Criterion) {
         let m = (*size + 1).next_power_of_two();
         let mut g: Mul<F> = Mul::new(*size);
         let mut outp = vec![F::zero(); 2 * m];
-        let inp = vec![rand(m).unwrap(); 2];
+        let inp = vec![random_vector(m).unwrap(); 2];
 
         c.bench_function(&format!("poly mul FFT, size={}", *size), |b| {
             b.iter(|| {
@@ -97,7 +98,7 @@ pub fn bool_vec(c: &mut Criterion) {
 
         let data_and_proof = benchmarked_v2_prove(&data, &mut client);
         let mut validator: ValidationMemory<F> = ValidationMemory::new(data.len());
-        let eval_at = rand(1).unwrap()[0];
+        let eval_at = random_vector(1).unwrap()[0];
 
         c.bench_function(&format!("bool vec v2 query, size={}", *size), |b| {
             b.iter(|| {
@@ -114,9 +115,9 @@ pub fn bool_vec(c: &mut Criterion) {
 
         // v3
         let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data.clone(), 0, 2);
-        let joint_rand = rand(x.joint_rand_len()).unwrap();
-        let prove_rand = rand(x.prove_rand_len()).unwrap();
-        let query_rand = rand(x.query_rand_len()).unwrap();
+        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
+        let query_rand = random_vector(x.query_rand_len()).unwrap();
 
         c.bench_function(&format!("bool vec v3 prove, size={}", *size), |b| {
             b.iter(|| {
@@ -143,9 +144,9 @@ pub fn mean_var_int_vec(c: &mut Criterion) {
         let data = vec![0; *size];
 
         let x: MeanVarUnsignedVector<F> = MeanVarUnsignedVector::new(bits, &data).unwrap();
-        let joint_rand = rand(x.joint_rand_len()).unwrap();
-        let prove_rand = rand(x.prove_rand_len()).unwrap();
-        let query_rand = rand(x.query_rand_len()).unwrap();
+        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
+        let query_rand = random_vector(x.query_rand_len()).unwrap();
 
         c.bench_function(
             &format!("{}-bit mean var int vec prove, size={}", bits, *size),
