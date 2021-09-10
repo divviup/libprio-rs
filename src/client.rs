@@ -7,9 +7,11 @@ use crate::{
     encrypt::{encrypt_share, EncryptError, PublicKey},
     field::FieldElement,
     polynomial::{poly_fft, PolyAuxMemory},
-    prng::Prng,
+    prng::{Prng, PrngError},
     util::{proof_length, unpack_proof_mut},
 };
+
+use aes::Aes128Ctr;
 
 use std::convert::TryFrom;
 
@@ -18,7 +20,7 @@ use std::convert::TryFrom;
 /// Client is used to create Prio shares.
 #[derive(Debug)]
 pub struct Client<F: FieldElement> {
-    prng: Prng<F>,
+    prng: Prng<F, Aes128Ctr>,
     dimension: usize,
     points_f: Vec<F>,
     points_g: Vec<F>,
@@ -32,20 +34,20 @@ pub struct Client<F: FieldElement> {
 /// Errors that might be emitted by the client.
 #[derive(Debug, thiserror::Error)]
 pub enum ClientError {
-    /// Thes error is output by `Client<F>::new()` if the length of the proof would exceed the
+    /// This error is output by `Client<F>::new()` if the length of the proof would exceed the
     /// number of roots of unity that can be generated in the field.
     #[error("input size exceeds field capacity")]
     InputSizeExceedsFieldCapacity,
-    /// Thes error is output by `Client<F>::new()` if the length of the proof would exceed the
-    /// ssytem's addressible memory.
+    /// This error is output by `Client<F>::new()` if the length of the proof would exceed the
+    /// system's addressible memory.
     #[error("input size exceeds field capacity")]
     InputSizeExceedsMemoryCapacity,
     /// Encryption/decryption error
     #[error("encryption/decryption error")]
     Encrypt(#[from] EncryptError),
-    /// Failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
+    /// PRNG error
+    #[error("prng error: {0}")]
+    Prng(#[from] PrngError),
 }
 
 impl<F: FieldElement> Client<F> {

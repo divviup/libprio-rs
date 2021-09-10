@@ -37,10 +37,12 @@ use std::convert::TryFrom;
 
 use getrandom::getrandom;
 
-use crate::field::{rand, FieldElement};
+use aes::Aes128Ctr;
+
+use crate::field::FieldElement;
 use crate::pcp::types::TypeError;
 use crate::pcp::{decide, prove, query, PcpError, Proof, Value, Verifier};
-use crate::prng::{Prng, PrngError, SEED_LENGTH};
+use crate::prng::{Prng, PrngError, StreamCipher};
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -92,8 +94,8 @@ impl<F: FieldElement> TryFrom<Share<F>> for Vec<F> {
         match share {
             Share::Leader(data) => Ok(data),
             Share::Helper { seed, length } => {
-                let mut prng = Prng::try_from_seed(&seed)?;
-                Ok((0..length).map(|_| prng.next().unwrap()).collect())
+                let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&seed)?;
+                Ok(prng.take(length).collect())
             }
         }
     }
@@ -144,8 +146,8 @@ fn assert_safe() {
     //    /// Panics if `out.len() != Self::OUT_LEN`.
     //    fn finalize(out: &mut [u8]);
     // }
-    const_assert_eq!(blake3::KEY_LEN, SEED_LENGTH);
-    const_assert_eq!(blake3::OUT_LEN, SEED_LENGTH);
+    const_assert_eq!(blake3::KEY_LEN, Aes128Ctr::STREAM_CIPHER_SEED_SIZE);
+    const_assert_eq!(blake3::OUT_LEN, Aes128Ctr::STREAM_CIPHER_SEED_SIZE);
 }
 
 #[derive(Clone)]
@@ -159,10 +161,10 @@ struct HelperShare {
 impl HelperShare {
     fn new() -> Self {
         HelperShare {
-            input_share: vec![0; SEED_LENGTH],
-            proof_share: vec![0; SEED_LENGTH],
-            joint_rand_seed_hint: vec![0; SEED_LENGTH],
-            blind: vec![0; SEED_LENGTH],
+            input_share: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
+            proof_share: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
+            joint_rand_seed_hint: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
+            blind: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
         }
     }
 }
@@ -194,7 +196,7 @@ where
     // Generate the input shares and compute the joint randomness.
     let mut helper_shares = vec![HelperShare::new(); num_shares - 1];
     let mut leader_input_share = input.as_slice().to_vec();
-    let mut joint_rand_seed = vec![0; SEED_LENGTH];
+    let mut joint_rand_seed = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
     let mut aggregator_id = 1; // ID of the first helper
     for helper in helper_shares.iter_mut() {
         getrandom(&mut helper.blind)?;
@@ -203,7 +205,7 @@ where
         let mut hasher = blake3::Hasher::new();
         hasher.update(&[aggregator_id]);
         hasher.update(&helper.blind);
-        let prng = Prng::try_from_seed(&helper.input_share)?;
+        let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&helper.input_share)?;
         for (x, y) in leader_input_share.iter_mut().zip(prng).take(input_len) {
             *x -= y;
             hasher.update(&y.into());
@@ -222,7 +224,7 @@ where
         aggregator_id += 1; // ID of the next helper
     }
 
-    let mut leader_blind = vec![0; SEED_LENGTH];
+    let mut leader_blind = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
     getrandom(&mut leader_blind)?;
 
     let mut hasher = blake3::Hasher::new();
@@ -232,7 +234,7 @@ where
         hasher.update(&(*x).into());
     }
 
-    let mut leader_joint_rand_seed_hint = vec![0; SEED_LENGTH];
+    let mut leader_joint_rand_seed_hint = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
     leader_joint_rand_seed_hint.copy_from_slice(hasher.finalize().as_bytes());
     for (x, y) in joint_rand_seed
         .iter_mut()
@@ -242,9 +244,10 @@ where
     }
 
     // Run the proof-generation algorithm.
-    let prng = Prng::try_from_seed(&joint_rand_seed)?;
+    let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&joint_rand_seed)?;
     let joint_rand: Vec<F> = prng.take(input.joint_rand_len()).collect();
-    let prove_rand: Vec<F> = rand(input.prove_rand_len())?;
+    let prng: Prng<F, Aes128Ctr> = Prng::new()?;
+    let prove_rand: Vec<F> = prng.take(input.prove_rand_len()).collect();
     let proof = prove(input, &prove_rand, &joint_rand)?;
 
     // Generate the proof shares and finalize the joint randomness seed hints.
@@ -253,7 +256,7 @@ where
     for helper in helper_shares.iter_mut() {
         getrandom(&mut helper.proof_share)?;
 
-        let prng = Prng::try_from_seed(&helper.proof_share)?;
+        let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&helper.proof_share)?;
         for (x, y) in leader_proof_share.iter_mut().zip(prng).take(proof_len) {
             *x -= y;
         }
@@ -353,7 +356,7 @@ where
     let proof_share = Proof::from(proof_share_data);
 
     // Compute the joint randomness.
-    let mut joint_rand_seed_share = vec![0; SEED_LENGTH];
+    let mut joint_rand_seed_share = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
     let mut hasher = blake3::Hasher::new();
     hasher.update(&[aggregator_id]);
     hasher.update(&msg.blind);
@@ -362,16 +365,16 @@ where
     }
     joint_rand_seed_share.copy_from_slice(hasher.finalize().as_bytes());
 
-    let mut joint_rand_seed = vec![0; SEED_LENGTH];
+    let mut joint_rand_seed = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
     for (j, x) in joint_rand_seed.iter_mut().enumerate() {
         *x = msg.joint_rand_seed_hint[j] ^ joint_rand_seed_share[j];
     }
 
-    let prng = Prng::try_from_seed(&joint_rand_seed)?;
+    let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&joint_rand_seed)?;
     let joint_rand: Vec<F> = prng.take(input_share.joint_rand_len()).collect();
 
     // Compute the query randomness.
-    let prng = Prng::try_from_seed(query_rand_seed)?;
+    let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(query_rand_seed)?;
     let query_rand: Vec<F> = prng.take(input_share.query_rand_len()).collect();
 
     // Run the query-generation algorithm.
@@ -406,7 +409,7 @@ where
 
     // Combine the verifier messages.
     let mut verifier_data = state.verifier_share.data;
-    let mut joint_rand_seed_check = vec![0; SEED_LENGTH];
+    let mut joint_rand_seed_check = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
             return Err(PpmError::Ppm(format!(
@@ -459,7 +462,7 @@ mod tests {
         let uploads = upload(&input, num_shares as u8).unwrap();
 
         // Aggregators agree on query randomness.
-        let mut query_rand_seed = vec![0; SEED_LENGTH];
+        let mut query_rand_seed = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
         getrandom(&mut query_rand_seed).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.

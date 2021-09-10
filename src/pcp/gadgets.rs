@@ -402,7 +402,9 @@ where
 mod tests {
     use super::*;
 
-    use crate::field::{rand, Field80 as TestField};
+    use aes::Aes128Ctr;
+
+    use crate::field::Field80 as TestField;
     use crate::prng::Prng;
 
     #[test]
@@ -422,7 +424,10 @@ mod tests {
 
     #[test]
     fn test_poly_eval() {
-        let poly = rand(10).unwrap();
+        let poly: Vec<TestField> = Prng::<TestField, Aes128Ctr>::new()
+            .unwrap()
+            .take(10)
+            .collect();
 
         let num_calls = FFT_THRESHOLD / 2;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
@@ -447,7 +452,7 @@ mod tests {
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     // to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
-        let mut prng = Prng::new().unwrap();
+        let mut prng: Prng<F, Aes128Ctr> = Prng::new().unwrap();
         let mut inp = vec![F::zero(); g.arity()];
         let mut poly_outp = vec![F::zero(); (g.degree() * (1 + num_calls)).next_power_of_two()];
         let mut poly_inp = vec![vec![F::zero(); 1 + num_calls]; g.arity()];
