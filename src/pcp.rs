@@ -19,25 +19,26 @@
 //! // The prover generates a proof `pf` that its input `x` is a valid encoding
 //! // of a boolean (either `true` or `false`). Both the input and proof are
 //! // vectors over a finite field.
-//! let x: Boolean<Field64> = Boolean::new(false);
+//! let input: Boolean<Field64> = Boolean::new(false);
 //!
 //! // The verifier chooses "joint randomness" that that will be used to
 //! // generate and verify a proof of `x`'s validity. In proof systems like
 //! // [BBC+19, Theorem 5.3], the verifier sends the prover a random challenge
 //! // in the first round, which the prover uses to construct the proof.
-//! let joint_rand = rand(x.valid_rand_len()).unwrap();
+//! let joint_rand = rand(input.joint_rand_len()).unwrap();
 //!
-//! // The verifier chooses local randomness it uses to check the proof.
-//! let query_rand = rand(x.valid_gadget_len()).unwrap();
+//! // The prover and verifier choose local randomness it uses to check the proof.
+//! let prove_rand = rand(input.prove_rand_len()).unwrap();
+//! let query_rand = rand(input.query_rand_len()).unwrap();
 //!
 //! // The prover generates the proof.
-//! let pf = prove(&x, &joint_rand).unwrap();
+//! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
 //!
 //! // The verifier queries the proof `pf` and input `x`, getting a
 //! // "verification message" in response. It uses this message to decide if
 //! // the input is valid.
-//! let vf = query(&x, &pf, &query_rand, &joint_rand).unwrap();
-//! let res = decide(&x, &vf).unwrap();
+//! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
+//! let res = decide(&input, &verifier).unwrap();
 //! assert_eq!(res, true);
 //! ```
 //!
@@ -50,12 +51,13 @@
 //!
 //! use std::convert::TryFrom;
 //!
-//! let x = Boolean::try_from(((), vec![Field64::from(23)].as_slice())).unwrap(); // Invalid input
-//! let joint_rand = rand(x.valid_rand_len()).unwrap();
-//! let query_rand = rand(x.valid_gadget_len()).unwrap();
-//! let pf = prove(&x, &joint_rand).unwrap();
-//! let vf = query(&x, &pf, &query_rand, &joint_rand).unwrap();
-//! let res = decide(&x, &vf).unwrap();
+//! let input = Boolean::try_from(((), vec![Field64::from(23)].as_slice())).unwrap(); // Invalid input
+//! let joint_rand = rand(input.joint_rand_len()).unwrap();
+//! let prove_rand = rand(input.prove_rand_len()).unwrap();
+//! let query_rand = rand(input.query_rand_len()).unwrap();
+//! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
+//! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
+//! let res = decide(&input, &verifier).unwrap();
 //! assert_eq!(res, false);
 //! ```
 //!
@@ -75,21 +77,21 @@
 //!
 //! // The prover encodes its input and splits it into two secret shares. It
 //! // sends each share to two aggregators.
-//! let x: Boolean<Field64> = Boolean::new(true);
-//! let x_par = x.param();
-//! let x_shares: Vec<Boolean<Field64>> = split(x.as_slice(), 2)
+//! let input: Boolean<Field64> = Boolean::new(true);
+//! let input_shares: Vec<Boolean<Field64>> = split(input.as_slice(), 2)
 //!     .unwrap()
 //!     .into_iter()
-//!     .map(|data| Boolean::try_from((x_par, data.as_slice())).unwrap())
+//!     .map(|data| Boolean::try_from((input.param(), data.as_slice())).unwrap())
 //!     .collect();
 //!
-//! let joint_rand = rand(x.valid_rand_len()).unwrap();
-//! let query_rand = rand(x.valid_gadget_len()).unwrap();
+//! let joint_rand = rand(input.joint_rand_len()).unwrap();
+//! let prove_rand = rand(input.prove_rand_len()).unwrap();
+//! let query_rand = rand(input.query_rand_len()).unwrap();
 //!
 //! // The prover generates a proof of its input's validity and splits the proof
 //! // into two shares. It sends each share to one of two aggregators.
-//! let pf = prove(&x, &joint_rand).unwrap();
-//! let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
+//! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
+//! let proof_shares: Vec<Proof<Field64>> = split(proof.as_slice(), 2)
 //!     .unwrap()
 //!     .into_iter()
 //!     .map(Proof::from)
@@ -97,14 +99,14 @@
 //!
 //! // Each verifier queries its shares of the input and proof and sends its
 //! // share of the verification message to the leader.
-//! let vf_shares = vec![
-//!     query(&x_shares[0], &pf_shares[0], &query_rand, &joint_rand).unwrap(),
-//!     query(&x_shares[1], &pf_shares[1], &query_rand, &joint_rand).unwrap(),
+//! let verifier_shares = vec![
+//!     query(&input_shares[0], &proof_shares[0], &query_rand, &joint_rand).unwrap(),
+//!     query(&input_shares[1], &proof_shares[1], &query_rand, &joint_rand).unwrap(),
 //! ];
 //!
 //! // The leader collects the verifier shares and decides if the input is valid.
-//! let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
-//! let res = decide(&x_shares[0], &vf).unwrap();
+//! let verifier = Verifier::try_from(verifier_shares.as_slice()).unwrap();
+//! let res = decide(&input_shares[0], &verifier).unwrap();
 //! assert_eq!(res, true);
 //! ```
 //!
@@ -130,7 +132,6 @@ use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_fini
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
 use crate::polynomial::poly_eval;
-use crate::prng::Prng;
 
 pub mod gadgets;
 pub mod types;
@@ -227,7 +228,7 @@ pub trait Value<F: FieldElement>: Sized
     /// use prio::field::{rand, FieldElement, Field64};
     ///
     /// let x: Boolean<Field64> = Boolean::new(false);
-    /// let joint_rand = rand(x.valid_rand_len()).unwrap();
+    /// let joint_rand = rand(x.joint_rand_len()).unwrap();
     /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, Field64::zero());
     /// ```
@@ -237,11 +238,16 @@ pub trait Value<F: FieldElement>: Sized
     /// Returns a reference to the underlying data.
     fn as_slice(&self) -> &[F];
 
-    /// The length of the random input expected by the validity circuit.
-    fn valid_rand_len(&self) -> usize;
+    /// The length of the random input used by both the prover and the verifier.
+    fn joint_rand_len(&self) -> usize;
 
-    /// The number of gadgets expected by the validity circuit.
-    fn valid_gadget_len(&self) -> usize;
+    /// The length of the random input consumed by the prover to generate a proof. This is the same
+    /// as the sum of the arity of each gadget in the validity circuit.
+    fn prove_rand_len(&self) -> usize;
+
+    /// The length of the random input consumed by the verifier to make queries against inputs and
+    /// proofs. This is the same as the number of gadgets in the validity circuit.
+    fn query_rand_len(&self) -> usize;
 
     /// The number of calls to the gadget made when evaluating the validity circuit.
     ///
@@ -274,37 +280,38 @@ pub trait Value<F: FieldElement>: Sized
     ///
     /// let measurement = [1, 2, 3];
     /// let bits = 8;
-    /// let x: MeanVarUnsignedVector<Field64> =
+    /// let input: MeanVarUnsignedVector<Field64> =
     ///     MeanVarUnsignedVector::new(bits, &measurement).unwrap();
-    /// let x_shares: Vec<MeanVarUnsignedVector<Field64>> = split(x.as_slice(), 2)
+    /// let input_shares: Vec<MeanVarUnsignedVector<Field64>> = split(input.as_slice(), 2)
     ///     .unwrap()
     ///     .into_iter()
     ///     .enumerate()
     ///     .map(|(i, data)| {
     ///         let mut share =
-    ///             MeanVarUnsignedVector::try_from((x.param(), data.as_slice())).unwrap();
+    ///             MeanVarUnsignedVector::try_from((input.param(), data.as_slice())).unwrap();
     ///         share.set_leader(i == 0);
     ///         share
     ///     })
     ///     .collect();
     ///
-    /// let joint_rand = rand(x.valid_rand_len()).unwrap();
-    /// let query_rand = rand(x.valid_gadget_len()).unwrap();
+    /// let joint_rand = rand(input.joint_rand_len()).unwrap();
+    /// let prove_rand = rand(input.prove_rand_len()).unwrap();
+    /// let query_rand = rand(input.query_rand_len()).unwrap();
     ///
-    /// let pf = prove(&x, &joint_rand).unwrap();
-    /// let pf_shares: Vec<Proof<Field64>> = split(pf.as_slice(), 2)
+    /// let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
+    /// let proof_shares: Vec<Proof<Field64>> = split(proof.as_slice(), 2)
     ///     .unwrap()
     ///     .into_iter()
     ///     .map(Proof::from)
     ///     .collect();
     ///
-    /// let vf_shares = vec![
-    ///     query(&x_shares[0], &pf_shares[0], &query_rand, &joint_rand).unwrap(),
-    ///     query(&x_shares[1], &pf_shares[1], &query_rand, &joint_rand).unwrap(),
+    /// let verifier_shares = vec![
+    ///     query(&input_shares[0], &proof_shares[0], &query_rand, &joint_rand).unwrap(),
+    ///     query(&input_shares[1], &proof_shares[1], &query_rand, &joint_rand).unwrap(),
     /// ];
     ///
-    /// let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
-    /// let res = decide(&x_shares[0], &vf).unwrap();
+    /// let verifier = Verifier::try_from(verifier_shares.as_slice()).unwrap();
+    /// let res = decide(&input_shares[0], &verifier).unwrap();
     /// assert_eq!(res, true);
     /// ```
     fn set_leader(&mut self, _is_leader: bool) {
@@ -336,19 +343,32 @@ pub trait Gadget<F: FieldElement> {
 }
 
 /// Generate a proof of an input's validity.
-pub fn prove<F, V>(input: &V, joint_rand: &[F]) -> Result<Proof<F>, PcpError>
+pub fn prove<F, V>(input: &V, prove_rand: &[F], joint_rand: &[F]) -> Result<Proof<F>, PcpError>
 where
     F: FieldElement,
     V: Value<F>,
 {
     let gadget_calls = input.valid_gadget_calls();
 
+    let mut prove_rand_len = 0;
     let mut shim = input
         .gadget()
         .into_iter()
         .enumerate()
-        .map(|(idx, gadget)| {
-            Ok(Box::new(ProveShimGadget::new(gadget, gadget_calls[idx])?) as Box<dyn Gadget<F>>)
+        .map(|(idx, inner)| {
+            let inner_arity = inner.arity();
+            if prove_rand_len + inner_arity > prove_rand.len() {
+                return Err(PcpError::Query("short prove randomness"));
+            }
+
+            let gadget = Box::new(ProveShimGadget::new(
+                inner,
+                gadget_calls[idx],
+                &prove_rand[prove_rand_len..prove_rand_len + inner_arity],
+            )?) as Box<dyn Gadget<F>>;
+            prove_rand_len += inner_arity;
+
+            Ok(gadget)
         })
         .collect::<Result<Vec<_>, PcpError>>()?;
 
@@ -413,14 +433,17 @@ struct ProveShimGadget<F: FieldElement> {
 }
 
 impl<F: FieldElement> ProveShimGadget<F> {
-    fn new(inner: Box<dyn Gadget<F>>, gadget_calls: usize) -> Result<Self, PcpError> {
+    fn new(
+        inner: Box<dyn Gadget<F>>,
+        gadget_calls: usize,
+        prove_rand: &[F],
+    ) -> Result<Self, PcpError> {
         let mut f_vals = vec![vec![F::zero(); 1 + gadget_calls]; inner.arity()];
-        let mut prng = Prng::new_with_length(f_vals.len())?;
 
         #[allow(clippy::needless_range_loop)]
         for wire in 0..f_vals.len() {
             // Choose a random field element as the first point on the wire polynomial.
-            f_vals[wire][0] = prng.next().unwrap();
+            f_vals[wire][0] = prove_rand[wire];
         }
 
         Ok(Self {
@@ -812,15 +835,17 @@ mod tests {
             })
             .collect();
 
-        let joint_rand = rand(x.valid_rand_len()).unwrap();
-        let pf = prove(&x, &joint_rand).unwrap();
+        let joint_rand = rand(x.joint_rand_len()).unwrap();
+        let prove_rand = rand(x.prove_rand_len()).unwrap();
+        let query_rand = rand(x.query_rand_len()).unwrap();
+
+        let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
         let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();
 
-        let query_rand = rand(2).unwrap(); // Length is the same as the length of the gadget
         let vf_shares: Vec<Verifier<F>> = (0..NUM_SHARES)
             .map(|i| query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap())
             .collect();
@@ -830,13 +855,14 @@ mod tests {
 
     #[test]
     fn test_decide() {
-        let query_rand = rand(1).unwrap();
-        let joint_rand = vec![];
         let x: Boolean<Field126> = Boolean::new(true);
+        let joint_rand = rand(x.joint_rand_len()).unwrap();
+        let prove_rand = rand(x.prove_rand_len()).unwrap();
+        let query_rand = rand(x.query_rand_len()).unwrap();
 
         let ok_vf = query(
             &x,
-            &prove(&x, &joint_rand).unwrap(),
+            &prove(&x, &prove_rand, &joint_rand).unwrap(),
             &query_rand,
             &joint_rand,
         )
@@ -875,7 +901,7 @@ mod tests {
         type TryFromError = Infallible;
 
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
-            if joint_rand.len() != self.valid_rand_len() {
+            if joint_rand.len() != self.joint_rand_len() {
                 return Err(PcpError::ValidRandLen);
             }
 
@@ -904,11 +930,15 @@ mod tests {
             vec![2, 1]
         }
 
-        fn valid_rand_len(&self) -> usize {
+        fn joint_rand_len(&self) -> usize {
             1
         }
 
-        fn valid_gadget_len(&self) -> usize {
+        fn prove_rand_len(&self) -> usize {
+            3
+        }
+
+        fn query_rand_len(&self) -> usize {
             2
         }
 

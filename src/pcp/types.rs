@@ -43,7 +43,7 @@ impl<F: FieldElement> Value<F> for Boolean<F> {
     type TryFromError = Infallible;
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
-        if rand.len() != self.valid_rand_len() {
+        if rand.len() != self.joint_rand_len() {
             return Err(PcpError::ValidRandLen);
         }
 
@@ -65,11 +65,15 @@ impl<F: FieldElement> Value<F> for Boolean<F> {
         vec![2]
     }
 
-    fn valid_rand_len(&self) -> usize {
+    fn joint_rand_len(&self) -> usize {
         0
     }
 
-    fn valid_gadget_len(&self) -> usize {
+    fn prove_rand_len(&self) -> usize {
+        2
+    }
+
+    fn query_rand_len(&self) -> usize {
         1
     }
 
@@ -132,7 +136,7 @@ impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
     type TryFromError = Infallible;
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
-        if rand.len() != self.valid_rand_len() {
+        if rand.len() != self.joint_rand_len() {
             return Err(PcpError::ValidRandLen);
         }
 
@@ -150,11 +154,15 @@ impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
         vec![self.data.len()]
     }
 
-    fn valid_rand_len(&self) -> usize {
+    fn joint_rand_len(&self) -> usize {
         1
     }
 
-    fn valid_gadget_len(&self) -> usize {
+    fn prove_rand_len(&self) -> usize {
+        1
+    }
+
+    fn query_rand_len(&self) -> usize {
         1
     }
 
@@ -299,11 +307,15 @@ impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
         vec![self.len]
     }
 
-    fn valid_rand_len(&self) -> usize {
+    fn joint_rand_len(&self) -> usize {
         1
     }
 
-    fn valid_gadget_len(&self) -> usize {
+    fn prove_rand_len(&self) -> usize {
+        2 * self.bits + 1
+    }
+
+    fn query_rand_len(&self) -> usize {
         1
     }
 
@@ -584,123 +596,134 @@ mod tests {
         );
     }
 
-    fn pcp_validity_test<F, V>(x: &V, t: &ValidityTestCase)
+    fn pcp_validity_test<F, V>(input: &V, t: &ValidityTestCase)
     where
         F: FieldElement,
         V: Value<F>,
     {
-        let mut g = x.gadget();
-        let joint_rand = rand(x.valid_rand_len()).unwrap();
-        let query_rand = rand(x.valid_gadget_len()).unwrap();
+        let mut gadgets = input.gadget();
+        let joint_rand = rand(input.joint_rand_len()).unwrap();
+        let prove_rand = rand(input.prove_rand_len()).unwrap();
+        let query_rand = rand(input.query_rand_len()).unwrap();
 
-        // Check that the output of valid_gadgets_len() is correct.
-        assert_eq!(x.valid_gadget_len(), g.len());
+        assert_eq!(input.query_rand_len(), gadgets.len());
 
         // Ensure that the input can be constructed from its parameters and its encoding as a
         // sequence of field elements.
-        assert_eq!(x, &V::try_from((x.param(), x.as_slice())).unwrap());
+        assert_eq!(
+            input,
+            &V::try_from((input.param(), input.as_slice())).unwrap()
+        );
 
         // Run the validity circuit.
-        let v = x.valid(&mut g, &joint_rand).unwrap();
+        let v = input.valid(&mut gadgets, &joint_rand).unwrap();
         assert_eq!(
             v == F::zero(),
             t.expect_valid,
             "{:?} validity circuit output {}",
-            x.as_slice(),
+            input.as_slice(),
             v
         );
 
         // Generate and verify a PCP.
-        let pf = prove(x, &joint_rand).unwrap();
-        let vf = query(x, &pf, &query_rand, &joint_rand).unwrap();
-        let res = decide(x, &vf).unwrap();
+        let proof = prove(input, &prove_rand, &joint_rand).unwrap();
+        let verifier = query(input, &proof, &query_rand, &joint_rand).unwrap();
+        let res = decide(input, &verifier).unwrap();
         assert_eq!(
             res,
             t.expect_valid,
             "{:?} query output {:?}",
-            x.as_slice(),
-            vf
+            input.as_slice(),
+            verifier
         );
 
         // Check that the proof size is as expected.
-        assert_eq!(pf.as_slice().len(), t.expected_proof_len);
+        assert_eq!(proof.as_slice().len(), t.expected_proof_len);
 
         // Run distributed PCP.
-        let x_shares: Vec<V> = split(x.as_slice(), NUM_SHARES)
+        let x_shares: Vec<V> = split(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .enumerate()
             .map(|(i, data)| {
-                let mut share = V::try_from((x.param(), &data)).unwrap();
+                let mut share = V::try_from((input.param(), &data)).unwrap();
                 share.set_leader(i == 0);
                 share
             })
             .collect();
 
-        let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
+        let proof_shares: Vec<Proof<F>> = split(proof.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();
 
-        let mut vf_shares: Vec<Verifier<F>> = Vec::with_capacity(NUM_SHARES);
+        let mut verifier_shares: Vec<Verifier<F>> = Vec::with_capacity(NUM_SHARES);
         for i in 0..NUM_SHARES {
-            vf_shares.push(query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap());
+            verifier_shares
+                .push(query(&x_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap());
         }
 
-        let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
-        let res = decide(&x_shares[0], &vf).unwrap();
+        let verifier = Verifier::try_from(verifier_shares.as_slice()).unwrap();
+        let res = decide(&x_shares[0], &verifier).unwrap();
         assert_eq!(
             res,
             t.expect_valid,
             "{:?} sum of of verifier shares is {:?}",
-            x.as_slice(),
-            &vf
+            input.as_slice(),
+            &verifier
         );
 
         // Try verifying a proof with an invalid seed for one of the intermediate polynomials.
         // Verification should fail regardless of whether the input is valid.
-        let mut mutated_pf = pf.clone();
-        mutated_pf.data[0] += F::one();
+        let mut mutated_proof = proof.clone();
+        mutated_proof.data[0] += F::one();
         assert!(
-            !decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
+            !decide(
+                input,
+                &query(input, &mutated_proof, &query_rand, &joint_rand).unwrap()
+            )
+            .unwrap(),
             "{:?} proof mutant verified",
-            x.as_slice(),
+            input.as_slice(),
         );
 
         // Try verifying a proof that is too short.
-        let mut mutated_pf = pf.clone();
-        mutated_pf.data.truncate(g[0].arity() - 1);
+        let mut mutated_proof = proof.clone();
+        mutated_proof.data.truncate(gadgets[0].arity() - 1);
         assert!(
-            query(x, &mutated_pf, &query_rand, &joint_rand).is_err(),
+            query(input, &mutated_proof, &query_rand, &joint_rand).is_err(),
             "{:?} proof mutant verified",
-            x.as_slice(),
+            input.as_slice(),
         );
 
         // Try verifying a proof that is too long.
-        let mut mutated_pf = pf.clone();
-        mutated_pf.data.extend_from_slice(&[F::one(); 17]);
+        let mut mutated_proof = proof.clone();
+        mutated_proof.data.extend_from_slice(&[F::one(); 17]);
         assert!(
-            query(x, &mutated_pf, &query_rand, &joint_rand).is_err(),
+            query(input, &mutated_proof, &query_rand, &joint_rand).is_err(),
             "{:?} proof mutant verified",
-            x.as_slice(),
+            input.as_slice(),
         );
 
-        let g_arity = g[0].arity();
-        if x.as_slice().len() > g_arity {
+        if input.as_slice().len() > gadgets[0].arity() {
             // Try verifying a proof with an invalid proof polynomial.
-            let mut mutated_pf = pf.clone();
-            mutated_pf.data[g_arity] += F::one();
+            let mut mutated_proof = proof.clone();
+            mutated_proof.data[gadgets[0].arity()] += F::one();
             assert!(
-                !decide(x, &query(x, &mutated_pf, &query_rand, &joint_rand).unwrap()).unwrap(),
+                !decide(
+                    input,
+                    &query(input, &mutated_proof, &query_rand, &joint_rand).unwrap()
+                )
+                .unwrap(),
                 "{:?} proof mutant verified",
-                x.as_slice(),
+                input.as_slice(),
             );
 
             // Try verifying a proof with a short proof polynomial.
-            let mut mutated_pf = pf;
-            mutated_pf.data.truncate(g_arity);
-            assert!(query(x, &mutated_pf, &query_rand, &joint_rand).is_err());
+            let mut mutated_proof = proof;
+            mutated_proof.data.truncate(gadgets[0].arity());
+            assert!(query(input, &mutated_proof, &query_rand, &joint_rand).is_err());
         }
     }
 }

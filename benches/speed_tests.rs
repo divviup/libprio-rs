@@ -114,16 +114,17 @@ pub fn bool_vec(c: &mut Criterion) {
 
         // v3
         let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data.clone(), 0, 2);
-        let query_rand = rand(1).unwrap();
-        let joint_rand = rand(x.valid_rand_len()).unwrap();
+        let joint_rand = rand(x.joint_rand_len()).unwrap();
+        let prove_rand = rand(x.prove_rand_len()).unwrap();
+        let query_rand = rand(x.query_rand_len()).unwrap();
 
         c.bench_function(&format!("bool vec v3 prove, size={}", *size), |b| {
             b.iter(|| {
-                prove(&x, &joint_rand).unwrap();
+                prove(&x, &prove_rand, &joint_rand).unwrap();
             })
         });
 
-        let pf = prove(&x, &joint_rand).unwrap();
+        let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
         println!("bool vec v3 proof size={}\n", pf.as_slice().len());
 
         c.bench_function(&format!("bool vec v3 query, size={}", *size), |b| {
@@ -142,19 +143,20 @@ pub fn mean_var_int_vec(c: &mut Criterion) {
         let data = vec![0; *size];
 
         let x: MeanVarUnsignedVector<F> = MeanVarUnsignedVector::new(bits, &data).unwrap();
-        let query_rand = rand(1).unwrap();
-        let joint_rand = rand(x.valid_rand_len()).unwrap();
+        let joint_rand = rand(x.joint_rand_len()).unwrap();
+        let prove_rand = rand(x.prove_rand_len()).unwrap();
+        let query_rand = rand(x.query_rand_len()).unwrap();
 
         c.bench_function(
             &format!("{}-bit mean var int vec prove, size={}", bits, *size),
             |b| {
                 b.iter(|| {
-                    prove(&x, &joint_rand).unwrap();
+                    prove(&x, &prove_rand, &joint_rand).unwrap();
                 })
             },
         );
 
-        let pf = prove(&x, &joint_rand).unwrap();
+        let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
         println!(
             "{}-bit mean var int vec proof size={}\n",
             bits,
