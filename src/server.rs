@@ -26,17 +26,9 @@ pub enum ServerError {
     /// Failure when calling getrandom().
     #[error("getrandom: {0}")]
     GetRandom(#[from] getrandom::Error),
-    /// Decrypted a share seed of the incorrect length.
-    #[error("invalid seed length")]
-    SeedLen,
-}
-
-impl From<PrngError> for ServerError {
-    fn from(err: PrngError) -> Self {
-        match err {
-            PrngError::SeedLen => ServerError::SeedLen,
-        }
-    }
+    /// PRNG error.
+    #[error("prng error: {0}")]
+    Prng(#[from] PrngError),
 }
 
 /// Auxiliary memory for constructing a

@@ -1,6 +1,10 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
+//! Tool for generating pseudorandom field elements.
+//!
+//! NOTE: The public API for this module is a work in progress.
+
 use super::field::{FieldElement, FieldError};
 use aes::{
     cipher::{generic_array::GenericArray, FromBlockCipher, NewBlockCipher, StreamCipher},
@@ -13,7 +17,8 @@ use std::marker::PhantomData;
 const BLOCK_SIZE: usize = 16;
 const DEFAULT_BUFFER_SIZE_IN_ELEMENTS: usize = 128;
 const MAXIMUM_BUFFER_SIZE_IN_ELEMENTS: usize = 4096;
-pub const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
+
+pub(crate) const SEED_LENGTH: usize = 2 * BLOCK_SIZE;
 
 pub(crate) fn secret_share<F: FieldElement>(share1: &mut [F]) -> Result<Vec<u8>, getrandom::Error> {
     let mut seed = vec![0; SEED_LENGTH];
@@ -43,9 +48,14 @@ pub(crate) fn extract_share_from_seed<F: FieldElement>(
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, PartialEq, thiserror::Error)]
-pub(crate) enum PrngError {
+pub enum PrngError {
+    /// Tried to construct a PRNG from a seed of invalid length.
     #[error("invalid seed length")]
     SeedLen,
+
+    /// Failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
@@ -75,6 +85,15 @@ impl<F: FieldElement> Prng<F> {
         let mut seed = [0; SEED_LENGTH];
         getrandom(&mut seed)?;
         Ok(Self::new_with_seed_and_optional_length(&seed, Some(length)))
+    }
+
+    /// Creates a PRNG from a seed.
+    pub(crate) fn try_from_seed(seed: &[u8]) -> Result<Self, PrngError> {
+        if seed.len() != SEED_LENGTH {
+            return Err(PrngError::SeedLen);
+        }
+
+        Ok(Self::new_with_seed_and_optional_length(seed, None))
     }
 
     fn new_with_seed_and_optional_length(seed: &[u8], length: Option<usize>) -> Self {

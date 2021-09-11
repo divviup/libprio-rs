@@ -7,7 +7,7 @@ use crate::pcp::gadgets::{MeanVarUnsigned, Mul, PolyEval};
 use crate::pcp::{Gadget, PcpError, Value};
 use crate::polynomial::poly_range_check;
 
-use std::convert::{Infallible, TryFrom};
+use std::convert::TryFrom;
 use std::mem::size_of;
 
 /// Errors propagated by methods in this module.
@@ -40,7 +40,6 @@ impl<F: FieldElement> Boolean<F> {
 
 impl<F: FieldElement> Value<F> for Boolean<F> {
     type Param = ();
-    type TryFromError = Infallible;
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
@@ -89,9 +88,9 @@ impl<F: FieldElement> Value<F> for Boolean<F> {
 }
 
 impl<F: FieldElement> TryFrom<((), &[F])> for Boolean<F> {
-    type Error = Infallible;
+    type Error = TypeError;
 
-    fn try_from(val: ((), &[F])) -> Result<Self, Infallible> {
+    fn try_from(val: ((), &[F])) -> Result<Self, TypeError> {
         Ok(Self {
             data: val.1.to_vec(),
             range: poly_range_check(0, 2),
@@ -133,7 +132,6 @@ impl<F: FieldElement> PolyCheckedVector<F> {
 
 impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
     type Param = Vec<F>; // A polynomial
-    type TryFromError = Infallible;
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
@@ -180,9 +178,9 @@ impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
 }
 
 impl<F: FieldElement> TryFrom<(Vec<F>, &[F])> for PolyCheckedVector<F> {
-    type Error = Infallible;
+    type Error = TypeError;
 
-    fn try_from(val: (Vec<F>, &[F])) -> Result<Self, Infallible> {
+    fn try_from(val: (Vec<F>, &[F])) -> Result<Self, TypeError> {
         Ok(Self {
             data: val.1.to_vec(),
             poly: val.0,
@@ -250,7 +248,6 @@ impl<F: FieldElement> MeanVarUnsignedVector<F> {
 
 impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
     type Param = usize; // Length of each integer in bits
-    type TryFromError = TypeError;
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         let bits = self.bits;
