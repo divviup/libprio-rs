@@ -9,7 +9,6 @@ use aes::{
     },
     Aes128, Aes128Ctr,
 };
-use blake3;
 use getrandom::getrandom;
 
 use std::marker::PhantomData;
