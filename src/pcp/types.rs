@@ -84,12 +84,12 @@ impl<F: FieldElement> Value<F> for Boolean<F> {
     fn param(&self) -> Self::Param {}
 }
 
-impl<F: FieldElement> TryFrom<((), Vec<F>)> for Boolean<F> {
+impl<F: FieldElement> TryFrom<((), &[F])> for Boolean<F> {
     type Error = Infallible;
 
-    fn try_from(val: ((), Vec<F>)) -> Result<Self, Infallible> {
+    fn try_from(val: ((), &[F])) -> Result<Self, Infallible> {
         Ok(Self {
-            data: val.1,
+            data: val.1.to_vec(),
             range: poly_range_check(0, 2),
         })
     }
@@ -171,12 +171,12 @@ impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
     }
 }
 
-impl<F: FieldElement> TryFrom<(Vec<F>, Vec<F>)> for PolyCheckedVector<F> {
+impl<F: FieldElement> TryFrom<(Vec<F>, &[F])> for PolyCheckedVector<F> {
     type Error = Infallible;
 
-    fn try_from(val: (Vec<F>, Vec<F>)) -> Result<Self, Infallible> {
+    fn try_from(val: (Vec<F>, &[F])) -> Result<Self, Infallible> {
         Ok(Self {
-            data: val.1,
+            data: val.1.to_vec(),
             poly: val.0,
         })
     }
@@ -324,12 +324,12 @@ impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
     }
 }
 
-impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for MeanVarUnsignedVector<F> {
+impl<F: FieldElement> TryFrom<(usize, &[F])> for MeanVarUnsignedVector<F> {
     type Error = TypeError;
 
-    fn try_from(val: (usize, Vec<F>)) -> Result<Self, TypeError> {
+    fn try_from(val: (usize, &[F])) -> Result<Self, TypeError> {
         let bits = val.0;
-        let data = val.1;
+        let data = val.1.to_vec();
         let len = data.len() / (bits + 1);
 
         if data.len() % (bits + 1) != 0 {
@@ -352,6 +352,7 @@ mod tests {
     use super::*;
     use crate::field::{rand, split, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
+    use assert_matches::assert_matches;
 
     // Number of shares to split input and proofs into in `pcp_test`.
     const NUM_SHARES: usize = 3;
@@ -396,9 +397,9 @@ mod tests {
             data: vec![],
             range: poly_range_check(0, 2),
         };
-        assert_eq!(
-            malformed_x.valid(&mut malformed_x.gadget(), &[]).err(),
-            Some(PcpError::CircuitInLen),
+        assert_matches!(
+            malformed_x.valid(&mut malformed_x.gadget(), &[]),
+            Err(PcpError::CircuitInLen)
         );
 
         // Try running the validity circuit on an input that's too large.
@@ -406,9 +407,9 @@ mod tests {
             data: vec![TestField::zero(), TestField::zero()],
             range: poly_range_check(0, 2),
         };
-        assert_eq!(
-            malformed_x.valid(&mut malformed_x.gadget(), &[]).err(),
-            Some(PcpError::CircuitInLen),
+        assert_matches!(
+            malformed_x.valid(&mut malformed_x.gadget(), &[]),
+            Err(PcpError::CircuitInLen)
         );
     }
 
@@ -597,7 +598,7 @@ mod tests {
 
         // Ensure that the input can be constructed from its parameters and its encoding as a
         // sequence of field elements.
-        assert_eq!(x, &V::try_from((x.param(), x.as_slice().to_vec())).unwrap());
+        assert_eq!(x, &V::try_from((x.param(), x.as_slice())).unwrap());
 
         // Run the validity circuit.
         let v = x.valid(&mut g, &joint_rand).unwrap();
@@ -630,7 +631,7 @@ mod tests {
             .into_iter()
             .enumerate()
             .map(|(i, data)| {
-                let mut share = V::try_from((x.param(), data)).unwrap();
+                let mut share = V::try_from((x.param(), &data)).unwrap();
                 share.set_leader(i == 0);
                 share
             })

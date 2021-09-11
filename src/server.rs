@@ -7,7 +7,7 @@ use crate::{
     field::{merge_vector, FieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
     prng::{extract_share_from_seed, Prng, PrngError},
-    util::{deserialize, proof_length, unpack_proof, SerializeError},
+    util::{proof_length, unpack_proof, SerializeError},
 };
 use serde::{Deserialize, Serialize};
 
@@ -100,7 +100,7 @@ impl<F: FieldElement> Server<F> {
     fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<F>, ServerError> {
         let share = decrypt_share(encrypted_share, &self.private_key)?;
         Ok(if self.is_first_server {
-            deserialize(&share)?
+            F::byte_slice_into_vec(&share)?
         } else {
             let len = proof_length(self.dimension);
             extract_share_from_seed(len, &share)?

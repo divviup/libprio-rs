@@ -8,7 +8,7 @@ use crate::{
     field::FieldElement,
     polynomial::{poly_fft, PolyAuxMemory},
     prng::Prng,
-    util::{proof_length, serialize, unpack_proof_mut},
+    util::{proof_length, unpack_proof_mut},
 };
 
 use std::convert::TryFrom;
@@ -99,7 +99,7 @@ impl<F: FieldElement> Client<F> {
         // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
         // in-place
         let share2 = crate::prng::secret_share(&mut proof)?;
-        let share1 = serialize(&proof);
+        let share1 = F::slice_into_byte_vec(&proof);
         // encrypt shares with respective keys
         let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
         let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
