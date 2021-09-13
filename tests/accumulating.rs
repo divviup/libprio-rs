@@ -36,7 +36,7 @@ fn accumulation() {
     for _ in 0..number_of_clients {
         // some random data
         let data = (0..dim)
-            .map(|_| Field32::from(rng.gen_range(0, 2)))
+            .map(|_| Field32::from(rng.gen_range(0..2)))
             .collect::<Vec<Field32>>();
 
         // update reference count
