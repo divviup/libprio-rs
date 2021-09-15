@@ -8,6 +8,9 @@
 //! Implementation of the [Prio](https://crypto.stanford.edu/prio/) private data aggregation
 //! protocol. For now we only support 0 / 1 vectors.
 
+#[macro_use]
+extern crate static_assertions;
+
 pub mod benchmarked;
 pub mod client;
 pub mod encrypt;
@@ -16,6 +19,7 @@ pub mod field;
 mod fp;
 pub mod pcp;
 mod polynomial;
-mod prng;
+pub mod ppm;
+pub mod prng;
 pub mod server;
 pub mod util;

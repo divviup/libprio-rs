@@ -131,6 +131,7 @@ use std::fmt::Debug;
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
+use crate::pcp::types::TypeError;
 use crate::polynomial::poly_eval;
 
 pub mod gadgets;
@@ -206,17 +207,15 @@ pub enum PcpError {
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value<F: FieldElement>: Sized
+pub trait Value<F: FieldElement>:
+    Sized
     + PartialEq
     + Eq
     + Debug
-    + for<'a> TryFrom<(<Self as Value<F>>::Param, &'a [F]), Error = <Self as Value<F>>::TryFromError>
+    + for<'a> TryFrom<(<Self as Value<F>>::Param, &'a [F]), Error = TypeError>
 {
     /// Parameters used to construct a value of this type from a vector of field elements.
     type Param;
-
-    /// Error returned when converting a `(Param, Vec<F>)` to a `Value<F>` fails.
-    type TryFromError: Debug;
 
     /// Evaluates the validity circuit on the given input (i.e., `self`) and returns the output.
     /// `joint_rand` is the joint randomness shared by the prover and verifier. `g` is the sequence
@@ -484,7 +483,7 @@ impl<F: FieldElement> Gadget<F> for ProveShimGadget<F> {
 /// The output of `prove`, a proof of an input's validity.
 #[derive(Clone, Debug)]
 pub struct Proof<F: FieldElement> {
-    data: Vec<F>,
+    pub(crate) data: Vec<F>,
 }
 
 impl<F: FieldElement> Proof<F> {
@@ -713,9 +712,9 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
 }
 
 /// The output of `query`, the verifier message generated for a proof.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Verifier<F: FieldElement> {
-    data: Vec<F>,
+    pub(crate) data: Vec<F>,
 }
 
 impl<F: FieldElement> Verifier<F> {
@@ -809,9 +808,8 @@ mod tests {
     use crate::field::{rand, split, Field126};
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::pcp::types::Boolean;
+    use crate::pcp::types::TypeError;
     use crate::polynomial::poly_range_check;
-
-    use std::convert::Infallible;
 
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
@@ -898,7 +896,6 @@ mod tests {
 
     impl<F: FieldElement> Value<F> for TestValue<F> {
         type Param = ();
-        type TryFromError = Infallible;
 
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
             if joint_rand.len() != self.joint_rand_len() {
@@ -957,9 +954,9 @@ mod tests {
     }
 
     impl<F: FieldElement> TryFrom<((), &[F])> for TestValue<F> {
-        type Error = Infallible;
+        type Error = TypeError;
 
-        fn try_from(val: ((), &[F])) -> Result<Self, Infallible> {
+        fn try_from(val: ((), &[F])) -> Result<Self, TypeError> {
             Ok(Self {
                 data: val.1.to_vec(),
             })
