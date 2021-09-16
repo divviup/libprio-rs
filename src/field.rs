@@ -6,15 +6,18 @@
 //! Each field has an associated parameter called the "generator" that generates a multiplicative
 //! subgroup of order `2^n` for some `n`.
 
-use crate::fp::{FP126, FP32, FP64, FP80};
-use crate::prng::{random_vector, PrngError};
-use serde::{Deserialize, Serialize};
+use crate::{
+    fp::{FP126, FP32, FP64, FP80},
+    prng::{random_vector, PrngError},
+};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     cmp::min,
     convert::TryFrom,
-    fmt::{Debug, Display, Formatter},
+    fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
     io::{Cursor, Read},
+    marker::PhantomData,
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign},
 };
 
@@ -184,13 +187,46 @@ pub trait FieldElement:
     }
 }
 
+/// serde Visitor implementation used to generically deserialize `FieldElement`
+/// values from byte arrays.
+struct FieldElementVisitor<F: FieldElement> {
+    phantom: PhantomData<F>,
+}
+
+impl<'de, F: FieldElement> Visitor<'de> for FieldElementVisitor<F> {
+    type Value = F;
+
+    fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
+        formatter.write_fmt(format_args!("an array of {} bytes", F::ENCODED_SIZE))
+    }
+
+    fn visit_bytes<E>(self, v: &[u8]) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Self::Value::try_from(v).map_err(E::custom)
+    }
+
+    fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+    where
+        A: serde::de::SeqAccess<'de>,
+    {
+        let mut bytes = vec![];
+        while let Some(byte) = seq.next_element()? {
+            bytes.push(byte);
+        }
+
+        self.visit_bytes(&bytes)
+    }
+}
+
 macro_rules! make_field {
     (
         $(#[$meta:meta])*
         $elem:ident, $int:ident, $fp:ident, $encoding_size:literal, $encoding_order:expr,
     ) => {
         $(#[$meta])*
-        #[derive(Clone, Copy, PartialOrd, Ord, Default, Deserialize, Serialize)]
+        #[derive(Clone, Copy, PartialOrd, Ord, Default)]
         pub struct $elem(u128);
 
         impl $elem {
@@ -406,6 +442,23 @@ macro_rules! make_field {
         impl Debug for $elem {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
                 write!(f, "{}", $fp.from_elem(self.0))
+            }
+        }
+
+        // We provide custom [`serde::Serialize`] and [`serde::Deserialize`] implementations because
+        // the derived implementations would represent `FieldElement` values as the backing `u128`,
+        // which is not what we want because (1) we can be more efficient in all cases and (2) in
+        // some circumstances, [some serializers don't support `u128`](https://github.com/serde-rs/json/issues/625).
+        impl Serialize for $elem {
+            fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+                let bytes: [u8; $elem::ENCODED_SIZE] = (*self).into();
+                serializer.serialize_bytes(&bytes)
+            }
+        }
+
+        impl<'de> Deserialize<'de> for $elem {
+            fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<$elem, D::Error> {
+                deserializer.deserialize_bytes(FieldElementVisitor { phantom: PhantomData })
             }
         }
 

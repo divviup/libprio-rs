@@ -127,15 +127,15 @@
 //! - \[BBC+19\] Boneh et al. "[Zero-Knowledge Proofs on Secret-Shared Data via Fully Linear
 //! PCPs.](https://eprint.iacr.org/2019/188)" CRYPTO 2019.
 
-use std::any::Any;
-use std::convert::TryFrom;
-use std::fmt::Debug;
-
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
 use crate::pcp::types::TypeError;
 use crate::polynomial::poly_eval;
+use serde::{Deserialize, Serialize};
+use std::any::Any;
+use std::convert::TryFrom;
+use std::fmt::Debug;
 
 pub mod gadgets;
 pub mod types;
@@ -717,7 +717,7 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
 }
 
 /// The output of `query`, the verifier message generated for a proof.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Verifier<F: FieldElement> {
     pub(crate) data: Vec<F>,
 }
