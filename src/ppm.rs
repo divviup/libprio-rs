@@ -33,16 +33,14 @@
 //! NOTE: This protocol implemented here is a prototype and has not undergone security analysis.
 //! Use at your own risk.
 
-use std::convert::TryFrom;
-
-use getrandom::getrandom;
-
-use aes::Aes128Ctr;
-
 use crate::field::FieldElement;
 use crate::pcp::types::TypeError;
 use crate::pcp::{decide, prove, query, PcpError, Proof, Value, Verifier};
 use crate::prng::{Prng, PrngError, StreamCipher};
+use aes::Aes128Ctr;
+use getrandom::getrandom;
+use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -73,7 +71,7 @@ pub enum PpmError {
 }
 
 /// A share of an input or proof for Prio.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum Share<F: FieldElement> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
@@ -103,7 +101,7 @@ impl<F: FieldElement> TryFrom<Share<F>> for Vec<F> {
 
 /// The message sent by the client to each aggregator. This includes the client's input share and
 /// the initial message of the input-validation protocol.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct UploadMessage<F: FieldElement> {
     /// The input share.
     pub input_share: Share<F>,
@@ -306,7 +304,7 @@ where
 
 /// The message sent by an aggregator to every other aggregator. This is the final message of the
 /// input-validation protocol.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerifierMessage<F: FieldElement> {
     /// The aggregator's share of the verifier message.
     pub verifier_share: Verifier<F>,

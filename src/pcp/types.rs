@@ -19,7 +19,7 @@ pub enum TypeError {
 }
 
 /// Values of this type encode a simple boolean (either `true` or `false`).
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Boolean<F: FieldElement> {
     data: Vec<F>,  // The encoded input
     range: Vec<F>, // A range check polynomial for [0, 2)
@@ -113,7 +113,7 @@ impl<F: FieldElement> TryFrom<((), &[F])> for Boolean<F> {
 /// ```
 /// The proof technique is based on the SIMD circuit construction of
 /// \[[BBG+19](https://eprint.iacr.org/2019/188), Theorem 5.3\].
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PolyCheckedVector<F: FieldElement> {
     data: Vec<F>,
     poly: Vec<F>,
@@ -196,7 +196,7 @@ impl<F: FieldElement> TryFrom<(Vec<F>, &[F])> for PolyCheckedVector<F> {
 /// `xx`, which is the integer raised to the power of two. The validity circuit checks that the
 /// integer represented by `x_vec` is the square root of `xx`. It is based on the SIMD circuit of
 /// \[BBG+19, Theorem 5.3\].
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct MeanVarUnsignedVector<F: FieldElement> {
     data: Vec<F>,
     /// The maximum length of each integer.
