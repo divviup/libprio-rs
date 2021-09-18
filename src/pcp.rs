@@ -719,7 +719,7 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
 /// The output of `query`, the verifier message generated for a proof.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Verifier<F: FieldElement> {
-    pub(crate) data: Vec<F>,
+    data: Vec<F>,
 }
 
 impl<F: FieldElement> Verifier<F> {
