@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module implements core functionality of the PPM protocol for Prio. It consists of the
-//! following functions:
+//! This module constructs  a Verifiable Distributed Aggregation Function (VDAF) from a
+//! [`pcp::Value`]. It consists of the following functions:
 //!
 //! * `upload` is run by the client to generate the input and proof shares.
 //!
@@ -41,6 +41,7 @@ use aes::Aes128Ctr;
 use getrandom::getrandom;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+use std::marker::PhantomData;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -174,6 +175,7 @@ impl HelperShare {
 ///
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
+// TODO(cjpatton) Rename to dist_input to align with spec
 pub fn upload<F, V>(input: &V, num_shares: u8) -> Result<Vec<UploadMessage<F>>, PpmError>
 where
     F: FieldElement,
@@ -181,9 +183,9 @@ where
 {
     assert_safe();
 
-    if num_shares < 2 {
+    if num_shares == 0 {
         return Err(PpmError::Ppm(format!(
-            "upload(): at least 2 shares are required; got {}",
+            "upload(): at least one share is required; got {}",
             num_shares
         )));
     }
@@ -320,9 +322,9 @@ where
     F: FieldElement,
     V: Value<F>,
 {
+    phantom: PhantomData<F>,
     input_share: V,
-    verifier_share: Verifier<F>,
-    joint_rand_seed_hint: Vec<u8>,
+    joint_rand_seed: Vec<u8>,
 }
 
 /// Run by each aggregator, this consumes the [`UploadMessage`] message sent from the client and
@@ -335,6 +337,7 @@ where
 /// share.
 /// * `param` is used to reconstruct the input share from the raw message.
 /// * `query_rand_seed` is used to derive the query randomness shared by all the aggregators.
+// TODO(cjpatton) Rename to dist_start to align with spec
 pub fn verify_start<F, V>(
     msg: UploadMessage<F>,
     param: V::Param,
@@ -380,9 +383,9 @@ where
 
     // Prepare the output state and message.
     let state = AggregatorState {
+        phantom: PhantomData,
         input_share,
-        verifier_share: verifier_share.clone(),
-        joint_rand_seed_hint: msg.joint_rand_seed_hint,
+        joint_rand_seed,
     };
 
     let out = VerifierMessage {
@@ -393,8 +396,9 @@ where
     Ok((state, out))
 }
 
-/// Run by each aggregator, this consumes the [`VerifierMessage`] messages broadcast by each of the
-/// other aggregators. It returns the aggregator's input share only if the input is valid.
+/// Run by each aggregator, this consumes the [`VerifierMessage`] messages broadcast by all of the
+/// aggregators. It returns the aggregator's input share only if the input is valid.
+// TODO(cjpatton) Rename to dist_finish to align with spec
 pub fn verify_finish<F, V>(
     state: AggregatorState<F, V>,
     msgs: Vec<VerifierMessage<F>>,
@@ -405,9 +409,15 @@ where
 {
     assert_safe();
 
+    if msgs.is_empty() {
+        return Err(PpmError::Ppm(
+            "verify_finish(): expected at least one inbound messages; got none".to_string(),
+        ));
+    }
+
     // Combine the verifier messages.
-    let mut verifier_data = state.verifier_share.data;
-    let mut joint_rand_seed_check = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
+    let mut joint_rand_seed = state.joint_rand_seed;
+    let mut verifier_data = vec![F::zero(); msgs[0].verifier_share.as_slice().len()];
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
             return Err(PpmError::Ppm(format!(
@@ -417,20 +427,17 @@ where
             )));
         }
 
-        for (x, y) in verifier_data.iter_mut().zip(msg.verifier_share.data) {
-            *x += y;
+        for (x, y) in verifier_data.iter_mut().zip(msg.verifier_share.as_slice()) {
+            *x += *y;
         }
 
-        for (x, y) in joint_rand_seed_check
-            .iter_mut()
-            .zip(msg.joint_rand_seed_share)
-        {
+        for (x, y) in joint_rand_seed.iter_mut().zip(msg.joint_rand_seed_share) {
             *x ^= y;
         }
     }
 
     // Check that the joint randomness was correct.
-    if joint_rand_seed_check != state.joint_rand_seed_hint {
+    if joint_rand_seed != [0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE] {
         return Err(PpmError::Validity("joint randomness check failed"));
     }
 
@@ -476,18 +483,8 @@ mod tests {
 
         // Aggregators decide whether the input is valid based on the verifier messages.
         let mut output = vec![Field64::zero(); input.as_slice().len()];
-        for (i, state) in states.into_iter().enumerate() {
-            // Gather the messages sent to aggregator i.
-            let mut verifiers_for_aggregator: Vec<VerifierMessage<Field64>> =
-                Vec::with_capacity(num_shares - 1);
-            for (j, verifier) in verifiers.iter().enumerate() {
-                if i != j {
-                    verifiers_for_aggregator.push(verifier.clone());
-                }
-            }
-
-            // Run aggregator i.
-            let output_share = verify_finish(state, verifiers_for_aggregator).unwrap();
+        for state in states {
+            let output_share = verify_finish(state, verifiers.clone()).unwrap();
             for (x, y) in output.iter_mut().zip(output_share.as_slice()) {
                 *x += *y;
             }
