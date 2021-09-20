@@ -359,9 +359,8 @@ impl<F: FieldElement> TryFrom<(usize, &[F])> for MeanVarUnsignedVector<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{split, Field64 as TestField};
+    use crate::field::{random_vector, split, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
-    use crate::prng::random_vector;
 
     use assert_matches::assert_matches;
 

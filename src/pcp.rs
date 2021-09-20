@@ -14,8 +14,7 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value};
-//! use prio::field::{FieldElement, Field64};
-//! use prio::prng::random_vector;
+//! use prio::field::{random_vector, FieldElement, Field64};
 //!
 //! // The prover generates a proof `pf` that its input `x` is a valid encoding
 //! // of a boolean (either `true` or `false`). Both the input and proof are
@@ -48,8 +47,7 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value};
-//! use prio::field::{FieldElement, Field64};
-//! use prio::prng::random_vector;
+//! use prio::field::{random_vector, FieldElement, Field64};
 //!
 //! use std::convert::TryFrom;
 //!
@@ -73,8 +71,7 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-//! use prio::field::{split, FieldElement, Field64};
-//! use prio::prng::random_vector;
+//! use prio::field::{split, random_vector, FieldElement, Field64};
 //!
 //! use std::convert::TryFrom;
 //!
@@ -141,6 +138,7 @@ pub mod gadgets;
 pub mod types;
 
 /// Errors propagated by methods in this module.
+// TODO(cjpatton) Consolidate the set of errors here. Lots of variants isn't super helpful.
 #[derive(Debug, thiserror::Error)]
 pub enum PcpError {
     /// The caller of an arithmetic circuit provided the wrong number of inputs. This error may
@@ -227,8 +225,7 @@ pub trait Value<F: FieldElement>:
     /// ```
     /// use prio::pcp::types::Boolean;
     /// use prio::pcp::Value;
-    /// use prio::field::{FieldElement, Field64};
-    /// use prio::prng::random_vector;
+    /// use prio::field::{random_vector, FieldElement, Field64};
     ///
     /// let x: Boolean<Field64> = Boolean::new(false);
     /// let joint_rand = random_vector(x.joint_rand_len()).unwrap();
@@ -277,8 +274,7 @@ pub trait Value<F: FieldElement>:
     /// ```
     /// use prio::pcp::types::MeanVarUnsignedVector;
     /// use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-    /// use prio::field::{split, FieldElement, Field64};
-    /// use prio::prng::random_vector;
+    /// use prio::field::{random_vector, split, FieldElement, Field64};
     ///
     /// use std::convert::TryFrom;
     ///
@@ -810,12 +806,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{split, Field126};
+    use crate::field::{random_vector, split, Field126};
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::pcp::types::Boolean;
     use crate::pcp::types::TypeError;
     use crate::polynomial::poly_range_check;
-    use crate::prng::random_vector;
 
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.

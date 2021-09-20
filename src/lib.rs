@@ -19,7 +19,7 @@ pub mod field;
 mod fp;
 pub mod pcp;
 mod polynomial;
-pub mod prng;
+mod prng;
 pub mod server;
 pub mod util;
 pub mod vdaf;
