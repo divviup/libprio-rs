@@ -33,42 +33,43 @@
 //! NOTE: This protocol implemented here is a prototype and has not undergone security analysis.
 //! Use at your own risk.
 
+pub mod suite;
+
 use crate::field::FieldElement;
 use crate::pcp::types::TypeError;
 use crate::pcp::{decide, prove, query, PcpError, Proof, Value, Verifier};
-use crate::prng::{Prng, PrngError, StreamCipher};
-use aes::Aes128Ctr;
-use getrandom::getrandom;
+use crate::prng::{Prng, PrngError};
+use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite, SuiteError};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::marker::PhantomData;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
-pub enum PpmError {
+pub enum VdafError {
     /// An error occurred.
     #[error("ppm error: {0}")]
-    Ppm(String),
+    Uncategorized(String),
 
     /// The distributed input was deemed invalid.
     #[error("ppm error: invalid distributed input: {0}")]
     Validity(&'static str),
 
     /// PCP error.
-    #[error("ppm error: pcp error: {0}")]
+    #[error("pcp error: {0}")]
     Pcp(#[from] PcpError),
 
     /// Type error.
-    #[error("ppm error: type error: {0}")]
+    #[error("type error: {0}")]
     Type(#[from] TypeError),
 
     /// PRNG error.
-    #[error("ppm error: prng error: {0}")]
+    #[error("prng error: {0}")]
     Prng(#[from] PrngError),
 
-    /// Calling get_random() returned an error.
-    #[error("ppm error: getrandom error: {0}")]
-    GetRandom(#[from] getrandom::Error),
+    /// Suite error.
+    #[error("suite error: {0}")]
+    Suite(#[from] SuiteError),
 }
 
 /// A share of an input or proof for Prio.
@@ -80,20 +81,20 @@ pub enum Share<F: FieldElement> {
     /// A compressed share, typically sent to the helper.
     Helper {
         /// The seed for the pseudorandom generator.
-        seed: Vec<u8>,
+        seed: Key,
         /// The length of the uncompressed share.
         length: usize,
     },
 }
 
 impl<F: FieldElement> TryFrom<Share<F>> for Vec<F> {
-    type Error = PpmError;
+    type Error = VdafError;
 
-    fn try_from(share: Share<F>) -> Result<Self, PpmError> {
+    fn try_from(share: Share<F>) -> Result<Self, VdafError> {
         match share {
             Share::Leader(data) => Ok(data),
             Share::Helper { seed, length } => {
-                let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&seed)?;
+                let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&seed));
                 Ok(prng.take(length).collect())
             }
         }
@@ -111,60 +112,28 @@ pub struct UploadMessage<F: FieldElement> {
     pub proof_share: Share<F>,
 
     /// The sum of the joint randomness seed shares sent to the other aggregators.
-    pub joint_rand_seed_hint: Vec<u8>,
+    pub joint_rand_seed_hint: Key,
 
     /// The blinding factor, used to derive the aggregator's joint randomness seed share.
-    pub blind: Vec<u8>,
-}
-
-fn assert_safe() {
-    // TODO(cjpatton) Replace this hack with a more consistent API for the Prio ciphersuite.Prng
-    // should be constructed with an implementation of the following trait:
-    //
-    // pub trait Cipher {
-    //    // Panics if `seed.len() != StreamCipher::KEY_LEN`.
-    //    fn new_stream_cipher(seed: &[u8]) -> StreamCipher;
-    //
-    //    // Panics if `Hasher::OUT_LEN != StreamCipher::KEY_LEN`.
-    //    fn new_hasher() -> Hasher;
-    // }
-    //
-    // pub trait StreamCipher {
-    //    const KEY_LEN: usize;
-    //
-    //    /// Fill `out` with the next `out.len()` bytes of the stream cipher.
-    //    fn fill(out: &mut [u8]);
-    // }
-    //
-    // pub trait Hasher<const OUT_LEN: usize> {
-    //    const OUT_LEN: usize;
-    //
-    //    /// Appends `input` to the hash input.
-    //    fn update(input: &[u8]);
-    //
-    //    /// Panics if `out.len() != Self::OUT_LEN`.
-    //    fn finalize(out: &mut [u8]);
-    // }
-    const_assert_eq!(blake3::KEY_LEN, Aes128Ctr::STREAM_CIPHER_SEED_SIZE);
-    const_assert_eq!(blake3::OUT_LEN, Aes128Ctr::STREAM_CIPHER_SEED_SIZE);
+    pub blind: Key,
 }
 
 #[derive(Clone)]
 struct HelperShare {
-    input_share: Vec<u8>,
-    proof_share: Vec<u8>,
-    joint_rand_seed_hint: Vec<u8>,
-    blind: Vec<u8>,
+    input_share: Key,
+    proof_share: Key,
+    joint_rand_seed_hint: Key,
+    blind: Key,
 }
 
 impl HelperShare {
-    fn new() -> Self {
-        HelperShare {
-            input_share: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
-            proof_share: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
-            joint_rand_seed_hint: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
-            blind: vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE],
-        }
+    fn new(suite: Suite) -> Result<Self, VdafError> {
+        Ok(HelperShare {
+            input_share: Key::generate(suite)?,
+            proof_share: Key::generate(suite)?,
+            joint_rand_seed_hint: Key::uninitialized(suite),
+            blind: Key::generate(suite)?,
+        })
     }
 }
 
@@ -176,15 +145,17 @@ impl HelperShare {
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
 // TODO(cjpatton) Rename to dist_input to align with spec
-pub fn upload<F, V>(input: &V, num_shares: u8) -> Result<Vec<UploadMessage<F>>, PpmError>
+pub fn upload<F, V>(
+    suite: Suite,
+    input: &V,
+    num_shares: u8,
+) -> Result<Vec<UploadMessage<F>>, VdafError>
 where
     F: FieldElement,
     V: Value<F>,
 {
-    assert_safe();
-
     if num_shares == 0 {
-        return Err(PpmError::Ppm(format!(
+        return Err(VdafError::Uncategorized(format!(
             "upload(): at least one share is required; got {}",
             num_shares
         )));
@@ -194,29 +165,24 @@ where
     let num_shares = num_shares as usize;
 
     // Generate the input shares and compute the joint randomness.
-    let mut helper_shares = vec![HelperShare::new(); num_shares - 1];
+    let mut helper_shares = vec![HelperShare::new(suite)?; num_shares - 1];
     let mut leader_input_share = input.as_slice().to_vec();
-    let mut joint_rand_seed = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
+    let mut joint_rand_seed = Key::uninitialized(suite);
     let mut aggregator_id = 1; // ID of the first helper
     for helper in helper_shares.iter_mut() {
-        getrandom(&mut helper.blind)?;
-        getrandom(&mut helper.input_share)?;
-
-        let mut hasher = blake3::Hasher::new();
-        hasher.update(&[aggregator_id]);
-        hasher.update(&helper.blind);
-        let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&helper.input_share)?;
+        let mut deriver = KeyDeriver::from_key(&helper.blind);
+        deriver.update(&[aggregator_id]);
+        let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&helper.input_share));
         for (x, y) in leader_input_share.iter_mut().zip(prng).take(input_len) {
             *x -= y;
-            hasher.update(&y.into());
+            deriver.update(&y.into());
         }
 
-        helper
-            .joint_rand_seed_hint
-            .copy_from_slice(hasher.finalize().as_bytes());
+        helper.joint_rand_seed_hint = deriver.finish();
         for (x, y) in joint_rand_seed
+            .as_mut_slice()
             .iter_mut()
-            .zip(helper.joint_rand_seed_hint.iter())
+            .zip(helper.joint_rand_seed_hint.as_slice().iter())
         {
             *x ^= y;
         }
@@ -224,29 +190,27 @@ where
         aggregator_id += 1; // ID of the next helper
     }
 
-    let mut leader_blind = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
-    getrandom(&mut leader_blind)?;
+    let leader_blind = Key::generate(suite)?;
 
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&[0]); // ID of the leader
-    hasher.update(&leader_blind);
+    let mut deriver = KeyDeriver::from_key(&leader_blind);
+    deriver.update(&[0]); // ID of the leader
     for x in leader_input_share.iter() {
-        hasher.update(&(*x).into());
+        deriver.update(&(*x).into());
     }
 
-    let mut leader_joint_rand_seed_hint = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
-    leader_joint_rand_seed_hint.copy_from_slice(hasher.finalize().as_bytes());
+    let mut leader_joint_rand_seed_hint = deriver.finish();
     for (x, y) in joint_rand_seed
+        .as_mut_slice()
         .iter_mut()
-        .zip(leader_joint_rand_seed_hint.iter())
+        .zip(leader_joint_rand_seed_hint.as_slice().iter())
     {
         *x ^= y;
     }
 
     // Run the proof-generation algorithm.
-    let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&joint_rand_seed)?;
+    let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
     let joint_rand: Vec<F> = prng.take(input.joint_rand_len()).collect();
-    let prng: Prng<F, Aes128Ctr> = Prng::new()?;
+    let prng: Prng<F> = Prng::generate(suite)?;
     let prove_rand: Vec<F> = prng.take(input.prove_rand_len()).collect();
     let proof = prove(input, &prove_rand, &joint_rand)?;
 
@@ -254,25 +218,25 @@ where
     let proof_len = proof.as_slice().len();
     let mut leader_proof_share = proof.data;
     for helper in helper_shares.iter_mut() {
-        getrandom(&mut helper.proof_share)?;
-
-        let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&helper.proof_share)?;
+        let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&helper.proof_share));
         for (x, y) in leader_proof_share.iter_mut().zip(prng).take(proof_len) {
             *x -= y;
         }
 
         for (x, y) in helper
             .joint_rand_seed_hint
+            .as_mut_slice()
             .iter_mut()
-            .zip(joint_rand_seed.iter())
+            .zip(joint_rand_seed.as_slice().iter())
         {
             *x ^= y;
         }
     }
 
     for (x, y) in leader_joint_rand_seed_hint
+        .as_mut_slice()
         .iter_mut()
-        .zip(joint_rand_seed.iter())
+        .zip(joint_rand_seed.as_slice().iter())
     {
         *x ^= y;
     }
@@ -312,7 +276,7 @@ pub struct VerifierMessage<F: FieldElement> {
     pub verifier_share: Verifier<F>,
 
     /// The aggregator's share of the joint randomness, derived from its input share.
-    pub joint_rand_seed_share: Vec<u8>,
+    pub joint_rand_seed_share: Key,
 }
 
 /// The initial state of an aggregate upon receiving the [`UploadMessage`] message from the client.
@@ -324,7 +288,7 @@ where
 {
     phantom: PhantomData<F>,
     input_share: V,
-    joint_rand_seed: Vec<u8>,
+    joint_rand_seed: Key,
 }
 
 /// Run by each aggregator, this consumes the [`UploadMessage`] message sent from the client and
@@ -339,16 +303,21 @@ where
 /// * `query_rand_seed` is used to derive the query randomness shared by all the aggregators.
 // TODO(cjpatton) Rename to dist_start to align with spec
 pub fn verify_start<F, V>(
+    suite: Suite,
     msg: UploadMessage<F>,
     param: V::Param,
     aggregator_id: u8,
-    query_rand_seed: &[u8],
-) -> Result<(AggregatorState<F, V>, VerifierMessage<F>), PpmError>
+    query_rand_seed: &Key,
+) -> Result<(AggregatorState<F, V>, VerifierMessage<F>), VdafError>
 where
     F: FieldElement,
     V: Value<F>,
 {
-    assert_safe();
+    if query_rand_seed.suite() != suite {
+        return Err(VdafError::Uncategorized(
+            "verify_start(): joint rand seed type does not match suite".to_string(),
+        ));
+    }
 
     let input_share_data: Vec<F> = Vec::try_from(msg.input_share)?;
     let input_share = V::try_from((param, &input_share_data))?;
@@ -357,25 +326,23 @@ where
     let proof_share = Proof::from(proof_share_data);
 
     // Compute the joint randomness.
-    let mut joint_rand_seed_share = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
-    let mut hasher = blake3::Hasher::new();
-    hasher.update(&[aggregator_id]);
-    hasher.update(&msg.blind);
+    let mut deriver = KeyDeriver::from_key(&msg.blind);
+    deriver.update(&[aggregator_id]);
     for x in input_share.as_slice() {
-        hasher.update(&(*x).into());
+        deriver.update(&(*x).into());
     }
-    joint_rand_seed_share.copy_from_slice(hasher.finalize().as_bytes());
+    let joint_rand_seed_share = deriver.finish();
 
-    let mut joint_rand_seed = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
-    for (j, x) in joint_rand_seed.iter_mut().enumerate() {
-        *x = msg.joint_rand_seed_hint[j] ^ joint_rand_seed_share[j];
+    let mut joint_rand_seed = Key::uninitialized(suite);
+    for (j, x) in joint_rand_seed.as_mut_slice().iter_mut().enumerate() {
+        *x = msg.joint_rand_seed_hint.as_slice()[j] ^ joint_rand_seed_share.as_slice()[j];
     }
 
-    let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(&joint_rand_seed)?;
+    let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
     let joint_rand: Vec<F> = prng.take(input_share.joint_rand_len()).collect();
 
     // Compute the query randomness.
-    let prng: Prng<F, Aes128Ctr> = Prng::new_with_seed(query_rand_seed)?;
+    let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(query_rand_seed));
     let query_rand: Vec<F> = prng.take(input_share.query_rand_len()).collect();
 
     // Run the query-generation algorithm.
@@ -400,17 +367,16 @@ where
 /// aggregators. It returns the aggregator's input share only if the input is valid.
 // TODO(cjpatton) Rename to dist_finish to align with spec
 pub fn verify_finish<F, V>(
+    suite: Suite,
     state: AggregatorState<F, V>,
     msgs: Vec<VerifierMessage<F>>,
-) -> Result<V, PpmError>
+) -> Result<V, VdafError>
 where
     F: FieldElement,
     V: Value<F>,
 {
-    assert_safe();
-
     if msgs.is_empty() {
-        return Err(PpmError::Ppm(
+        return Err(VdafError::Uncategorized(
             "verify_finish(): expected at least one inbound messages; got none".to_string(),
         ));
     }
@@ -420,7 +386,7 @@ where
     let mut verifier_data = vec![F::zero(); msgs[0].verifier_share.as_slice().len()];
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
-            return Err(PpmError::Ppm(format!(
+            return Err(VdafError::Uncategorized(format!(
                 "verify_finish(): expected verifier share of length {}; got {}",
                 verifier_data.len(),
                 msg.verifier_share.as_slice().len(),
@@ -431,21 +397,25 @@ where
             *x += *y;
         }
 
-        for (x, y) in joint_rand_seed.iter_mut().zip(msg.joint_rand_seed_share) {
+        for (x, y) in joint_rand_seed
+            .as_mut_slice()
+            .iter_mut()
+            .zip(msg.joint_rand_seed_share.as_slice())
+        {
             *x ^= y;
         }
     }
 
     // Check that the joint randomness was correct.
-    if joint_rand_seed != [0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE] {
-        return Err(PpmError::Validity("joint randomness check failed"));
+    if joint_rand_seed != Key::uninitialized(suite) {
+        return Err(VdafError::Validity("joint randomness check failed"));
     }
 
     // Check the proof.
     let verifier = Verifier::from(verifier_data);
     let result = decide(&state.input_share, &verifier)?;
     if !result {
-        return Err(PpmError::Validity("proof check failed"));
+        return Err(VdafError::Validity("proof check failed"));
     }
 
     Ok(state.input_share)
@@ -460,15 +430,15 @@ mod tests {
 
     #[test]
     fn test_prio() {
+        let suite = Suite::Blake3;
         let num_shares = 23;
         let input: Boolean<Field64> = Boolean::new(true);
 
         // Client runs the input and proof distribution algorithms.
-        let uploads = upload(&input, num_shares as u8).unwrap();
+        let uploads = upload(suite, &input, num_shares as u8).unwrap();
 
         // Aggregators agree on query randomness.
-        let mut query_rand_seed = vec![0; Aes128Ctr::STREAM_CIPHER_SEED_SIZE];
-        getrandom(&mut query_rand_seed).unwrap();
+        let query_rand_seed = Key::generate(suite).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let mut states: Vec<AggregatorState<Field64, Boolean<Field64>>> =
@@ -476,7 +446,7 @@ mod tests {
         let mut verifiers: Vec<VerifierMessage<Field64>> = Vec::with_capacity(num_shares);
         for (aggregator_id, upload) in (0..num_shares as u8).zip(uploads.into_iter()) {
             let (state, verifier) =
-                verify_start(upload, (), aggregator_id, &query_rand_seed).unwrap();
+                verify_start(suite, upload, (), aggregator_id, &query_rand_seed).unwrap();
             states.push(state);
             verifiers.push(verifier);
         }
@@ -484,7 +454,7 @@ mod tests {
         // Aggregators decide whether the input is valid based on the verifier messages.
         let mut output = vec![Field64::zero(); input.as_slice().len()];
         for state in states {
-            let output_share = verify_finish(state, verifiers.clone()).unwrap();
+            let output_share = verify_finish(suite, state, verifiers.clone()).unwrap();
             for (x, y) in output.iter_mut().zip(output_share.as_slice()) {
                 *x += *y;
             }

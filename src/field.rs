@@ -8,7 +8,8 @@
 
 use crate::{
     fp::{FP126, FP32, FP64, FP80},
-    prng::{random_vector, PrngError},
+    prng::{Prng, PrngError},
+    vdaf::suite::Suite,
 };
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -604,12 +605,18 @@ pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Result<Vec<Vec<F>
     Ok(outp)
 }
 
+/// Generate a vector of uniform random field elements.
+pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
+    Ok(Prng::generate(Suite::Aes128CtrHmacSha256)?
+        .take(len)
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::fp::MAX_ROOTS;
     use crate::prng::Prng;
-    use aes::Aes128Ctr;
     use assert_matches::assert_matches;
     use std::io::{Cursor, Write};
 
@@ -646,7 +653,7 @@ mod tests {
     // experimental" https://github.com/rust-lang/rust/issues/15701
     #[allow(clippy::eq_op)]
     fn field_element_test<F: FieldElement>() {
-        let mut prng: Prng<F, Aes128Ctr> = Prng::new().unwrap();
+        let mut prng: Prng<F> = Prng::generate(Suite::Aes128CtrHmacSha256).unwrap();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();

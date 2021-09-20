@@ -9,9 +9,8 @@ use crate::{
     polynomial::{poly_fft, PolyAuxMemory},
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof_mut},
+    vdaf::suite::Suite,
 };
-
-use aes::Aes128Ctr;
 
 use std::convert::TryFrom;
 
@@ -20,7 +19,7 @@ use std::convert::TryFrom;
 /// Client is used to create Prio shares.
 #[derive(Debug)]
 pub struct Client<F: FieldElement> {
-    prng: Prng<F, Aes128Ctr>,
+    prng: Prng<F>,
     dimension: usize,
     points_f: Vec<F>,
     points_g: Vec<F>,
@@ -68,7 +67,7 @@ impl<F: FieldElement> Client<F> {
         }
 
         Ok(Client {
-            prng: Prng::new()?,
+            prng: Prng::generate(Suite::Aes128CtrHmacSha256)?,
             dimension,
             points_f: vec![F::zero(); n],
             points_g: vec![F::zero(); n],

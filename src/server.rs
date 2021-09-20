@@ -8,8 +8,8 @@ use crate::{
     polynomial::{poly_interpret_eval, PolyAuxMemory},
     prng::{extract_share_from_seed, Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
+    vdaf::suite::Suite,
 };
-use aes::Aes128Ctr;
 use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations
@@ -59,7 +59,7 @@ impl<F: FieldElement> ValidationMemory<F> {
 /// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server<F: FieldElement> {
-    prng: Prng<F, Aes128Ctr>,
+    prng: Prng<F>,
     dimension: usize,
     is_first_server: bool,
     accumulator: Vec<F>,
@@ -80,7 +80,7 @@ impl<F: FieldElement> Server<F> {
         private_key: PrivateKey,
     ) -> Result<Server<F>, ServerError> {
         Ok(Server {
-            prng: Prng::new()?,
+            prng: Prng::generate(Suite::Aes128CtrHmacSha256)?,
             dimension,
             is_first_server,
             accumulator: vec![F::zero(); dimension],

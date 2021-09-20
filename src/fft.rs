@@ -114,9 +114,8 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{split, Field126, Field32, Field64, Field80, FieldPriov2};
+    use crate::field::{random_vector, split, Field126, Field32, Field64, Field80, FieldPriov2};
     use crate::polynomial::{poly_fft, PolyAuxMemory};
-    use crate::prng::random_vector;
 
     fn discrete_fourier_transform_then_inv_test<F: FieldElement>() -> Result<(), FftError> {
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];

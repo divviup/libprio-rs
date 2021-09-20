@@ -5,11 +5,10 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use prio::benchmarked::*;
 use prio::client::Client;
 use prio::encrypt::PublicKey;
-use prio::field::{Field126 as F, FieldElement};
+use prio::field::{random_vector, Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::pcp::types::{MeanVarUnsignedVector, PolyCheckedVector};
 use prio::pcp::{prove, query, Value};
-use prio::prng::random_vector;
 use prio::server::{generate_verification_message, ValidationMemory};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
