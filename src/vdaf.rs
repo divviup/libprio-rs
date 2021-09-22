@@ -145,15 +145,11 @@ impl HelperShare {
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
 // TODO(cjpatton) Rename to dist_input to align with spec
-pub fn upload<F, V>(
+pub fn upload<V: Value>(
     suite: Suite,
     input: &V,
     num_shares: u8,
-) -> Result<Vec<UploadMessage<F>>, VdafError>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
+) -> Result<Vec<UploadMessage<V::Field>>, VdafError> {
     if num_shares == 0 {
         return Err(VdafError::Uncategorized(format!(
             "upload(): at least one share is required; got {}",
@@ -172,7 +168,7 @@ where
     for helper in helper_shares.iter_mut() {
         let mut deriver = KeyDeriver::from_key(&helper.blind);
         deriver.update(&[aggregator_id]);
-        let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&helper.input_share));
+        let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&helper.input_share));
         for (x, y) in leader_input_share.iter_mut().zip(prng).take(input_len) {
             *x -= y;
             deriver.update(&y.into());
@@ -208,17 +204,17 @@ where
     }
 
     // Run the proof-generation algorithm.
-    let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
-    let joint_rand: Vec<F> = prng.take(input.joint_rand_len()).collect();
-    let prng: Prng<F> = Prng::generate(suite)?;
-    let prove_rand: Vec<F> = prng.take(input.prove_rand_len()).collect();
+    let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
+    let joint_rand: Vec<V::Field> = prng.take(input.joint_rand_len()).collect();
+    let prng: Prng<V::Field> = Prng::generate(suite)?;
+    let prove_rand: Vec<V::Field> = prng.take(input.prove_rand_len()).collect();
     let proof = prove(input, &prove_rand, &joint_rand)?;
 
     // Generate the proof shares and finalize the joint randomness seed hints.
     let proof_len = proof.as_slice().len();
     let mut leader_proof_share = proof.data;
     for helper in helper_shares.iter_mut() {
-        let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&helper.proof_share));
+        let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&helper.proof_share));
         for (x, y) in leader_proof_share.iter_mut().zip(prng).take(proof_len) {
             *x -= y;
         }
@@ -281,12 +277,8 @@ pub struct VerifierMessage<F: FieldElement> {
 
 /// The initial state of an aggregate upon receiving the [`UploadMessage`] message from the client.
 #[derive(Clone, Debug)]
-pub struct AggregatorState<F, V>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
-    phantom: PhantomData<F>,
+pub struct AggregatorState<V: Value> {
+    phantom: PhantomData<V::Field>,
     input_share: V,
     joint_rand_seed: Key,
 }
@@ -302,27 +294,23 @@ where
 /// * `param` is used to reconstruct the input share from the raw message.
 /// * `query_rand_seed` is used to derive the query randomness shared by all the aggregators.
 // TODO(cjpatton) Rename to dist_start to align with spec
-pub fn verify_start<F, V>(
+pub fn verify_start<V: Value>(
     suite: Suite,
-    msg: UploadMessage<F>,
+    msg: UploadMessage<V::Field>,
     param: V::Param,
     aggregator_id: u8,
     query_rand_seed: &Key,
-) -> Result<(AggregatorState<F, V>, VerifierMessage<F>), VdafError>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
+) -> Result<(AggregatorState<V>, VerifierMessage<V::Field>), VdafError> {
     if query_rand_seed.suite() != suite {
         return Err(VdafError::Uncategorized(
             "verify_start(): joint rand seed type does not match suite".to_string(),
         ));
     }
 
-    let input_share_data: Vec<F> = Vec::try_from(msg.input_share)?;
+    let input_share_data: Vec<V::Field> = Vec::try_from(msg.input_share)?;
     let input_share = V::try_from((param, &input_share_data))?;
 
-    let proof_share_data: Vec<F> = Vec::try_from(msg.proof_share)?;
+    let proof_share_data: Vec<V::Field> = Vec::try_from(msg.proof_share)?;
     let proof_share = Proof::from(proof_share_data);
 
     // Compute the joint randomness.
@@ -338,12 +326,12 @@ where
         *x = msg.joint_rand_seed_hint.as_slice()[j] ^ joint_rand_seed_share.as_slice()[j];
     }
 
-    let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
-    let joint_rand: Vec<F> = prng.take(input_share.joint_rand_len()).collect();
+    let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
+    let joint_rand: Vec<V::Field> = prng.take(input_share.joint_rand_len()).collect();
 
     // Compute the query randomness.
-    let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(query_rand_seed));
-    let query_rand: Vec<F> = prng.take(input_share.query_rand_len()).collect();
+    let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(query_rand_seed));
+    let query_rand: Vec<V::Field> = prng.take(input_share.query_rand_len()).collect();
 
     // Run the query-generation algorithm.
     let verifier_share = query(&input_share, &proof_share, &query_rand, &joint_rand)?;
@@ -366,15 +354,11 @@ where
 /// Run by each aggregator, this consumes the [`VerifierMessage`] messages broadcast by all of the
 /// aggregators. It returns the aggregator's input share only if the input is valid.
 // TODO(cjpatton) Rename to dist_finish to align with spec
-pub fn verify_finish<F, V>(
+pub fn verify_finish<V: Value>(
     suite: Suite,
-    state: AggregatorState<F, V>,
-    msgs: Vec<VerifierMessage<F>>,
-) -> Result<V, VdafError>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
+    state: AggregatorState<V>,
+    msgs: Vec<VerifierMessage<V::Field>>,
+) -> Result<V, VdafError> {
     if msgs.is_empty() {
         return Err(VdafError::Uncategorized(
             "verify_finish(): expected at least one inbound messages; got none".to_string(),
@@ -383,7 +367,7 @@ where
 
     // Combine the verifier messages.
     let mut joint_rand_seed = state.joint_rand_seed;
-    let mut verifier_data = vec![F::zero(); msgs[0].verifier_share.as_slice().len()];
+    let mut verifier_data = vec![V::Field::zero(); msgs[0].verifier_share.as_slice().len()];
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
             return Err(VdafError::Uncategorized(format!(
@@ -441,8 +425,7 @@ mod tests {
         let query_rand_seed = Key::generate(suite).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
-        let mut states: Vec<AggregatorState<Field64, Boolean<Field64>>> =
-            Vec::with_capacity(num_shares);
+        let mut states: Vec<AggregatorState<Boolean<Field64>>> = Vec::with_capacity(num_shares);
         let mut verifiers: Vec<VerifierMessage<Field64>> = Vec::with_capacity(num_shares);
         for (aggregator_id, upload) in (0..num_shares as u8).zip(uploads.into_iter()) {
             let (state, verifier) =

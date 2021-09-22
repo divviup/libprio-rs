@@ -138,6 +138,7 @@ pub mod gadgets;
 pub mod types;
 
 /// Errors propagated by methods in this module.
+//
 // TODO(cjpatton) Consolidate the set of errors here. Lots of variants isn't super helpful.
 #[derive(Debug, thiserror::Error)]
 pub enum PcpError {
@@ -208,13 +209,16 @@ pub enum PcpError {
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value<F: FieldElement>:
+pub trait Value:
     Sized
     + PartialEq
     + Eq
     + Debug
-    + for<'a> TryFrom<(<Self as Value<F>>::Param, &'a [F]), Error = TypeError>
+    + for<'a> TryFrom<(<Self as Value>::Param, &'a [Self::Field]), Error = TypeError>
 {
+    /// The finite field used for this type.
+    type Field: FieldElement;
+
     /// Parameters used to construct a value of this type from a vector of field elements.
     type Param;
 
@@ -232,11 +236,14 @@ pub trait Value<F: FieldElement>:
     /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, Field64::zero());
     /// ```
-    fn valid(&self, gadgets: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F])
-        -> Result<F, PcpError>;
+    fn valid(
+        &self,
+        gadgets: &mut Vec<Box<dyn Gadget<Self::Field>>>,
+        joint_rand: &[Self::Field],
+    ) -> Result<Self::Field, PcpError>;
 
     /// Returns a reference to the underlying data.
-    fn as_slice(&self) -> &[F];
+    fn as_slice(&self) -> &[Self::Field];
 
     /// The length of the random input used by both the prover and the verifier.
     fn joint_rand_len(&self) -> usize;
@@ -250,10 +257,10 @@ pub trait Value<F: FieldElement>:
     fn query_rand_len(&self) -> usize;
 
     /// The number of calls to the gadget made when evaluating the validity circuit.
-    ///
-    /// TODO(cjpatton) Consider consolidating this and `gadget` into one call. The benefit would be
-    /// that there is one less thing to worry about when implementing a Value<F>. We would need to
-    /// extend Gadget<F> so that it tells you how many times it gets called.
+    //
+    // TODO(cjpatton) Consider consolidating this and `gadget` into one call. The benefit would be
+    // that there is one less thing to worry about when implementing a Value<F>. We would need to
+    // extend Gadget<F> so that it tells you how many times it gets called.
     fn valid_gadget_calls(&self) -> Vec<usize>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
@@ -262,7 +269,7 @@ pub trait Value<F: FieldElement>:
     /// idea to generalize the proof system to allow multiple gadgets is discussed briefly in
     /// [BBC+19, Remark 4.5], but no construction is given. The construction implemented here
     /// requires security analysis.
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>>;
+    fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>>;
 
     /// Returns a copy of the associated type parameters for this value.
     fn param(&self) -> Self::Param;
@@ -320,9 +327,9 @@ pub trait Value<F: FieldElement>:
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
-///
-/// TODO(cjpatton) Consider extending this API with a `Param` associated type and have it implement
-/// a constructor from an instance of `Param` and the number of times the gadget gets called.
+//
+// TODO(cjpatton) Consider extending this API with a `Param` associated type and have it implement
+// a constructor from an instance of `Param` and the number of times the gadget gets called.
 pub trait Gadget<F: FieldElement> {
     /// Evaluates the gadget on input `inp` and returns the output.
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError>;
@@ -343,11 +350,11 @@ pub trait Gadget<F: FieldElement> {
 }
 
 /// Generate a proof of an input's validity.
-pub fn prove<F, V>(input: &V, prove_rand: &[F], joint_rand: &[F]) -> Result<Proof<F>, PcpError>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
+pub fn prove<V: Value>(
+    input: &V,
+    prove_rand: &[V::Field],
+    joint_rand: &[V::Field],
+) -> Result<Proof<V::Field>, PcpError> {
     let gadget_calls = input.valid_gadget_calls();
 
     let mut prove_rand_len = 0;
@@ -365,7 +372,7 @@ where
                 inner,
                 gadget_calls[idx],
                 &prove_rand[prove_rand_len..prove_rand_len + inner_arity],
-            )?) as Box<dyn Gadget<F>>;
+            )?) as Box<dyn Gadget<V::Field>>;
             prove_rand_len += inner_arity;
 
             Ok(gadget)
@@ -379,7 +386,7 @@ where
             shim[idx].arity() + shim[idx].degree() * (1 + gadget_calls[idx]).next_power_of_two()
         })
         .sum();
-    let mut data = vec![F::zero(); data_len];
+    let mut data = vec![V::Field::zero(); data_len];
 
     // Run the validity circuit with a sequence of "shim" gadgets that record the value of each
     // input wire of each gadget evaluation. These values are used to construct the wire
@@ -392,14 +399,16 @@ where
     for idx in 0..shim.len() {
         let gadget = shim[idx]
             .as_any()
-            .downcast_mut::<ProveShimGadget<F>>()
+            .downcast_mut::<ProveShimGadget<V::Field>>()
             .unwrap();
 
         // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
         // evaluation of the gadget.
         let m = (1 + gadget_calls[idx]).next_power_of_two();
-        let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
-        let mut f = vec![vec![F::zero(); m]; gadget.arity()];
+        let m_inv =
+            V::Field::from(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
+                .inv();
+        let mut f = vec![vec![V::Field::zero(); m]; gadget.arity()];
         for wire in 0..gadget.arity() {
             discrete_fourier_transform(&mut f[wire], &gadget.f_vals[wire], m)?;
             discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
@@ -514,16 +523,12 @@ impl<F: FieldElement> From<Proof<F>> for Vec<u8> {
 /// * `proof` is the proof.
 /// * `query_rand` is the verifier's randomness.
 /// * `joint_rand` is the randomness shared by the prover and verifier.
-pub fn query<F, V>(
+pub fn query<V: Value>(
     input: &V,
-    proof: &Proof<F>,
-    query_rand: &[F],
-    joint_rand: &[F],
-) -> Result<Verifier<F>, PcpError>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
+    proof: &Proof<V::Field>,
+    query_rand: &[V::Field],
+    joint_rand: &[V::Field],
+) -> Result<Verifier<V::Field>, PcpError> {
     let gadget_calls = input.valid_gadget_calls();
 
     let mut proof_len = 0;
@@ -544,7 +549,9 @@ where
             // Make sure the query randomness isn't a root of unity. Evaluating the gadget
             // polynomial at any of these points would be a privacy violation, since these points
             // were used by the prover to construct the wire polynomials.
-            if r.pow(F::Integer::try_from(m).unwrap()) == F::one() {
+            if r.pow(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
+                == V::Field::one()
+            {
                 return Err(PcpError::QueryRandInvalid);
             }
 
@@ -562,7 +569,7 @@ where
                 r,
                 proof_data,
                 gadget_calls[idx],
-            )?) as Box<dyn Gadget<F>>)
+            )?) as Box<dyn Gadget<V::Field>>)
         })
         .collect::<Result<Vec<_>, _>>()?;
 
@@ -599,14 +606,16 @@ where
         let r = query_rand[idx];
         let gadget = shim[idx]
             .as_any()
-            .downcast_ref::<QueryShimGadget<F>>()
+            .downcast_ref::<QueryShimGadget<V::Field>>()
             .unwrap();
 
         // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
         // polynomial at query randomness `r`.
         let m = (1 + gadget_calls[idx]).next_power_of_two();
-        let m_inv = F::from(F::Integer::try_from(m).unwrap()).inv();
-        let mut f = vec![F::zero(); m];
+        let m_inv =
+            V::Field::from(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
+                .inv();
+        let mut f = vec![V::Field::zero(); m];
         for wire in 0..gadget.arity() {
             discrete_fourier_transform(&mut f, &gadget.f_vals[wire], m)?;
             discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
@@ -763,11 +772,7 @@ impl<F: FieldElement> TryFrom<&[Verifier<F>]> for Verifier<F> {
 }
 
 /// Decide if the input (or input share) is valid using the given verifier.
-pub fn decide<F, V>(input: &V, verifier: &Verifier<F>) -> Result<bool, PcpError>
-where
-    F: FieldElement,
-    V: Value<F>,
-{
+pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool, PcpError> {
     let mut gadgets = input.gadget();
 
     if verifier.data.is_empty() {
@@ -775,7 +780,7 @@ where
     }
 
     // Check if the output of the circuit is 0.
-    if verifier.data[0] != F::zero() {
+    if verifier.data[0] != V::Field::zero() {
         return Ok(false);
     }
 
@@ -895,7 +900,8 @@ mod tests {
         }
     }
 
-    impl<F: FieldElement> Value<F> for TestValue<F> {
+    impl<F: FieldElement> Value for TestValue<F> {
+        type Field = F;
         type Param = ();
 
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {

@@ -38,7 +38,8 @@ impl<F: FieldElement> Boolean<F> {
     }
 }
 
-impl<F: FieldElement> Value<F> for Boolean<F> {
+impl<F: FieldElement> Value for Boolean<F> {
+    type Field = F;
     type Param = ();
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
@@ -130,7 +131,8 @@ impl<F: FieldElement> PolyCheckedVector<F> {
     }
 }
 
-impl<F: FieldElement> Value<F> for PolyCheckedVector<F> {
+impl<F: FieldElement> Value for PolyCheckedVector<F> {
+    type Field = F;
     type Param = Vec<F>; // A polynomial
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
@@ -246,7 +248,8 @@ impl<F: FieldElement> MeanVarUnsignedVector<F> {
     }
 }
 
-impl<F: FieldElement> Value<F> for MeanVarUnsignedVector<F> {
+impl<F: FieldElement> Value for MeanVarUnsignedVector<F> {
+    type Field = F;
     type Param = usize; // Length of each integer in bits
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
@@ -594,11 +597,7 @@ mod tests {
         );
     }
 
-    fn pcp_validity_test<F, V>(input: &V, t: &ValidityTestCase)
-    where
-        F: FieldElement,
-        V: Value<F>,
-    {
+    fn pcp_validity_test<V: Value>(input: &V, t: &ValidityTestCase) {
         let mut gadgets = input.gadget();
         let joint_rand = random_vector(input.joint_rand_len()).unwrap();
         let prove_rand = random_vector(input.prove_rand_len()).unwrap();
@@ -616,7 +615,7 @@ mod tests {
         // Run the validity circuit.
         let v = input.valid(&mut gadgets, &joint_rand).unwrap();
         assert_eq!(
-            v == F::zero(),
+            v == V::Field::zero(),
             t.expect_valid,
             "{:?} validity circuit output {}",
             input.as_slice(),
@@ -650,13 +649,13 @@ mod tests {
             })
             .collect();
 
-        let proof_shares: Vec<Proof<F>> = split(proof.as_slice(), NUM_SHARES)
+        let proof_shares: Vec<Proof<V::Field>> = split(proof.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();
 
-        let mut verifier_shares: Vec<Verifier<F>> = Vec::with_capacity(NUM_SHARES);
+        let mut verifier_shares: Vec<Verifier<V::Field>> = Vec::with_capacity(NUM_SHARES);
         for i in 0..NUM_SHARES {
             verifier_shares
                 .push(query(&x_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap());
@@ -675,7 +674,7 @@ mod tests {
         // Try verifying a proof with an invalid seed for one of the intermediate polynomials.
         // Verification should fail regardless of whether the input is valid.
         let mut mutated_proof = proof.clone();
-        mutated_proof.data[0] += F::one();
+        mutated_proof.data[0] += V::Field::one();
         assert!(
             !decide(
                 input,
@@ -697,7 +696,7 @@ mod tests {
 
         // Try verifying a proof that is too long.
         let mut mutated_proof = proof.clone();
-        mutated_proof.data.extend_from_slice(&[F::one(); 17]);
+        mutated_proof.data.extend_from_slice(&[V::Field::one(); 17]);
         assert!(
             query(input, &mutated_proof, &query_rand, &joint_rand).is_err(),
             "{:?} proof mutant verified",
@@ -707,7 +706,7 @@ mod tests {
         if input.as_slice().len() > gadgets[0].arity() {
             // Try verifying a proof with an invalid proof polynomial.
             let mut mutated_proof = proof.clone();
-            mutated_proof.data[gadgets[0].arity()] += F::one();
+            mutated_proof.data[gadgets[0].arity()] += V::Field::one();
             assert!(
                 !decide(
                     input,
