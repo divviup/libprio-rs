@@ -220,7 +220,7 @@ pub trait Value:
     type Field: FieldElement;
 
     /// Parameters used to construct a value of this type from a vector of field elements.
-    type Param;
+    type Param: Clone + Debug;
 
     /// Evaluates the validity circuit on the given input (i.e., `self`) and returns the output.
     /// `joint_rand` is the joint randomness shared by the prover and verifier. `g` is the sequence
