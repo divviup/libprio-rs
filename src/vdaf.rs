@@ -328,7 +328,8 @@ pub fn verify_start<V: Value>(
     };
 
     let input_share_data: Vec<V::Field> = Vec::try_from(msg.input_share)?;
-    let input_share = V::try_from((input_param, &input_share_data))?;
+    let mut input_share = V::try_from((input_param, &input_share_data))?;
+    input_share.set_leader(aggregator_id == 0);
 
     let proof_share_data: Vec<V::Field> = Vec::try_from(msg.proof_share)?;
     let proof_share = Proof::from(proof_share_data);
