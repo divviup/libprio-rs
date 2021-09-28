@@ -15,12 +15,13 @@ use crate::prng::{Prng, PrngError};
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite, SuiteError};
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
+use std::iter::IntoIterator;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
 pub enum VdafError {
     /// An error occurred.
-    #[error("ppm error: {0}")]
+    #[error("vdaf error: {0}")]
     Uncategorized(String),
 
     /// The distributed input was deemed invalid.
@@ -375,15 +376,21 @@ pub fn verify_start<V: Value>(
 /// [`VerifierMessage`] messages broadcast by all of the aggregators and produces the aggregator's
 /// input share.
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msgs` and among `msgs`.
-pub fn verify_finish<V: Value>(
-    state: AggregatorState<V>,
-    msgs: Vec<VerifierMessage<V::Field>>,
-) -> Result<V, VdafError> {
-    if msgs.is_empty() {
-        return Err(VdafError::Uncategorized(
-            "verify_finish(): expected at least one inbound messages; got none".to_string(),
-        ));
-    }
+pub fn verify_finish<M, V>(state: AggregatorState<V>, msgs: M) -> Result<V, VdafError>
+where
+    V: Value,
+    M: IntoIterator<Item = VerifierMessage<V::Field>>,
+{
+    let mut msgs = msgs.into_iter().peekable();
+
+    let verifier_length = match msgs.peek() {
+        Some(message) => message.verifier_share.as_slice().len(),
+        None => {
+            return Err(VdafError::Uncategorized(
+                "verify_finish(): expected at least one inbound messages; got none".to_string(),
+            ));
+        }
+    };
 
     let (input_share, mut joint_rand_seed) = match state {
         AggregatorState::Wait {
@@ -399,7 +406,7 @@ pub fn verify_finish<V: Value>(
     };
 
     // Combine the verifier messages.
-    let mut verifier_data = vec![V::Field::zero(); msgs[0].verifier_share.as_slice().len()];
+    let mut verifier_data = vec![V::Field::zero(); verifier_length];
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
             return Err(VdafError::Uncategorized(format!(
@@ -447,14 +454,14 @@ mod tests {
     #[test]
     fn test_prio() {
         let suite = Suite::Blake3;
-        let num_shares = 23;
+        const NUM_SHARES: usize = 23;
         let input: Boolean<Field64> = Boolean::new(true);
 
         // Client runs the input and proof distribution algorithms.
-        let input_shares = dist_input(suite, &input, num_shares as u8).unwrap();
+        let input_shares = dist_input(suite, &input, NUM_SHARES as u8).unwrap();
 
         // Aggregators agree on query randomness.
-        let states = dist_init(suite, (), num_shares).unwrap();
+        let states = dist_init(suite, (), NUM_SHARES as u8).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let (states, verifiers): (
