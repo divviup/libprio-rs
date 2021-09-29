@@ -1,0 +1,17 @@
+[package]
+name = "generate-test-vector"
+version = "0.1.0"
+edition = "2018"
+description = "Utility for generating Prio test vectors"
+license = "MPL-2.0"
+repository = "https://github.com/abetterinternet/libprio-rs"
+
+[dependencies]
+prio = { path = "..", features = ["test-vector"] }
+color-eyre = { version = "^0.5" }
+serde_json = { version = "1.0" }
+structopt = { version = "0.3.23" }
+
+[[bin]]
+name = "generate-test-vector"
+path = "src/bin/generate_test_vector.rs"
