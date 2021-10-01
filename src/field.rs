@@ -11,7 +11,10 @@ use crate::{
     prng::{Prng, PrngError},
     vdaf::suite::Suite,
 };
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{
+    de::{DeserializeOwned, Visitor},
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 use std::{
     cmp::min,
     convert::TryFrom,
@@ -73,6 +76,8 @@ pub trait FieldElement:
     // isn't possible yet[1]. However we can provide the impl on FieldElement implementations.
     // [1]: https://github.com/rust-lang/rust/issues/60551
     + Into<Vec<u8>>
+    + Serialize
+    + DeserializeOwned
     + 'static // NOTE This bound is needed for downcasting a `dyn Gadget<F>>` to a concrete type.
 {
     /// Size in bytes of the encoding of a value.
