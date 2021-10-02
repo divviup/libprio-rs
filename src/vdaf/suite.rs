@@ -3,8 +3,8 @@
 //! This module implements the cryptographic dependencies for our VDAF implementation. This
 //! includes a stream cipher (here we call it a [`KeyStream`]) and a pseudorandom function whose
 //! output size is the same as the key size (we call this a [`KeyDeriver`]).
-//!
-//! TODO(cjpatton) Add unit test with test vectors.
+//
+// TODO(cjpatton) Add unit test with test vectors.
 
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{FromBlockCipher, NewBlockCipher, StreamCipher as AesStreamCipher};

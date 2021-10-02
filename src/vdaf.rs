@@ -128,7 +128,7 @@ pub fn dist_input<V: Value>(
 ) -> Result<Vec<InputShareMessage<V::Field>>, VdafError> {
     if num_shares == 0 {
         return Err(VdafError::Uncategorized(format!(
-            "upload(): at least one share is required; got {}",
+            "dist_input(): at least one share is required; got {}",
             num_shares
         )));
     }
@@ -309,6 +309,7 @@ pub fn dist_init<V: Value>(
 /// The verify-start algorithm of the VDAF. Run by each aggregator, this consumes the
 /// [`InputShareMessage`] message sent from the client and produces the [`VerifierMessage`] message
 /// that will be broadcast to the other aggregators.
+//
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msg`.
 pub fn verify_start<V: Value>(
     state: AggregatorState<V>,
@@ -375,6 +376,7 @@ pub fn verify_start<V: Value>(
 /// The verify-finish algorithm of the VDAF. Run by each aggregator, this consumes the
 /// [`VerifierMessage`] messages broadcast by all of the aggregators and produces the aggregator's
 /// input share.
+//
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msgs` and among `msgs`.
 pub fn verify_finish<M, V>(state: AggregatorState<V>, msgs: M) -> Result<V, VdafError>
 where
@@ -399,7 +401,7 @@ where
         } => (input_share, joint_rand_seed),
         state => {
             return Err(VdafError::Uncategorized(format!(
-                "verify_start(): called on incorrect state: {:?}",
+                "verify_finish(): called on incorrect state: {:?}",
                 state
             )));
         }
