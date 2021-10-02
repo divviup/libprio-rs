@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module constructs a Verifiable Distributed Aggregation Function (VDAF) from a
-//! [`Value`].
+//! This module constructs a Verifiable Distributed Aggregation Function
+//! ([VDAF](https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html)) from a [`Value`].
 //!
 //! NOTE: This protocol implemented here is a prototype and has not undergone security analysis.
 //! Use at your own risk.
@@ -114,24 +114,20 @@ impl HelperShare {
 }
 
 /// The input-distribution algorithm of the VDAF. Run by the client, this generates the sequence of
-/// [`InputShareMessage`] messages to send to the aggregators.
+/// [`InputShareMessage`] messages to send to the aggregators. Note that this particular VDAF does
+/// not have a public parameter.
 ///
 /// # Parameters
 ///
 /// * `suite` is the cipher suite used for key derivation.
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
-pub fn dist_input<V: Value>(
+pub fn vdaf_input<V: Value>(
     suite: Suite,
     input: &V,
     num_shares: u8,
 ) -> Result<Vec<InputShareMessage<V::Field>>, VdafError> {
-    if num_shares == 0 {
-        return Err(VdafError::Uncategorized(format!(
-            "dist_input(): at least one share is required; got {}",
-            num_shares
-        )));
-    }
+    check_num_shares("vdaf_input", num_shares)?;
 
     let input_len = input.as_slice().len();
     let num_shares = num_shares as usize;
@@ -240,10 +236,43 @@ pub fn dist_input<V: Value>(
     Ok(out)
 }
 
+/// The verification parameter used by each aggregator to evaluate the VDAF.
+#[derive(Clone, Debug)]
+pub struct VerifyParam<V: Value> {
+    /// Input parameter, needed to reconstruct a [`Value`] from a vector of field elements.
+    pub value_param: V::Param,
+
+    /// Key used to derive the query randomness from the nonce.
+    pub query_rand_init: Key,
+
+    /// The identity of the aggregator.
+    pub aggregator_id: u8,
+}
+
+/// The setup algorithm of the VDAF that generates the verification parameter of each aggregator.
+/// Note that this VDAF does not involve a public parameter.
+#[cfg(test)]
+fn vdaf_setup<V: Value>(
+    suite: Suite,
+    value_param: &V::Param,
+    num_shares: u8,
+) -> Result<Vec<VerifyParam<V>>, VdafError> {
+    check_num_shares("vdaf_setup", num_shares)?;
+
+    let query_rand_init = Key::generate(suite)?;
+    Ok((0..num_shares)
+        .map(|aggregator_id| VerifyParam {
+            value_param: value_param.clone(),
+            query_rand_init: query_rand_init.clone(),
+            aggregator_id,
+        })
+        .collect())
+}
+
 /// The message sent by an aggregator to every other aggregator. This is the final message of the
 /// input-validation protocol.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VerifierMessage<F> {
+pub struct VerifyMessage<F> {
     /// The aggregator's share of the verifier message.
     pub verifier_share: Verifier<F>,
 
@@ -256,89 +285,44 @@ pub struct VerifierMessage<F> {
 
 /// The state of each aggregator.
 #[derive(Clone, Debug)]
-pub enum AggregatorState<V: Value> {
-    /// Aggregator is waiting for its input share.
-    Ready {
-        /// Aggregator ID.
-        aggregator_id: u8,
+pub struct VerifyState<V: Value> {
+    /// The input share.
+    input_share: V,
 
-        /// Input parameter, needed to reconstruct a [`Value`] from a vector of field elements.
-        input_param: V::Param,
-
-        /// Query randomness seed shared by the aggregators and used to verify the input.
-        query_rand_seed: Key,
-    },
-    /// Aggregator is waiting for the verifier messages.
-    Wait {
-        /// The input share.
-        input_share: V,
-
-        /// The joint randomness seed indicated by the client. The aggregators check that this
-        /// indication matches the actual joint randomness seed.
-        //
-        // TODO(cjpatton) If `input.joint_rand_len() == 0`, then we don't need to bother with the
-        // joint randomness seed at all and make this optional.
-        joint_rand_seed: Key,
-    },
-}
-
-/// The distributed state-initialization algorithm. This returns the initial state of each
-/// aggregator for evaluating the VDAF.
-///
-/// # Parameters
-///
-/// * `suite` is the ciphersuite used for key derivation.
-/// * `input_param` is the parameter used to reconstruct a [`Value`] from a vector of field
-///   element.
-/// * `num_shares` is the number of aggregators.
-pub fn dist_init<V: Value>(
-    suite: Suite,
-    input_param: V::Param,
-    num_shares: u8,
-) -> Result<Vec<AggregatorState<V>>, VdafError> {
-    let query_rand_seed = Key::generate(suite)?;
-    Ok((0..num_shares)
-        .map(|aggregator_id| AggregatorState::Ready {
-            aggregator_id,
-            input_param: input_param.clone(),
-            query_rand_seed: query_rand_seed.clone(),
-        })
-        .collect())
+    /// The joint randomness seed indicated by the client. The aggregators check that this
+    /// indication matches the actual joint randomness seed.
+    //
+    // TODO(cjpatton) If `input.joint_rand_len() == 0`, then we don't need to bother with the
+    // joint randomness seed at all and make this optional.
+    joint_rand_seed: Key,
 }
 
 /// The verify-start algorithm of the VDAF. Run by each aggregator, this consumes the
-/// [`InputShareMessage`] message sent from the client and produces the [`VerifierMessage`] message
-/// that will be broadcast to the other aggregators.
+/// [`InputShareMessage`] message sent from the client and produces the [`VerifyMessage`] message
+/// that will be broadcast to the other aggregators. This VDAF does not involve an aggregation
+/// parameter.
 //
-// TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msg`.
-pub fn verify_start<V: Value>(
-    state: AggregatorState<V>,
+// TODO(cjpatton) Check for ciphersuite mismatch between `verify_param` and `msg`.
+pub fn vdaf_start<V: Value>(
+    verify_param: &VerifyParam<V>,
+    nonce: &[u8],
     msg: InputShareMessage<V::Field>,
-) -> Result<(AggregatorState<V>, VerifierMessage<V::Field>), VdafError> {
-    let (aggregator_id, input_param, query_rand_seed) = match state {
-        AggregatorState::Ready {
-            aggregator_id,
-            input_param,
-            query_rand_seed,
-        } => (aggregator_id, input_param, query_rand_seed),
-        state => {
-            return Err(VdafError::Uncategorized(format!(
-                "verify_start(): called on incorrect state: {:?}",
-                state
-            )));
-        }
-    };
+) -> Result<(VerifyState<V>, VerifyMessage<V::Field>), VdafError> {
+    let mut deriver = KeyDeriver::from_key(&verify_param.query_rand_init);
+    deriver.update(&[255]);
+    deriver.update(nonce);
+    let query_rand_seed = deriver.finish();
 
     let input_share_data: Vec<V::Field> = Vec::try_from(msg.input_share)?;
-    let mut input_share = V::try_from((input_param, &input_share_data))?;
-    input_share.set_leader(aggregator_id == 0);
+    let mut input_share = V::try_from((verify_param.value_param.clone(), &input_share_data))?;
+    input_share.set_leader(verify_param.aggregator_id == 0);
 
     let proof_share_data: Vec<V::Field> = Vec::try_from(msg.proof_share)?;
     let proof_share = Proof::from(proof_share_data);
 
     // Compute the joint randomness.
     let mut deriver = KeyDeriver::from_key(&msg.blind);
-    deriver.update(&[aggregator_id]);
+    deriver.update(&[verify_param.aggregator_id]);
     for x in input_share.as_slice() {
         deriver.update(&(*x).into());
     }
@@ -360,12 +344,12 @@ pub fn verify_start<V: Value>(
     let verifier_share = query(&input_share, &proof_share, &query_rand, &joint_rand)?;
 
     // Prepare the output state and message.
-    let state = AggregatorState::Wait {
+    let state = VerifyState {
         input_share,
         joint_rand_seed,
     };
 
-    let out = VerifierMessage {
+    let out = VerifyMessage {
         verifier_share,
         joint_rand_seed_share,
     };
@@ -374,14 +358,14 @@ pub fn verify_start<V: Value>(
 }
 
 /// The verify-finish algorithm of the VDAF. Run by each aggregator, this consumes the
-/// [`VerifierMessage`] messages broadcast by all of the aggregators and produces the aggregator's
+/// [`VerifyMessage`] messages broadcast by all of the aggregators and produces the aggregator's
 /// input share.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msgs` and among `msgs`.
-pub fn verify_finish<M, V>(state: AggregatorState<V>, msgs: M) -> Result<V, VdafError>
+pub fn vdaf_finish<M, V>(mut state: VerifyState<V>, msgs: M) -> Result<V, VdafError>
 where
     V: Value,
-    M: IntoIterator<Item = VerifierMessage<V::Field>>,
+    M: IntoIterator<Item = VerifyMessage<V::Field>>,
 {
     let mut msgs = msgs.into_iter().peekable();
 
@@ -389,21 +373,8 @@ where
         Some(message) => message.verifier_share.as_slice().len(),
         None => {
             return Err(VdafError::Uncategorized(
-                "verify_finish(): expected at least one inbound messages; got none".to_string(),
+                "vdaf_finish(): expected at least one inbound messages; got none".to_string(),
             ));
-        }
-    };
-
-    let (input_share, mut joint_rand_seed) = match state {
-        AggregatorState::Wait {
-            input_share,
-            joint_rand_seed,
-        } => (input_share, joint_rand_seed),
-        state => {
-            return Err(VdafError::Uncategorized(format!(
-                "verify_finish(): called on incorrect state: {:?}",
-                state
-            )));
         }
     };
 
@@ -412,7 +383,7 @@ where
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
             return Err(VdafError::Uncategorized(format!(
-                "verify_finish(): expected verifier share of length {}; got {}",
+                "vdaf_finish(): expected verifier share of length {}; got {}",
                 verifier_data.len(),
                 msg.verifier_share.as_slice().len(),
             )));
@@ -422,7 +393,8 @@ where
             *x += *y;
         }
 
-        for (x, y) in joint_rand_seed
+        for (x, y) in state
+            .joint_rand_seed
             .as_mut_slice()
             .iter_mut()
             .zip(msg.joint_rand_seed_share.as_slice())
@@ -432,18 +404,33 @@ where
     }
 
     // Check that the joint randomness was correct.
-    if joint_rand_seed != Key::uninitialized(joint_rand_seed.suite()) {
+    if state.joint_rand_seed != Key::uninitialized(state.joint_rand_seed.suite()) {
         return Err(VdafError::Validity("joint randomness check failed"));
     }
 
     // Check the proof.
     let verifier = Verifier::from(verifier_data);
-    let result = decide(&input_share, &verifier)?;
+    let result = decide(&state.input_share, &verifier)?;
     if !result {
         return Err(VdafError::Validity("proof check failed"));
     }
 
-    Ok(input_share)
+    Ok(state.input_share)
+}
+
+fn check_num_shares(func_name: &str, num_shares: u8) -> Result<(), VdafError> {
+    if num_shares == 0 {
+        return Err(VdafError::Uncategorized(format!(
+            "{}(): at least one share is required; got {}",
+            func_name, num_shares
+        )));
+    } else if num_shares > 254 {
+        return Err(VdafError::Uncategorized(format!(
+            "{}(): share count must not exceed 254; got {}",
+            func_name, num_shares
+        )));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -458,27 +445,30 @@ mod tests {
         let suite = Suite::Blake3;
         const NUM_SHARES: usize = 23;
         let input: Boolean<Field64> = Boolean::new(true);
+        let nonce = b"This is a good nonce.";
 
         // Client runs the input and proof distribution algorithms.
-        let input_shares = dist_input(suite, &input, NUM_SHARES as u8).unwrap();
+        let input_shares = vdaf_input(suite, &input, NUM_SHARES as u8).unwrap();
 
-        // Aggregators agree on query randomness.
-        let states = dist_init(suite, (), NUM_SHARES as u8).unwrap();
+        // Aggregators agree on seed used to generate per-report query randomness.
+        let verify_params = vdaf_setup(suite, &input.param(), NUM_SHARES as u8).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let (states, verifiers): (
-            Vec<AggregatorState<Boolean<Field64>>>,
-            Vec<VerifierMessage<Field64>>,
-        ) = states
-            .into_iter()
+            Vec<VerifyState<Boolean<Field64>>>,
+            Vec<VerifyMessage<Field64>>,
+        ) = verify_params
+            .iter()
             .zip(input_shares.into_iter())
-            .map(|(state, input_share)| verify_start(state, input_share).unwrap())
+            .map(|(verify_param, input_share)| {
+                vdaf_start(verify_param, &nonce[..], input_share).unwrap()
+            })
             .unzip();
 
         // Aggregators decide whether the input is valid based on the verifier messages.
         let mut output = vec![Field64::zero(); input.as_slice().len()];
         for state in states {
-            let output_share = verify_finish(state, verifiers.clone()).unwrap();
+            let output_share = vdaf_finish(state, verifiers.clone()).unwrap();
             for (x, y) in output.iter_mut().zip(output_share.as_slice()) {
                 *x += *y;
             }
