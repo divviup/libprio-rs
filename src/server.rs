@@ -35,7 +35,7 @@ pub enum ServerError {
 /// Auxiliary memory for constructing a
 /// [`VerificationMessage`](struct.VerificationMessage.html)
 #[derive(Debug)]
-pub struct ValidationMemory<F: FieldElement> {
+pub struct ValidationMemory<F> {
     points_f: Vec<F>,
     points_g: Vec<F>,
     points_h: Vec<F>,
@@ -58,7 +58,7 @@ impl<F: FieldElement> ValidationMemory<F> {
 
 /// Main workhorse of the server.
 #[derive(Debug)]
-pub struct Server<F: FieldElement> {
+pub struct Server<F> {
     prng: Prng<F>,
     dimension: usize,
     is_first_server: bool,
@@ -179,7 +179,7 @@ impl<F: FieldElement> Server<F> {
 
 /// Verification message for proof validation
 #[derive(Debug, Serialize, Deserialize)]
-pub struct VerificationMessage<F: FieldElement> {
+pub struct VerificationMessage<F> {
     /// f evaluated at random point
     pub f_r: F,
     /// g evaluated at random point

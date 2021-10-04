@@ -47,7 +47,7 @@ pub enum VdafError {
 
 /// A share of an input or proof for Prio.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum Share<F: FieldElement> {
+pub enum Share<F> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
 
@@ -77,7 +77,7 @@ impl<F: FieldElement> TryFrom<Share<F>> for Vec<F> {
 /// The message sent by the client to each aggregator. This includes the client's input share and
 /// the initial message of the input-validation protocol.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct InputShareMessage<F: FieldElement> {
+pub struct InputShareMessage<F> {
     /// The input share.
     pub input_share: Share<F>,
 
@@ -243,7 +243,7 @@ pub fn dist_input<V: Value>(
 /// The message sent by an aggregator to every other aggregator. This is the final message of the
 /// input-validation protocol.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VerifierMessage<F: FieldElement> {
+pub struct VerifierMessage<F> {
     /// The aggregator's share of the verifier message.
     pub verifier_share: Verifier<F>,
 
