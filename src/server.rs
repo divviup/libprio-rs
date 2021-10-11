@@ -268,8 +268,12 @@ pub fn is_valid_share<F: FieldElement>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field32;
-    use crate::util;
+    use crate::{
+        encrypt::{encrypt_share, PublicKey},
+        field::{Field32, FieldPriov2},
+        test_vector::Priov2TestVector,
+        util::{self, unpack_proof_mut},
+    };
     use serde_json;
 
     #[test]
@@ -319,5 +323,137 @@ mod tests {
         let deserialized: VerificationMessage<Field32> = serde_json::from_str(&serialized).unwrap();
 
         assert!(is_valid_share(&deserialized, &v2));
+    }
+
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    enum Tweak {
+        None,
+        WrongInput,
+        DataPartOfShare,
+        ZeroTermF,
+        ZeroTermG,
+        ZeroTermH,
+        PointsH,
+        VerificationF,
+        VerificationG,
+        VerificationH,
+    }
+
+    fn tweaks(tweak: Tweak) {
+        let dim = 123;
+
+        // We generate a test vector just to get a `Client` and `Server`s with
+        // encryption keys but construct and tweak inputs below.
+        let test_vector = Priov2TestVector::new(dim, 0).unwrap();
+        let mut server1 = test_vector.server_1().unwrap();
+        let mut server2 = test_vector.server_2().unwrap();
+        let mut client = test_vector.client().unwrap();
+
+        // all zero data
+        let mut data = vec![FieldPriov2::zero(); dim];
+
+        if let Tweak::WrongInput = tweak {
+            data[0] = FieldPriov2::from(2);
+        }
+
+        let (share1_original, share2) = client.encode_simple(&data).unwrap();
+
+        let decrypted_share1 = decrypt_share(&share1_original, &server1.private_key).unwrap();
+        let mut share1_field = FieldPriov2::byte_slice_into_vec(&decrypted_share1).unwrap();
+        let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
+
+        let one = FieldPriov2::from(1);
+
+        match tweak {
+            Tweak::DataPartOfShare => unpacked_share1.data[0] += one,
+            Tweak::ZeroTermF => *unpacked_share1.f0 += one,
+            Tweak::ZeroTermG => *unpacked_share1.g0 += one,
+            Tweak::ZeroTermH => *unpacked_share1.h0 += one,
+            Tweak::PointsH => unpacked_share1.points_h_packed[0] += one,
+            _ => (),
+        };
+
+        // reserialize altered share1
+        let share1_modified = encrypt_share(
+            &FieldPriov2::slice_into_byte_vec(&share1_field),
+            &PublicKey::from(&server1.private_key),
+        )
+        .unwrap();
+
+        let eval_at = server1.choose_eval_at();
+
+        let mut v1 = server1
+            .generate_verification_message(eval_at, &share1_modified)
+            .unwrap();
+        let v2 = server2
+            .generate_verification_message(eval_at, &share2)
+            .unwrap();
+
+        match tweak {
+            Tweak::VerificationF => v1.f_r += one,
+            Tweak::VerificationG => v1.g_r += one,
+            Tweak::VerificationH => v1.h_r += one,
+            _ => (),
+        }
+
+        let should_be_valid = matches!(tweak, Tweak::None);
+        assert_eq!(
+            server1.aggregate(&share1_modified, &v1, &v2).unwrap(),
+            should_be_valid
+        );
+        assert_eq!(
+            server2.aggregate(&share2, &v1, &v2).unwrap(),
+            should_be_valid
+        );
+    }
+
+    #[test]
+    fn tweak_none() {
+        tweaks(Tweak::None);
+    }
+
+    #[test]
+    fn tweak_input() {
+        tweaks(Tweak::WrongInput);
+    }
+
+    #[test]
+    fn tweak_data() {
+        tweaks(Tweak::DataPartOfShare);
+    }
+
+    #[test]
+    fn tweak_f_zero() {
+        tweaks(Tweak::ZeroTermF);
+    }
+
+    #[test]
+    fn tweak_g_zero() {
+        tweaks(Tweak::ZeroTermG);
+    }
+
+    #[test]
+    fn tweak_h_zero() {
+        tweaks(Tweak::ZeroTermH);
+    }
+
+    #[test]
+    fn tweak_h_points() {
+        tweaks(Tweak::PointsH);
+    }
+
+    #[test]
+    fn tweak_f_verif() {
+        tweaks(Tweak::VerificationF);
+    }
+
+    #[test]
+    fn tweak_g_verif() {
+        tweaks(Tweak::VerificationG);
+    }
+
+    #[test]
+    fn tweak_h_verif() {
+        tweaks(Tweak::VerificationH);
     }
 }

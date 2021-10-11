@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! This module constructs a Verifiable Distributed Aggregation Function (VDAF) from a
-//! [`pcp::Value`].
+//! [`Value`].
 //!
 //! NOTE: This protocol implemented here is a prototype and has not undergone security analysis.
 //! Use at your own risk.
