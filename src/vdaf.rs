@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module constructs a Verifiable Distributed Aggregation Function
-//! ([VDAF](https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html)) from a [`Value`].
-//!
-//! NOTE: This protocol implemented here is a prototype and has not undergone security analysis.
-//! Use at your own risk.
+//! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
+//! implements the prio3 Verifiable Distributed Aggregation Function specified in
+//! [[VDAF](https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html)]. It is constructed from a
+//! [`Value`].
 
 pub mod suite;
 
@@ -122,12 +121,12 @@ impl HelperShare {
 /// * `suite` is the cipher suite used for key derivation.
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
-pub fn vdaf_input<V: Value>(
+pub fn prio3_input<V: Value>(
     suite: Suite,
     input: &V,
     num_shares: u8,
 ) -> Result<Vec<InputShareMessage<V::Field>>, VdafError> {
-    check_num_shares("vdaf_input", num_shares)?;
+    check_num_shares("prio3_input", num_shares)?;
 
     let input_len = input.as_slice().len();
     let num_shares = num_shares as usize;
@@ -252,12 +251,12 @@ pub struct VerifyParam<V: Value> {
 /// The setup algorithm of the VDAF that generates the verification parameter of each aggregator.
 /// Note that this VDAF does not involve a public parameter.
 #[cfg(test)]
-fn vdaf_setup<V: Value>(
+fn prio3_setup<V: Value>(
     suite: Suite,
     value_param: &V::Param,
     num_shares: u8,
 ) -> Result<Vec<VerifyParam<V>>, VdafError> {
-    check_num_shares("vdaf_setup", num_shares)?;
+    check_num_shares("prio3_setup", num_shares)?;
 
     let query_rand_init = Key::generate(suite)?;
     Ok((0..num_shares)
@@ -303,7 +302,7 @@ pub struct VerifyState<V: Value> {
 /// parameter.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `verify_param` and `msg`.
-pub fn vdaf_start<V: Value>(
+pub fn prio3_start<V: Value>(
     verify_param: &VerifyParam<V>,
     nonce: &[u8],
     msg: InputShareMessage<V::Field>,
@@ -362,7 +361,7 @@ pub fn vdaf_start<V: Value>(
 /// input share.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msgs` and among `msgs`.
-pub fn vdaf_finish<M, V>(mut state: VerifyState<V>, msgs: M) -> Result<V, VdafError>
+pub fn prio3_finish<M, V>(mut state: VerifyState<V>, msgs: M) -> Result<V, VdafError>
 where
     V: Value,
     M: IntoIterator<Item = VerifyMessage<V::Field>>,
@@ -373,7 +372,7 @@ where
         Some(message) => message.verifier_share.as_slice().len(),
         None => {
             return Err(VdafError::Uncategorized(
-                "vdaf_finish(): expected at least one inbound messages; got none".to_string(),
+                "prio3_finish(): expected at least one inbound messages; got none".to_string(),
             ));
         }
     };
@@ -383,7 +382,7 @@ where
     for msg in msgs {
         if msg.verifier_share.as_slice().len() != verifier_data.len() {
             return Err(VdafError::Uncategorized(format!(
-                "vdaf_finish(): expected verifier share of length {}; got {}",
+                "prio3_finish(): expected verifier share of length {}; got {}",
                 verifier_data.len(),
                 msg.verifier_share.as_slice().len(),
             )));
@@ -448,10 +447,10 @@ mod tests {
         let nonce = b"This is a good nonce.";
 
         // Client runs the input and proof distribution algorithms.
-        let input_shares = vdaf_input(suite, &input, NUM_SHARES as u8).unwrap();
+        let input_shares = prio3_input(suite, &input, NUM_SHARES as u8).unwrap();
 
         // Aggregators agree on seed used to generate per-report query randomness.
-        let verify_params = vdaf_setup(suite, &input.param(), NUM_SHARES as u8).unwrap();
+        let verify_params = prio3_setup(suite, &input.param(), NUM_SHARES as u8).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let (states, verifiers): (
@@ -461,14 +460,14 @@ mod tests {
             .iter()
             .zip(input_shares.into_iter())
             .map(|(verify_param, input_share)| {
-                vdaf_start(verify_param, &nonce[..], input_share).unwrap()
+                prio3_start(verify_param, &nonce[..], input_share).unwrap()
             })
             .unzip();
 
         // Aggregators decide whether the input is valid based on the verifier messages.
         let mut output = vec![Field64::zero(); input.as_slice().len()];
         for state in states {
-            let output_share = vdaf_finish(state, verifiers.clone()).unwrap();
+            let output_share = prio3_finish(state, verifiers.clone()).unwrap();
             for (x, y) in output.iter_mut().zip(output_share.as_slice()) {
                 *x += *y;
             }
