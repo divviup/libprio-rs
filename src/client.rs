@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The Prio client. Only 0 / 1 vectors are supported for now.
+//! The Prio v2 client. Only 0 / 1 vectors are supported for now.
 
 use crate::{
     encrypt::{encrypt_share, EncryptError, PublicKey},
