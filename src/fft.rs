@@ -115,7 +115,9 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split, Field126, Field32, Field64, Field80, FieldPriov2};
+    use crate::field::{
+        random_vector, split_vector, Field126, Field32, Field64, Field80, FieldPriov2,
+    };
     use crate::polynomial::{poly_fft, PolyAuxMemory};
 
     fn discrete_fourier_transform_then_inv_test<F: FieldElement>() -> Result<(), FftError> {
@@ -190,7 +192,7 @@ mod tests {
         let len = 16;
         let num_shares = 3;
         let x: Vec<Field64> = random_vector(len).unwrap();
-        let mut x_shares = split(&x, num_shares).unwrap();
+        let mut x_shares = split_vector(&x, num_shares).unwrap();
 
         // Just for fun, let's do something different with a subset of the inputs. For the first
         // share, every odd element is set to the plaintext value. For all shares but the first,

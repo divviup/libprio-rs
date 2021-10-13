@@ -71,14 +71,14 @@
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-//! use prio::field::{split, random_vector, FieldElement, Field64};
+//! use prio::field::{random_vector, split_vector, FieldElement, Field64};
 //!
 //! use std::convert::TryFrom;
 //!
 //! // The prover encodes its input and splits it into two secret shares. It
 //! // sends each share to two aggregators.
 //! let input: Boolean<Field64> = Boolean::new(true);
-//! let input_shares: Vec<Boolean<Field64>> = split(input.as_slice(), 2)
+//! let input_shares: Vec<Boolean<Field64>> = split_vector(input.as_slice(), 2)
 //!     .unwrap()
 //!     .into_iter()
 //!     .map(|data| Boolean::try_from((input.param(), data.as_slice())).unwrap())
@@ -91,7 +91,7 @@
 //! // The prover generates a proof of its input's validity and splits the proof
 //! // into two shares. It sends each share to one of two aggregators.
 //! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
-//! let proof_shares: Vec<Proof<Field64>> = split(proof.as_slice(), 2)
+//! let proof_shares: Vec<Proof<Field64>> = split_vector(proof.as_slice(), 2)
 //!     .unwrap()
 //!     .into_iter()
 //!     .map(Proof::from)
@@ -109,6 +109,10 @@
 //! let res = decide(&input_shares[0], &verifier).unwrap();
 //! assert_eq!(res, true);
 //! ```
+//!
+//! Note that the secret sharing provided by [`crate::field::split_vector`] is not the most
+//! efficient possible. A much more efficient secret sharing scheme is implemented in the
+//! [`crate::vdaf`] module.
 //!
 //! The fully linear PCP system of [BBC+19, Theorem 4.3] applies to languages recognized by
 //! arithmetic circuits over finite fields that have a particular structure. Namely, all gates in
@@ -281,7 +285,7 @@ pub trait Value:
     /// ```
     /// use prio::pcp::types::MeanVarUnsignedVector;
     /// use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-    /// use prio::field::{random_vector, split, FieldElement, Field64};
+    /// use prio::field::{random_vector, split_vector, FieldElement, Field64};
     ///
     /// use std::convert::TryFrom;
     ///
@@ -289,7 +293,7 @@ pub trait Value:
     /// let bits = 8;
     /// let input: MeanVarUnsignedVector<Field64> =
     ///     MeanVarUnsignedVector::new(bits, &measurement).unwrap();
-    /// let input_shares: Vec<MeanVarUnsignedVector<Field64>> = split(input.as_slice(), 2)
+    /// let input_shares: Vec<MeanVarUnsignedVector<Field64>> = split_vector(input.as_slice(), 2)
     ///     .unwrap()
     ///     .into_iter()
     ///     .enumerate()
@@ -306,7 +310,7 @@ pub trait Value:
     /// let query_rand = random_vector(input.query_rand_len()).unwrap();
     ///
     /// let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
-    /// let proof_shares: Vec<Proof<Field64>> = split(proof.as_slice(), 2)
+    /// let proof_shares: Vec<Proof<Field64>> = split_vector(proof.as_slice(), 2)
     ///     .unwrap()
     ///     .into_iter()
     ///     .map(Proof::from)
@@ -811,7 +815,7 @@ pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split, Field126};
+    use crate::field::{random_vector, split_vector, Field126};
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::pcp::types::Boolean;
     use crate::pcp::types::TypeError;
@@ -828,7 +832,7 @@ mod tests {
         let inp = F::from(3);
         let x: T = TestValue::new(inp);
         let x_par = x.param();
-        let x_shares: Vec<T> = split(x.as_slice(), NUM_SHARES)
+        let x_shares: Vec<T> = split_vector(x.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .enumerate()
@@ -844,7 +848,7 @@ mod tests {
         let query_rand = random_vector(x.query_rand_len()).unwrap();
 
         let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
-        let pf_shares: Vec<Proof<F>> = split(pf.as_slice(), NUM_SHARES)
+        let pf_shares: Vec<Proof<F>> = split_vector(pf.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)

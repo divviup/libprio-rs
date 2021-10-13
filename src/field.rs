@@ -532,7 +532,7 @@ make_field!(
 );
 
 make_field!(
-    /// Same as Field32, but encoded in little endian for compatibility with Prio v2/ENPA
+    /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
     FieldPriov2,
     u32,
     FP32,
@@ -576,7 +576,7 @@ make_field!(
 /// # Errors
 ///
 /// Fails if the two vectors do not have the same length.
-pub fn merge_vector<F: FieldElement>(
+pub(crate) fn merge_vector<F: FieldElement>(
     accumulator: &mut [F],
     other_vector: &[F],
 ) -> Result<(), FieldError> {
@@ -591,7 +591,10 @@ pub fn merge_vector<F: FieldElement>(
 }
 
 /// Outputs an additive secret sharing of the input.
-pub fn split<F: FieldElement>(inp: &[F], num_shares: usize) -> Result<Vec<Vec<F>>, PrngError> {
+pub fn split_vector<F: FieldElement>(
+    inp: &[F],
+    num_shares: usize,
+) -> Result<Vec<Vec<F>>, PrngError> {
     if num_shares == 0 {
         return Ok(vec![]);
     }

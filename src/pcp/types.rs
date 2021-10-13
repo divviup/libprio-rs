@@ -362,7 +362,7 @@ impl<F: FieldElement> TryFrom<(usize, &[F])> for MeanVarUnsignedVector<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split, Field64 as TestField};
+    use crate::field::{random_vector, split_vector, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
 
     use assert_matches::assert_matches;
@@ -638,7 +638,7 @@ mod tests {
         assert_eq!(proof.as_slice().len(), t.expected_proof_len);
 
         // Run distributed PCP.
-        let x_shares: Vec<V> = split(input.as_slice(), NUM_SHARES)
+        let x_shares: Vec<V> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .enumerate()
@@ -649,7 +649,7 @@ mod tests {
             })
             .collect();
 
-        let proof_shares: Vec<Proof<V::Field>> = split(proof.as_slice(), NUM_SHARES)
+        let proof_shares: Vec<Proof<V::Field>> = split_vector(proof.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)
