@@ -74,7 +74,8 @@ pub fn discrete_fourier_transform<F: FieldElement>(
 }
 
 /// Sets `outp` to the inverse of the DFT of `inp`.
-pub fn discrete_fourier_transform_inv<F: FieldElement>(
+#[cfg(test)]
+pub(crate) fn discrete_fourier_transform_inv<F: FieldElement>(
     outp: &mut [F],
     inp: &[F],
     size: usize,
