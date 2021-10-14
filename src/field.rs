@@ -17,7 +17,7 @@ use serde::{
 };
 use std::{
     cmp::min,
-    convert::TryFrom,
+    convert::{TryFrom, TryInto},
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
     io::{Cursor, Read},
@@ -83,8 +83,11 @@ pub trait FieldElement:
     /// Size in bytes of the encoding of a value.
     const ENCODED_SIZE: usize;
 
-    /// The error returned if converting `usize` to an `Int` fails.
-    type IntegerTryFromError: Debug;
+    /// The error returned if converting `usize` to an `Integer` fails.
+    type IntegerTryFromError: std::error::Error;
+
+    /// The error returend if converting an `Integer` to a `u64` fails.
+    type TryIntoU64Error: std::error::Error;
 
     /// The integer representation of the field element.
     type Integer: Copy
@@ -94,7 +97,9 @@ pub trait FieldElement:
         + Div<Output = <Self as FieldElement>::Integer>
         + Shr<Output = <Self as FieldElement>::Integer>
         + Sub<Output = <Self as FieldElement>::Integer>
-        + TryFrom<usize, Error = Self::IntegerTryFromError>;
+        + From<Self>
+        + TryFrom<usize, Error = Self::IntegerTryFromError>
+        + TryInto<u64, Error = Self::TryIntoU64Error>;
 
     /// Modular exponentation, i.e., `self^exp (mod p)`.
     fn pow(&self, exp: Self::Integer) -> Self;
@@ -472,6 +477,7 @@ macro_rules! make_field {
             const ENCODED_SIZE: usize = $encoding_size;
             type Integer = $int;
             type IntegerTryFromError = <Self::Integer as TryFrom<usize>>::Error;
+            type TryIntoU64Error = <Self::Integer as TryInto<u64>>::Error;
 
             fn pow(&self, exp: Self::Integer) -> Self {
                 Self($fp.pow(self.0, u128::try_from(exp).unwrap()))
