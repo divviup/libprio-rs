@@ -380,16 +380,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "generate-test-vector"
-version = "0.5.0"
-dependencies = [
- "color-eyre",
- "prio",
- "serde_json",
- "structopt",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -681,6 +671,17 @@ dependencies = [
  "serde_json",
  "static_assertions",
  "thiserror",
+]
+
+[[package]]
+name = "prio-binaries"
+version = "0.5.0"
+dependencies = [
+ "base64",
+ "color-eyre",
+ "prio",
+ "serde_json",
+ "structopt",
 ]
 
 [[package]]
