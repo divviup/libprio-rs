@@ -1,7 +1,7 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The Prio server. Only 0 / 1 vectors are supported for now.
+//! The Prio v2 server. Only 0 / 1 vectors are supported for now.
 use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FieldElement, FieldError},
