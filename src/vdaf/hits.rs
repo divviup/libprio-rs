@@ -391,6 +391,9 @@ pub fn hits_start<I: Idpf<2, 1>>(
     // [BBCG+21, Appendix C.4]
     //
     // Add blind shares $(a_\sigma b_\sigma, c_\sigma)$
+    //
+    // NOTE(cjpatton) We can make this faster by a factor of 3 by using three seed shares instead
+    // of one.
     let mut prng =
         Prng::<I::Field>::from_key_stream(KeyStream::from_key(&input_share.sketch_start_seed))
             .skip(3 * i);
@@ -401,6 +404,8 @@ pub fn hits_start<I: Idpf<2, 1>>(
     let (d, e) = match &input_share.sketch_next {
         Share::Leader(data) => (data[2 * i], data[2 * i + 1]),
         Share::Helper { seed, length: _ } => {
+            // NOTE(cjpatton) We can make this faster by a factor of 2 by using two seed shares
+            // instead of one.
             let mut prng = Prng::<I::Field>::from_key_stream(KeyStream::from_key(seed)).skip(2 * i);
             (prng.next().unwrap(), prng.next().unwrap())
         }
