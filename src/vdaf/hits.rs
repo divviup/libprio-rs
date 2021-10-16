@@ -141,8 +141,7 @@ impl<F: FieldElement> Idpf<2, 1> for ToyIdpf<F> {
         let mut data = vec![F::zero(); data_len];
         let mut output = output.into_iter();
         for len in 0..input.len + 1 {
-            let index = input.prefix(len).index();
-            data[index] = output.next().unwrap();
+            data[input.prefix(len).index()] = output.next().unwrap();
         }
 
         // NOTE(cjpatton) We could save some space by representing one of the key shares as a PRNG
@@ -391,20 +390,13 @@ pub fn hits_start<I: Idpf<2, 1>>(
 
     // [BBCG+21, Appendix C.4]
     //
-    // $(a_\sigma b_\sigma, c_\sigma)$
+    // Add blind shares $(a_\sigma b_\sigma, c_\sigma)$
     let mut prng =
         Prng::<I::Field>::from_key_stream(KeyStream::from_key(&input_share.sketch_start_seed))
             .skip(3 * i);
-    let (a, b, c) = (
-        prng.next().unwrap(),
-        prng.next().unwrap(),
-        prng.next().unwrap(),
-    );
-
-    // Add blind shares.
-    z[0] += a;
-    z[1] += b;
-    z[2] += c;
+    z[0] += prng.next().unwrap();
+    z[1] += prng.next().unwrap();
+    z[2] += prng.next().unwrap();
 
     let (d, e) = match &input_share.sketch_next {
         Share::Leader(data) => (data[2 * i], data[2 * i + 1]),
