@@ -192,7 +192,7 @@ pub struct InputShareMessage<I: Idpf<2, 1>> {
 pub fn hits_input<I: Idpf<2, 1>>(
     suite: Suite,
     input: &IdpfInput,
-) -> Result<Vec<InputShareMessage<I>>, VdafError> {
+) -> Result<[InputShareMessage<I>; 2], VdafError> {
     let auth_rand: Vec<I::Field> = Prng::generate(suite)?.take(input.len + 1).collect();
 
     // For each level of the prefix tree, generate correlated randomness that the aggregators use
@@ -227,7 +227,7 @@ pub fn hits_input<I: Idpf<2, 1>>(
     let mut data = IntoIter::new(I::gen(input, std::iter::repeat(I::Field::one()))?);
     let mut auth = IntoIter::new(I::gen(input, auth_rand)?);
 
-    Ok(vec![
+    Ok([
         InputShareMessage {
             data: data.next().unwrap(),
             auth: auth.next().unwrap(),
