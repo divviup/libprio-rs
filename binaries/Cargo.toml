@@ -11,7 +11,7 @@ base64 = "0.13.0"
 prio = { path = "..", features = ["test-vector"] }
 color-eyre = { version = "^0.5" }
 serde_json = { version = "1.0" }
-structopt = { version = "0.3.23" }
+structopt = { version = "0.3.25" }
 
 [[bin]]
 name = "generate-test-vector"
