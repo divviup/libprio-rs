@@ -27,7 +27,7 @@ serde_json = { version = "1.0", optional = true }
 assert_matches = "1.5.0"
 criterion = "0.3"
 modinverse = "0.1.0"
-num-bigint = "0.4.0"
+num-bigint = "0.4.2"
 serde_json = "1.0"
 # Enable test_vector module for test targets
 # https://github.com/rust-lang/cargo/issues/2911#issuecomment-749580481
