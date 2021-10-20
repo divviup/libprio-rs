@@ -71,14 +71,17 @@ impl<'a> PartialEq<IdpfInput<'a>> for IdpfInput<'a> {
         }
 
         // Do a constant-time comparison, masking the last byte to fit the input length (in bits).
-        let q = self.len / 8;
-        let m = (self.len % 8) as u8;
+        let i = self.len >> 3;
+        let j = ((i << 3) ^ self.len) as u8;
         let mut out = 0;
-        for (i, (a, b)) in self.data.iter().zip(other.data).enumerate() {
-            let (x, y) = match i == q {
-                true => (*a & m, *b & m),
-                false => (*a, *b),
-            };
+        for (r, (a, b)) in self.data.iter().zip(other.data).enumerate() {
+            let (mut x, mut y) = (*a, *b);
+            if r == i {
+                x &= j;
+                y &= j;
+            } else if r > i {
+                break;
+            }
             out |= x ^ y;
         }
         out == 0
@@ -97,8 +100,9 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>: Sized {
     // prefix tree.
     type Field: FieldElement;
 
-    /// Generate a new sequence of IDPF shares for `input`. Parameter `output` is an iterator that
-    /// is invoked to get the output value for each successive level of the prefix tree.
+    /// Generate and return a sequence of IDPF shares for `input`. Parameter `output` is an
+    /// iterator that is invoked to get the output value for each successive level of the prefix
+    /// tree.
     fn gen<O: IntoIterator<Item = Self::Field>>(
         input: &IdpfInput,
         output: O,
@@ -114,7 +118,7 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>: Sized {
 //
 // NOTE(cjpatton) It would be straight-forward to generalize this construction to any `KEY_LEN` and
 // `OUT_LEN`.
-pub struct ToyIdpf<F: FieldElement> {
+pub struct ToyIdpf<F> {
     data: Vec<F>,
     len: usize,
 }
@@ -173,7 +177,7 @@ impl<F: FieldElement> Idpf<2, 1> for ToyIdpf<F> {
 
 /// An input share for the heavy hitters VDAF.
 pub struct InputShareMessage<I: Idpf<2, 1>> {
-    /// IDPF share of inpuot
+    /// IDPF share of input
     pub data: I,
 
     /// IDPF share of the authentication vector
@@ -275,7 +279,7 @@ pub struct AggregationParam<'a> {
 
 impl<'a> AggregationParam<'a> {
     /// Constructs an aggregation parameter from a sequence of prefixes. An error is returned if
-    /// the prefixes aren't equal length, a prefix appears twice in the set of prefixesx, or the
+    /// the prefixes aren't equal length, a prefix appears twice in the set of prefixes, or the
     /// set of prefixes is empty.
     pub fn new<P: IntoIterator<Item = IdpfInput<'a>>>(
         prefixes: P,
@@ -446,7 +450,9 @@ where
                 z_left[2] + z_right[2],
             ])
         })
-        .unwrap()?;
+        .unwrap_or(Err(VdafError::Uncategorized(
+            "hits_next(): empty verify message iterator".to_string(),
+        )))?;
 
     let (output_share, d, e) = match state {
         VerifyState::Start { output_share, d, e } => (output_share, d, e),
@@ -484,7 +490,9 @@ where
             )),
         })
         .reduce(|y_left, y_right| Ok(y_left? + y_right?))
-        .unwrap()?;
+        .unwrap_or(Err(VdafError::Uncategorized(
+            "hits_next(): empty verify message iterator".to_string(),
+        )))?;
 
     let output_share = match state {
         VerifyState::Next { output_share } => (output_share),
