@@ -8,7 +8,6 @@
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
 
 use std::array::IntoIter;
-use std::collections::HashSet;
 use std::convert::TryFrom;
 
 use crate::field::{split_vector, FieldElement};
@@ -285,34 +284,33 @@ impl<'a> AggregationParam<'a> {
     pub fn new<P: IntoIterator<Item = IdpfInput<'a>>>(
         prefixes: P,
     ) -> Result<AggregationParam<'a>, VdafError> {
-        let mut unique_prefixes = HashSet::new();
         let mut len = None;
-        let prefixes = prefixes
-            .into_iter()
-            .map(|prefix| {
-                if unique_prefixes.contains(&prefix) {
-                    return Err(VdafError::Uncategorized(format!(
-                        "prefix {:?} occurs twice in prefix set",
-                        prefix
-                    )));
-                }
+        let mut unique_prefixes = Vec::new();
+        for prefix in prefixes {
+            if unique_prefixes.contains(&prefix) {
+                return Err(VdafError::Uncategorized(format!(
+                    "prefix {:?} occurs twice in prefix set",
+                    prefix
+                )));
+            }
 
-                if let Some(l) = len {
-                    if prefix.len != l {
-                        return Err(VdafError::Uncategorized(
-                            "prefixes must all have the same length".to_string(),
-                        ));
-                    }
-                } else {
-                    len = Some(prefix.len);
+            if let Some(l) = len {
+                if prefix.len != l {
+                    return Err(VdafError::Uncategorized(
+                        "prefixes must all have the same length".to_string(),
+                    ));
                 }
-                unique_prefixes.insert(prefix.clone());
-                Ok(prefix)
-            })
-            .collect::<Result<Vec<_>, VdafError>>()?;
+            } else {
+                len = Some(prefix.len);
+            }
+            unique_prefixes.push(prefix);
+        }
 
         match len {
-            Some(len) => Ok(AggregationParam { prefixes, len }),
+            Some(len) => Ok(AggregationParam {
+                prefixes: unique_prefixes,
+                len,
+            }),
             None => Err(VdafError::Uncategorized("prefix set is empty".to_string())),
         }
     }
