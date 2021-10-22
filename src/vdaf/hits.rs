@@ -79,9 +79,12 @@ impl<'a> PartialEq<IdpfInput<'a>> for IdpfInput<'a> {
             if r == i {
                 x &= j;
                 y &= j;
-            } else if r > i {
+            }
+
+            if r > i {
                 break;
             }
+
             out |= x ^ y;
         }
         out == 0
@@ -264,9 +267,7 @@ fn hits_setup(suite: Suite) -> Result<[VerifyParam; 2], VdafError> {
         VerifyParam {
             verify_rand_init: verify_rand_init.clone(),
         },
-        VerifyParam {
-            verify_rand_init: verify_rand_init.clone(),
-        },
+        VerifyParam { verify_rand_init },
     ])
 }
 
@@ -450,9 +451,11 @@ where
                 z_left[2] + z_right[2],
             ])
         })
-        .unwrap_or(Err(VdafError::Uncategorized(
-            "hits_next(): empty verify message iterator".to_string(),
-        )))?;
+        .unwrap_or_else(|| {
+            Err(VdafError::Uncategorized(
+                "hits_next(): empty verify message iterator".to_string(),
+            ))
+        })?;
 
     let (output_share, d, e) = match state {
         VerifyState::Start { output_share, d, e } => (output_share, d, e),
@@ -490,9 +493,11 @@ where
             )),
         })
         .reduce(|y_left, y_right| Ok(y_left? + y_right?))
-        .unwrap_or(Err(VdafError::Uncategorized(
-            "hits_next(): empty verify message iterator".to_string(),
-        )))?;
+        .unwrap_or_else(|| {
+            Err(VdafError::Uncategorized(
+                "hits_next(): empty verify message iterator".to_string(),
+            ))
+        })?;
 
     let output_share = match state {
         VerifyState::Next { output_share } => (output_share),
@@ -712,7 +717,7 @@ mod tests {
         let mut state1: Vec<VerifyState<I::Field>> = Vec::with_capacity(2);
         let mut round1: Vec<VerifyMessage<I::Field>> = Vec::with_capacity(2);
         for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
-            let (state, msg) = hits_start(verify_param, agg_param, nonce, &input_share)?;
+            let (state, msg) = hits_start(verify_param, agg_param, nonce, input_share)?;
             state1.push(state);
             round1.push(msg);
         }
@@ -736,7 +741,7 @@ mod tests {
         }
 
         if let Some(want) = expected_output {
-            if want != &output {
+            if want != output {
                 return Err(VdafError::Uncategorized(format!(
                     "eval_vdaf(): unexpected output: got {:?}; want {:?}",
                     output, want
