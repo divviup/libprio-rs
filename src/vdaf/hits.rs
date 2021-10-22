@@ -522,6 +522,7 @@ mod tests {
     use super::*;
 
     use crate::field::Field126;
+    use std::collections::HashSet;
 
     #[test]
     fn test_ipdf() {
@@ -547,6 +548,13 @@ mod tests {
             IdpfInput::new(b"hell-", 40).unwrap()
         );
 
+        // IDPF hash tests
+        let mut unique = HashSet::new();
+        assert!(unique.insert(IdpfInput::new(b"hello", 40).unwrap()));
+        assert!(!unique.insert(IdpfInput::new(b"hello", 40).unwrap()));
+        assert!(unique.insert(IdpfInput::new(b"hello", 39).unwrap()));
+        assert!(unique.insert(IdpfInput::new(b"bye", 20).unwrap()));
+
         // Generate IPDF keys.
         let input = IdpfInput::new(b"hi", 16).unwrap();
         let keys = ToyIdpf::<Field126>::gen(&input, std::iter::repeat(Field126::one())).unwrap();
@@ -558,19 +566,19 @@ mod tests {
         }
 
         // Try evaluating the IPDF keys on incorrect prefixes.
-        let res = eval_idpf(
+        eval_idpf(
             &keys,
             &IdpfInput::new(&[2], 2).unwrap(),
             &[Field126::zero()],
-        );
-        assert!(res.is_ok(), "{:?}", res);
+        )
+        .unwrap();
 
-        let res = eval_idpf(
+        eval_idpf(
             &keys,
             &IdpfInput::new(&[23, 1], 12).unwrap(),
             &[Field126::zero()],
-        );
-        assert!(res.is_ok(), "{:?}", res);
+        )
+        .unwrap();
     }
 
     #[test]
@@ -578,18 +586,18 @@ mod tests {
         // Try constructing an invalid aggregation parameters.
         //
         // The parameter is invalid if the same prefix appears twice.
-        assert!(AggregationParam::new([
+        AggregationParam::new([
             IdpfInput::new(b"hello", 40).unwrap(),
-            IdpfInput::new(b"hello", 40).unwrap()
+            IdpfInput::new(b"hello", 40).unwrap(),
         ])
-        .is_err());
+        .unwrap_err();
 
         // The parameter is invalid if there is a mixture of prefix lengths.
-        assert!(AggregationParam::new([
+        AggregationParam::new([
             IdpfInput::new(b"hi", 10).unwrap(),
             IdpfInput::new(b"xx", 12).unwrap(),
         ])
-        .is_err());
+        .unwrap_err();
 
         let suite = Suite::Blake3;
         let verify_params = hits_setup(suite).unwrap();
@@ -613,7 +621,7 @@ mod tests {
 
         // Try various prefixes.
         let prefix_len = 9;
-        let res = eval_vdaf(
+        eval_vdaf(
             &verify_params,
             &nonce[..],
             &input_shares,
@@ -640,8 +648,8 @@ mod tests {
                 Field126::zero(),
                 Field126::zero(),
             ]),
-        );
-        assert!(res.is_ok(), "{:?}", res);
+        )
+        .unwrap();
 
         // Try evaluating the VDAF with malformed inputs.
         //
@@ -653,14 +661,14 @@ mod tests {
             }
         }
         let prefix_len = 16;
-        let res = eval_vdaf(
+        eval_vdaf(
             &verify_params,
             &nonce[..],
             &input_shares,
             &AggregationParam::new([IdpfInput::new(b"xx", prefix_len).unwrap()]).unwrap(),
             None,
-        );
-        assert!(res.is_err());
+        )
+        .unwrap_err();
 
         // This IDPF key pair has a garbled authentication vector.
         let mut input_shares = hits_input::<ToyIdpf<Field126>>(suite, &input).unwrap();
@@ -668,14 +676,14 @@ mod tests {
             *x = Field126::zero();
         }
         let prefix_len = 16;
-        let res = eval_vdaf(
+        eval_vdaf(
             &verify_params,
             &nonce[..],
             &input_shares,
             &AggregationParam::new([IdpfInput::new(b"xx", prefix_len).unwrap()]).unwrap(),
             None,
-        );
-        assert!(res.is_err());
+        )
+        .unwrap_err();
     }
 
     fn eval_idpf<I, const KEY_LEN: usize, const OUT_LEN: usize>(
