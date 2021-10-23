@@ -402,7 +402,7 @@ where
 mod tests {
     use super::*;
 
-    use crate::field::Field80 as TestField;
+    use crate::field::Field96 as TestField;
     use crate::prng::Prng;
     use crate::vdaf::suite::Suite;
 

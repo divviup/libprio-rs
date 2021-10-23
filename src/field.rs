@@ -7,7 +7,7 @@
 //! subgroup of order `2^n` for some `n`.
 
 use crate::{
-    fp::{FP126, FP32, FP64, FP80},
+    fp::{FP126, FP32, FP64, FP96},
     prng::{Prng, PrngError},
     vdaf::suite::Suite,
 };
@@ -250,7 +250,7 @@ macro_rules! make_field {
             /// We cannot use `u128::from_le_bytes` or `u128::from_be_bytes` because those functions
             /// expect inputs to be exactly 16 bytes long. Our encoding of most field elements is
             /// more compact, and does not have to correspond to the size of an integer type. For
-            /// instance,`Field80`'s encoding is 10 bytes, even though it is a 16 byte `u128` in
+            /// instance,`Field96`'s encoding is 12 bytes, even though it is a 16 byte `u128` in
             /// memory.
             fn try_from_bytes(bytes: &[u8], mask: u128) -> Result<Self, FieldError> {
                 if Self::ENCODED_SIZE > bytes.len() {
@@ -523,7 +523,7 @@ macro_rules! make_field {
 }
 
 make_field!(
-    /// `GF(4293918721)`, a 32-bit field. The generator has order `2^20`.
+    /// `GF(4293918721)`, a 32-bit field.
     Field32,
     u32,
     FP32,
@@ -541,8 +541,7 @@ make_field!(
 );
 
 make_field!(
-    /// **(NOTE: These parameters are experimental. Applications should expect them to
-    /// change.)** `GF(15564440312192434177)`, a 64-bit field. The generator has order `2^59`.
+    /// `GF(18446744069414584321)`, a 64-bit field.
     Field64,
     u64,
     FP64,
@@ -551,19 +550,16 @@ make_field!(
 );
 
 make_field!(
-    ///  **(NOTE: These parameters are experimental. Applications should expect them to
-    ///  change.)** `GF(779190469673491460259841)`, an 80-bit field. The generator has order `2^72`.
-    Field80,
+    /// `GF(79228148845226978974766202881)`, a 96-bit field.
+    Field96,
     u128,
-    FP80,
-    10,
+    FP96,
+    12,
     ByteOrder::BigEndian,
 );
 
 make_field!(
-    ///  **(NOTE: These parameters are experimental. Applications should expect them to
-    ///  change.)** `GF(74769074762901517850839147140769382401)`, a 126-bit field. The generator
-    ///  has order `2^118`.
+    /// `GF(85070591730234613043491808580380655617)`, a 126-bit field.
     Field126,
     u128,
     FP126,
@@ -771,8 +767,8 @@ mod tests {
     }
 
     #[test]
-    fn test_field80() {
-        field_element_test::<Field80>();
+    fn test_field96() {
+        field_element_test::<Field96>();
     }
 
     #[test]
