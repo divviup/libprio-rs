@@ -23,14 +23,14 @@ use crate::vdaf::{Client, Share, VdafError};
 #[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct IdpfInput {
     // XXX Make this u128?
-    index: usize,
+    index: u128,
 }
 
 /// Return the `bit`-th bit of the input. Bounds checking is performed by the caller.
-fn bit(data: &[u8], bit: usize) -> usize {
+fn bit(data: &[u8], bit: usize) -> u128 {
     let i = bit >> 3;
     let j = ((i << 3) ^ bit) as u8;
-    (data[i] >> j) as usize & 1
+    (data[i] >> j) as u128 & 1
 }
 
 impl IdpfInput {
@@ -119,7 +119,7 @@ impl<F: FieldElement> Idpf<2, 1> for ToyIdpf<F> {
     ) -> Result<[Self; 2], VdafError> {
         const MAX_DATA_BYTES: usize = 1024 * 1024; // 1MB
 
-        let max_index = usize::try_from(2 * (MAX_DATA_BYTES / F::ENCODED_SIZE)).unwrap();
+        let max_index = (2 * (MAX_DATA_BYTES / F::ENCODED_SIZE)) as u128;
         if input.index > max_index {
             return Err(VdafError::Uncategorized(format!(
                 "input index ({}) exceeds maximum of ({})",
@@ -127,11 +127,13 @@ impl<F: FieldElement> Idpf<2, 1> for ToyIdpf<F> {
             )));
         }
 
-        let data_len = 2 * input.index;
+        let data_len = 2 * usize::try_from(input.index).unwrap();
+        let input_level = input.level();
         let mut data = vec![F::zero(); data_len];
         let mut output = output.into_iter();
-        for level in 0..input.level() + 1 {
-            data[input.prefix(level).index] = output.next().unwrap();
+        for level in 0..input_level + 1 {
+            let data_index = usize::try_from(input.prefix(level).index).unwrap();
+            data[data_index] = output.next().unwrap();
         }
 
         // NOTE(cjpatton) We could save some space by representing one of the key shares as a PRNG
@@ -140,11 +142,11 @@ impl<F: FieldElement> Idpf<2, 1> for ToyIdpf<F> {
         Ok([
             ToyIdpf {
                 data: data.next().unwrap(),
-                level: input.level(),
+                level: input_level,
             },
             ToyIdpf {
                 data: data.next().unwrap(),
-                level: input.level(),
+                level: input_level,
             },
         ])
     }
@@ -158,7 +160,8 @@ impl<F: FieldElement> Idpf<2, 1> for ToyIdpf<F> {
             )));
         }
 
-        Ok([self.data[prefix.index]])
+        let data_index = usize::try_from(prefix.index).unwrap();
+        Ok([self.data[data_index]])
     }
 }
 
