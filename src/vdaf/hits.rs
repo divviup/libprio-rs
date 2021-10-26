@@ -7,6 +7,8 @@
 //! [VDAF]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
 
+// TODO Add support for a different field at the leaves.
+
 use std::array::IntoIter;
 use std::convert::TryFrom;
 
@@ -317,30 +319,32 @@ impl<'a> AggregationParam<'a> {
 }
 
 /// The state of an aggregator while evaluating the VDAF.
-pub enum VerifyState<F: FieldElement> {
-    /// State after first round of VDAF evaluation.
-    Start {
-        /// The aggregator's share of the output.
-        output_share: Vec<F>,
+enum VerifyState {
+    Ready,
+    Start,
+    Finish,
+}
 
-        /// Aggregator's share of $A = -2a + k$ (see [[BBDG+21](https://eprint.iacr.org/2021/017),
-        /// Appendix C.4]).
-        d: F,
+pub struct EvalState<F: FieldElement> {
+    step: VerifyState,
 
-        /// Aggregator's share of $B = a^2 + b -ak + c$.
-        e: F,
-    },
+    output_share: Option<Vec<F>>,
 
-    /// State after secon round of VDAF evaluation.
-    Next {
-        /// The aggregator's share of the output.
-        output_share: Vec<F>,
-    },
+    /// Shares of the blinded polynomial coefficients (see
+    /// [[BBDG+21](https://eprint.iacr.org/2021/017), Appendix C.4]).
+    z: [F; 3],
+
+    /// Aggregator's share of $A = -2a + k$ (see [[BBDG+21](https://eprint.iacr.org/2021/017),
+    /// Appendix C.4]).
+    d: F, // corr_a
+
+    /// Aggregator's share of $B = a^2 + b -ak + c$.
+    e: F, // corr_b
 }
 
 /// Structure of the verification messages produced by the aggregators while evaluating the VDAF.
 #[derive(Clone)]
-pub enum VerifyMessage<F: FieldElement> {
+pub enum EvalMessage<F: FieldElement> {
     /// First round message.
     Start {
         /// Shares of the blinded polynomial coefficients (see
@@ -349,21 +353,27 @@ pub enum VerifyMessage<F: FieldElement> {
     },
 
     /// Second round message.
-    Next {
+    Finish {
         /// Share of the polynomial evaluation.
         y: F,
+    },
+
+    /// XXX
+    Verified {
+        /// XXX
+        output_share: Vec<F>,
     },
 }
 
 /// The VDAF verify-start algorithm for heavy hitters.
 #[allow(clippy::type_complexity)]
 #[allow(clippy::many_single_char_names)]
-pub fn hits_start<I: Idpf<2, 1>>(
+pub fn hits_init<I: Idpf<2, 1>>(
     verify_param: &VerifyParam,
     agg_param: &AggregationParam,
     nonce: &[u8],
     input_share: &InputShareMessage<I>,
-) -> Result<(VerifyState<I::Field>, VerifyMessage<I::Field>), VdafError> {
+) -> Result<EvalState<I::Field>, VdafError> {
     let i = agg_param.len;
 
     // Derive the verification randomness.
@@ -414,107 +424,109 @@ pub fn hits_start<I: Idpf<2, 1>>(
         }
     };
 
-    Ok((
-        VerifyState::Start { output_share, d, e },
-        VerifyMessage::Start { z },
-    ))
+    Ok(EvalState {
+        step: VerifyState::Ready,
+        output_share: Some(output_share),
+        z,
+        d,
+        e,
+    })
 }
 
-/// The VDAF verify-next algorithm for heavy hitters. The protocol has two rounds, so this is only
-/// called once by each aggregator.
-#[allow(clippy::many_single_char_names)]
-pub fn hits_next<F, M>(
-    state: VerifyState<F>,
-    msg: M,
-) -> Result<(VerifyState<F>, VerifyMessage<F>), VdafError>
-where
-    F: FieldElement,
-    M: IntoIterator<Item = VerifyMessage<F>>,
-{
-    // Compute polynomial coefficients.
-    let z = msg
-        .into_iter()
-        .map(|msg| match msg {
-            VerifyMessage::Start { z } => Ok(z),
-            _ => Err(VdafError::Uncategorized(
-                "hits_next() called on unexpected message".to_string(),
-            )),
-        })
-        .reduce(|z_left, z_right| {
-            let z_left = z_left?;
-            let z_right = z_right?;
-            Ok([
-                z_left[0] + z_right[0],
-                z_left[1] + z_right[1],
-                z_left[2] + z_right[2],
-            ])
-        })
-        .unwrap_or_else(|| {
-            Err(VdafError::Uncategorized(
-                "hits_next(): empty verify message iterator".to_string(),
-            ))
-        })?;
-
-    let (output_share, d, e) = match state {
-        VerifyState::Start { output_share, d, e } => (output_share, d, e),
-        _ => {
-            return Err(VdafError::Uncategorized(
-                "hits_next() called in unexpected state".to_string(),
-            ));
+impl<F: FieldElement> EvalState<F> {
+    pub fn start(&mut self) -> Result<EvalMessage<F>, VdafError> {
+        match self.step {
+            VerifyState::Ready => {
+                // XXX Check that msg is emtpy.
+                self.step = VerifyState::Start;
+                Ok(EvalMessage::Start { z: self.z })
+            }
+            _ => Err(VdafError::Uncategorized("XXX".to_string())),
         }
-    };
-
-    // Compute our share of the polynomial evaluation.
-    //
-    // NOTE(cjpatton) This differs slightly from [BBCG+21] in that the first three terms are
-    // scaled by the number of shares of the output.
-    let x = ((z[0] * z[0]) - z[1] - z[2]) / (F::one() + F::one());
-    let y = x + (d * z[0]) + e;
-    Ok((
-        VerifyState::Next { output_share },
-        VerifyMessage::Next { y },
-    ))
-}
-
-/// The VDAF verify-finish algorithm for heavy hitters.
-pub fn hits_finish<F, M>(state: VerifyState<F>, msg: M) -> Result<Vec<F>, VdafError>
-where
-    F: FieldElement,
-    M: IntoIterator<Item = VerifyMessage<F>>,
-{
-    let y = msg
-        .into_iter()
-        .map(|msg| match msg {
-            VerifyMessage::Next { y } => Ok(y),
-            _ => Err(VdafError::Uncategorized(
-                "hits_finish() called on unexpected message".to_string(),
-            )),
-        })
-        .reduce(|y_left, y_right| Ok(y_left? + y_right?))
-        .unwrap_or_else(|| {
-            Err(VdafError::Uncategorized(
-                "hits_next(): empty verify message iterator".to_string(),
-            ))
-        })?;
-
-    let output_share = match state {
-        VerifyState::Next { output_share } => (output_share),
-        _ => {
-            return Err(VdafError::Uncategorized(
-                "hits_finish() called in unexpected state".to_string(),
-            ));
-        }
-    };
-
-    if y != F::zero() {
-        return Err(VdafError::Uncategorized(format!(
-            "hits_finish(): output is invalid: got {}; expected {}",
-            y,
-            F::zero(),
-        )));
     }
 
-    Ok(output_share)
+    pub fn next<M>(&mut self, msg: M) -> Result<EvalMessage<F>, VdafError>
+    where
+        M: IntoIterator<Item = EvalMessage<F>>,
+    {
+        match self.step {
+            VerifyState::Start => {
+                // Compute polynomial coefficients.
+                let z = msg
+                    .into_iter()
+                    .map(|msg| match msg {
+                        EvalMessage::Start { z } => Ok(z),
+                        _ => Err(VdafError::Uncategorized(
+                            "hits_next() called on unexpected message".to_string(),
+                        )),
+                    })
+                    .reduce(|z_left, z_right| {
+                        let z_left = z_left?;
+                        let z_right = z_right?;
+                        Ok([
+                            z_left[0] + z_right[0],
+                            z_left[1] + z_right[1],
+                            z_left[2] + z_right[2],
+                        ])
+                    })
+                    .unwrap_or_else(|| {
+                        Err(VdafError::Uncategorized(
+                            "hits_next(): empty verify message iterator".to_string(),
+                        ))
+                    })?;
+
+                // Compute our share of the polynomial evaluation.
+                //
+                // NOTE(cjpatton) This differs slightly from [BBCG+21] in that the first three terms are
+                // scaled by the number of shares of the output.
+                //
+                // XXX Match spec here
+                let x = ((z[0] * z[0]) - z[1] - z[2]) / (F::one() + F::one());
+                let y = x + (self.d * z[0]) + self.e;
+                self.step = VerifyState::Finish;
+                Ok(EvalMessage::Finish { y })
+            }
+            _ => Err(VdafError::Uncategorized("XXX".to_string())),
+        }
+    }
+
+    pub fn finish<M>(self, msg: M) -> Result<EvalMessage<F>, VdafError>
+    where
+        M: IntoIterator<Item = EvalMessage<F>>,
+    {
+        match self.step {
+            VerifyState::Finish => {
+                let y = msg
+                    .into_iter()
+                    .map(|msg| match msg {
+                        EvalMessage::Finish { y } => Ok(y),
+                        _ => Err(VdafError::Uncategorized(
+                            "hits_finish() called on unexpected message".to_string(),
+                        )),
+                    })
+                    .reduce(|y_left, y_right| Ok(y_left? + y_right?))
+                    .unwrap_or_else(|| {
+                        Err(VdafError::Uncategorized(
+                            "hits_next(): empty verify message iterator".to_string(),
+                        ))
+                    })?;
+
+                if y != F::zero() {
+                    return Err(VdafError::Uncategorized(format!(
+                        "hits_finish(): output is invalid: got {}; expected {}",
+                        y,
+                        F::zero(),
+                    )));
+                }
+
+                match self.output_share {
+                    Some(output_share) => Ok(EvalMessage::Verified { output_share }),
+                    None => Err(VdafError::Uncategorized("XXX".to_string())),
+                }
+            }
+            _ => Err(VdafError::Uncategorized("XXX".to_string())),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -720,8 +732,8 @@ mod tests {
         expected_output: Option<&[I::Field]>,
     ) -> Result<(), VdafError> {
         // Each aggregator runs verify-start.
-        let mut state1: Vec<VerifyState<I::Field>> = Vec::with_capacity(2);
-        let mut round1: Vec<VerifyMessage<I::Field>> = Vec::with_capacity(2);
+        let mut state1: Vec<EvalState<I::Field>> = Vec::with_capacity(2);
+        let mut round1: Vec<EvalMessage<I::Field>> = Vec::with_capacity(2);
         for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
             let (state, msg) = hits_start(verify_param, agg_param, nonce, input_share)?;
             state1.push(state);
@@ -729,8 +741,8 @@ mod tests {
         }
 
         // Aggregators exchange round-1 messages and run verify-next.
-        let mut state2: Vec<VerifyState<I::Field>> = Vec::with_capacity(2);
-        let mut round2: Vec<VerifyMessage<I::Field>> = Vec::with_capacity(2);
+        let mut state2: Vec<EvalState<I::Field>> = Vec::with_capacity(2);
+        let mut round2: Vec<EvalMessage<I::Field>> = Vec::with_capacity(2);
         for state in state1.into_iter() {
             let (state, msg) = hits_next(state, round1.clone())?;
             state2.push(state);
