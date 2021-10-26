@@ -5,7 +5,6 @@
 //! [[VDAF](https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html)]. It is constructed from a
 //! [`crate::pcp::Value`].
 
-use std::array::IntoIter;
 use std::convert::TryFrom;
 
 use crate::field::FieldElement;
