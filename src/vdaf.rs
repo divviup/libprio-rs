@@ -73,21 +73,24 @@ impl<F: FieldElement> TryFrom<Share<F>> for Vec<F> {
 
 /// The Client's role in the execution of a VDAF.
 pub trait Client {
+    //// A public parameter for this VDAF.
+    type PublicParam;
+
     /// The raw measurement being aggregated.
     type Measurement;
 
-    /// The type of input shares sento by the Client.
+    /// The type of input shares sent by the Client.
     type InputShare;
 
+    /// Returns a new Client configured with the given public parameter.
+    fn new(public_param: Self::PublicParam) -> Self;
+
     /// Shards a measurement into a sequence of input shares, one for each Aggregator.
-    fn shard(measurement: &Self::Measurement) -> Result<Vec<Self::InputShare>, VdafError>;
+    fn shard(&self, measurement: &Self::Measurement) -> Result<Vec<Self::InputShare>, VdafError>;
 }
 
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator {
-    /// The number of rounds in the Verify process.
-    const ROUNDS: usize;
-
     /// The type of input share received from each Client.
     type InputShare;
 
@@ -107,10 +110,13 @@ pub trait Aggregator {
     /// The Aggregator's share of the aggregate result.
     type AggregateShare;
 
+    /// Returns a new Aggregator configured with the given verificaiton parameter.
+    fn new(verify_param: Self::VerifyParam) -> Self;
+
     /// Begins the Verify process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
     fn verify(
-        verify_param: &Self::VerifyParam,
+        &self,
         agg_param: &Self::AggregateParam,
         nonce: &[u8],
         input_share: &Self::InputShare,
@@ -124,19 +130,18 @@ pub trait Aggregator {
 }
 
 /// The state of an Aggregator during the Verify process.
-pub trait VerifyStep {
-    /// The type of output from this state. If this is the terminal state, then this is the
-    /// Aggregator's output share.
-    type Output;
-}
+pub trait VerifyStep {}
 
 /// The initial state of an Aggregator during the Verify process.
-pub trait VerifyStart: VerifyStep {
+pub trait VerifyStart {
     /// The Aggregator's next state.
     type Next: VerifyStep;
 
+    /// XXX
+    type Output;
+
     /// Returns the Aggregator's output and next state.
-    fn start(self) -> (Self::Next, Self::Output);
+    fn start(self) -> Result<(Self::Next, Self::Output), VdafError>;
 }
 
 /// An intermediate state of an Aggregator during the Verify process.
@@ -147,6 +152,10 @@ pub trait VerifyNext: VerifyStep {
     /// The output type from the previous round.
     type Input;
 
+    /// XXX
+    type Output;
+
+    /// XXX
     fn next<M: IntoIterator<Item = Self::Input>>(
         self,
         inputs: M,
@@ -157,6 +166,9 @@ pub trait VerifyNext: VerifyStep {
 pub trait VerifyFinish: VerifyStep {
     /// The output type from the previous round.
     type Input;
+
+    /// XXX
+    type Output;
 
     /// Returns the Aggregator's output share.
     fn finish<M: IntoIterator<Item = Self::Input>>(
