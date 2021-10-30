@@ -364,11 +364,15 @@ fn gadget_call_check<F: FieldElement, G: Gadget<F>>(
     in_len: usize,
 ) -> Result<(), PcpError> {
     if in_len != gadget.arity() {
-        return Err(PcpError::CircuitInLen);
+        return Err(PcpError::Gadget(format!(
+            "unexpected number of inputs: got {}; want {}",
+            in_len,
+            gadget.arity()
+        )));
     }
 
     if in_len == 0 {
-        return Err(PcpError::CircuitIn("can't call an arity-0 gadget"));
+        return Err(PcpError::Gadget("can't call an arity-0 gadget".to_string()));
     }
 
     Ok(())
@@ -387,12 +391,16 @@ where
 
     for i in 1..inp.len() {
         if inp[i].len() != inp[0].len() {
-            return Err(PcpError::GadgetPolyInLen);
+            return Err(PcpError::Gadget(
+                "gadget called on polynomials with different lengths".to_string(),
+            ));
         }
     }
 
     if outp.len() < gadget.degree() * inp[0].len() {
-        return Err(PcpError::GadgetPolyOutLen);
+        return Err(PcpError::Gadget(
+            "slice allocated for gadget output polynomial is too small".to_string(),
+        ));
     }
 
     Ok(())
