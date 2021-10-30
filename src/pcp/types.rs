@@ -18,14 +18,15 @@ pub enum TypeError {
     Instantiate(&'static str),
 }
 
-/// Values of this type encode a simple boolean (either `true` or `false`).
+/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of
+/// the measurements (i.e., the number of `1s`).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Boolean<F: FieldElement> {
+pub struct Count<F: FieldElement> {
     data: Vec<F>,  // The encoded input
     range: Vec<F>, // A range check polynomial for [0, 2)
 }
 
-impl<F: FieldElement> Boolean<F> {
+impl<F: FieldElement> Count<F> {
     /// Encodes a boolean as a value of this type.
     pub fn new(b: bool) -> Self {
         Self {
@@ -38,7 +39,7 @@ impl<F: FieldElement> Boolean<F> {
     }
 }
 
-impl<F: FieldElement> Value for Boolean<F> {
+impl<F: FieldElement> Value for Count<F> {
     type Field = F;
     type Param = ();
 
@@ -96,7 +97,7 @@ impl<F: FieldElement> Value for Boolean<F> {
     fn param(&self) -> Self::Param {}
 }
 
-impl<F: FieldElement> TryFrom<((), &[F])> for Boolean<F> {
+impl<F: FieldElement> TryFrom<((), &[F])> for Count<F> {
     type Error = TypeError;
 
     fn try_from(val: ((), &[F])) -> Result<Self, TypeError> {
@@ -386,17 +387,17 @@ mod tests {
     }
 
     #[test]
-    fn test_boolean() {
+    fn test_count() {
         // Test PCP on valid input.
         pcp_validity_test(
-            &Boolean::<TestField>::new(true),
+            &Count::<TestField>::new(true),
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 9,
             },
         );
         pcp_validity_test(
-            &Boolean::<TestField>::new(false),
+            &Count::<TestField>::new(false),
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 9,
@@ -405,7 +406,7 @@ mod tests {
 
         // Test PCP on invalid input.
         pcp_validity_test(
-            &Boolean {
+            &Count {
                 data: vec![TestField::from(1337)],
                 range: poly_range_check(0, 2),
             },
@@ -416,7 +417,7 @@ mod tests {
         );
 
         // Try running the validity circuit on an input that's too short.
-        let malformed_x = Boolean::<TestField> {
+        let malformed_x = Count::<TestField> {
             data: vec![],
             range: poly_range_check(0, 2),
         };
@@ -425,7 +426,7 @@ mod tests {
             .unwrap_err();
 
         // Try running the validity circuit on an input that's too large.
-        let malformed_x = Boolean::<TestField> {
+        let malformed_x = Count::<TestField> {
             data: vec![TestField::zero(), TestField::zero()],
             range: poly_range_check(0, 2),
         };

@@ -386,13 +386,13 @@ mod tests {
     use super::*;
 
     use crate::field::Field64;
-    use crate::pcp::types::Boolean;
+    use crate::pcp::types::Count;
 
     #[test]
     fn test_prio3() {
         let suite = Suite::Blake3;
         const NUM_SHARES: usize = 23;
-        let input: Boolean<Field64> = Boolean::new(true);
+        let input: Count<Field64> = Count::new(true);
         let nonce = b"This is a good nonce.";
 
         // Client runs the input and proof distribution algorithms.
@@ -403,7 +403,7 @@ mod tests {
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let (states, verifiers): (
-            Vec<VerifyState<Boolean<Field64>>>,
+            Vec<VerifyState<Count<Field64>>>,
             Vec<VerifyMessage<Field64>>,
         ) = verify_params
             .iter()

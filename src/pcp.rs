@@ -19,12 +19,12 @@
 //! then the verification step will fail with high probability. For example:
 //!
 //! ```
-//! use prio::pcp::types::Boolean;
+//! use prio::pcp::types::Count;
 //! use prio::pcp::{decide, prove, query, Value};
 //! use prio::field::{random_vector, FieldElement, Field64};
 //!
-//! // The prover choose an input. In this case, the input is a boolean `false`.
-//! let input: Boolean<Field64> = Boolean::new(false);
+//! // The prover chooses a measurement.
+//! let input: Count<Field64> = Count::new(false);
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
@@ -123,11 +123,11 @@ pub trait Value:
     /// of gadgets called by the circuit.
     ///
     /// ```
-    /// use prio::pcp::types::Boolean;
+    /// use prio::pcp::types::Count;
     /// use prio::pcp::Value;
     /// use prio::field::{random_vector, FieldElement, Field64};
     ///
-    /// let x: Boolean<Field64> = Boolean::new(false);
+    /// let x: Count<Field64> = Count::new(false);
     /// let joint_rand = random_vector(x.joint_rand_len()).unwrap();
     /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, Field64::zero());
@@ -672,7 +672,7 @@ mod tests {
     use super::*;
     use crate::field::{random_vector, split_vector, Field126};
     use crate::pcp::gadgets::{Mul, PolyEval};
-    use crate::pcp::types::Boolean;
+    use crate::pcp::types::Count;
     use crate::pcp::types::TypeError;
     use crate::polynomial::poly_range_check;
 
@@ -723,7 +723,7 @@ mod tests {
 
     #[test]
     fn test_decide() {
-        let x: Boolean<Field126> = Boolean::new(true);
+        let x: Count<Field126> = Count::new(true);
         let joint_rand = random_vector(x.joint_rand_len()).unwrap();
         let prove_rand = random_vector(x.prove_rand_len()).unwrap();
         let query_rand = random_vector(x.query_rand_len()).unwrap();
