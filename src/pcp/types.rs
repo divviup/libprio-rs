@@ -44,11 +44,19 @@ impl<F: FieldElement> Value for Boolean<F> {
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
-            return Err(PcpError::ValidRandLen);
+            return Err(PcpError::Valid(format!(
+                "unexpected joint randomness length: got {}; want {}",
+                rand.len(),
+                self.joint_rand_len()
+            )));
         }
 
         if self.data.len() != 1 {
-            return Err(PcpError::CircuitInLen);
+            return Err(PcpError::Valid(format!(
+                "unexpected input length: got {}; want {}",
+                self.data.len(),
+                1
+            )));
         }
 
         let mut inp = [self.data[0], self.data[0]];
@@ -137,7 +145,11 @@ impl<F: FieldElement> Value for PolyCheckedVector<F> {
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
-            return Err(PcpError::ValidRandLen);
+            return Err(PcpError::Valid(format!(
+                "unexpected joint randomness length: got {}; want {}",
+                rand.len(),
+                self.joint_rand_len()
+            )));
         }
 
         let mut outp = F::zero();
@@ -262,7 +274,7 @@ impl<F: FieldElement> Value for MeanVarUnsignedVector<F> {
         for chunk in self.data.chunks(bits + 1) {
             if chunk.len() < bits + 1 {
                 return Err(PcpError::Valid(
-                    "MeanVarUnsignedVector: length of data not divisible by chunk size",
+                    "MeanVarUnsignedVector: length of data not divisible by chunk size".to_string(),
                 ));
             }
 
@@ -365,8 +377,6 @@ mod tests {
     use crate::field::{random_vector, split_vector, Field64 as TestField};
     use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
 
-    use assert_matches::assert_matches;
-
     // Number of shares to split input and proofs into in `pcp_test`.
     const NUM_SHARES: usize = 3;
 
@@ -410,20 +420,18 @@ mod tests {
             data: vec![],
             range: poly_range_check(0, 2),
         };
-        assert_matches!(
-            malformed_x.valid(&mut malformed_x.gadget(), &[]),
-            Err(PcpError::CircuitInLen)
-        );
+        malformed_x
+            .valid(&mut malformed_x.gadget(), &[])
+            .unwrap_err();
 
         // Try running the validity circuit on an input that's too large.
         let malformed_x = Boolean::<TestField> {
             data: vec![TestField::zero(), TestField::zero()],
             range: poly_range_check(0, 2),
         };
-        assert_matches!(
-            malformed_x.valid(&mut malformed_x.gadget(), &[]),
-            Err(PcpError::CircuitInLen)
-        );
+        malformed_x
+            .valid(&mut malformed_x.gadget(), &[])
+            .unwrap_err();
     }
 
     #[test]
@@ -655,13 +663,15 @@ mod tests {
             .map(Proof::from)
             .collect();
 
-        let mut verifier_shares: Vec<Verifier<V::Field>> = Vec::with_capacity(NUM_SHARES);
-        for i in 0..NUM_SHARES {
-            verifier_shares
-                .push(query(&x_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap());
-        }
-
-        let verifier = Verifier::try_from(verifier_shares.as_slice()).unwrap();
+        let verifier: Verifier<V::Field> = (0..NUM_SHARES)
+            .map(|i| query(&x_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap())
+            .reduce(|mut left, right| {
+                for (x, y) in left.data.iter_mut().zip(right.data.iter()) {
+                    *x += *y;
+                }
+                Verifier { data: left.data }
+            })
+            .unwrap();
         let res = decide(&x_shares[0], &verifier).unwrap();
         assert_eq!(
             res,

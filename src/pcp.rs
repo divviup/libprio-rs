@@ -1,132 +1,62 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
-//! implements a fully linear PCP ("Probabilistically Checkable Proof") system based on
-//! \[[BBC+19](https://eprint.iacr.org/2019/188), Theorem 4.3\].
+//! defines the [`Value`] trait, the main building block of the [`prio3`](crate::vdaf::prio3) VDAF.
+//! Implementations of this trait for various measurement types can be found in [`types`].
+//!
+//! This module also implements a fully linear PCP ("Probabilistically Checkable Proof") system
+//! based on [[BBCG+19], Theorem 4.3] suitable for implementations of [`Value`]. This proof system
+//! is used in `prio3` to ensure validity of the recovered output shares. Most applications will
+//! not need to use this module directly. Typically the VDAF will provide the functionality you
+//! need.
 //!
 //! # Overview
 //!
 //! The proof system is comprised of three algorithms. The first, `prove`, is run by the prover in
 //! order to generate a proof of a statement's validity. The second and third, `query` and
 //! `decide`, are run by the verifier in order to check the proof. The proof asserts that the input
-//! is an element of a language recognized by an arithmetic circuit. For example:
+//! is an element of a language recognized by an arithmetic circuit. If an input is _not_ valid,
+//! then the verification step will fail with high probability. For example:
 //!
 //! ```
 //! use prio::pcp::types::Boolean;
 //! use prio::pcp::{decide, prove, query, Value};
 //! use prio::field::{random_vector, FieldElement, Field64};
 //!
-//! // The prover generates a proof `pf` that its input `x` is a valid encoding
-//! // of a boolean (either `true` or `false`). Both the input and proof are
-//! // vectors over a finite field.
+//! // The prover choose an input. In this case, the input is a boolean `false`.
 //! let input: Boolean<Field64> = Boolean::new(false);
 //!
-//! // The verifier chooses "joint randomness" that that will be used to
-//! // generate and verify a proof of `x`'s validity. In proof systems like
-//! // [BBC+19, Theorem 5.3], the verifier sends the prover a random challenge
-//! // in the first round, which the prover uses to construct the proof.
+//! // The prover and verifier agree on "joint randomness" used to generate and
+//! // check the proof. The application needs to ensure that the prover
+//! // "commits" to the input before this point. In the `prio3` VDAF, the joint
+//! // randomness is derived from additive shares of the input.
 //! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
-//!
-//! // The prover and verifier choose local randomness it uses to check the proof.
-//! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
-//! let query_rand = random_vector(input.query_rand_len()).unwrap();
 //!
 //! // The prover generates the proof.
-//! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
-//!
-//! // The verifier queries the proof `pf` and input `x`, getting a
-//! // "verification message" in response. It uses this message to decide if
-//! // the input is valid.
-//! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
-//! let res = decide(&input, &verifier).unwrap();
-//! assert_eq!(res, true);
-//! ```
-//!
-//! If an input is _not_ valid, then the verification step will fail with high probability:
-//!
-//! ```
-//! use prio::pcp::types::Boolean;
-//! use prio::pcp::{decide, prove, query, Value};
-//! use prio::field::{random_vector, FieldElement, Field64};
-//!
-//! use std::convert::TryFrom;
-//!
-//! let input = Boolean::try_from(((), vec![Field64::from(23)].as_slice())).unwrap(); // Invalid input
-//! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
 //! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
-//! let query_rand = random_vector(input.query_rand_len()).unwrap();
 //! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
+//!
+//! // The verifier checks the proof.
+//! let query_rand = random_vector(input.query_rand_len()).unwrap();
 //! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
-//! let res = decide(&input, &verifier).unwrap();
-//! assert_eq!(res, false);
+//! assert!(decide(&input, &verifier).unwrap());
 //! ```
 //!
-//! The "fully linear" property of the proof system allows the protocol to be executed over
-//! secret-shared data. In this setting, the prover uses an additive secret sharing scheme to
-//! "split" its input and proof into a number of shares and distributes the shares among a set of
-//! verifiers. Each verifier queries its input and proof share locally. One of the verifiers
-//! collects the outputs and uses them to decide if the input was valid. This procedure allows the
-//! verifiers to validate a user's input without ever seeing the input in the clear:
+//! The proof system implemented here lifts [[BBCG+19], Theorem 4.3] to a 1.5-round, public-coin,
+//! interactive oracle proof system (see [[BBCG+19], Definition 3.11]). The main difference is that
+//! the arithmetic circuit may include an additional, random input (called the "joint randomness"
+//! above). This allows us to express proof systems like the SIMD circuit of [[BBCG+19]] that
+//! trade a modest amount of soundness error for efficiency.
 //!
-//! ```
-//! use prio::pcp::types::Boolean;
-//! use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-//! use prio::field::{random_vector, split_vector, FieldElement, Field64};
+//! Another improvement made here is to allow validity circuits with multiple repeating
+//! sub-components (called "gadgets" here, see [`gadgets`]) instead of just one. This idea comes
+//! from [[BBCG+19], Remark 4.5].
 //!
-//! use std::convert::TryFrom;
+//! WARNING: These modifications have not yet undergone significant security analysis. As such,
+//! this proof system should not be considered suitable for production use.
 //!
-//! // The prover encodes its input and splits it into two secret shares. It
-//! // sends each share to two aggregators.
-//! let input: Boolean<Field64> = Boolean::new(true);
-//! let input_shares: Vec<Boolean<Field64>> = split_vector(input.as_slice(), 2)
-//!     .unwrap()
-//!     .into_iter()
-//!     .map(|data| Boolean::try_from((input.param(), data.as_slice())).unwrap())
-//!     .collect();
-//!
-//! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
-//! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
-//! let query_rand = random_vector(input.query_rand_len()).unwrap();
-//!
-//! // The prover generates a proof of its input's validity and splits the proof
-//! // into two shares. It sends each share to one of two aggregators.
-//! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
-//! let proof_shares: Vec<Proof<Field64>> = split_vector(proof.as_slice(), 2)
-//!     .unwrap()
-//!     .into_iter()
-//!     .map(Proof::from)
-//!     .collect();
-//!
-//! // Each verifier queries its shares of the input and proof and sends its
-//! // share of the verification message to the leader.
-//! let verifier_shares = vec![
-//!     query(&input_shares[0], &proof_shares[0], &query_rand, &joint_rand).unwrap(),
-//!     query(&input_shares[1], &proof_shares[1], &query_rand, &joint_rand).unwrap(),
-//! ];
-//!
-//! // The leader collects the verifier shares and decides if the input is valid.
-//! let verifier = Verifier::try_from(verifier_shares.as_slice()).unwrap();
-//! let res = decide(&input_shares[0], &verifier).unwrap();
-//! assert_eq!(res, true);
-//! ```
-//!
-//! Note that the secret sharing provided by [`crate::field::split_vector`] is not the most
-//! efficient possible. A much more efficient secret sharing scheme is implemented in the
-//! [`crate::vdaf`] module.
-//!
-//! The fully linear PCP system of [BBC+19, Theorem 4.3] applies to languages recognized by
-//! arithmetic circuits over finite fields that have a particular structure. Namely, all gates in
-//! the circuit are either affine (i.e., addition or scalar multiplication) or invoke a special
-//! sub-circuit, called the "gadget", which may contain non-affine operations (i.e.,
-//! multiplication). For example, the `Boolean` type uses the `Mul` gadget, an arity-2 circuit that
-//! simply multiples its inputs and outputs the result.
-//!
-//! # References
-//!
-//! - \[GB17\] H. Corrigan-Gibbs and D. Boneh. "[Prio: Private, Robust, and Scalable Computation of
-//! Aggregate Statistics.](https://crypto.stanford.edu/prio/paper.pdf)" NSDI 2017.
-//! - \[BBC+19\] Boneh et al. "[Zero-Knowledge Proofs on Secret-Shared Data via Fully Linear
-//! PCPs.](https://eprint.iacr.org/2019/188)" CRYPTO 2019.
+//! [BBCG+19]: https://ia.cr/2019/188
+//! [CGB17]: https://crypto.stanford.edu/prio
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
@@ -142,73 +72,35 @@ pub mod gadgets;
 pub mod types;
 
 /// Errors propagated by methods in this module.
-//
-// TODO(cjpatton) Consolidate the set of errors here. Lots of variants isn't super helpful.
 #[derive(Debug, thiserror::Error)]
 pub enum PcpError {
-    /// The caller of an arithmetic circuit provided the wrong number of inputs. This error may
-    /// occur when evaluating a validity circuit or gadget.
-    #[error("wrong number of inputs to arithmetic circuit")]
-    CircuitInLen,
+    /// Calling [`prove`] returned an error.
+    #[error("prove error: {0}")]
+    Prove(String),
 
-    /// The caller of an arithmetic circuit provided malformed input.
-    #[error("malformed input to circuit")]
-    CircuitIn(&'static str),
+    /// Calling [`query`] returned an error.
+    #[error("query error: {0}")]
+    Query(String),
 
-    /// This error is returned by `collect` if the input slice is empty.
-    #[error("collect requires at least one input")]
-    CollectInLen,
+    /// Calling [`decide`] returned an error.
+    #[error("decide error: {0}")]
+    Decide(String),
 
-    /// This error is returned by `collect` if the two or more verifier shares have different
-    /// gadget arities.
-    #[error("collect inputs have mismatched gadget arity")]
-    CollectGadgetInLenMismatch,
+    /// Gadget returned an error.
+    #[error("gadget error: {0}")]
+    Gadget(String),
+
+    /// Validity circuit returned an error.
+    #[error("validity circuit error: {0}")]
+    Valid(String),
 
     /// Returned if an FFT operation propagates an error.
-    #[error("FFT error")]
+    #[error("FFT error: {0}")]
     Fft(#[from] FftError),
 
-    /// When evaluating a gadget on polynomials, this error is returned if the input polynomials
-    /// don't all have the same length.
-    #[error("gadget called on polynomials with different lengths")]
-    GadgetPolyInLen,
-
-    /// When evaluating a gadget on polynomials, this error is returned if the slice allocated for
-    /// the output polynomial is too small.
-    #[error("slice allocated for gadget output is too small")]
-    GadgetPolyOutLen,
-
-    /// Calling `query` returned an error.
-    #[error("query error: {0}")]
-    Query(&'static str),
-
-    /// Returned by `query` if one of the elements of the query randomness vector is invalid. An
-    /// element is invalid if using it to generate the verification message would result in a
-    /// privacy violation.
-    ///
-    /// If this error is returned, the caller may generate fresh randomness and retry.
-    #[error("query error: invalid query randomness")]
-    QueryRandInvalid,
-
-    /// Calling `decide` returned an error.
-    #[error("decide error: {0}")]
-    Decide(&'static str),
-
-    /// The validity circuit was called with the wrong amount of randomness.
-    #[error("incorrect amount of randomness")]
-    ValidRandLen,
-
-    /// Encountered an error while evaluating a validity circuit.
-    #[error("failed to run validity circuit: {0}")]
-    Valid(&'static str),
-
     /// Returned if a field operation encountered an error.
-    #[error("Field error")]
+    #[error("Field error: {0}")]
     Field(#[from] FieldError),
-
-    /// Failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
 }
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
@@ -269,10 +161,12 @@ pub trait Value:
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
-    /// NOTE The construction of [BBC+19, Theorem 4.3] uses a single gadget rather than many. The
-    /// idea to generalize the proof system to allow multiple gadgets is discussed briefly in
-    /// [BBC+19, Remark 4.5], but no construction is given. The construction implemented here
+    /// NOTE The construction of [[BBCG+19], Theorem 4.3] uses a single gadget rather than many.
+    /// The idea to generalize the proof system to allow multiple gadgets is discussed briefly in
+    /// [[BBCG+19], Remark 4.5], but no construction is given. The construction implemented here
     /// requires security analysis.
+    ///
+    /// [BBCG+19]: https://ia.cr/2019/188
     fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>>;
 
     /// Returns a copy of the associated type parameters for this value.
@@ -281,59 +175,15 @@ pub trait Value:
     /// When verifying a proof over secret shared data, this method may be used to distinguish the
     /// "leader" share from the others. This is useful, for example, when some of the gadget inputs
     /// are constants used for both proof generation and verification.
-    ///
-    /// ```
-    /// use prio::pcp::types::MeanVarUnsignedVector;
-    /// use prio::pcp::{decide, prove, query, Value, Proof, Verifier};
-    /// use prio::field::{random_vector, split_vector, FieldElement, Field64};
-    ///
-    /// use std::convert::TryFrom;
-    ///
-    /// let measurement = [1, 2, 3];
-    /// let bits = 8;
-    /// let input: MeanVarUnsignedVector<Field64> =
-    ///     MeanVarUnsignedVector::new(bits, &measurement).unwrap();
-    /// let input_shares: Vec<MeanVarUnsignedVector<Field64>> = split_vector(input.as_slice(), 2)
-    ///     .unwrap()
-    ///     .into_iter()
-    ///     .enumerate()
-    ///     .map(|(i, data)| {
-    ///         let mut share =
-    ///             MeanVarUnsignedVector::try_from((input.param(), data.as_slice())).unwrap();
-    ///         share.set_leader(i == 0);
-    ///         share
-    ///     })
-    ///     .collect();
-    ///
-    /// let joint_rand = random_vector(input.joint_rand_len()).unwrap();
-    /// let prove_rand = random_vector(input.prove_rand_len()).unwrap();
-    /// let query_rand = random_vector(input.query_rand_len()).unwrap();
-    ///
-    /// let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
-    /// let proof_shares: Vec<Proof<Field64>> = split_vector(proof.as_slice(), 2)
-    ///     .unwrap()
-    ///     .into_iter()
-    ///     .map(Proof::from)
-    ///     .collect();
-    ///
-    /// let verifier_shares = vec![
-    ///     query(&input_shares[0], &proof_shares[0], &query_rand, &joint_rand).unwrap(),
-    ///     query(&input_shares[1], &proof_shares[1], &query_rand, &joint_rand).unwrap(),
-    /// ];
-    ///
-    /// let verifier = Verifier::try_from(verifier_shares.as_slice()).unwrap();
-    /// let res = decide(&input_shares[0], &verifier).unwrap();
-    /// assert_eq!(res, true);
-    /// ```
+    //
+    // TODO(cjpatton) Deprecate this method. The proper way to do this should be to normalizing by
+    // dividing by the number of shares.
     fn set_leader(&mut self, _is_leader: bool) {
         // No-op by default.
     }
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
-//
-// TODO(cjpatton) Consider extending this API with a `Param` associated type and have it implement
-// a constructor from an instance of `Param` and the number of times the gadget gets called.
 pub trait Gadget<F: FieldElement> {
     /// Evaluates the gadget on input `inp` and returns the output.
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError>;
@@ -354,6 +204,12 @@ pub trait Gadget<F: FieldElement> {
 }
 
 /// Generate a proof of an input's validity.
+///
+/// # Parameters
+///
+/// * `input` is the input.
+/// * `prove_rand` is the prover' randomness.
+/// * `joint_rand` is the randomness shared by the prover and verifier.
 pub fn prove<V: Value>(
     input: &V,
     prove_rand: &[V::Field],
@@ -369,7 +225,11 @@ pub fn prove<V: Value>(
         .map(|(idx, inner)| {
             let inner_arity = inner.arity();
             if prove_rand_len + inner_arity > prove_rand.len() {
-                return Err(PcpError::Query("short prove randomness"));
+                return Err(PcpError::Prove(format!(
+                    "short prove randomness: got {}; want {}",
+                    prove_rand.len(),
+                    input.prove_rand_len()
+                )));
             }
 
             let gadget = Box::new(ProveShimGadget::new(
@@ -522,9 +382,10 @@ impl<F: FieldElement> From<Proof<F>> for Vec<u8> {
 /// Generate a verifier message for an input and proof (or the verifier share for an input share
 /// and proof share).
 ///
-/// Parameters:
-/// * `input` is the input.
-/// * `proof` is the proof.
+/// # Parameters
+///
+/// * `input` is the input or input share.
+/// * `proof` is the proof or proof share.
 /// * `query_rand` is the verifier's randomness.
 /// * `joint_rand` is the randomness shared by the prover and verifier.
 pub fn query<V: Value>(
@@ -542,7 +403,11 @@ pub fn query<V: Value>(
         .enumerate()
         .map(|(idx, gadget)| {
             if idx >= query_rand.len() {
-                return Err(PcpError::Query("short query randomness"));
+                return Err(PcpError::Query(format!(
+                    "short query randomness: got {}; want {}",
+                    query_rand.len(),
+                    input.query_rand_len()
+                )));
             }
 
             let gadget_degree = gadget.degree();
@@ -556,13 +421,17 @@ pub fn query<V: Value>(
             if r.pow(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
                 == V::Field::one()
             {
-                return Err(PcpError::QueryRandInvalid);
+                return Err(PcpError::Query(format!(
+                    "invalid query randomness: encountered 2^{}-th root of unity",
+                    m
+                )));
             }
 
             // Compute the length of the sub-proof corresponding to the `idx`-th gadget.
             let next_len = gadget_arity + gadget_degree * (m - 1) + 1;
             if proof_len + next_len > proof.data.len() {
-                return Err(PcpError::Query("short proof"));
+                // TODO(cjpatton) Compute the expected proof length and print it in error message.
+                return Err(PcpError::Query("short proof".to_string()));
             }
 
             let proof_data = &proof.data[proof_len..proof_len + next_len];
@@ -578,11 +447,16 @@ pub fn query<V: Value>(
         .collect::<Result<Vec<_>, _>>()?;
 
     if proof_len < proof.data.len() {
-        return Err(PcpError::Query("long proof"));
+        // TODO(cjpatton) Compute the expected proof length and print it in error message.
+        return Err(PcpError::Query("long proof".to_string()));
     }
 
     if query_rand.len() > shim.len() {
-        return Err(PcpError::Query("long joint randomness"));
+        return Err(PcpError::Query(format!(
+            "long query randomness: got {}; want {}",
+            query_rand.len(),
+            input.query_rand_len()
+        )));
     }
 
     // Create a buffer for the verifier data. This includes the output of the validity circuit and,
@@ -748,39 +622,18 @@ impl<F: FieldElement> From<Vec<F>> for Verifier<F> {
     }
 }
 
-impl<F: FieldElement> TryFrom<&[Verifier<F>]> for Verifier<F> {
-    type Error = PcpError;
-
-    /// Returns the verifier corresponding to a sequence of verifier shares.
-    fn try_from(verifier_shares: &[Verifier<F>]) -> Result<Verifier<F>, PcpError> {
-        if verifier_shares.is_empty() {
-            return Err(PcpError::CollectInLen);
-        }
-
-        let mut verifier = Verifier {
-            data: vec![F::zero(); verifier_shares[0].data.len()],
-        };
-
-        for verifier_share in verifier_shares {
-            if verifier_share.data.len() != verifier.data.len() {
-                return Err(PcpError::CollectGadgetInLenMismatch);
-            }
-
-            for j in 0..verifier.data.len() {
-                verifier.data[j] += verifier_share.data[j];
-            }
-        }
-
-        Ok(verifier)
-    }
-}
-
 /// Decide if the input (or input share) is valid using the given verifier.
+///
+/// # Parameters
+///
+/// * `input` is the input or input share.
+/// * `verifier` is the verifier message or a share of the verifier message.
 pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool, PcpError> {
     let mut gadgets = input.gadget();
 
     if verifier.data.is_empty() {
-        return Err(PcpError::Decide("zero-length verifier"));
+        // TODO(cjpatton) Compute expected verifier length and output it here
+        return Err(PcpError::Decide("zero-length verifier".to_string()));
     }
 
     // Check if the output of the circuit is 0.
@@ -794,7 +647,8 @@ pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool
     for idx in 0..gadgets.len() {
         let next_len = 1 + gadgets[idx].arity();
         if verifier_len + next_len > verifier.data.len() {
-            return Err(PcpError::Decide("short verifier"));
+            // TODO(cjpatton) Compute expected verifier length and output it here
+            return Err(PcpError::Decide("short verifier".to_string()));
         }
 
         let e = gadgets[idx].call(&verifier.data[verifier_len..verifier_len + next_len - 1])?;
@@ -806,7 +660,8 @@ pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool
     }
 
     if verifier_len != verifier.data.len() {
-        return Err(PcpError::Decide("long verifier"));
+        // TODO(cjpatton) Compute expected verifier length and output it here
+        return Err(PcpError::Decide("long verifier".to_string()));
     }
 
     Ok(true)
@@ -854,10 +709,15 @@ mod tests {
             .map(Proof::from)
             .collect();
 
-        let vf_shares: Vec<Verifier<F>> = (0..NUM_SHARES)
+        let vf: Verifier<F> = (0..NUM_SHARES)
             .map(|i| query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap())
-            .collect();
-        let vf = Verifier::try_from(vf_shares.as_slice()).unwrap();
+            .reduce(|mut left, right| {
+                for (x, y) in left.data.iter_mut().zip(right.data.iter()) {
+                    *x += *y;
+                }
+                Verifier { data: left.data }
+            })
+            .unwrap();
         assert!(decide(&x, &vf).unwrap());
     }
 
@@ -910,11 +770,19 @@ mod tests {
 
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
             if joint_rand.len() != self.joint_rand_len() {
-                return Err(PcpError::ValidRandLen);
+                return Err(PcpError::Valid(format!(
+                    "unexpected joint randomness length: got {}; want {}",
+                    joint_rand.len(),
+                    self.joint_rand_len()
+                )));
             }
 
             if self.data.len() != 2 {
-                return Err(PcpError::CircuitInLen);
+                return Err(PcpError::Valid(format!(
+                    "unexpected input length: got {}; want {}",
+                    self.data.len(),
+                    2
+                )));
             }
 
             let r = joint_rand[0];
