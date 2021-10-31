@@ -392,7 +392,7 @@ mod tests {
     fn test_prio3() {
         let suite = Suite::Blake3;
         const NUM_SHARES: usize = 23;
-        let input: Count<Field64> = Count::new(true);
+        let input: Count<Field64> = Count::new(1).unwrap();
         let nonce = b"This is a good nonce.";
 
         // Client runs the input and proof distribution algorithms.
