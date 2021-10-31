@@ -103,41 +103,58 @@ impl<F: FieldElement> TryFrom<((), &[F])> for Count<F> {
     }
 }
 
-/// This type represents vectors for which `poly(x) == 0` holds for some polynomial `poly` and each
-/// vector element `x`.
+/// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of the measurements.
 ///
-/// This type is "generic" in that it can be used to construct high level types. For example, a
-/// boolean vector can be represented as follows:
+/// The validity circuit is based on the SIMD circuit construction of [[BBCG+19], Theorem 5.3].
 ///
-/// ```
-/// use prio::field::{Field64, FieldElement};
-/// use prio::pcp::types::PolyCheckedVector;
-///
-/// let data = vec![Field64::zero(), Field64::one(), Field64::zero()];
-/// let x = PolyCheckedVector::new_range_checked(data, 0, 2);
-/// ```
-/// The proof technique is based on the SIMD circuit construction of
-/// \[[BBG+19](https://eprint.iacr.org/2019/188), Theorem 5.3\].
+/// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct PolyCheckedVector<F: FieldElement> {
+pub struct Sum<F: FieldElement> {
     data: Vec<F>,
-    poly: Vec<F>,
+    range_checker: Vec<F>,
 }
 
-impl<F: FieldElement> PolyCheckedVector<F> {
-    /// Returns a `poly`-checked vector where `poly(x) == 0` if and only if `x` is in range
-    /// `[start, end)`. The degree of `poly` is equal to `end`.
-    pub fn new_range_checked(data: Vec<F>, start: usize, end: usize) -> Self {
-        Self {
-            data,
-            poly: poly_range_check(start, end),
+impl<F: FieldElement> Sum<F> {
+    /// Constructs a new summand. The value of `summand` must be in `[0, 2^bits)`.
+    pub fn new(summand: u64, bits: u32) -> Result<Self, PcpError> {
+        let summand = usize::try_from(summand).unwrap();
+        let bits = usize::try_from(bits).unwrap();
+
+        if bits > (size_of::<F::Integer>() << 3) {
+            return Err(PcpError::Value(
+                "bits exceeds bit length of the field's integer representation".to_string(),
+            ));
         }
+
+        let int = F::Integer::try_from(summand).map_err(|err| {
+            PcpError::Value(format!("failed to convert summand to field: {:?}", err))
+        })?;
+
+        let max = F::Integer::try_from(1 << bits).unwrap();
+        if int >= max {
+            return Err(PcpError::Value(
+                "value of summand exceeds bit length".to_string(),
+            ));
+        }
+
+        let one = F::Integer::try_from(1).unwrap();
+        let mut data: Vec<F> = Vec::with_capacity(bits);
+        for l in 0..bits {
+            let l = F::Integer::try_from(l).unwrap();
+            let w = F::from((int >> l) & one);
+            data.push(w);
+        }
+
+        Ok(Self {
+            data,
+            range_checker: poly_range_check(0, 2),
+        })
     }
 }
 
-impl<F: FieldElement> Value for PolyCheckedVector<F> {
+impl<F: FieldElement> Value for Sum<F> {
     type Field = F;
-    type Param = Vec<F>; // A polynomial
+    type Param = u32;
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
@@ -148,14 +165,15 @@ impl<F: FieldElement> Value for PolyCheckedVector<F> {
             )));
         }
 
-        let mut outp = F::zero();
+        // Check that each element of `data` is a 0 or 1.
+        let mut range_check = F::zero();
         let mut r = rand[0];
         for chunk in self.data.chunks(1) {
-            outp += r * g[0].call(chunk)?;
+            range_check += r * g[0].call(chunk)?;
             r *= rand[0];
         }
 
-        Ok(outp)
+        Ok(range_check)
     }
 
     fn valid_gadget_calls(&self) -> Vec<usize> {
@@ -175,7 +193,10 @@ impl<F: FieldElement> Value for PolyCheckedVector<F> {
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(self.poly.clone(), self.data.len()))]
+        vec![Box::new(PolyEval::new(
+            self.range_checker.clone(),
+            self.data.len(),
+        ))]
     }
 
     fn as_slice(&self) -> &[F] {
@@ -183,17 +204,26 @@ impl<F: FieldElement> Value for PolyCheckedVector<F> {
     }
 
     fn param(&self) -> Self::Param {
-        self.poly.clone()
+        self.data.len() as u32
     }
 }
 
-impl<F: FieldElement> TryFrom<(Vec<F>, &[F])> for PolyCheckedVector<F> {
+impl<F: FieldElement> TryFrom<(u32, &[F])> for Sum<F> {
     type Error = PcpError;
 
-    fn try_from(val: (Vec<F>, &[F])) -> Result<Self, PcpError> {
+    fn try_from(val: (u32, &[F])) -> Result<Self, PcpError> {
+        let bits = usize::try_from(val.0).unwrap();
+        let data = val.1;
+
+        if data.len() != bits {
+            return Err(PcpError::Value(
+                "data length does not match bit length".to_string(),
+            ));
+        }
+
         Ok(Self {
-            data: val.1.to_vec(),
-            poly: val.0,
+            data: data.to_vec(),
+            range_checker: poly_range_check(0, 2),
         })
     }
 }
@@ -431,27 +461,23 @@ mod tests {
     }
 
     #[test]
-    fn test_poly_checked_vec() {
+    fn test_sum() {
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
 
         // Test PCP on valid input.
         pcp_validity_test(
-            &PolyCheckedVector::<TestField>::new_range_checked(
-                vec![nine, one, one, one, one, one, one, one, one, one, one],
-                1,
-                10,
-            ),
+            &Sum::<TestField>::new(1337, 11).unwrap(),
             &ValidityTestCase {
                 expect_valid: true,
-                expected_proof_len: 137,
+                expected_proof_len: 32,
             },
         );
         pcp_validity_test(
-            &PolyCheckedVector::<TestField> {
+            &Sum::<TestField> {
                 data: vec![],
-                poly: poly_range_check(0, 2),
+                range_checker: poly_range_check(0, 2),
             },
             &ValidityTestCase {
                 expect_valid: true,
@@ -459,19 +485,19 @@ mod tests {
             },
         );
         pcp_validity_test(
-            &PolyCheckedVector::<TestField> {
-                data: vec![one],
-                poly: poly_range_check(0, 2),
+            &Sum::<TestField> {
+                data: vec![one, zero],
+                range_checker: poly_range_check(0, 2),
             },
             &ValidityTestCase {
                 expect_valid: true,
-                expected_proof_len: 4,
+                expected_proof_len: 8,
             },
         );
         pcp_validity_test(
-            &PolyCheckedVector::<TestField> {
+            &Sum::<TestField> {
                 data: vec![one, zero, one, one, zero, one, one, one, zero],
-                poly: poly_range_check(0, 2),
+                range_checker: poly_range_check(0, 2),
             },
             &ValidityTestCase {
                 expect_valid: true,
@@ -481,9 +507,9 @@ mod tests {
 
         // Test PCP on invalid input.
         pcp_validity_test(
-            &PolyCheckedVector::<TestField> {
+            &Sum::<TestField> {
                 data: vec![one, nine, zero],
-                poly: poly_range_check(0, 2),
+                range_checker: poly_range_check(0, 2),
             },
             &ValidityTestCase {
                 expect_valid: false,
@@ -491,9 +517,9 @@ mod tests {
             },
         );
         pcp_validity_test(
-            &PolyCheckedVector::<TestField> {
+            &Sum::<TestField> {
                 data: vec![zero, zero, zero, zero, nine],
-                poly: poly_range_check(0, 2),
+                range_checker: poly_range_check(0, 2),
             },
             &ValidityTestCase {
                 expect_valid: false,
@@ -601,6 +627,7 @@ mod tests {
         );
     }
 
+    // TODO(cjpatton) Have this return an error and have the caller assert success (or failure).
     fn pcp_validity_test<V: Value>(input: &V, t: &ValidityTestCase) {
         let mut gadgets = input.gadget();
         let joint_rand = random_vector(input.joint_rand_len()).unwrap();

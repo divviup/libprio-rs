@@ -7,7 +7,7 @@ use prio::client::Client;
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
-use prio::pcp::types::{MeanVarUnsignedVector, PolyCheckedVector};
+use prio::pcp::types::MeanVarUnsignedVector;
 use prio::pcp::{prove, query, Value};
 use prio::server::{generate_verification_message, ValidationMemory};
 
@@ -112,26 +112,7 @@ pub fn bool_vec(c: &mut Criterion) {
             })
         });
 
-        // v3
-        let x: PolyCheckedVector<F> = PolyCheckedVector::new_range_checked(data.clone(), 0, 2);
-        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
-        let query_rand = random_vector(x.query_rand_len()).unwrap();
-
-        c.bench_function(&format!("bool vec v3 prove, size={}", *size), |b| {
-            b.iter(|| {
-                prove(&x, &prove_rand, &joint_rand).unwrap();
-            })
-        });
-
-        let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
-        println!("bool vec v3 proof size={}\n", pf.as_slice().len());
-
-        c.bench_function(&format!("bool vec v3 query, size={}", *size), |b| {
-            b.iter(|| {
-                query(&x, &pf, &query_rand, &joint_rand).unwrap();
-            })
-        });
+        // TODO(cjpatton) Add benchmark for comparable "v3" functionality.
     }
 }
 
