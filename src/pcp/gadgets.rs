@@ -5,7 +5,7 @@
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
 use crate::field::FieldElement;
 use crate::pcp::{Gadget, PcpError};
-use crate::polynomial::{poly_deg, poly_eval, poly_mul, poly_range_check};
+use crate::polynomial::{poly_deg, poly_eval, poly_mul};
 
 use std::any::Any;
 use std::convert::TryFrom;
@@ -191,173 +191,6 @@ impl<F: FieldElement> Gadget<F> for PolyEval<F> {
     }
 }
 
-/// The gadget for the MeanVarUnsignedVector type. It is not designed for general use.
-///
-/// MeanVarUnsigned is parameterized by a positive integer `bits`. Its arity is `2*bits+1`:
-///
-///  * The first `bits` values are interpreted as a vector `r_vec`.
-///  * The next `bits` values are interpreted as a vector `x_vec`.
-///  * The last value is interpreted as a singleton `x`.
-///
-/// The gadget is designed to output `x^2` *as long as* `x_vec` is a vector comprised of 0s and 1s.
-/// It first computes `w[l] = p(x_vec[l]) * r_vec[l]` for each `0 <= l < bits`, where `p(x) =
-/// x(x-1)`. It then computes `w = w[0] + ... + w[bits-1]` and returns `w + x^2`.
-///
-/// If `vec_x[l] == 1` or `vec_x[l] == 0`, then `p(vec_x[l]) == 0`; otherwise, `p(vec_x[l]) != 0`.
-/// The validity circuit for MeanVarUnsignedVector sets `r_vec[l] = r^(l+1)`, where `r` is a
-/// uniform random field element. This is ensures that, if `p(vec_x[l]) != 0` for some `l`, then
-/// `w != 0` with high probability.
-pub struct MeanVarUnsigned<F: FieldElement> {
-    /// Polynomial used to check that each element of `x_vec` is either `0` or `1`.
-    poly: [F; 3],
-    /// Size of buffer for FFT operations.
-    n: usize,
-    /// Inverse of `n` in `F`.
-    n_inv: F,
-    /// The parameter that determines the circuit's arity.
-    bits: usize,
-}
-
-impl<F: FieldElement> MeanVarUnsigned<F> {
-    /// Constructs a MeanVarUnsigned gadget with parameter `bits`. `num_calls` is the number of
-    /// times this gadget is called by the validity circuit.
-    pub fn new(bits: usize, num_calls: usize) -> Self {
-        let poly: Vec<F> = poly_range_check(0, 2);
-        let n = (3 * (1 + num_calls).next_power_of_two()).next_power_of_two();
-        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
-
-        Self {
-            poly: [poly[0], poly[1], poly[2]],
-            n,
-            n_inv,
-            bits,
-        }
-    }
-
-    pub(crate) fn call_poly_direct(
-        &mut self,
-        outp: &mut [F],
-        inp: &[Vec<F>],
-    ) -> Result<(), PcpError> {
-        let bits = self.bits;
-        let r_vec = &inp[..bits];
-        let x_vec = &inp[bits..2 * bits];
-        let x = &inp[2 * bits];
-
-        let z = poly_mul(x, x);
-        outp[..z.len()].clone_from_slice(&z[..]);
-        for item in outp.iter_mut().skip(z.len()) {
-            *item = F::zero();
-        }
-
-        for l in 0..bits {
-            let mut z = r_vec[l].to_vec();
-            for i in 0..3 {
-                for j in 0..z.len() {
-                    outp[j] += self.poly[i] * z[j];
-                }
-
-                if i < 2 {
-                    z = poly_mul(&z, &x_vec[l]);
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    #[allow(clippy::many_single_char_names)]
-    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
-        let bits = self.bits;
-        let n = self.n;
-        let r_vec = &inp[..bits];
-        let x_vec = &inp[bits..2 * bits];
-        let x = &inp[2 * bits];
-
-        let mut x_vals = vec![F::zero(); n];
-        let mut z_vals = vec![F::zero(); n];
-        let mut z = vec![F::zero(); n];
-
-        let m = n / 2;
-        let m_inv = self.n_inv * F::from(F::Integer::try_from(2).unwrap());
-        discrete_fourier_transform(&mut x_vals, x, m)?;
-        for j in 0..m {
-            z_vals[j] = x_vals[j] * x_vals[j];
-        }
-        discrete_fourier_transform(&mut z, &z_vals, m)?;
-        discrete_fourier_transform_inv_finish(&mut z, m, m_inv);
-        outp.clone_from_slice(&z[..outp.len()]);
-
-        for l in 0..bits {
-            let x = &x_vec[l];
-            let y = &r_vec[l];
-            z[..y.len()].clone_from_slice(y);
-
-            discrete_fourier_transform(&mut x_vals, x, n)?;
-            discrete_fourier_transform(&mut z_vals, y, n)?;
-
-            let mut z_len = y.len();
-            for i in 0..3 {
-                for j in 0..z_len {
-                    outp[j] += self.poly[i] * z[j];
-                }
-
-                if i < 2 {
-                    for j in 0..n {
-                        z_vals[j] *= x_vals[j];
-                    }
-
-                    discrete_fourier_transform(&mut z, &z_vals, n)?;
-                    discrete_fourier_transform_inv_finish(&mut z, n, self.n_inv);
-                    z_len += x.len();
-                }
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl<F: FieldElement> Gadget<F> for MeanVarUnsigned<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
-        gadget_call_check(self, inp.len())?;
-        let bits = self.bits;
-        let r_vec = &inp[..bits];
-        let x_vec = &inp[bits..2 * bits];
-        let x = inp[2 * bits];
-
-        let mut res = x * x;
-
-        // Check that `x_vec` is a bit vector.
-        for l in 0..bits {
-            res += r_vec[l] * poly_eval(&self.poly, x_vec[l]);
-        }
-
-        Ok(res)
-    }
-
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
-        gadget_call_poly_check(self, outp, inp)?;
-        if inp[0].len() >= FFT_THRESHOLD {
-            self.call_poly_fft(outp, inp)
-        } else {
-            self.call_poly_direct(outp, inp)
-        }
-    }
-
-    fn arity(&self) -> usize {
-        2 * self.bits + 1
-    }
-
-    fn degree(&self) -> usize {
-        3
-    }
-
-    fn as_any(&mut self) -> &mut dyn Any {
-        self
-    }
-}
-
 // Check that the input parameters of g.call() are wll-formed.
 fn gadget_call_check<F: FieldElement, G: Gadget<F>>(
     gadget: &G,
@@ -439,17 +272,6 @@ mod tests {
 
         let num_calls = FFT_THRESHOLD;
         let mut g: PolyEval<TestField> = PolyEval::new(poly, num_calls);
-        gadget_test(&mut g, num_calls);
-    }
-
-    #[test]
-    fn test_mean_var_unsigned() {
-        let num_calls = FFT_THRESHOLD / 2;
-        let mut g: MeanVarUnsigned<TestField> = MeanVarUnsigned::new(12, num_calls);
-        gadget_test(&mut g, num_calls);
-
-        let num_calls = FFT_THRESHOLD;
-        let mut g: MeanVarUnsigned<TestField> = MeanVarUnsigned::new(5, num_calls);
         gadget_test(&mut g, num_calls);
     }
 
