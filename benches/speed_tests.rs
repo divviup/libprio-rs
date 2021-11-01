@@ -7,8 +7,6 @@ use prio::client::Client;
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
-use prio::pcp::types::MeanVarUnsignedVector;
-use prio::pcp::{prove, query, Value};
 use prio::server::{generate_verification_message, ValidationMemory};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
@@ -116,44 +114,5 @@ pub fn bool_vec(c: &mut Criterion) {
     }
 }
 
-/// Benchmark proof generation and verification for the MeanVarUnsignedVector type.
-pub fn mean_var_int_vec(c: &mut Criterion) {
-    let bits = 12;
-    let test_sizes = [1, 10, 20, 100, 1_000];
-    for size in test_sizes.iter() {
-        let data = vec![0; *size];
-
-        let x: MeanVarUnsignedVector<F> = MeanVarUnsignedVector::new(bits, &data).unwrap();
-        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
-        let query_rand = random_vector(x.query_rand_len()).unwrap();
-
-        c.bench_function(
-            &format!("{}-bit mean var int vec prove, size={}", bits, *size),
-            |b| {
-                b.iter(|| {
-                    prove(&x, &prove_rand, &joint_rand).unwrap();
-                })
-            },
-        );
-
-        let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
-        println!(
-            "{}-bit mean var int vec proof size={}\n",
-            bits,
-            pf.as_slice().len()
-        );
-
-        c.bench_function(
-            &format!("{}-bit mean var int vec query, size={}", bits, *size),
-            |b| {
-                b.iter(|| {
-                    query(&x, &pf, &query_rand, &joint_rand).unwrap();
-                })
-            },
-        );
-    }
-}
-
-criterion_group!(benches, bool_vec, mean_var_int_vec, poly_mul, prng, fft);
+criterion_group!(benches, bool_vec, poly_mul, prng, fft);
 criterion_main!(benches);
