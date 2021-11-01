@@ -251,14 +251,17 @@ mod tests {
                 expect_valid: true,
                 expected_proof_len: 9,
             },
-        );
+        )
+        .unwrap();
+
         pcp_validity_test(
             &Count::<TestField>::new(0).unwrap(),
             &ValidityTestCase {
                 expect_valid: true,
                 expected_proof_len: 9,
             },
-        );
+        )
+        .unwrap();
 
         // Test PCP on invalid input.
         pcp_validity_test(
@@ -270,7 +273,8 @@ mod tests {
                 expect_valid: false,
                 expected_proof_len: 9,
             },
-        );
+        )
+        .unwrap();
 
         // Try running the validity circuit on an input that's too short.
         let malformed_x = Count::<TestField> {
@@ -304,7 +308,9 @@ mod tests {
                 expect_valid: true,
                 expected_proof_len: 32,
             },
-        );
+        )
+        .unwrap();
+
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![],
@@ -314,7 +320,9 @@ mod tests {
                 expect_valid: true,
                 expected_proof_len: 2,
             },
-        );
+        )
+        .unwrap();
+
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![one, zero],
@@ -324,7 +332,9 @@ mod tests {
                 expect_valid: true,
                 expected_proof_len: 8,
             },
-        );
+        )
+        .unwrap();
+
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![one, zero, one, one, zero, one, one, one, zero],
@@ -334,7 +344,8 @@ mod tests {
                 expect_valid: true,
                 expected_proof_len: 32,
             },
-        );
+        )
+        .unwrap();
 
         // Test PCP on invalid input.
         pcp_validity_test(
@@ -346,7 +357,9 @@ mod tests {
                 expect_valid: false,
                 expected_proof_len: 8,
             },
-        );
+        )
+        .unwrap();
+
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![zero, zero, zero, zero, nine],
@@ -356,59 +369,83 @@ mod tests {
                 expect_valid: false,
                 expected_proof_len: 16,
             },
-        );
+        )
+        .unwrap();
     }
 
-    // TODO(cjpatton) Have this return an error and have the caller assert success (or failure).
-    fn pcp_validity_test<V: Value>(input: &V, t: &ValidityTestCase) {
+    fn pcp_validity_test<V: Value>(input: &V, t: &ValidityTestCase) -> Result<(), PcpError> {
         let mut gadgets = input.gadget();
         let joint_rand = random_vector(input.joint_rand_len()).unwrap();
         let prove_rand = random_vector(input.prove_rand_len()).unwrap();
         let query_rand = random_vector(input.query_rand_len()).unwrap();
 
-        assert_eq!(input.query_rand_len(), gadgets.len());
+        if input.query_rand_len() != gadgets.len() {
+            return Err(PcpError::Test(format!(
+                "query rand length: got {}; want {}",
+                input.query_rand_len(),
+                gadgets.len()
+            )));
+        }
 
         // Ensure that the input can be constructed from its parameters and its encoding as a
         // sequence of field elements.
-        assert_eq!(
-            input,
-            &V::try_from((input.param(), input.as_slice())).unwrap()
-        );
+        let got = &V::try_from((input.param(), input.as_slice()))?;
+        if got != input {
+            return Err(PcpError::Test(format!(
+                "input constructed from data and param does not match input: got {:?}; want {:?}",
+                got, input
+            )));
+        }
 
         // Run the validity circuit.
-        let v = input.valid(&mut gadgets, &joint_rand).unwrap();
-        assert_eq!(
-            v == V::Field::zero(),
-            t.expect_valid,
-            "{:?} validity circuit output {}",
-            input.as_slice(),
-            v
-        );
+        let v = input.valid(&mut gadgets, &joint_rand)?;
+        if v != V::Field::zero() && t.expect_valid {
+            return Err(PcpError::Test(format!(
+                "expected valid input: valid() returned {}",
+                v
+            )));
+        }
+        if v == V::Field::zero() && !t.expect_valid {
+            return Err(PcpError::Test(format!(
+                "expected invalid input: valid() returned {}",
+                v
+            )));
+        }
 
-        // Generate and verify a PCP.
-        let proof = prove(input, &prove_rand, &joint_rand).unwrap();
-        let verifier = query(input, &proof, &query_rand, &joint_rand).unwrap();
-        let res = decide(input, &verifier).unwrap();
-        assert_eq!(
-            res,
-            t.expect_valid,
-            "{:?} query output {:?}",
-            input.as_slice(),
-            verifier
-        );
+        // Generate the proof.
+        let proof = prove(input, &prove_rand, &joint_rand)?;
+        if proof.as_slice().len() != t.expected_proof_len {
+            // TODO(cjpatton) Have `Value` compute the expected proof length and check that here
+            // instead.
+            return Err(PcpError::Test(format!(
+                "unexpected proof length: got {}; want {}",
+                proof.as_slice().len(),
+                t.expected_proof_len
+            )));
+        }
 
-        // Check that the proof size is as expected.
-        assert_eq!(proof.as_slice().len(), t.expected_proof_len);
+        // Query the proof.
+        let verifier = query(input, &proof, &query_rand, &joint_rand)?;
+        // TODO(cjpatton) Have `Value` compute the expected verifier length and check that here.
+
+        // Decide if the input is valid.
+        let res = decide(input, &verifier)?;
+        if res != t.expect_valid {
+            return Err(PcpError::Test(format!(
+                "decision is {}; want {}",
+                res, t.expect_valid,
+            )));
+        }
 
         // Run distributed PCP.
-        let x_shares: Vec<V> = split_vector(input.as_slice(), NUM_SHARES)
+        let input_shares: Vec<V> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .enumerate()
             .map(|(i, data)| {
-                let mut share = V::try_from((input.param(), &data)).unwrap();
-                share.set_leader(i == 0);
-                share
+                let mut input_share = V::try_from((input.param(), &data)).unwrap();
+                input_share.set_leader(i == 0);
+                input_share
             })
             .collect();
 
@@ -419,7 +456,7 @@ mod tests {
             .collect();
 
         let verifier: Verifier<V::Field> = (0..NUM_SHARES)
-            .map(|i| query(&x_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap())
+            .map(|i| query(&input_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap())
             .reduce(|mut left, right| {
                 for (x, y) in left.data.iter_mut().zip(right.data.iter()) {
                     *x += *y;
@@ -427,65 +464,46 @@ mod tests {
                 Verifier { data: left.data }
             })
             .unwrap();
-        let res = decide(&x_shares[0], &verifier).unwrap();
-        assert_eq!(
-            res,
-            t.expect_valid,
-            "{:?} sum of of verifier shares is {:?}",
-            input.as_slice(),
-            &verifier
-        );
 
-        // Try verifying a proof with an invalid seed for one of the intermediate polynomials.
-        // Verification should fail regardless of whether the input is valid.
-        let mut mutated_proof = proof.clone();
-        mutated_proof.data[0] += V::Field::one();
-        assert!(
-            !decide(
-                input,
-                &query(input, &mutated_proof, &query_rand, &joint_rand).unwrap()
-            )
-            .unwrap(),
-            "{:?} proof mutant verified",
-            input.as_slice(),
-        );
+        let res = decide(&input_shares[0], &verifier)?;
+        if res != t.expect_valid {
+            return Err(PcpError::Test(format!(
+                "distributed decision is {}; want {}",
+                res, t.expect_valid,
+            )));
+        }
+
+        // Try verifying various proof mutants.
+        for i in 0..proof.as_slice().len() {
+            let mut mutated_proof = proof.clone();
+            mutated_proof.data[i] += V::Field::one();
+            let verifier = query(input, &mutated_proof, &query_rand, &joint_rand)?;
+            if decide(input, &verifier)? {
+                return Err(PcpError::Test(format!(
+                    "decision for proof mutant {} is {}; want {}",
+                    i, true, false,
+                )));
+            }
+        }
 
         // Try verifying a proof that is too short.
         let mut mutated_proof = proof.clone();
         mutated_proof.data.truncate(gadgets[0].arity() - 1);
-        assert!(
-            query(input, &mutated_proof, &query_rand, &joint_rand).is_err(),
-            "{:?} proof mutant verified",
-            input.as_slice(),
-        );
+        if !query(input, &mutated_proof, &query_rand, &joint_rand).is_err() {
+            return Err(PcpError::Test(format!(
+                "query on short proof succeeded; want failure",
+            )));
+        }
 
         // Try verifying a proof that is too long.
         let mut mutated_proof = proof.clone();
         mutated_proof.data.extend_from_slice(&[V::Field::one(); 17]);
-        assert!(
-            query(input, &mutated_proof, &query_rand, &joint_rand).is_err(),
-            "{:?} proof mutant verified",
-            input.as_slice(),
-        );
-
-        if input.as_slice().len() > gadgets[0].arity() {
-            // Try verifying a proof with an invalid proof polynomial.
-            let mut mutated_proof = proof.clone();
-            mutated_proof.data[gadgets[0].arity()] += V::Field::one();
-            assert!(
-                !decide(
-                    input,
-                    &query(input, &mutated_proof, &query_rand, &joint_rand).unwrap()
-                )
-                .unwrap(),
-                "{:?} proof mutant verified",
-                input.as_slice(),
-            );
-
-            // Try verifying a proof with a short proof polynomial.
-            let mut mutated_proof = proof;
-            mutated_proof.data.truncate(gadgets[0].arity());
-            assert!(query(input, &mutated_proof, &query_rand, &joint_rand).is_err());
+        if !query(input, &mutated_proof, &query_rand, &joint_rand).is_err() {
+            return Err(PcpError::Test(format!(
+                "query on short proof succeeded; want failure",
+            )));
         }
+
+        Ok(())
     }
 }

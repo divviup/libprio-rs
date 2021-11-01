@@ -104,6 +104,11 @@ pub enum PcpError {
     /// Returned if a field operation encountered an error.
     #[error("Field error: {0}")]
     Field(#[from] FieldError),
+
+    /// Unit test error.
+    #[cfg(test)]
+    #[error("test failed: {0}")]
+    Test(String),
 }
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
