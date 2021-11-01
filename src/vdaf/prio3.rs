@@ -12,7 +12,7 @@
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
 use crate::field::FieldElement;
-use crate::pcp::{decide, prove, query, Proof, Value, Verifier};
+use crate::pcp::{decide, prove, query, Proof, Value, ValueParam, Verifier};
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{Share, VdafError};
@@ -77,6 +77,7 @@ pub fn prio3_input<V: Value>(
 
     let input_len = input.as_slice().len();
     let num_shares = num_shares as usize;
+    let param = input.param();
 
     // Generate the input shares and compute the joint randomness.
     let mut helper_shares = vec![HelperShare::new(suite)?; num_shares - 1];
@@ -123,9 +124,9 @@ pub fn prio3_input<V: Value>(
 
     // Run the proof-generation algorithm.
     let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
-    let joint_rand: Vec<V::Field> = prng.take(input.joint_rand_len()).collect();
+    let joint_rand: Vec<V::Field> = prng.take(param.joint_rand_len()).collect();
     let prng: Prng<V::Field> = Prng::generate(suite)?;
-    let prove_rand: Vec<V::Field> = prng.take(input.prove_rand_len()).collect();
+    let prove_rand: Vec<V::Field> = prng.take(param.prove_rand_len()).collect();
     let proof = prove(input, &prove_rand, &joint_rand)?;
 
     // Generate the proof shares and finalize the joint randomness seed hints.
@@ -228,7 +229,7 @@ pub struct VerifyMessage<F> {
 
     /// The aggregator's share of the joint randomness, derived from its input share.
     //
-    // TODO(cjpatton) If `input.joint_rand_len() == 0`, then we don't need to bother with the
+    // TODO(cjpatton) If `joint_rand_len == 0`, then we don't need to bother with the
     // joint randomness seed at all and make this optional.
     pub joint_rand_seed_share: Key,
 }
@@ -242,7 +243,7 @@ pub struct VerifyState<V: Value> {
     /// The joint randomness seed indicated by the client. The aggregators check that this
     /// indication matches the actual joint randomness seed.
     //
-    // TODO(cjpatton) If `input.joint_rand_len() == 0`, then we don't need to bother with the
+    // TODO(cjpatton) If `joint_rand_len == 0`, then we don't need to bother with the
     // joint randomness seed at all and make this optional.
     joint_rand_seed: Key,
 }
@@ -258,17 +259,15 @@ pub fn prio3_start<V: Value>(
     nonce: &[u8],
     msg: InputShareMessage<V::Field>,
 ) -> Result<(VerifyState<V>, VerifyMessage<V::Field>), VdafError> {
+    let param = &verify_param.value_param;
+
     let mut deriver = KeyDeriver::from_key(&verify_param.query_rand_init);
     deriver.update(&[255]);
     deriver.update(nonce);
     let query_rand_seed = deriver.finish();
 
     let input_share_data: Vec<V::Field> = Vec::try_from(msg.input_share)?;
-    let input_share = V::new_share(
-        input_share_data,
-        &verify_param.value_param,
-        verify_param.num_shares as usize,
-    )?;
+    let input_share = V::new_share(input_share_data, param, verify_param.num_shares as usize)?;
 
     let proof_share_data: Vec<V::Field> = Vec::try_from(msg.proof_share)?;
     let proof_share = Proof::from(proof_share_data);
@@ -287,11 +286,11 @@ pub fn prio3_start<V: Value>(
     }
 
     let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
-    let joint_rand: Vec<V::Field> = prng.take(input_share.joint_rand_len()).collect();
+    let joint_rand: Vec<V::Field> = prng.take(param.joint_rand_len()).collect();
 
     // Compute the query randomness.
     let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&query_rand_seed));
-    let query_rand: Vec<V::Field> = prng.take(input_share.query_rand_len()).collect();
+    let query_rand: Vec<V::Field> = prng.take(param.query_rand_len()).collect();
 
     // Run the query-generation algorithm.
     let verifier_share = query(&input_share, &proof_share, &query_rand, &joint_rand)?;
