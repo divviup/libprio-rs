@@ -38,6 +38,13 @@ impl<F: FieldElement> Value for Count<F> {
     type Field = F;
     type Param = ();
 
+    fn new_share(data: Vec<F>, _param: &(), _num_shares: usize) -> Result<Self, PcpError> {
+        Ok(Self {
+            data,
+            range: poly_range_check(0, 2),
+        })
+    }
+
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
             return Err(PcpError::Valid(format!(
@@ -90,17 +97,6 @@ impl<F: FieldElement> Value for Count<F> {
     }
 
     fn param(&self) -> Self::Param {}
-}
-
-impl<F: FieldElement> TryFrom<((), &[F])> for Count<F> {
-    type Error = PcpError;
-
-    fn try_from(val: ((), &[F])) -> Result<Self, PcpError> {
-        Ok(Self {
-            data: val.1.to_vec(),
-            range: poly_range_check(0, 2),
-        })
-    }
 }
 
 /// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of the measurements.
@@ -156,6 +152,19 @@ impl<F: FieldElement> Value for Sum<F> {
     type Field = F;
     type Param = u32;
 
+    fn new_share(data: Vec<F>, bits: &u32, _num_shares: usize) -> Result<Self, PcpError> {
+        if data.len() != *bits as usize {
+            return Err(PcpError::Value(
+                "data length does not match bit length".to_string(),
+            ));
+        }
+
+        Ok(Self {
+            data,
+            range_checker: poly_range_check(0, 2),
+        })
+    }
+
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
         if rand.len() != self.joint_rand_len() {
             return Err(PcpError::Valid(format!(
@@ -205,26 +214,6 @@ impl<F: FieldElement> Value for Sum<F> {
 
     fn param(&self) -> Self::Param {
         self.data.len() as u32
-    }
-}
-
-impl<F: FieldElement> TryFrom<(u32, &[F])> for Sum<F> {
-    type Error = PcpError;
-
-    fn try_from(val: (u32, &[F])) -> Result<Self, PcpError> {
-        let bits = usize::try_from(val.0).unwrap();
-        let data = val.1;
-
-        if data.len() != bits {
-            return Err(PcpError::Value(
-                "data length does not match bit length".to_string(),
-            ));
-        }
-
-        Ok(Self {
-            data: data.to_vec(),
-            range_checker: poly_range_check(0, 2),
-        })
     }
 }
 
@@ -389,7 +378,7 @@ mod tests {
 
         // Ensure that the input can be constructed from its parameters and its encoding as a
         // sequence of field elements.
-        let got = &V::try_from((input.param(), input.as_slice()))?;
+        let got = &V::new_share(input.as_slice().to_vec(), &input.param(), 1)?;
         if got != input {
             return Err(PcpError::Test(format!(
                 "input constructed from data and param does not match input: got {:?}; want {:?}",
@@ -441,12 +430,7 @@ mod tests {
         let input_shares: Vec<V> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
-            .enumerate()
-            .map(|(i, data)| {
-                let mut input_share = V::try_from((input.param(), &data)).unwrap();
-                input_share.set_leader(i == 0);
-                input_share
-            })
+            .map(|data| V::new_share(data.clone(), &input.param(), NUM_SHARES).unwrap())
             .collect();
 
         let proof_shares: Vec<Proof<V::Field>> = split_vector(proof.as_slice(), NUM_SHARES)

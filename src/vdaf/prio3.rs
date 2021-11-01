@@ -193,6 +193,9 @@ pub struct VerifyParam<V: Value> {
 
     /// The identity of the aggregator.
     pub aggregator_id: u8,
+
+    /// The number of aggregators.
+    pub num_shares: u8,
 }
 
 /// The setup algorithm of the VDAF that generates the verification parameter of each aggregator.
@@ -211,6 +214,7 @@ fn prio3_setup<V: Value>(
             value_param: value_param.clone(),
             query_rand_init: query_rand_init.clone(),
             aggregator_id,
+            num_shares,
         })
         .collect())
 }
@@ -260,8 +264,11 @@ pub fn prio3_start<V: Value>(
     let query_rand_seed = deriver.finish();
 
     let input_share_data: Vec<V::Field> = Vec::try_from(msg.input_share)?;
-    let mut input_share = V::try_from((verify_param.value_param.clone(), &input_share_data))?;
-    input_share.set_leader(verify_param.aggregator_id == 0);
+    let input_share = V::new_share(
+        input_share_data,
+        &verify_param.value_param,
+        verify_param.num_shares as usize,
+    )?;
 
     let proof_share_data: Vec<V::Field> = Vec::try_from(msg.proof_share)?;
     let proof_share = Proof::from(proof_share_data);
