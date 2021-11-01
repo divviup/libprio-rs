@@ -113,18 +113,21 @@ pub enum PcpError {
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value:
-    Sized
-    + PartialEq
-    + Eq
-    + Debug
-    + for<'a> TryFrom<(<Self as Value>::Param, &'a [Self::Field]), Error = PcpError>
-{
+pub trait Value: Sized + PartialEq + Eq + Debug {
     /// The finite field used for this type.
     type Field: FieldElement;
 
     /// Parameters used to construct a value of this type from a vector of field elements.
     type Param: Clone + Debug;
+
+    /// Constructs an instance of a value from an additive share of the input (`data`) and type
+    /// parameter (`param`). For some types, the validity circuit may depend on the total number of
+    /// shares (`num_shares`).
+    fn new_share(
+        data: Vec<Self::Field>,
+        param: &Self::Param,
+        num_shares: usize,
+    ) -> Result<Self, PcpError>;
 
     /// Evaluates the validity circuit on the given input (i.e., `self`) and returns the output.
     /// `joint_rand` is the joint randomness shared by the prover and verifier. `g` is the sequence
@@ -179,16 +182,6 @@ pub trait Value:
 
     /// Returns a copy of the associated type parameters for this value.
     fn param(&self) -> Self::Param;
-
-    /// When verifying a proof over secret shared data, this method may be used to distinguish the
-    /// "leader" share from the others. This is useful, for example, when some of the gadget inputs
-    /// are constants used for both proof generation and verification.
-    //
-    // TODO(cjpatton) Deprecate this method. The proper way to do this should be to normalizing by
-    // dividing by the number of shares.
-    fn set_leader(&mut self, _is_leader: bool) {
-        // No-op by default.
-    }
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
@@ -697,12 +690,7 @@ mod tests {
         let x_shares: Vec<T> = split_vector(x.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
-            .enumerate()
-            .map(|(i, data)| {
-                let mut share = T::try_from((x_par, data.as_slice())).unwrap();
-                share.set_leader(i == 0);
-                share
-            })
+            .map(|data| T::new_share(data, &x_par, NUM_SHARES).unwrap())
             .collect();
 
         let joint_rand = random_vector(x.joint_rand_len()).unwrap();
@@ -775,6 +763,10 @@ mod tests {
         type Field = F;
         type Param = ();
 
+        fn new_share(data: Vec<F>, _param: &(), _num_shares: usize) -> Result<Self, PcpError> {
+            Ok(Self { data })
+        }
+
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
             if joint_rand.len() != self.joint_rand_len() {
                 return Err(PcpError::Valid(format!(
@@ -837,15 +829,5 @@ mod tests {
         }
 
         fn param(&self) -> Self::Param {}
-    }
-
-    impl<F: FieldElement> TryFrom<((), &[F])> for TestValue<F> {
-        type Error = PcpError;
-
-        fn try_from(val: ((), &[F])) -> Result<Self, PcpError> {
-            Ok(Self {
-                data: val.1.to_vec(),
-            })
-        }
     }
 }
