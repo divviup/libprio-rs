@@ -4,7 +4,7 @@
 
 use crate::field::FieldElement;
 use crate::pcp::gadgets::{Mul, PolyEval};
-use crate::pcp::{Gadget, PcpError, Value};
+use crate::pcp::{Gadget, PcpError, Value, ValueParam};
 use crate::polynomial::poly_range_check;
 
 use std::convert::TryFrom;
@@ -27,7 +27,7 @@ impl<F: FieldElement> Count<F> {
                 1 => F::one(),
                 0 => F::zero(),
                 _ => {
-                    return Err(PcpError::Value("Count value  must be 0 or 1".to_string()));
+                    return Err(PcpError::Value("Count value must be 0 or 1".to_string()));
                 }
             }],
         })
@@ -36,9 +36,13 @@ impl<F: FieldElement> Count<F> {
 
 impl<F: FieldElement> Value for Count<F> {
     type Field = F;
-    type Param = ();
+    type Param = CountValueParam;
 
-    fn new_share(data: Vec<F>, _param: &(), _num_shares: usize) -> Result<Self, PcpError> {
+    fn new_share(
+        data: Vec<F>,
+        _param: &CountValueParam,
+        _num_shares: usize,
+    ) -> Result<Self, PcpError> {
         Ok(Self {
             data,
             range: poly_range_check(0, 2),
@@ -46,13 +50,7 @@ impl<F: FieldElement> Value for Count<F> {
     }
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
-        if rand.len() != self.joint_rand_len() {
-            return Err(PcpError::Valid(format!(
-                "unexpected joint randomness length: got {}; want {}",
-                rand.len(),
-                self.joint_rand_len()
-            )));
-        }
+        valid_call_check(self, rand)?;
 
         if self.data.len() != 1 {
             return Err(PcpError::Valid(format!(
@@ -72,8 +70,38 @@ impl<F: FieldElement> Value for Count<F> {
         Ok(v)
     }
 
-    fn valid_gadget_calls(&self) -> Vec<usize> {
-        vec![2]
+    fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(Mul::new(2))]
+    }
+
+    fn param(&self) -> CountValueParam {
+        CountValueParam()
+    }
+
+    fn into_output(self) -> Vec<F> {
+        self.data
+    }
+}
+
+/// Parameters for the [`Count`] type.
+#[derive(Clone, Debug)]
+pub struct CountValueParam();
+
+impl ValueParam for CountValueParam {
+    fn input_len(&self) -> usize {
+        1
+    }
+
+    fn proof_len(&self) -> usize {
+        9
+    }
+
+    fn verifier_len(&self) -> usize {
+        4
     }
 
     fn joint_rand_len(&self) -> usize {
@@ -87,16 +115,6 @@ impl<F: FieldElement> Value for Count<F> {
     fn query_rand_len(&self) -> usize {
         1
     }
-
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(Mul::new(2))]
-    }
-
-    fn as_slice(&self) -> &[F] {
-        &self.data
-    }
-
-    fn param(&self) -> Self::Param {}
 }
 
 /// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of the measurements.
@@ -150,10 +168,14 @@ impl<F: FieldElement> Sum<F> {
 
 impl<F: FieldElement> Value for Sum<F> {
     type Field = F;
-    type Param = u32;
+    type Param = SumValueParam;
 
-    fn new_share(data: Vec<F>, bits: &u32, _num_shares: usize) -> Result<Self, PcpError> {
-        if data.len() != *bits as usize {
+    fn new_share(
+        data: Vec<F>,
+        param: &SumValueParam,
+        _num_shares: usize,
+    ) -> Result<Self, PcpError> {
+        if data.len() != param.0 as usize {
             return Err(PcpError::Value(
                 "data length does not match bit length".to_string(),
             ));
@@ -166,13 +188,7 @@ impl<F: FieldElement> Value for Sum<F> {
     }
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
-        if rand.len() != self.joint_rand_len() {
-            return Err(PcpError::Valid(format!(
-                "unexpected joint randomness length: got {}; want {}",
-                rand.len(),
-                self.joint_rand_len()
-            )));
-        }
+        valid_call_check(self, rand)?;
 
         // Check that each element of `data` is a 0 or 1.
         let mut range_check = F::zero();
@@ -185,8 +201,46 @@ impl<F: FieldElement> Value for Sum<F> {
         Ok(range_check)
     }
 
-    fn valid_gadget_calls(&self) -> Vec<usize> {
-        vec![self.data.len()]
+    fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(
+            self.range_checker.clone(),
+            self.data.len(),
+        ))]
+    }
+
+    fn param(&self) -> SumValueParam {
+        SumValueParam(self.data.len())
+    }
+
+    fn into_output(self) -> Vec<F> {
+        let mut decoded = F::zero();
+        for (l, bit) in self.data.iter().enumerate() {
+            let w = F::from(F::Integer::try_from(1 << l).unwrap());
+            decoded += w * *bit;
+        }
+        vec![decoded]
+    }
+}
+
+/// Parameters for the [`Sum`] type.
+#[derive(Clone, Debug)]
+pub struct SumValueParam(usize);
+
+impl ValueParam for SumValueParam {
+    fn input_len(&self) -> usize {
+        self.0
+    }
+
+    fn proof_len(&self) -> usize {
+        2 * ((1 + self.0).next_power_of_two() - 1) + 2
+    }
+
+    fn verifier_len(&self) -> usize {
+        3
     }
 
     fn joint_rand_len(&self) -> usize {
@@ -199,21 +253,6 @@ impl<F: FieldElement> Value for Sum<F> {
 
     fn query_rand_len(&self) -> usize {
         1
-    }
-
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.data.len(),
-        ))]
-    }
-
-    fn as_slice(&self) -> &[F] {
-        &self.data
-    }
-
-    fn param(&self) -> Self::Param {
-        self.data.len() as u32
     }
 }
 
@@ -264,11 +303,14 @@ impl<F: FieldElement> Histogram<F> {
 
 impl<F: FieldElement> Value for Histogram<F> {
     type Field = F;
-    type Param = u32; // Number of buckets
+    type Param = HistogramValueParam;
 
-    fn new_share(data: Vec<F>, num_buckets: &u32, num_shares: usize) -> Result<Self, PcpError> {
-        let expected_data_len = usize::try_from(*num_buckets).unwrap() + 1;
-        if data.len() != expected_data_len {
+    fn new_share(
+        data: Vec<F>,
+        param: &HistogramValueParam,
+        num_shares: usize,
+    ) -> Result<Self, PcpError> {
+        if data.len() != param.0 {
             return Err(PcpError::Value(
                 "data length does not match buckets".to_string(),
             ));
@@ -283,13 +325,7 @@ impl<F: FieldElement> Value for Histogram<F> {
     }
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
-        if rand.len() != self.joint_rand_len() {
-            return Err(PcpError::Valid(format!(
-                "unexpected joint randomness length: got {}; want {}",
-                rand.len(),
-                self.joint_rand_len()
-            )));
-        }
+        valid_call_check(self, rand)?;
 
         // Check that each element of `data` is a 0 or 1.
         let mut range_check = F::zero();
@@ -310,8 +346,41 @@ impl<F: FieldElement> Value for Histogram<F> {
         Ok(out)
     }
 
-    fn valid_gadget_calls(&self) -> Vec<usize> {
-        vec![self.data.len()]
+    fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(
+            self.range_checker.clone(),
+            self.data.len(),
+        ))]
+    }
+
+    fn param(&self) -> HistogramValueParam {
+        HistogramValueParam(self.data.len())
+    }
+
+    fn into_output(self) -> Vec<F> {
+        self.data
+    }
+}
+
+/// Parameters for the [`Histogram`] type.
+#[derive(Clone, Debug)]
+pub struct HistogramValueParam(usize);
+
+impl ValueParam for HistogramValueParam {
+    fn input_len(&self) -> usize {
+        self.0
+    }
+
+    fn proof_len(&self) -> usize {
+        2 * ((1 + self.0).next_power_of_two() - 1) + 2
+    }
+
+    fn verifier_len(&self) -> usize {
+        3
     }
 
     fn joint_rand_len(&self) -> usize {
@@ -325,21 +394,28 @@ impl<F: FieldElement> Value for Histogram<F> {
     fn query_rand_len(&self) -> usize {
         1
     }
+}
 
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.data.len(),
-        ))]
+fn valid_call_check<V: Value>(input: &V, joint_rand: &[V::Field]) -> Result<(), PcpError> {
+    let param = input.param();
+
+    if input.as_slice().len() != param.input_len() {
+        return Err(PcpError::Valid(format!(
+            "unexpected input length: got {}; want {}",
+            input.as_slice().len(),
+            param.input_len(),
+        )));
     }
 
-    fn as_slice(&self) -> &[F] {
-        &self.data
+    if joint_rand.len() != param.joint_rand_len() {
+        return Err(PcpError::Valid(format!(
+            "unexpected joint randomness length: got {}; want {}",
+            joint_rand.len(),
+            param.joint_rand_len()
+        )));
     }
 
-    fn param(&self) -> u32 {
-        u32::try_from(self.data.len()).unwrap() - 1
-    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -351,28 +427,31 @@ mod tests {
     // Number of shares to split input and proofs into in `pcp_test`.
     const NUM_SHARES: usize = 3;
 
-    struct ValidityTestCase {
+    struct ValidityTestCase<F> {
         expect_valid: bool,
-        expected_proof_len: usize,
+        expected_output: Option<Vec<F>>,
     }
 
     #[test]
     fn test_count() {
+        let zero = TestField::zero();
+        let one = TestField::one();
+
         // Test PCP on valid input.
         pcp_validity_test(
             &Count::<TestField>::new(1).unwrap(),
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 9,
+                expected_output: Some(vec![one]),
             },
         )
         .unwrap();
 
         pcp_validity_test(
             &Count::<TestField>::new(0).unwrap(),
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 9,
+                expected_output: Some(vec![zero]),
             },
         )
         .unwrap();
@@ -383,9 +462,9 @@ mod tests {
                 data: vec![TestField::from(1337)],
                 range: poly_range_check(0, 2),
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 9,
+                expected_output: None,
             },
         )
         .unwrap();
@@ -420,7 +499,7 @@ mod tests {
             &Sum::<TestField>::new(1337, 11).unwrap(),
             &ValidityTestCase {
                 expect_valid: true,
-                expected_proof_len: 32,
+                expected_output: Some(vec![TestField::from(1337)]),
             },
         )
         .unwrap();
@@ -430,9 +509,9 @@ mod tests {
                 data: vec![],
                 range_checker: poly_range_check(0, 2),
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 2,
+                expected_output: Some(vec![zero]),
             },
         )
         .unwrap();
@@ -444,7 +523,7 @@ mod tests {
             },
             &ValidityTestCase {
                 expect_valid: true,
-                expected_proof_len: 8,
+                expected_output: Some(vec![one]),
             },
         )
         .unwrap();
@@ -454,9 +533,9 @@ mod tests {
                 data: vec![one, zero, one, one, zero, one, one, one, zero],
                 range_checker: poly_range_check(0, 2),
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 32,
+                expected_output: Some(vec![TestField::from(237)]),
             },
         )
         .unwrap();
@@ -467,9 +546,9 @@ mod tests {
                 data: vec![one, nine, zero],
                 range_checker: poly_range_check(0, 2),
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 8,
+                expected_output: None,
             },
         )
         .unwrap();
@@ -479,9 +558,9 @@ mod tests {
                 data: vec![zero, zero, zero, zero, nine],
                 range_checker: poly_range_check(0, 2),
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 16,
+                expected_output: None,
             },
         )
         .unwrap();
@@ -516,27 +595,27 @@ mod tests {
         // Test valid inputs.
         pcp_validity_test(
             &Histogram::<TestField>::new(0, &buckets).unwrap(),
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 8,
+                expected_output: Some(vec![one, zero, zero]),
             },
         )
         .unwrap();
 
         pcp_validity_test(
             &Histogram::<TestField>::new(17, &buckets).unwrap(),
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 8,
+                expected_output: Some(vec![zero, one, zero]),
             },
         )
         .unwrap();
 
         pcp_validity_test(
             &Histogram::<TestField>::new(1337, &buckets).unwrap(),
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_proof_len: 8,
+                expected_output: Some(vec![zero, zero, one]),
             },
         )
         .unwrap();
@@ -548,9 +627,9 @@ mod tests {
                 range_checker: poly_range_check(0, 2),
                 sum_check_share: one,
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 8,
+                expected_output: None,
             },
         )
         .unwrap();
@@ -561,9 +640,9 @@ mod tests {
                 range_checker: poly_range_check(0, 2),
                 sum_check_share: one,
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 8,
+                expected_output: None,
             },
         )
         .unwrap();
@@ -574,9 +653,9 @@ mod tests {
                 range_checker: poly_range_check(0, 2),
                 sum_check_share: one,
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 8,
+                expected_output: None,
             },
         )
         .unwrap();
@@ -587,24 +666,33 @@ mod tests {
                 range_checker: poly_range_check(0, 2),
                 sum_check_share: one,
             },
-            &ValidityTestCase {
+            &ValidityTestCase::<TestField> {
                 expect_valid: false,
-                expected_proof_len: 8,
+                expected_output: None,
             },
         )
         .unwrap();
     }
 
-    fn pcp_validity_test<V: Value>(input: &V, t: &ValidityTestCase) -> Result<(), PcpError> {
+    fn pcp_validity_test<V: Value>(
+        input: &V,
+        t: &ValidityTestCase<V::Field>,
+    ) -> Result<(), PcpError> {
         let mut gadgets = input.gadget();
-        let joint_rand = random_vector(input.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(input.prove_rand_len()).unwrap();
-        let query_rand = random_vector(input.query_rand_len()).unwrap();
+        let param = input.param();
 
-        if input.query_rand_len() != gadgets.len() {
+        if input.as_slice().len() != param.input_len() {
+            return Err(PcpError::Test(format!(
+                "unexpected input length: got {}; want {}",
+                input.as_slice().len(),
+                param.input_len()
+            )));
+        }
+
+        if param.query_rand_len() != gadgets.len() {
             return Err(PcpError::Test(format!(
                 "query rand length: got {}; want {}",
-                input.query_rand_len(),
+                param.query_rand_len(),
                 gadgets.len()
             )));
         }
@@ -618,6 +706,10 @@ mod tests {
                 got, input
             )));
         }
+
+        let joint_rand = random_vector(param.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(param.prove_rand_len()).unwrap();
+        let query_rand = random_vector(param.query_rand_len()).unwrap();
 
         // Run the validity circuit.
         let v = input.valid(&mut gadgets, &joint_rand)?;
@@ -636,19 +728,23 @@ mod tests {
 
         // Generate the proof.
         let proof = prove(input, &prove_rand, &joint_rand)?;
-        if proof.as_slice().len() != t.expected_proof_len {
-            // TODO(cjpatton) Have `Value` compute the expected proof length and check that here
-            // instead.
+        if proof.as_slice().len() != param.proof_len() {
             return Err(PcpError::Test(format!(
                 "unexpected proof length: got {}; want {}",
                 proof.as_slice().len(),
-                t.expected_proof_len
+                param.proof_len()
             )));
         }
 
         // Query the proof.
         let verifier = query(input, &proof, &query_rand, &joint_rand)?;
-        // TODO(cjpatton) Have `Value` compute the expected verifier length and check that here.
+        if verifier.as_slice().len() != param.verifier_len() {
+            return Err(PcpError::Test(format!(
+                "unexpected verifier length: got {}; want {}",
+                verifier.as_slice().len(),
+                param.verifier_len()
+            )));
+        }
 
         // Decide if the input is valid.
         let res = decide(input, &verifier)?;
@@ -717,8 +813,18 @@ mod tests {
         mutated_proof.data.extend_from_slice(&[V::Field::one(); 17]);
         if !query(input, &mutated_proof, &query_rand, &joint_rand).is_err() {
             return Err(PcpError::Test(format!(
-                "query on short proof succeeded; want failure",
+                "query on long proof succeeded; want failure",
             )));
+        }
+
+        if let Some(ref want) = t.expected_output {
+            let got = input.clone().into_output();
+            if &got != want {
+                return Err(PcpError::Test(format!(
+                    "unexpected output: got {:?}; want {:?}",
+                    got, want
+                )));
+            }
         }
 
         Ok(())

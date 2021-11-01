@@ -20,6 +20,8 @@ pub struct Mul<F: FieldElement> {
     n: usize,
     /// Inverse of `n` in `F`.
     n_inv: F,
+    /// The number of times this gadget will be called.
+    num_calls: usize,
 }
 
 impl<F: FieldElement> Mul<F> {
@@ -31,7 +33,11 @@ impl<F: FieldElement> Mul<F> {
         // (We round up to the next power of two in order to make room for FFT.)
         let n = (2 * (1 + num_calls).next_power_of_two()).next_power_of_two();
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
-        Self { n, n_inv }
+        Self {
+            n,
+            n_inv,
+            num_calls,
+        }
     }
 
     // Multiply input polynomials directly.
@@ -86,6 +92,10 @@ impl<F: FieldElement> Gadget<F> for Mul<F> {
         2
     }
 
+    fn calls(&self) -> usize {
+        self.num_calls
+    }
+
     fn as_any(&mut self) -> &mut dyn Any {
         self
     }
@@ -98,6 +108,8 @@ pub struct PolyEval<F: FieldElement> {
     n: usize,
     /// Inverse of `n` in `F`.
     n_inv: F,
+    /// The number of times this gadget will be called.
+    num_calls: usize,
 }
 
 impl<F: FieldElement> PolyEval<F> {
@@ -106,7 +118,12 @@ impl<F: FieldElement> PolyEval<F> {
     pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
         let n = (poly_deg(&poly) * (1 + num_calls).next_power_of_two()).next_power_of_two();
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
-        Self { poly, n, n_inv }
+        Self {
+            poly,
+            n,
+            n_inv,
+            num_calls,
+        }
     }
 }
 
@@ -184,6 +201,10 @@ impl<F: FieldElement> Gadget<F> for PolyEval<F> {
 
     fn degree(&self) -> usize {
         poly_deg(&self.poly)
+    }
+
+    fn calls(&self) -> usize {
+        self.num_calls
     }
 
     fn as_any(&mut self) -> &mut dyn Any {

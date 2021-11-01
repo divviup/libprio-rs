@@ -20,24 +20,25 @@
 //!
 //! ```
 //! use prio::pcp::types::Count;
-//! use prio::pcp::{decide, prove, query, Value};
+//! use prio::pcp::{decide, prove, query, Value, ValueParam};
 //! use prio::field::{random_vector, FieldElement, Field64};
 //!
 //! // The prover chooses a measurement.
 //! let input: Count<Field64> = Count::new(0).unwrap();
+//! let param = input.param();
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
 //! // "commits" to the input before this point. In the `prio3` VDAF, the joint
 //! // randomness is derived from additive shares of the input.
-//! let joint_rand = random_vector(input.joint_rand_len()).unwrap();
+//! let joint_rand = random_vector(param.joint_rand_len()).unwrap();
 //!
 //! // The prover generates the proof.
-//! let prove_rand = random_vector(input.prove_rand_len()).unwrap();
+//! let prove_rand = random_vector(param.prove_rand_len()).unwrap();
 //! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
 //!
 //! // The verifier checks the proof.
-//! let query_rand = random_vector(input.query_rand_len()).unwrap();
+//! let query_rand = random_vector(param.query_rand_len()).unwrap();
 //! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
 //! assert!(decide(&input, &verifier).unwrap());
 //! ```
@@ -111,14 +112,39 @@ pub enum PcpError {
     Test(String),
 }
 
-/// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
-/// determines whether a given value is valid.
-pub trait Value: Sized + Eq + Debug {
+/// Parameters of a value. An implementation of this trait is used to construct a value from a
+/// vector of field elements. It also defines the lengths of inputs and outputs of [`prove`],
+/// [`query`], and [`decide`].
+pub trait ValueParam: Clone + Debug {
+    /// The length of the input for this type.
+    fn input_len(&self) -> usize;
+
+    /// The length of the proof generated for this type.
+    fn proof_len(&self) -> usize;
+
+    /// The length of the verifier message generated for this type.
+    fn verifier_len(&self) -> usize;
+
+    /// The length of the random input used by both the prover and the verifier.
+    fn joint_rand_len(&self) -> usize;
+
+    /// The length of the random input consumed by the prover to generate a proof. This is the same
+    /// as the sum of the arity of each gadget in the validity circuit.
+    fn prove_rand_len(&self) -> usize;
+
+    /// The length of the random input consumed by the verifier to make queries against inputs and
+    /// proofs. This is the same as the number of gadgets in the validity circuit.
+    fn query_rand_len(&self) -> usize;
+}
+
+/// A value. Implementations of this trait specify an arithmetic circuit that determines whether an
+/// input of this type is valid.
+pub trait Value: Sized + Eq + Clone + Debug {
     /// The finite field used for this type.
     type Field: FieldElement;
 
     /// Parameters used to construct a value of this type from a vector of field elements.
-    type Param: Clone + Debug;
+    type Param: ValueParam;
 
     /// Constructs an instance of a value from an additive share of the input (`data`) and type
     /// parameter (`param`). For some types, the validity circuit may depend on the total number of
@@ -135,11 +161,11 @@ pub trait Value: Sized + Eq + Debug {
     ///
     /// ```
     /// use prio::pcp::types::Count;
-    /// use prio::pcp::Value;
+    /// use prio::pcp::{Value, ValueParam};
     /// use prio::field::{random_vector, FieldElement, Field64};
     ///
     /// let x: Count<Field64> = Count::new(1).unwrap();
-    /// let joint_rand = random_vector(x.joint_rand_len()).unwrap();
+    /// let joint_rand = random_vector(x.param().joint_rand_len()).unwrap();
     /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, Field64::zero());
     /// ```
@@ -151,24 +177,6 @@ pub trait Value: Sized + Eq + Debug {
 
     /// Returns a reference to the underlying data.
     fn as_slice(&self) -> &[Self::Field];
-
-    /// The length of the random input used by both the prover and the verifier.
-    fn joint_rand_len(&self) -> usize;
-
-    /// The length of the random input consumed by the prover to generate a proof. This is the same
-    /// as the sum of the arity of each gadget in the validity circuit.
-    fn prove_rand_len(&self) -> usize;
-
-    /// The length of the random input consumed by the verifier to make queries against inputs and
-    /// proofs. This is the same as the number of gadgets in the validity circuit.
-    fn query_rand_len(&self) -> usize;
-
-    /// The number of calls to the gadget made when evaluating the validity circuit.
-    //
-    // TODO(cjpatton) Consider consolidating this and `gadget` into one call. The benefit would be
-    // that there is one less thing to worry about when implementing a Value<F>. We would need to
-    // extend Gadget<F> so that it tells you how many times it gets called.
-    fn valid_gadget_calls(&self) -> Vec<usize>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
@@ -182,6 +190,10 @@ pub trait Value: Sized + Eq + Debug {
 
     /// Returns a copy of the associated type parameters for this value.
     fn param(&self) -> Self::Param;
+
+    /// Converts this value into an aggregatable output. This operation is only safe after the
+    /// input has been validated.
+    fn into_output(self) -> Vec<Self::Field>;
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
@@ -200,6 +212,9 @@ pub trait Gadget<F: FieldElement> {
     /// buffer passed to `call_poly`.
     fn degree(&self) -> usize;
 
+    /// Returns the number of times the gadget is expected to be called.
+    fn calls(&self) -> usize;
+
     /// This call is used to downcast a `Box<dyn Gadget<F>>` to a concrete type.
     fn as_any(&mut self) -> &mut dyn Any;
 }
@@ -211,31 +226,29 @@ pub trait Gadget<F: FieldElement> {
 /// * `input` is the input.
 /// * `prove_rand` is the prover' randomness.
 /// * `joint_rand` is the randomness shared by the prover and verifier.
+#[allow(clippy::needless_range_loop)]
 pub fn prove<V: Value>(
     input: &V,
     prove_rand: &[V::Field],
     joint_rand: &[V::Field],
 ) -> Result<Proof<V::Field>, PcpError> {
-    let gadget_calls = input.valid_gadget_calls();
-
+    let param = input.param();
     let mut prove_rand_len = 0;
     let mut shim = input
         .gadget()
         .into_iter()
-        .enumerate()
-        .map(|(idx, inner)| {
+        .map(|inner| {
             let inner_arity = inner.arity();
             if prove_rand_len + inner_arity > prove_rand.len() {
                 return Err(PcpError::Prove(format!(
                     "short prove randomness: got {}; want {}",
                     prove_rand.len(),
-                    input.prove_rand_len()
+                    param.prove_rand_len()
                 )));
             }
 
             let gadget = Box::new(ProveShimGadget::new(
                 inner,
-                gadget_calls[idx],
                 &prove_rand[prove_rand_len..prove_rand_len + inner_arity],
             )?) as Box<dyn Gadget<V::Field>>;
             prove_rand_len += inner_arity;
@@ -248,7 +261,7 @@ pub fn prove<V: Value>(
     // length is to accommodate the computation of each gadget polynomial.
     let data_len = (0..shim.len())
         .map(|idx| {
-            shim[idx].arity() + shim[idx].degree() * (1 + gadget_calls[idx]).next_power_of_two()
+            shim[idx].arity() + shim[idx].degree() * (1 + shim[idx].calls()).next_power_of_two()
         })
         .sum();
     let mut data = vec![V::Field::zero(); data_len];
@@ -269,7 +282,7 @@ pub fn prove<V: Value>(
 
         // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
         // evaluation of the gadget.
-        let m = (1 + gadget_calls[idx]).next_power_of_two();
+        let m = (1 + gadget.calls()).next_power_of_two();
         let m_inv =
             V::Field::from(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
                 .inv();
@@ -307,12 +320,8 @@ struct ProveShimGadget<F: FieldElement> {
 }
 
 impl<F: FieldElement> ProveShimGadget<F> {
-    fn new(
-        inner: Box<dyn Gadget<F>>,
-        gadget_calls: usize,
-        prove_rand: &[F],
-    ) -> Result<Self, PcpError> {
-        let mut f_vals = vec![vec![F::zero(); 1 + gadget_calls]; inner.arity()];
+    fn new(inner: Box<dyn Gadget<F>>, prove_rand: &[F]) -> Result<Self, PcpError> {
+        let mut f_vals = vec![vec![F::zero(); 1 + inner.calls()]; inner.arity()];
 
         #[allow(clippy::needless_range_loop)]
         for wire in 0..f_vals.len() {
@@ -348,6 +357,10 @@ impl<F: FieldElement> Gadget<F> for ProveShimGadget<F> {
 
     fn degree(&self) -> usize {
         self.inner.degree()
+    }
+
+    fn calls(&self) -> usize {
+        self.inner.calls()
     }
 
     fn as_any(&mut self) -> &mut dyn Any {
@@ -395,8 +408,7 @@ pub fn query<V: Value>(
     query_rand: &[V::Field],
     joint_rand: &[V::Field],
 ) -> Result<Verifier<V::Field>, PcpError> {
-    let gadget_calls = input.valid_gadget_calls();
-
+    let param = input.param();
     let mut proof_len = 0;
     let mut shim = input
         .gadget()
@@ -407,13 +419,13 @@ pub fn query<V: Value>(
                 return Err(PcpError::Query(format!(
                     "short query randomness: got {}; want {}",
                     query_rand.len(),
-                    input.query_rand_len()
+                    param.query_rand_len()
                 )));
             }
 
             let gadget_degree = gadget.degree();
             let gadget_arity = gadget.arity();
-            let m = (1 + gadget_calls[idx]).next_power_of_two();
+            let m = (1 + gadget.calls()).next_power_of_two();
             let r = query_rand[idx];
 
             // Make sure the query randomness isn't a root of unity. Evaluating the gadget
@@ -431,32 +443,31 @@ pub fn query<V: Value>(
             // Compute the length of the sub-proof corresponding to the `idx`-th gadget.
             let next_len = gadget_arity + gadget_degree * (m - 1) + 1;
             if proof_len + next_len > proof.data.len() {
-                // TODO(cjpatton) Compute the expected proof length and print it in error message.
-                return Err(PcpError::Query("short proof".to_string()));
+                return Err(PcpError::Query(format!(
+                    "short proof (expected length {})",
+                    param.proof_len(),
+                )));
             }
 
             let proof_data = &proof.data[proof_len..proof_len + next_len];
             proof_len += next_len;
 
-            Ok(Box::new(QueryShimGadget::new(
-                gadget,
-                r,
-                proof_data,
-                gadget_calls[idx],
-            )?) as Box<dyn Gadget<V::Field>>)
+            Ok(Box::new(QueryShimGadget::new(gadget, r, proof_data)?) as Box<dyn Gadget<V::Field>>)
         })
         .collect::<Result<Vec<_>, _>>()?;
 
     if proof_len < proof.data.len() {
-        // TODO(cjpatton) Compute the expected proof length and print it in error message.
-        return Err(PcpError::Query("long proof".to_string()));
+        return Err(PcpError::Query(format!(
+            "long proof (expected length {})",
+            param.proof_len(),
+        )));
     }
 
     if query_rand.len() > shim.len() {
         return Err(PcpError::Query(format!(
             "long query randomness: got {}; want {}",
             query_rand.len(),
-            input.query_rand_len()
+            param.query_rand_len()
         )));
     }
 
@@ -490,7 +501,7 @@ pub fn query<V: Value>(
 
         // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
         // polynomial at query randomness `r`.
-        let m = (1 + gadget_calls[idx]).next_power_of_two();
+        let m = (1 + gadget.calls()).next_power_of_two();
         let m_inv =
             V::Field::from(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
                 .inv();
@@ -530,21 +541,16 @@ struct QueryShimGadget<F: FieldElement> {
 }
 
 impl<F: FieldElement> QueryShimGadget<F> {
-    fn new(
-        inner: Box<dyn Gadget<F>>,
-        r: F,
-        proof_data: &[F],
-        gadget_calls: usize,
-    ) -> Result<Self, PcpError> {
+    fn new(inner: Box<dyn Gadget<F>>, r: F, proof_data: &[F]) -> Result<Self, PcpError> {
         let gadget_degree = inner.degree();
         let gadget_arity = inner.arity();
-        let m = (1 + gadget_calls).next_power_of_two();
+        let m = (1 + inner.calls()).next_power_of_two();
         let p = m * gadget_degree;
 
         // Each call to this gadget records the values at which intermediate proof polynomials were
         // interpolated. The first point was a random value chosen by the prover and transmitted in
         // the proof.
-        let mut f_vals = vec![vec![F::zero(); 1 + gadget_calls]; gadget_arity];
+        let mut f_vals = vec![vec![F::zero(); 1 + inner.calls()]; gadget_arity];
         for wire in 0..gadget_arity {
             f_vals[wire][0] = proof_data[wire];
         }
@@ -595,6 +601,10 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
         self.inner.degree()
     }
 
+    fn calls(&self) -> usize {
+        self.inner.calls()
+    }
+
     fn as_any(&mut self) -> &mut dyn Any {
         self
     }
@@ -630,11 +640,14 @@ impl<F: FieldElement> From<Vec<F>> for Verifier<F> {
 /// * `input` is the input or input share.
 /// * `verifier` is the verifier message or a share of the verifier message.
 pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool, PcpError> {
+    let param = input.param();
     let mut gadgets = input.gadget();
 
     if verifier.data.is_empty() {
-        // TODO(cjpatton) Compute expected verifier length and output it here
-        return Err(PcpError::Decide("zero-length verifier".to_string()));
+        return Err(PcpError::Decide(format!(
+            "zero-length verifier (expected length {})",
+            param.verifier_len()
+        )));
     }
 
     // Check if the output of the circuit is 0.
@@ -648,8 +661,10 @@ pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool
     for idx in 0..gadgets.len() {
         let next_len = 1 + gadgets[idx].arity();
         if verifier_len + next_len > verifier.data.len() {
-            // TODO(cjpatton) Compute expected verifier length and output it here
-            return Err(PcpError::Decide("short verifier".to_string()));
+            return Err(PcpError::Decide(format!(
+                "short verifier (expected length {})",
+                param.verifier_len()
+            )));
         }
 
         let e = gadgets[idx].call(&verifier.data[verifier_len..verifier_len + next_len - 1])?;
@@ -661,8 +676,10 @@ pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool
     }
 
     if verifier_len != verifier.data.len() {
-        // TODO(cjpatton) Compute expected verifier length and output it here
-        return Err(PcpError::Decide("long verifier".to_string()));
+        return Err(PcpError::Decide(format!(
+            "long verifier (expected length {})",
+            param.verifier_len()
+        )));
     }
 
     Ok(true)
@@ -673,39 +690,39 @@ mod tests {
     use super::*;
     use crate::field::{random_vector, split_vector, Field126};
     use crate::pcp::gadgets::{Mul, PolyEval};
-    use crate::pcp::types::Count;
     use crate::polynomial::poly_range_check;
 
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
     #[test]
     fn test_pcp() {
-        type F = Field126;
-        type T = TestValue<F>;
         const NUM_SHARES: usize = 2;
 
-        let inp = F::from(3);
-        let x: T = TestValue::new(inp);
-        let x_par = x.param();
-        let x_shares: Vec<T> = split_vector(x.as_slice(), NUM_SHARES)
+        let input: TestValue<Field126> = TestValue::new(Field126::from(3));
+        let param = input.param();
+        assert_eq!(input.as_slice().len(), param.input_len());
+
+        let input_shares: Vec<TestValue<Field126>> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
-            .map(|data| T::new_share(data, &x_par, NUM_SHARES).unwrap())
+            .map(|data| TestValue::new_share(data, &param, NUM_SHARES).unwrap())
             .collect();
 
-        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
-        let query_rand = random_vector(x.query_rand_len()).unwrap();
+        let joint_rand = random_vector(param.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(param.prove_rand_len()).unwrap();
+        let query_rand = random_vector(param.query_rand_len()).unwrap();
 
-        let pf = prove(&x, &prove_rand, &joint_rand).unwrap();
-        let pf_shares: Vec<Proof<F>> = split_vector(pf.as_slice(), NUM_SHARES)
+        let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
+        assert_eq!(proof.as_slice().len(), param.proof_len());
+
+        let proof_shares: Vec<Proof<Field126>> = split_vector(proof.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .map(Proof::from)
             .collect();
 
-        let vf: Verifier<F> = (0..NUM_SHARES)
-            .map(|i| query(&x_shares[i], &pf_shares[i], &query_rand, &joint_rand).unwrap())
+        let verifier: Verifier<Field126> = (0..NUM_SHARES)
+            .map(|i| query(&input_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap())
             .reduce(|mut left, right| {
                 for (x, y) in left.data.iter_mut().zip(right.data.iter()) {
                     *x += *y;
@@ -713,41 +730,15 @@ mod tests {
                 Verifier { data: left.data }
             })
             .unwrap();
-        assert!(decide(&x, &vf).unwrap());
-    }
+        assert_eq!(verifier.as_slice().len(), param.verifier_len());
 
-    #[test]
-    fn test_decide() {
-        let x: Count<Field126> = Count::new(1).unwrap();
-        let joint_rand = random_vector(x.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(x.prove_rand_len()).unwrap();
-        let query_rand = random_vector(x.query_rand_len()).unwrap();
-
-        let ok_vf = query(
-            &x,
-            &prove(&x, &prove_rand, &joint_rand).unwrap(),
-            &query_rand,
-            &joint_rand,
-        )
-        .unwrap();
-        assert!(decide(&x, &ok_vf).is_ok());
-
-        let vf_len = ok_vf.as_slice().len();
-
-        let bad_vf = Verifier::from(ok_vf.as_slice()[..vf_len - 1].to_vec());
-        assert!(decide(&x, &bad_vf).is_err());
-
-        let bad_vf = Verifier::from(ok_vf.as_slice()[..2].to_vec());
-        assert!(decide(&x, &bad_vf).is_err());
-
-        let bad_vf = Verifier::from(vec![]);
-        assert!(decide(&x, &bad_vf).is_err());
+        assert!(decide(&input, &verifier).unwrap());
     }
 
     /// A toy type used for testing the functionality in this module. Valid inputs of this type
     /// consist of a pair of field elements `(x, y)` where `2 <= x < 5` and `x^3 == y`.
-    #[derive(Debug, PartialEq, Eq)]
-    pub struct TestValue<F: FieldElement> {
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct TestValue<F: FieldElement> {
         data: Vec<F>, // The encoded input
     }
 
@@ -761,29 +752,17 @@ mod tests {
 
     impl<F: FieldElement> Value for TestValue<F> {
         type Field = F;
-        type Param = ();
+        type Param = TestValueParam;
 
-        fn new_share(data: Vec<F>, _param: &(), _num_shares: usize) -> Result<Self, PcpError> {
+        fn new_share(
+            data: Vec<F>,
+            _param: &TestValueParam,
+            _num_shares: usize,
+        ) -> Result<Self, PcpError> {
             Ok(Self { data })
         }
 
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
-            if joint_rand.len() != self.joint_rand_len() {
-                return Err(PcpError::Valid(format!(
-                    "unexpected joint randomness length: got {}; want {}",
-                    joint_rand.len(),
-                    self.joint_rand_len()
-                )));
-            }
-
-            if self.data.len() != 2 {
-                return Err(PcpError::Valid(format!(
-                    "unexpected input length: got {}; want {}",
-                    self.data.len(),
-                    2
-                )));
-            }
-
             let r = joint_rand[0];
             let mut res = F::zero();
 
@@ -801,8 +780,54 @@ mod tests {
             Ok(res)
         }
 
-        fn valid_gadget_calls(&self) -> Vec<usize> {
-            vec![2, 1]
+        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+            vec![
+                Box::new(Mul::new(2)),
+                Box::new(PolyEval::new(poly_range_check(2, 5), 1)),
+            ]
+        }
+
+        fn as_slice(&self) -> &[F] {
+            &self.data
+        }
+
+        fn param(&self) -> TestValueParam {
+            TestValueParam()
+        }
+
+        fn into_output(self) -> Vec<F> {
+            self.data
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    struct TestValueParam();
+
+    impl ValueParam for TestValueParam {
+        fn input_len(&self) -> usize {
+            2
+        }
+
+        fn proof_len(&self) -> usize {
+            // First chunk
+            let mul = 2 /* gadget arity */ + 2 /* gadget degree */ * (
+                (1 + 2 /* gadget calls */ as usize).next_power_of_two() - 1) + 1;
+
+            // Second chunk
+            let poly = 1 /* gadget arity */ + 3 /* gadget degree */ * (
+                (1 + 1 /* gadget calls */ as usize).next_power_of_two() - 1) + 1;
+
+            mul + poly
+        }
+
+        fn verifier_len(&self) -> usize {
+            // First chunk
+            let mul = 1 + 2 /* gadget arity */;
+
+            // Second chunk
+            let poly = 1 + 1 /* gadget arity */;
+
+            1 + mul + poly
         }
 
         fn joint_rand_len(&self) -> usize {
@@ -816,18 +841,5 @@ mod tests {
         fn query_rand_len(&self) -> usize {
             2
         }
-
-        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-            vec![
-                Box::new(Mul::new(2)),
-                Box::new(PolyEval::new(poly_range_check(2, 5), 1)),
-            ]
-        }
-
-        fn as_slice(&self) -> &[F] {
-            &self.data
-        }
-
-        fn param(&self) -> Self::Param {}
     }
 }
