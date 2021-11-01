@@ -217,6 +217,131 @@ impl<F: FieldElement> Value for Sum<F> {
     }
 }
 
+/// The histogram type. Each measurement is a non-negative integer and the aggregate is a histogram
+/// approximating the distribution of the measurements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Histogram<F> {
+    data: Vec<F>,
+    range_checker: Vec<F>,
+    sum_check_share: F,
+}
+
+impl<F: FieldElement> Histogram<F> {
+    /// Constructs a new histogram input. The values of `buckets` must be strictly increasing.
+    pub fn new(measurement: u64, buckets: &[u64]) -> Result<Self, PcpError> {
+        let mut data = vec![F::zero(); buckets.len() + 1];
+
+        if buckets.len() >= u32::MAX as usize {
+            return Err(PcpError::Value(
+                "invalid buckets: number of buckets exceeds maximum permitted".to_string(),
+            ));
+        }
+
+        if !buckets.is_empty() {
+            for i in 0..buckets.len() - 1 {
+                if buckets[i + 1] <= buckets[i] {
+                    return Err(PcpError::Value(
+                        "invalid buckets: out-of-order boundary".to_string(),
+                    ));
+                }
+            }
+        }
+
+        let bucket = match buckets.binary_search(&measurement) {
+            Ok(i) => i,  // on a bucket boundary
+            Err(i) => i, // smaller than the i-th bucket boundary
+        };
+
+        data[bucket] = F::one();
+
+        Ok(Self {
+            data,
+            range_checker: poly_range_check(0, 2),
+            sum_check_share: F::one(),
+        })
+    }
+}
+
+impl<F: FieldElement> Value for Histogram<F> {
+    type Field = F;
+    type Param = u32; // Number of buckets
+
+    fn new_share(data: Vec<F>, num_buckets: &u32, num_shares: usize) -> Result<Self, PcpError> {
+        let expected_data_len = usize::try_from(*num_buckets).unwrap() + 1;
+        if data.len() != expected_data_len {
+            return Err(PcpError::Value(
+                "data length does not match buckets".to_string(),
+            ));
+        }
+
+        let sum_check_share = F::one() / F::from(F::Integer::try_from(num_shares).unwrap());
+        Ok(Self {
+            data: data.to_vec(),
+            range_checker: poly_range_check(0, 2),
+            sum_check_share,
+        })
+    }
+
+    fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
+        if rand.len() != self.joint_rand_len() {
+            return Err(PcpError::Valid(format!(
+                "unexpected joint randomness length: got {}; want {}",
+                rand.len(),
+                self.joint_rand_len()
+            )));
+        }
+
+        // Check that each element of `data` is a 0 or 1.
+        let mut range_check = F::zero();
+        let mut r = rand[0];
+        for chunk in self.data.chunks(1) {
+            range_check += r * g[0].call(chunk)?;
+            r *= rand[0];
+        }
+
+        // Check that the elements of `data` sum to 1.
+        let mut sum_check = -self.sum_check_share;
+        for val in self.data.iter() {
+            sum_check += *val;
+        }
+
+        // Take a random linear combination of both checks.
+        let out = rand[1] * range_check + (rand[1] * rand[1]) * sum_check;
+        Ok(out)
+    }
+
+    fn valid_gadget_calls(&self) -> Vec<usize> {
+        vec![self.data.len()]
+    }
+
+    fn joint_rand_len(&self) -> usize {
+        2
+    }
+
+    fn prove_rand_len(&self) -> usize {
+        1
+    }
+
+    fn query_rand_len(&self) -> usize {
+        1
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(
+            self.range_checker.clone(),
+            self.data.len(),
+        ))]
+    }
+
+    fn as_slice(&self) -> &[F] {
+        &self.data
+    }
+
+    fn param(&self) -> u32 {
+        u32::try_from(self.data.len()).unwrap() - 1
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -357,6 +482,114 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: false,
                 expected_proof_len: 16,
+            },
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_histogram() {
+        let zero = TestField::zero();
+        let one = TestField::one();
+        let nine = TestField::from(9);
+        let buckets = [10, 20];
+
+        let input: Histogram<TestField> = Histogram::new(7, &buckets).unwrap();
+        assert_eq!(input.data, &[one, zero, zero]);
+
+        let input: Histogram<TestField> = Histogram::new(10, &buckets).unwrap();
+        assert_eq!(input.data, &[one, zero, zero]);
+
+        let input: Histogram<TestField> = Histogram::new(17, &buckets).unwrap();
+        assert_eq!(input.data, &[zero, one, zero]);
+
+        let input: Histogram<TestField> = Histogram::new(20, &buckets).unwrap();
+        assert_eq!(input.data, &[zero, one, zero]);
+
+        let input: Histogram<TestField> = Histogram::new(27, &buckets).unwrap();
+        assert_eq!(input.data, &[zero, zero, one]);
+
+        // Invalid bucket boundaries.
+        Histogram::<TestField>::new(27, &[10, 0]).unwrap_err();
+        Histogram::<TestField>::new(27, &[10, 10]).unwrap_err();
+
+        // Test valid inputs.
+        pcp_validity_test(
+            &Histogram::<TestField>::new(0, &buckets).unwrap(),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 8,
+            },
+        )
+        .unwrap();
+
+        pcp_validity_test(
+            &Histogram::<TestField>::new(17, &buckets).unwrap(),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 8,
+            },
+        )
+        .unwrap();
+
+        pcp_validity_test(
+            &Histogram::<TestField>::new(1337, &buckets).unwrap(),
+            &ValidityTestCase {
+                expect_valid: true,
+                expected_proof_len: 8,
+            },
+        )
+        .unwrap();
+
+        // Test invalid inputs.
+        pcp_validity_test(
+            &Histogram::<TestField> {
+                data: vec![zero, zero, nine],
+                range_checker: poly_range_check(0, 2),
+                sum_check_share: one,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 8,
+            },
+        )
+        .unwrap();
+
+        pcp_validity_test(
+            &Histogram::<TestField> {
+                data: vec![zero, one, one],
+                range_checker: poly_range_check(0, 2),
+                sum_check_share: one,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 8,
+            },
+        )
+        .unwrap();
+
+        pcp_validity_test(
+            &Histogram::<TestField> {
+                data: vec![one, one, one],
+                range_checker: poly_range_check(0, 2),
+                sum_check_share: one,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 8,
+            },
+        )
+        .unwrap();
+
+        pcp_validity_test(
+            &Histogram::<TestField> {
+                data: vec![zero, zero, zero],
+                range_checker: poly_range_check(0, 2),
+                sum_check_share: one,
+            },
+            &ValidityTestCase {
+                expect_valid: false,
+                expected_proof_len: 8,
             },
         )
         .unwrap();
