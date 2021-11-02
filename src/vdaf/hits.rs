@@ -301,10 +301,7 @@ impl<I: Idpf<2, 2>> Client for Hits<I> {
             HitsInputShare {
                 idpf: idpf_shares.next().unwrap(),
                 sketch_start_seed: helper_sketch_start_seed,
-                sketch_next: Share::Helper {
-                    seed: helper_sketch_next_seed,
-                    length: 2 * input.level,
-                },
+                sketch_next: Share::Helper(helper_sketch_next_seed),
             },
         ])
     }
@@ -402,7 +399,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 
         let (d, e) = match &input_share.sketch_next {
             Share::Leader(data) => (data[2 * level], data[2 * level + 1]),
-            Share::Helper { seed, length: _ } => {
+            Share::Helper(seed) => {
                 let mut prng =
                     Prng::<I::Field>::from_key_stream(KeyStream::from_key(seed)).skip(2 * level);
                 (prng.next().unwrap(), prng.next().unwrap())
