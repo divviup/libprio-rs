@@ -113,7 +113,7 @@ pub enum PcpError {
 
 /// A value of a certain type. Implementations of this trait specify an arithmetic circuit that
 /// determines whether a given value is valid.
-pub trait Value: Sized + PartialEq + Eq + Debug {
+pub trait Value: Sized + Eq + Debug {
     /// The finite field used for this type.
     type Field: FieldElement;
 
