@@ -12,7 +12,7 @@
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
 use crate::field::FieldElement;
-use crate::pcp::{decide, prove, query, Proof, Value, ValueParam, Verifier};
+use crate::pcp::Type;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{Share, VdafError};
@@ -67,27 +67,26 @@ impl HelperShare {
 /// * `suite` is the cipher suite used for key derivation.
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
-pub fn prio3_input<V: Value>(
+pub fn prio3_input<V: Type>(
     suite: Suite,
-    input: &V,
+    typ: &V,
+    input: &[V::Field],
     num_shares: u8,
 ) -> Result<Vec<InputShareMessage<V::Field>>, VdafError> {
     check_num_shares("prio3_input", num_shares)?;
 
-    let input_len = input.as_slice().len();
     let num_shares = num_shares as usize;
-    let param = input.param();
 
     // Generate the input shares and compute the joint randomness.
     let mut helper_shares = vec![HelperShare::new(suite)?; num_shares - 1];
-    let mut leader_input_share = input.as_slice().to_vec();
+    let mut leader_input_share = input.to_vec();
     let mut joint_rand_seed = Key::uninitialized(suite);
     let mut aggregator_id = 1; // ID of the first helper
     for helper in helper_shares.iter_mut() {
         let mut deriver = KeyDeriver::from_key(&helper.blind);
         deriver.update(&[aggregator_id]);
         let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&helper.input_share));
-        for (x, y) in leader_input_share.iter_mut().zip(prng).take(input_len) {
+        for (x, y) in leader_input_share.iter_mut().zip(prng).take(input.len()) {
             *x -= y;
             deriver.update(&y.into());
         }
@@ -123,17 +122,19 @@ pub fn prio3_input<V: Value>(
 
     // Run the proof-generation algorithm.
     let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
-    let joint_rand: Vec<V::Field> = prng.take(param.joint_rand_len()).collect();
+    let joint_rand: Vec<V::Field> = prng.take(typ.joint_rand_len()).collect();
     let prng: Prng<V::Field> = Prng::generate(suite)?;
-    let prove_rand: Vec<V::Field> = prng.take(param.prove_rand_len()).collect();
-    let proof = prove(input, &prove_rand, &joint_rand)?;
+    let prove_rand: Vec<V::Field> = prng.take(typ.prove_rand_len()).collect();
+    let mut leader_proof_share = typ.prove(input, &prove_rand, &joint_rand)?;
 
     // Generate the proof shares and finalize the joint randomness seed hints.
-    let proof_len = proof.as_slice().len();
-    let mut leader_proof_share = proof.data;
     for helper in helper_shares.iter_mut() {
         let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&helper.proof_share));
-        for (x, y) in leader_proof_share.iter_mut().zip(prng).take(proof_len) {
+        for (x, y) in leader_proof_share
+            .iter_mut()
+            .zip(prng)
+            .take(typ.proof_len())
+        {
             *x -= y;
         }
 
@@ -178,9 +179,9 @@ pub fn prio3_input<V: Value>(
 
 /// The verification parameter used by each aggregator to evaluate the VDAF.
 #[derive(Clone, Debug)]
-pub struct VerifyParam<V: Value> {
-    /// Input parameter, needed to reconstruct a [`Value`] from a vector of field elements.
-    pub value_param: V::Param,
+pub struct VerifyParam<V: Type> {
+    /// Type.
+    pub typ: V,
 
     /// Key used to derive the query randomness from the nonce.
     pub query_rand_init: Key,
@@ -195,9 +196,9 @@ pub struct VerifyParam<V: Value> {
 /// The setup algorithm of the VDAF that generates the verification parameter of each aggregator.
 /// Note that this VDAF does not involve a public parameter.
 #[cfg(test)]
-fn prio3_setup<V: Value>(
+fn prio3_setup<V: Type>(
     suite: Suite,
-    value_param: &V::Param,
+    typ: &V,
     num_shares: u8,
 ) -> Result<Vec<VerifyParam<V>>, VdafError> {
     check_num_shares("prio3_setup", num_shares)?;
@@ -205,7 +206,7 @@ fn prio3_setup<V: Value>(
     let query_rand_init = Key::generate(suite)?;
     Ok((0..num_shares)
         .map(|aggregator_id| VerifyParam {
-            value_param: value_param.clone(),
+            typ: typ.clone(),
             query_rand_init: query_rand_init.clone(),
             aggregator_id,
             num_shares,
@@ -218,7 +219,7 @@ fn prio3_setup<V: Value>(
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerifyMessage<F> {
     /// The aggregator's share of the verifier message.
-    pub verifier_share: Verifier<F>,
+    pub verifier_share: Vec<F>,
 
     /// The aggregator's share of the joint randomness, derived from its input share.
     //
@@ -229,9 +230,11 @@ pub struct VerifyMessage<F> {
 
 /// The state of each aggregator.
 #[derive(Clone, Debug)]
-pub struct VerifyState<V: Value> {
+pub struct VerifyState<V: Type> {
+    typ: V,
+
     /// The input share.
-    input_share: V,
+    input_share: Vec<V::Field>,
 
     /// The joint randomness seed indicated by the client. The aggregators check that this
     /// indication matches the actual joint randomness seed.
@@ -247,23 +250,20 @@ pub struct VerifyState<V: Value> {
 /// parameter.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `verify_param` and `msg`.
-pub fn prio3_start<V: Value>(
+pub fn prio3_start<V: Type>(
     verify_param: &VerifyParam<V>,
     nonce: &[u8],
     msg: InputShareMessage<V::Field>,
 ) -> Result<(VerifyState<V>, VerifyMessage<V::Field>), VdafError> {
-    let param = &verify_param.value_param;
+    let typ = verify_param.typ.clone();
 
     let mut deriver = KeyDeriver::from_key(&verify_param.query_rand_init);
     deriver.update(&[255]);
     deriver.update(nonce);
     let query_rand_seed = deriver.finish();
 
-    let input_share_data = msg.input_share.into_vec(param.input_len())?;
-    let input_share = V::new_share(input_share_data, param, verify_param.num_shares as usize)?;
-
-    let proof_share_data = msg.proof_share.into_vec(param.proof_len())?;
-    let proof_share = Proof::from(proof_share_data);
+    let input_share = msg.input_share.into_vec(typ.input_len())?;
+    let proof_share = msg.proof_share.into_vec(typ.proof_len())?;
 
     // Compute the joint randomness.
     let mut deriver = KeyDeriver::from_key(&msg.blind);
@@ -279,17 +279,24 @@ pub fn prio3_start<V: Value>(
     }
 
     let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
-    let joint_rand: Vec<V::Field> = prng.take(param.joint_rand_len()).collect();
+    let joint_rand: Vec<V::Field> = prng.take(typ.joint_rand_len()).collect();
 
     // Compute the query randomness.
     let prng: Prng<V::Field> = Prng::from_key_stream(KeyStream::from_key(&query_rand_seed));
-    let query_rand: Vec<V::Field> = prng.take(param.query_rand_len()).collect();
+    let query_rand: Vec<V::Field> = prng.take(typ.query_rand_len()).collect();
 
     // Run the query-generation algorithm.
-    let verifier_share = query(&input_share, &proof_share, &query_rand, &joint_rand)?;
+    let verifier_share = typ.query(
+        &input_share,
+        &proof_share,
+        &query_rand,
+        &joint_rand,
+        verify_param.num_shares as usize,
+    )?;
 
     // Prepare the output state and message.
     let state = VerifyState {
+        typ,
         input_share,
         joint_rand_seed,
     };
@@ -307,9 +314,9 @@ pub fn prio3_start<V: Value>(
 /// input share.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msgs` and among `msgs`.
-pub fn prio3_finish<M, V>(mut state: VerifyState<V>, msgs: M) -> Result<V, VdafError>
+pub fn prio3_finish<M, V>(mut state: VerifyState<V>, msgs: M) -> Result<Vec<V::Field>, VdafError>
 where
-    V: Value,
+    V: Type,
     M: IntoIterator<Item = VerifyMessage<V::Field>>,
 {
     let mut msgs = msgs.into_iter().peekable();
@@ -324,18 +331,18 @@ where
     };
 
     // Combine the verifier messages.
-    let mut verifier_data = vec![V::Field::zero(); verifier_length];
+    let mut verifier = vec![V::Field::zero(); verifier_length];
     for msg in msgs {
-        if msg.verifier_share.as_slice().len() != verifier_data.len() {
+        if msg.verifier_share.len() != verifier.len() {
             return Err(VdafError::Uncategorized(format!(
                 "prio3_finish(): expected verifier share of length {}; got {}",
-                verifier_data.len(),
-                msg.verifier_share.as_slice().len(),
+                verifier.len(),
+                msg.verifier_share.len(),
             )));
         }
 
-        for (x, y) in verifier_data.iter_mut().zip(msg.verifier_share.as_slice()) {
-            *x += *y;
+        for (x, y) in verifier.iter_mut().zip(msg.verifier_share) {
+            *x += y;
         }
 
         for (x, y) in state
@@ -356,8 +363,7 @@ where
     }
 
     // Check the proof.
-    let verifier = Verifier::from(verifier_data);
-    let result = decide(&state.input_share, &verifier)?;
+    let result = state.typ.decide(&verifier)?;
     if !result {
         return Err(VdafError::Uncategorized("proof check failed".to_string()));
     }
@@ -391,14 +397,16 @@ mod tests {
     fn test_prio3() {
         let suite = Suite::Blake3;
         const NUM_SHARES: usize = 23;
-        let input: Count<Field64> = Count::new(1).unwrap();
+
+        let count = Count::new();
+        let input: Vec<Field64> = count.encode(&1).unwrap();
         let nonce = b"This is a good nonce.";
 
         // Client runs the input and proof distribution algorithms.
-        let input_shares = prio3_input(suite, &input, NUM_SHARES as u8).unwrap();
+        let input_shares = prio3_input(suite, &count, &input, NUM_SHARES as u8).unwrap();
 
         // Aggregators agree on seed used to generate per-report query randomness.
-        let verify_params = prio3_setup(suite, &input.param(), NUM_SHARES as u8).unwrap();
+        let verify_params = prio3_setup(suite, &count, NUM_SHARES as u8).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let (states, verifiers): (
