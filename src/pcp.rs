@@ -19,13 +19,13 @@
 //! then the verification step will fail with high probability. For example:
 //!
 //! ```
-//! use prio::pcp::types::Count;
+//! use prio::pcp::types::{Count, CountParam};
 //! use prio::pcp::{decide, prove, query, Value, ValueParam};
 //! use prio::field::{random_vector, FieldElement, Field64};
 //!
 //! // The prover chooses a measurement.
-//! let input: Count<Field64> = Count::new(0).unwrap();
-//! let param = input.param();
+//! let param = CountParam::new();
+//! let input: Count<Field64> = Count::new(0, &param).unwrap();
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
@@ -40,7 +40,7 @@
 //! // The verifier checks the proof.
 //! let query_rand = random_vector(param.query_rand_len()).unwrap();
 //! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
-//! assert!(decide(&input, &verifier).unwrap());
+//! assert!(decide(&param,  &verifier).unwrap());
 //! ```
 //!
 //! The proof system implemented here lifts [[BBCG+19], Theorem 4.3] to a 1.5-round, public-coin,
@@ -115,7 +115,7 @@ pub enum PcpError {
 /// Parameters of a value. An implementation of this trait is used to construct a value from a
 /// vector of field elements. It also defines the lengths of inputs and outputs of [`prove`],
 /// [`query`], and [`decide`].
-pub trait ValueParam: Clone + Debug {
+pub trait ValueParam<F: FieldElement>: Clone + Debug {
     /// The length of the input for this type.
     fn input_len(&self) -> usize;
 
@@ -135,23 +135,33 @@ pub trait ValueParam: Clone + Debug {
     /// The length of the random input consumed by the verifier to make queries against inputs and
     /// proofs. This is the same as the number of gadgets in the validity circuit.
     fn query_rand_len(&self) -> usize;
+
+    /// Returns the sequence of gadgets associated with the validity circuit.
+    ///
+    /// NOTE The construction of [[BBCG+19], Theorem 4.3] uses a single gadget rather than many.
+    /// The idea to generalize the proof system to allow multiple gadgets is discussed briefly in
+    /// [[BBCG+19], Remark 4.5], but no construction is given. The construction implemented here
+    /// requires security analysis.
+    ///
+    /// [BBCG+19]: https://ia.cr/2019/188
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>>;
 }
 
 /// A value. Implementations of this trait specify an arithmetic circuit that determines whether an
 /// input of this type is valid.
-pub trait Value: Sized + Eq + Clone + Debug {
+pub trait Value<'a>: Sized + Eq + Clone + Debug {
     /// The finite field used for this type.
     type Field: FieldElement;
 
     /// Parameters used to construct a value of this type from a vector of field elements.
-    type Param: ValueParam;
+    type Param: ValueParam<Self::Field>;
 
     /// Constructs an instance of a value from an additive share of the input (`data`) and type
     /// parameter (`param`). For some types, the validity circuit may depend on the total number of
     /// shares (`num_shares`).
     fn new_share(
         data: Vec<Self::Field>,
-        param: &Self::Param,
+        param: &'a Self::Param,
         num_shares: usize,
     ) -> Result<Self, PcpError>;
 
@@ -160,13 +170,14 @@ pub trait Value: Sized + Eq + Clone + Debug {
     /// of gadgets called by the circuit.
     ///
     /// ```
-    /// use prio::pcp::types::Count;
+    /// use prio::pcp::types::{Count, CountParam};
     /// use prio::pcp::{Value, ValueParam};
     /// use prio::field::{random_vector, FieldElement, Field64};
     ///
-    /// let x: Count<Field64> = Count::new(1).unwrap();
-    /// let joint_rand = random_vector(x.param().joint_rand_len()).unwrap();
-    /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
+    /// let param = CountParam::new();
+    /// let input: Count<Field64> = Count::new(1, &param).unwrap();
+    /// let joint_rand = random_vector(param.joint_rand_len()).unwrap();
+    /// let v = input.valid(&mut param.gadget(), &joint_rand).unwrap();
     /// assert_eq!(v, Field64::zero());
     /// ```
     fn valid(
@@ -178,18 +189,8 @@ pub trait Value: Sized + Eq + Clone + Debug {
     /// Returns a reference to the underlying data.
     fn as_slice(&self) -> &[Self::Field];
 
-    /// Returns the sequence of gadgets associated with the validity circuit.
-    ///
-    /// NOTE The construction of [[BBCG+19], Theorem 4.3] uses a single gadget rather than many.
-    /// The idea to generalize the proof system to allow multiple gadgets is discussed briefly in
-    /// [[BBCG+19], Remark 4.5], but no construction is given. The construction implemented here
-    /// requires security analysis.
-    ///
-    /// [BBCG+19]: https://ia.cr/2019/188
-    fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>>;
-
     /// Returns a copy of the associated type parameters for this value.
-    fn param(&self) -> Self::Param;
+    fn param(&self) -> &Self::Param;
 
     /// Converts this value into an aggregatable output. This operation is only safe after the
     /// input has been validated.
@@ -227,14 +228,14 @@ pub trait Gadget<F: FieldElement> {
 /// * `prove_rand` is the prover' randomness.
 /// * `joint_rand` is the randomness shared by the prover and verifier.
 #[allow(clippy::needless_range_loop)]
-pub fn prove<V: Value>(
+pub fn prove<'a, V: Value<'a>>(
     input: &V,
     prove_rand: &[V::Field],
     joint_rand: &[V::Field],
 ) -> Result<Proof<V::Field>, PcpError> {
     let param = input.param();
     let mut prove_rand_len = 0;
-    let mut shim = input
+    let mut shim = param
         .gadget()
         .into_iter()
         .map(|inner| {
@@ -402,7 +403,7 @@ impl<F: FieldElement> From<Proof<F>> for Vec<u8> {
 /// * `proof` is the proof or proof share.
 /// * `query_rand` is the verifier's randomness.
 /// * `joint_rand` is the randomness shared by the prover and verifier.
-pub fn query<V: Value>(
+pub fn query<'a, V: Value<'a>>(
     input: &V,
     proof: &Proof<V::Field>,
     query_rand: &[V::Field],
@@ -410,7 +411,7 @@ pub fn query<V: Value>(
 ) -> Result<Verifier<V::Field>, PcpError> {
     let param = input.param();
     let mut proof_len = 0;
-    let mut shim = input
+    let mut shim = param
         .gadget()
         .into_iter()
         .enumerate()
@@ -637,11 +638,13 @@ impl<F: FieldElement> From<Vec<F>> for Verifier<F> {
 ///
 /// # Parameters
 ///
-/// * `input` is the input or input share.
+/// * `param` is the value parameter.
 /// * `verifier` is the verifier message or a share of the verifier message.
-pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool, PcpError> {
-    let param = input.param();
-    let mut gadgets = input.gadget();
+pub fn decide<F: FieldElement, P: ValueParam<F>>(
+    param: &P,
+    verifier: &Verifier<F>,
+) -> Result<bool, PcpError> {
+    let mut gadgets = param.gadget();
 
     if verifier.data.is_empty() {
         return Err(PcpError::Decide(format!(
@@ -651,7 +654,7 @@ pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool
     }
 
     // Check if the output of the circuit is 0.
-    if verifier.data[0] != V::Field::zero() {
+    if verifier.data[0] != F::zero() {
         return Ok(false);
     }
 
@@ -692,14 +695,16 @@ mod tests {
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::polynomial::poly_range_check;
 
+    use std::marker::PhantomData;
+
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
     #[test]
     fn test_pcp() {
         const NUM_SHARES: usize = 2;
 
-        let input: TestValue<Field126> = TestValue::new(Field126::from(3));
-        let param = input.param();
+        let param = TestValueParam::new();
+        let input: TestValue<Field126> = TestValue::new(Field126::from(3), &param);
         assert_eq!(input.as_slice().len(), param.input_len());
 
         let input_shares: Vec<TestValue<Field126>> = split_vector(input.as_slice(), NUM_SHARES)
@@ -732,34 +737,36 @@ mod tests {
             .unwrap();
         assert_eq!(verifier.as_slice().len(), param.verifier_len());
 
-        assert!(decide(&input, &verifier).unwrap());
+        assert!(decide(input.param(), &verifier).unwrap());
     }
 
     /// A toy type used for testing the functionality in this module. Valid inputs of this type
     /// consist of a pair of field elements `(x, y)` where `2 <= x < 5` and `x^3 == y`.
     #[derive(Clone, Debug, PartialEq, Eq)]
-    struct TestValue<F: FieldElement> {
+    struct TestValue<'a, F: FieldElement> {
         data: Vec<F>, // The encoded input
+        param: &'a TestValueParam<F>,
     }
 
-    impl<F: FieldElement> TestValue<F> {
-        pub fn new(inp: F) -> Self {
+    impl<'a, F: FieldElement> TestValue<'a, F> {
+        pub fn new(inp: F, param: &'a TestValueParam<F>) -> Self {
             Self {
                 data: vec![inp, inp * inp * inp],
+                param,
             }
         }
     }
 
-    impl<F: FieldElement> Value for TestValue<F> {
+    impl<'a, F: FieldElement> Value<'a> for TestValue<'a, F> {
         type Field = F;
-        type Param = TestValueParam;
+        type Param = TestValueParam<F>;
 
         fn new_share(
             data: Vec<F>,
-            _param: &TestValueParam,
+            param: &'a TestValueParam<F>,
             _num_shares: usize,
         ) -> Result<Self, PcpError> {
-            Ok(Self { data })
+            Ok(Self { data, param })
         }
 
         fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
@@ -780,19 +787,12 @@ mod tests {
             Ok(res)
         }
 
-        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-            vec![
-                Box::new(Mul::new(2)),
-                Box::new(PolyEval::new(poly_range_check(2, 5), 1)),
-            ]
-        }
-
         fn as_slice(&self) -> &[F] {
             &self.data
         }
 
-        fn param(&self) -> TestValueParam {
-            TestValueParam()
+        fn param(&self) -> &TestValueParam<F> {
+            self.param
         }
 
         fn into_output(self) -> Vec<F> {
@@ -800,10 +800,16 @@ mod tests {
         }
     }
 
-    #[derive(Clone, Debug)]
-    struct TestValueParam();
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct TestValueParam<F>(PhantomData<F>);
 
-    impl ValueParam for TestValueParam {
+    impl<F: FieldElement> TestValueParam<F> {
+        fn new() -> Self {
+            Self(PhantomData)
+        }
+    }
+
+    impl<F: FieldElement> ValueParam<F> for TestValueParam<F> {
         fn input_len(&self) -> usize {
             2
         }
@@ -840,6 +846,13 @@ mod tests {
 
         fn query_rand_len(&self) -> usize {
             2
+        }
+
+        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+            vec![
+                Box::new(Mul::new(2)),
+                Box::new(PolyEval::new(poly_range_check(2, 5), 1)),
+            ]
         }
     }
 }

@@ -18,6 +18,7 @@ use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{Share, VdafError};
 use serde::{Deserialize, Serialize};
 use std::iter::IntoIterator;
+use std::marker::PhantomData;
 
 /// The message sent by the client to each aggregator. This includes the client's input share and
 /// the initial message of the input-validation protocol.
@@ -67,7 +68,7 @@ impl HelperShare {
 /// * `suite` is the cipher suite used for key derivation.
 /// * `input` is the input to be secret shared.
 /// * `num_shares` is the number of input shares (i.e., aggregators) to generate.
-pub fn prio3_input<V: Value>(
+pub fn prio3_input<'a, V: Value<'a>>(
     suite: Suite,
     input: &V,
     num_shares: u8,
@@ -178,7 +179,7 @@ pub fn prio3_input<V: Value>(
 
 /// The verification parameter used by each aggregator to evaluate the VDAF.
 #[derive(Clone, Debug)]
-pub struct VerifyParam<V: Value> {
+pub struct VerifyParam<'a, V: Value<'a>> {
     /// Input parameter, needed to reconstruct a [`Value`] from a vector of field elements.
     pub value_param: V::Param,
 
@@ -195,11 +196,11 @@ pub struct VerifyParam<V: Value> {
 /// The setup algorithm of the VDAF that generates the verification parameter of each aggregator.
 /// Note that this VDAF does not involve a public parameter.
 #[cfg(test)]
-fn prio3_setup<V: Value>(
+fn prio3_setup<'a, V: Value<'a>>(
     suite: Suite,
     value_param: &V::Param,
     num_shares: u8,
-) -> Result<Vec<VerifyParam<V>>, VdafError> {
+) -> Result<Vec<VerifyParam<'a, V>>, VdafError> {
     check_num_shares("prio3_setup", num_shares)?;
 
     let query_rand_init = Key::generate(suite)?;
@@ -229,7 +230,7 @@ pub struct VerifyMessage<F> {
 
 /// The state of each aggregator.
 #[derive(Clone, Debug)]
-pub struct VerifyState<V: Value> {
+pub struct VerifyState<'a, V: Value<'a>> {
     /// The input share.
     input_share: V,
 
@@ -239,6 +240,8 @@ pub struct VerifyState<V: Value> {
     // TODO(cjpatton) If `joint_rand_len == 0`, then we don't need to bother with the
     // joint randomness seed at all and make this optional.
     joint_rand_seed: Key,
+
+    phantom: PhantomData<&'a V>,
 }
 
 /// The verify-start algorithm of the VDAF. Run by each aggregator, this consumes the
@@ -247,12 +250,12 @@ pub struct VerifyState<V: Value> {
 /// parameter.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `verify_param` and `msg`.
-pub fn prio3_start<V: Value>(
-    verify_param: &VerifyParam<V>,
+pub fn prio3_start<'a, V: Value<'a>>(
+    verify_param: &'a VerifyParam<'a, V>,
     nonce: &[u8],
     msg: InputShareMessage<V::Field>,
-) -> Result<(VerifyState<V>, VerifyMessage<V::Field>), VdafError> {
-    let param = &verify_param.value_param;
+) -> Result<(VerifyState<'a, V>, VerifyMessage<V::Field>), VdafError> {
+    let param = &(verify_param.value_param);
 
     let mut deriver = KeyDeriver::from_key(&verify_param.query_rand_init);
     deriver.update(&[255]);
@@ -292,6 +295,7 @@ pub fn prio3_start<V: Value>(
     let state = VerifyState {
         input_share,
         joint_rand_seed,
+        phantom: PhantomData,
     };
 
     let out = VerifyMessage {
@@ -307,9 +311,9 @@ pub fn prio3_start<V: Value>(
 /// input share.
 //
 // TODO(cjpatton) Check for ciphersuite mismatch between `state` and `msgs` and among `msgs`.
-pub fn prio3_finish<M, V>(mut state: VerifyState<V>, msgs: M) -> Result<V, VdafError>
+pub fn prio3_finish<'a, M, V>(mut state: VerifyState<'a, V>, msgs: M) -> Result<V, VdafError>
 where
-    V: Value,
+    V: Value<'a>,
     M: IntoIterator<Item = VerifyMessage<V::Field>>,
 {
     let mut msgs = msgs.into_iter().peekable();
@@ -357,7 +361,7 @@ where
 
     // Check the proof.
     let verifier = Verifier::from(verifier_data);
-    let result = decide(&state.input_share, &verifier)?;
+    let result = decide(state.input_share.param(), &verifier)?;
     if !result {
         return Err(VdafError::Uncategorized("proof check failed".to_string()));
     }
@@ -385,20 +389,22 @@ mod tests {
     use super::*;
 
     use crate::field::Field64;
-    use crate::pcp::types::Count;
+    use crate::pcp::types::{Count, CountParam};
 
     #[test]
     fn test_prio3() {
         let suite = Suite::Blake3;
         const NUM_SHARES: usize = 23;
-        let input: Count<Field64> = Count::new(1).unwrap();
+
+        let param = CountParam::new();
+        let input: Count<Field64> = Count::new(1, &param).unwrap();
         let nonce = b"This is a good nonce.";
 
         // Client runs the input and proof distribution algorithms.
         let input_shares = prio3_input(suite, &input, NUM_SHARES as u8).unwrap();
 
         // Aggregators agree on seed used to generate per-report query randomness.
-        let verify_params = prio3_setup(suite, &input.param(), NUM_SHARES as u8).unwrap();
+        let verify_params = prio3_setup(suite, &param, NUM_SHARES as u8).unwrap();
 
         // Aggregators receive their proof shares and broadcast their verifier messages.
         let (states, verifiers): (

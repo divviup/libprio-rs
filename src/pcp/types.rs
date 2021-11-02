@@ -13,16 +13,15 @@ use std::mem::size_of;
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of
 /// the measurements (i.e., the number of `1s`).
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Count<F: FieldElement> {
-    data: Vec<F>,  // The encoded input
-    range: Vec<F>, // A range check polynomial for [0, 2)
+pub struct Count<'a, F: FieldElement> {
+    data: Vec<F>, // The encoded input
+    param: &'a CountParam<F>,
 }
 
-impl<F: FieldElement> Count<F> {
+impl<'a, F: FieldElement> Count<'a, F> {
     /// Construct a new counter.
-    pub fn new(value: u64) -> Result<Self, PcpError> {
+    pub fn new(value: u64, param: &'a CountParam<F>) -> Result<Self, PcpError> {
         Ok(Self {
-            range: poly_range_check(0, 2),
             data: vec![match value {
                 1 => F::one(),
                 0 => F::zero(),
@@ -30,23 +29,21 @@ impl<F: FieldElement> Count<F> {
                     return Err(PcpError::Value("Count value must be 0 or 1".to_string()));
                 }
             }],
+            param,
         })
     }
 }
 
-impl<F: FieldElement> Value for Count<F> {
+impl<'a, F: FieldElement> Value<'a> for Count<'a, F> {
     type Field = F;
-    type Param = CountValueParam;
+    type Param = CountParam<F>;
 
     fn new_share(
         data: Vec<F>,
-        _param: &CountValueParam,
+        param: &'a CountParam<F>,
         _num_shares: usize,
     ) -> Result<Self, PcpError> {
-        Ok(Self {
-            data,
-            range: poly_range_check(0, 2),
-        })
+        Ok(Self { data, param })
     }
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
@@ -61,8 +58,8 @@ impl<F: FieldElement> Value for Count<F> {
         }
 
         let mut inp = [self.data[0], self.data[0]];
-        let mut v = self.range[0];
-        for c in &self.range[1..] {
+        let mut v = self.param.range_checker[0];
+        for c in &self.param.range_checker[1..] {
             v += *c * inp[0];
             inp[0] = g[0].call(&inp)?;
         }
@@ -74,12 +71,8 @@ impl<F: FieldElement> Value for Count<F> {
         &self.data
     }
 
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(Mul::new(2))]
-    }
-
-    fn param(&self) -> CountValueParam {
-        CountValueParam()
+    fn param(&self) -> &CountParam<F> {
+        self.param
     }
 
     fn into_output(self) -> Vec<F> {
@@ -88,10 +81,21 @@ impl<F: FieldElement> Value for Count<F> {
 }
 
 /// Parameters for the [`Count`] type.
-#[derive(Clone, Debug)]
-pub struct CountValueParam();
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct CountParam<F> {
+    range_checker: Vec<F>,
+}
 
-impl ValueParam for CountValueParam {
+impl<F: FieldElement> CountParam<F> {
+    /// Return a new [`Count`] type parameter.
+    pub fn new() -> Self {
+        Self {
+            range_checker: poly_range_check(0, 2),
+        }
+    }
+}
+
+impl<F: FieldElement> ValueParam<F> for CountParam<F> {
     fn input_len(&self) -> usize {
         1
     }
@@ -115,6 +119,10 @@ impl ValueParam for CountValueParam {
     fn query_rand_len(&self) -> usize {
         1
     }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(Mul::new(2))]
+    }
 }
 
 /// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of the measurements.
@@ -123,16 +131,16 @@ impl ValueParam for CountValueParam {
 ///
 /// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sum<F: FieldElement> {
+pub struct Sum<'a, F: FieldElement> {
     data: Vec<F>,
-    range_checker: Vec<F>,
+    param: &'a SumParam<F>,
 }
 
-impl<F: FieldElement> Sum<F> {
+impl<'a, F: FieldElement> Sum<'a, F> {
     /// Constructs a new summand. The value of `summand` must be in `[0, 2^bits)`.
-    pub fn new(summand: u64, bits: u32) -> Result<Self, PcpError> {
+    pub fn new(summand: u64, param: &'a SumParam<F>) -> Result<Self, PcpError> {
         let summand = usize::try_from(summand).unwrap();
-        let bits = usize::try_from(bits).unwrap();
+        let bits = usize::try_from(param.bits).unwrap();
 
         if bits > (size_of::<F::Integer>() << 3) {
             return Err(PcpError::Value(
@@ -159,32 +167,26 @@ impl<F: FieldElement> Sum<F> {
             data.push(w);
         }
 
-        Ok(Self {
-            data,
-            range_checker: poly_range_check(0, 2),
-        })
+        Ok(Self { data, param })
     }
 }
 
-impl<F: FieldElement> Value for Sum<F> {
+impl<'a, F: FieldElement> Value<'a> for Sum<'a, F> {
     type Field = F;
-    type Param = SumValueParam;
+    type Param = SumParam<F>;
 
     fn new_share(
         data: Vec<F>,
-        param: &SumValueParam,
+        param: &'a SumParam<F>,
         _num_shares: usize,
     ) -> Result<Self, PcpError> {
-        if data.len() != param.0 as usize {
+        if data.len() != param.bits {
             return Err(PcpError::Value(
                 "data length does not match bit length".to_string(),
             ));
         }
 
-        Ok(Self {
-            data,
-            range_checker: poly_range_check(0, 2),
-        })
+        Ok(Self { data, param })
     }
 
     fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, rand: &[F]) -> Result<F, PcpError> {
@@ -205,15 +207,8 @@ impl<F: FieldElement> Value for Sum<F> {
         &self.data
     }
 
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.data.len(),
-        ))]
-    }
-
-    fn param(&self) -> SumValueParam {
-        SumValueParam(self.data.len())
+    fn param(&self) -> &SumParam<F> {
+        &self.param
     }
 
     fn into_output(self) -> Vec<F> {
@@ -227,16 +222,30 @@ impl<F: FieldElement> Value for Sum<F> {
 }
 
 /// Parameters for the [`Sum`] type.
-#[derive(Clone, Debug)]
-pub struct SumValueParam(usize);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SumParam<F> {
+    bits: usize,
+    range_checker: Vec<F>,
+}
 
-impl ValueParam for SumValueParam {
+impl<F: FieldElement> SumParam<F> {
+    /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
+    /// 2^bits)`.
+    pub fn new(bits: usize) -> Self {
+        Self {
+            bits,
+            range_checker: poly_range_check(0, 2),
+        }
+    }
+}
+
+impl<F: FieldElement> ValueParam<F> for SumParam<F> {
     fn input_len(&self) -> usize {
-        self.0
+        self.bits
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.0).next_power_of_two() - 1) + 2
+        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
     }
 
     fn verifier_len(&self) -> usize {
@@ -254,20 +263,28 @@ impl ValueParam for SumValueParam {
     fn query_rand_len(&self) -> usize {
         1
     }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(
+            self.range_checker.clone(),
+            self.bits,
+        ))]
+    }
 }
 
 /// The histogram type. Each measurement is a non-negative integer and the aggregate is a histogram
 /// approximating the distribution of the measurements.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Histogram<F> {
+pub struct Histogram<'a, F> {
     data: Vec<F>,
-    range_checker: Vec<F>,
     sum_check_share: F,
+    param: &'a HistogramParam<F>,
 }
 
-impl<F: FieldElement> Histogram<F> {
+impl<'a, F: FieldElement> Histogram<'a, F> {
     /// Constructs a new histogram input. The values of `buckets` must be strictly increasing.
-    pub fn new(measurement: u64, buckets: &[u64]) -> Result<Self, PcpError> {
+    pub fn new(measurement: u64, param: &'a HistogramParam<F>) -> Result<Self, PcpError> {
+        let buckets = &param.buckets;
         let mut data = vec![F::zero(); buckets.len() + 1];
 
         if buckets.len() >= u32::MAX as usize {
@@ -295,22 +312,22 @@ impl<F: FieldElement> Histogram<F> {
 
         Ok(Self {
             data,
-            range_checker: poly_range_check(0, 2),
             sum_check_share: F::one(),
+            param,
         })
     }
 }
 
-impl<F: FieldElement> Value for Histogram<F> {
+impl<'a, F: FieldElement> Value<'a> for Histogram<'a, F> {
     type Field = F;
-    type Param = HistogramValueParam;
+    type Param = HistogramParam<F>;
 
     fn new_share(
         data: Vec<F>,
-        param: &HistogramValueParam,
+        param: &'a HistogramParam<F>,
         num_shares: usize,
     ) -> Result<Self, PcpError> {
-        if data.len() != param.0 {
+        if data.len() != param.buckets.len() + 1 {
             return Err(PcpError::Value(
                 "data length does not match buckets".to_string(),
             ));
@@ -319,8 +336,8 @@ impl<F: FieldElement> Value for Histogram<F> {
         let sum_check_share = F::one() / F::from(F::Integer::try_from(num_shares).unwrap());
         Ok(Self {
             data: data.to_vec(),
-            range_checker: poly_range_check(0, 2),
             sum_check_share,
+            param,
         })
     }
 
@@ -350,15 +367,8 @@ impl<F: FieldElement> Value for Histogram<F> {
         &self.data
     }
 
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.data.len(),
-        ))]
-    }
-
-    fn param(&self) -> HistogramValueParam {
-        HistogramValueParam(self.data.len())
+    fn param(&self) -> &HistogramParam<F> {
+        self.param
     }
 
     fn into_output(self) -> Vec<F> {
@@ -367,16 +377,29 @@ impl<F: FieldElement> Value for Histogram<F> {
 }
 
 /// Parameters for the [`Histogram`] type.
-#[derive(Clone, Debug)]
-pub struct HistogramValueParam(usize);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HistogramParam<F> {
+    buckets: Vec<u64>,
+    range_checker: Vec<F>,
+}
 
-impl ValueParam for HistogramValueParam {
+impl<F: FieldElement> HistogramParam<F> {
+    /// Return a new [`Histogram`] type parameter with the given buckets.
+    pub fn new(buckets: Vec<u64>) -> Self {
+        Self {
+            buckets,
+            range_checker: poly_range_check(0, 2),
+        }
+    }
+}
+
+impl<F: FieldElement> ValueParam<F> for HistogramParam<F> {
     fn input_len(&self) -> usize {
-        self.0
+        self.buckets.len() + 1
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.0).next_power_of_two() - 1) + 2
+        2 * ((1 + self.input_len()).next_power_of_two() - 1) + 2
     }
 
     fn verifier_len(&self) -> usize {
@@ -394,9 +417,16 @@ impl ValueParam for HistogramValueParam {
     fn query_rand_len(&self) -> usize {
         1
     }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(
+            self.range_checker.to_vec(),
+            self.input_len(),
+        ))]
+    }
 }
 
-fn valid_call_check<V: Value>(input: &V, joint_rand: &[V::Field]) -> Result<(), PcpError> {
+fn valid_call_check<'a, V: Value<'a>>(input: &V, joint_rand: &[V::Field]) -> Result<(), PcpError> {
     let param = input.param();
 
     if input.as_slice().len() != param.input_len() {
@@ -434,12 +464,13 @@ mod tests {
 
     #[test]
     fn test_count() {
+        let param = &CountParam::new();
         let zero = TestField::zero();
         let one = TestField::one();
 
         // Test PCP on valid input.
         pcp_validity_test(
-            &Count::<TestField>::new(1).unwrap(),
+            &Count::<TestField>::new(1, param).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one]),
@@ -448,7 +479,7 @@ mod tests {
         .unwrap();
 
         pcp_validity_test(
-            &Count::<TestField>::new(0).unwrap(),
+            &Count::<TestField>::new(0, param).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero]),
@@ -460,7 +491,7 @@ mod tests {
         pcp_validity_test(
             &Count {
                 data: vec![TestField::from(1337)],
-                range: poly_range_check(0, 2),
+                param,
             },
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
@@ -472,31 +503,28 @@ mod tests {
         // Try running the validity circuit on an input that's too short.
         let malformed_x = Count::<TestField> {
             data: vec![],
-            range: poly_range_check(0, 2),
+            param,
         };
-        malformed_x
-            .valid(&mut malformed_x.gadget(), &[])
-            .unwrap_err();
+        malformed_x.valid(&mut param.gadget(), &[]).unwrap_err();
 
         // Try running the validity circuit on an input that's too large.
         let malformed_x = Count::<TestField> {
             data: vec![TestField::zero(), TestField::zero()],
-            range: poly_range_check(0, 2),
+            param,
         };
-        malformed_x
-            .valid(&mut malformed_x.gadget(), &[])
-            .unwrap_err();
+        malformed_x.valid(&mut param.gadget(), &[]).unwrap_err();
     }
 
     #[test]
     fn test_sum() {
+        let param = &SumParam::new(11);
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
 
         // Test PCP on valid input.
         pcp_validity_test(
-            &Sum::<TestField>::new(1337, 11).unwrap(),
+            &Sum::<TestField>::new(1337, param).unwrap(),
             &ValidityTestCase {
                 expect_valid: true,
                 expected_output: Some(vec![TestField::from(1337)]),
@@ -507,7 +535,7 @@ mod tests {
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![],
-                range_checker: poly_range_check(0, 2),
+                param: &SumParam::new(0),
             },
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
@@ -519,7 +547,7 @@ mod tests {
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![one, zero],
-                range_checker: poly_range_check(0, 2),
+                param: &SumParam::new(2),
             },
             &ValidityTestCase {
                 expect_valid: true,
@@ -531,7 +559,7 @@ mod tests {
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![one, zero, one, one, zero, one, one, one, zero],
-                range_checker: poly_range_check(0, 2),
+                param: &SumParam::new(9),
             },
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
@@ -544,7 +572,7 @@ mod tests {
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![one, nine, zero],
-                range_checker: poly_range_check(0, 2),
+                param: &SumParam::new(3),
             },
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
@@ -556,7 +584,7 @@ mod tests {
         pcp_validity_test(
             &Sum::<TestField> {
                 data: vec![zero, zero, zero, zero, nine],
-                range_checker: poly_range_check(0, 2),
+                param: &SumParam::new(5),
             },
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
@@ -568,33 +596,33 @@ mod tests {
 
     #[test]
     fn test_histogram() {
+        let param = &HistogramParam::new(vec![10, 20]);
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
-        let buckets = [10, 20];
 
-        let input: Histogram<TestField> = Histogram::new(7, &buckets).unwrap();
+        let input: Histogram<TestField> = Histogram::new(7, param).unwrap();
         assert_eq!(input.data, &[one, zero, zero]);
 
-        let input: Histogram<TestField> = Histogram::new(10, &buckets).unwrap();
+        let input: Histogram<TestField> = Histogram::new(10, param).unwrap();
         assert_eq!(input.data, &[one, zero, zero]);
 
-        let input: Histogram<TestField> = Histogram::new(17, &buckets).unwrap();
+        let input: Histogram<TestField> = Histogram::new(17, param).unwrap();
         assert_eq!(input.data, &[zero, one, zero]);
 
-        let input: Histogram<TestField> = Histogram::new(20, &buckets).unwrap();
+        let input: Histogram<TestField> = Histogram::new(20, param).unwrap();
         assert_eq!(input.data, &[zero, one, zero]);
 
-        let input: Histogram<TestField> = Histogram::new(27, &buckets).unwrap();
+        let input: Histogram<TestField> = Histogram::new(27, param).unwrap();
         assert_eq!(input.data, &[zero, zero, one]);
 
         // Invalid bucket boundaries.
-        Histogram::<TestField>::new(27, &[10, 0]).unwrap_err();
-        Histogram::<TestField>::new(27, &[10, 10]).unwrap_err();
+        Histogram::<TestField>::new(27, &HistogramParam::new(vec![10, 0])).unwrap_err();
+        Histogram::<TestField>::new(27, &HistogramParam::new(vec![10, 10])).unwrap_err();
 
         // Test valid inputs.
         pcp_validity_test(
-            &Histogram::<TestField>::new(0, &buckets).unwrap(),
+            &Histogram::<TestField>::new(0, param).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one, zero, zero]),
@@ -603,7 +631,7 @@ mod tests {
         .unwrap();
 
         pcp_validity_test(
-            &Histogram::<TestField>::new(17, &buckets).unwrap(),
+            &Histogram::<TestField>::new(17, param).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, one, zero]),
@@ -612,7 +640,7 @@ mod tests {
         .unwrap();
 
         pcp_validity_test(
-            &Histogram::<TestField>::new(1337, &buckets).unwrap(),
+            &Histogram::<TestField>::new(1337, param).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, zero, one]),
@@ -624,7 +652,7 @@ mod tests {
         pcp_validity_test(
             &Histogram::<TestField> {
                 data: vec![zero, zero, nine],
-                range_checker: poly_range_check(0, 2),
+                param,
                 sum_check_share: one,
             },
             &ValidityTestCase::<TestField> {
@@ -637,7 +665,7 @@ mod tests {
         pcp_validity_test(
             &Histogram::<TestField> {
                 data: vec![zero, one, one],
-                range_checker: poly_range_check(0, 2),
+                param,
                 sum_check_share: one,
             },
             &ValidityTestCase::<TestField> {
@@ -650,7 +678,7 @@ mod tests {
         pcp_validity_test(
             &Histogram::<TestField> {
                 data: vec![one, one, one],
-                range_checker: poly_range_check(0, 2),
+                param,
                 sum_check_share: one,
             },
             &ValidityTestCase::<TestField> {
@@ -663,7 +691,7 @@ mod tests {
         pcp_validity_test(
             &Histogram::<TestField> {
                 data: vec![zero, zero, zero],
-                range_checker: poly_range_check(0, 2),
+                param,
                 sum_check_share: one,
             },
             &ValidityTestCase::<TestField> {
@@ -674,12 +702,12 @@ mod tests {
         .unwrap();
     }
 
-    fn pcp_validity_test<V: Value>(
-        input: &V,
+    fn pcp_validity_test<'a, V: Value<'a>>(
+        input: &'a V,
         t: &ValidityTestCase<V::Field>,
     ) -> Result<(), PcpError> {
-        let mut gadgets = input.gadget();
         let param = input.param();
+        let mut gadgets = param.gadget();
 
         if input.as_slice().len() != param.input_len() {
             return Err(PcpError::Test(format!(
@@ -699,7 +727,7 @@ mod tests {
 
         // Ensure that the input can be constructed from its parameters and its encoding as a
         // sequence of field elements.
-        let got = &V::new_share(input.as_slice().to_vec(), &input.param(), 1)?;
+        let got = &V::new_share(input.as_slice().to_vec(), input.param(), 1)?;
         if got != input {
             return Err(PcpError::Test(format!(
                 "input constructed from data and param does not match input: got {:?}; want {:?}",
@@ -747,7 +775,7 @@ mod tests {
         }
 
         // Decide if the input is valid.
-        let res = decide(input, &verifier)?;
+        let res = decide(param, &verifier)?;
         if res != t.expect_valid {
             return Err(PcpError::Test(format!(
                 "decision is {}; want {}",
@@ -759,7 +787,7 @@ mod tests {
         let input_shares: Vec<V> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
-            .map(|data| V::new_share(data.clone(), &input.param(), NUM_SHARES).unwrap())
+            .map(|data| V::new_share(data.clone(), input.param(), NUM_SHARES).unwrap())
             .collect();
 
         let proof_shares: Vec<Proof<V::Field>> = split_vector(proof.as_slice(), NUM_SHARES)
@@ -778,7 +806,7 @@ mod tests {
             })
             .unwrap();
 
-        let res = decide(&input_shares[0], &verifier)?;
+        let res = decide(param, &verifier)?;
         if res != t.expect_valid {
             return Err(PcpError::Test(format!(
                 "distributed decision is {}; want {}",
@@ -791,7 +819,7 @@ mod tests {
             let mut mutated_proof = proof.clone();
             mutated_proof.data[i] += V::Field::one();
             let verifier = query(input, &mutated_proof, &query_rand, &joint_rand)?;
-            if decide(input, &verifier)? {
+            if decide(param, &verifier)? {
                 return Err(PcpError::Test(format!(
                     "decision for proof mutant {} is {}; want {}",
                     i, true, false,
