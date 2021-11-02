@@ -8,8 +8,6 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
-use std::convert::TryFrom;
-
 use crate::field::FieldElement;
 use crate::pcp::PcpError;
 use crate::prng::{Prng, PrngError};
@@ -43,26 +41,25 @@ pub enum Share<F> {
     Leader(Vec<F>),
 
     /// A compressed share, typically sent to the helper.
-    Helper {
-        /// The seed for the pseudorandom generator.
-        seed: Key,
-        /// The length of the uncompressed share.
-        //
-        // TODO(cjpatton) Avoid encoding the length of the uncompressed share on the wire. The VDAF
-        // should always provide a way to compute this.
-        length: usize,
-    },
+    Helper(Key),
 }
 
-impl<F: FieldElement> TryFrom<Share<F>> for Vec<F> {
-    type Error = VdafError;
-
-    fn try_from(share: Share<F>) -> Result<Self, VdafError> {
-        match share {
-            Share::Leader(data) => Ok(data),
-            Share::Helper { seed, length } => {
+impl<F: FieldElement> Share<F> {
+    fn into_vec(self, len: usize) -> Result<Vec<F>, VdafError> {
+        match self {
+            Share::Leader(data) => {
+                if data.len() != len {
+                    return Err(VdafError::Uncategorized(format!(
+                        "unexpected length: got {}; want {}",
+                        data.len(),
+                        len
+                    )));
+                }
+                Ok(data)
+            }
+            Share::Helper(seed) => {
                 let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&seed));
-                Ok(prng.take(length).collect())
+                Ok(prng.take(len).collect())
             }
         }
     }

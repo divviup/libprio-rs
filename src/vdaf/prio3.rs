@@ -17,7 +17,6 @@ use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{Share, VdafError};
 use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
 use std::iter::IntoIterator;
 
 /// The message sent by the client to each aggregator. This includes the client's input share and
@@ -167,14 +166,8 @@ pub fn prio3_input<V: Value>(
 
     for helper in helper_shares.into_iter() {
         out.push(InputShareMessage {
-            input_share: Share::Helper {
-                seed: helper.input_share,
-                length: input_len,
-            },
-            proof_share: Share::Helper {
-                seed: helper.proof_share,
-                length: proof_len,
-            },
+            input_share: Share::Helper(helper.input_share),
+            proof_share: Share::Helper(helper.proof_share),
             joint_rand_seed_hint: helper.joint_rand_seed_hint,
             blind: helper.blind,
         });
@@ -266,10 +259,10 @@ pub fn prio3_start<V: Value>(
     deriver.update(nonce);
     let query_rand_seed = deriver.finish();
 
-    let input_share_data: Vec<V::Field> = Vec::try_from(msg.input_share)?;
+    let input_share_data = msg.input_share.into_vec(param.input_len())?;
     let input_share = V::new_share(input_share_data, param, verify_param.num_shares as usize)?;
 
-    let proof_share_data: Vec<V::Field> = Vec::try_from(msg.proof_share)?;
+    let proof_share_data = msg.proof_share.into_vec(param.proof_len())?;
     let proof_share = Proof::from(proof_share_data);
 
     // Compute the joint randomness.
