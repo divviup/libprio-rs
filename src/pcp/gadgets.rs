@@ -102,6 +102,8 @@ impl<F: FieldElement> Gadget<F> for Mul<F> {
 }
 
 /// An arity-1 gadget that evaluates its input on some polynomial.
+//
+// TODO Make `poly` an array of length determined by a const generic.
 pub struct PolyEval<F: FieldElement> {
     poly: Vec<F>,
     /// Size of buffer for FFT operations.

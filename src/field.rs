@@ -92,7 +92,8 @@ pub trait FieldElement:
     /// The integer representation of the field element.
     type Integer: Copy
         + Debug
-        + PartialOrd
+        + Eq
+        + Ord
         + BitAnd<Output = <Self as FieldElement>::Integer>
         + Div<Output = <Self as FieldElement>::Integer>
         + Shr<Output = <Self as FieldElement>::Integer>

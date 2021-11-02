@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
-//! defines the [`Value`] trait, the main building block of the [`prio3`](crate::vdaf::prio3) VDAF.
+//! defines the [`Type`] trait, the main building block of the [`prio3`](crate::vdaf::prio3) VDAF.
 //! Implementations of this trait for various measurement types can be found in [`types`].
 //!
 //! This module also implements a fully linear PCP ("Probabilistically Checkable Proof") system
-//! based on [[BBCG+19], Theorem 4.3] suitable for implementations of [`Value`]. This proof system
-//! is used in `prio3` to ensure validity of the recovered output shares. Most applications will
-//! not need to use this module directly. Typically the VDAF will provide the functionality you
-//! need.
+//! based on [[BBCG+19], Theorem 4.3] suitable for implementations of [`Type`]. Implementations of
+//! [`Type`] provide the FLP functionality described in [[VDAF], Section 6.1] and used in `prio3`
+//! to ensure validity of the recovered output shares. Most applications will not need to use this
+//! module directly.
 //!
 //! # Overview
 //!
@@ -20,50 +20,52 @@
 //!
 //! ```
 //! use prio::pcp::types::Count;
-//! use prio::pcp::{decide, prove, query, Value, ValueParam};
+//! use prio::pcp::Type;
 //! use prio::field::{random_vector, FieldElement, Field64};
 //!
 //! // The prover chooses a measurement.
-//! let input: Count<Field64> = Count::new(0).unwrap();
-//! let param = input.param();
+//! let count = Count::new();
+//! let input: Vec<Field64> = count.encode(&0).unwrap();
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
 //! // "commits" to the input before this point. In the `prio3` VDAF, the joint
 //! // randomness is derived from additive shares of the input.
-//! let joint_rand = random_vector(param.joint_rand_len()).unwrap();
+//! let joint_rand = random_vector(count.joint_rand_len()).unwrap();
 //!
 //! // The prover generates the proof.
-//! let prove_rand = random_vector(param.prove_rand_len()).unwrap();
-//! let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
+//! let prove_rand = random_vector(count.prove_rand_len()).unwrap();
+//! let proof = count.prove(&input, &prove_rand, &joint_rand).unwrap();
 //!
-//! // The verifier checks the proof.
-//! let query_rand = random_vector(param.query_rand_len()).unwrap();
-//! let verifier = query(&input, &proof, &query_rand, &joint_rand).unwrap();
-//! assert!(decide(&input, &verifier).unwrap());
+//! // The verifier checks the proof. In the first step, the verifier "queries"
+//! // the input and proof, getting the "verifier message" in response. It then
+//! // inspects the verifier to decide if the input is valid.
+//! let query_rand = random_vector(count.query_rand_len()).unwrap();
+//! let verifier = count.query(&input, &proof, &query_rand, &joint_rand, 1).unwrap();
+//! assert!(count.decide(&verifier).unwrap());
 //! ```
 //!
 //! The proof system implemented here lifts [[BBCG+19], Theorem 4.3] to a 1.5-round, public-coin,
 //! interactive oracle proof system (see [[BBCG+19], Definition 3.11]). The main difference is that
 //! the arithmetic circuit may include an additional, random input (called the "joint randomness"
 //! above). This allows us to express proof systems like the SIMD circuit of [[BBCG+19]] that
-//! trade a modest amount of soundness error for efficiency.
+//! trade a modest amount of soundness error for a significantly smaller proof.
 //!
-//! Another improvement made here is to allow validity circuits with multiple repeating
+//! Another improvement made here is to allow for validity circuits with multiple repeating
 //! sub-components (called "gadgets" here, see [`gadgets`]) instead of just one. This idea comes
 //! from [[BBCG+19], Remark 4.5].
 //!
-//! WARNING: These modifications have not yet undergone significant security analysis. As such,
-//! this proof system should not be considered suitable for production use.
+//! WARNING: This proof system has not yet undergone significant security analysis. As such, this
+//! proof system should not be considered suitable for production use.
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
+//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-00
 //! [CGB17]: https://crypto.stanford.edu/prio
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
 use crate::fp::log2;
 use crate::polynomial::poly_eval;
-use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -74,29 +76,33 @@ pub mod types;
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
 pub enum PcpError {
-    /// Calling [`prove`] returned an error.
+    /// Calling [`Type::prove`] returned an error.
     #[error("prove error: {0}")]
     Prove(String),
 
-    /// Calling [`query`] returned an error.
+    /// Calling [`Type::query`] returned an error.
     #[error("query error: {0}")]
     Query(String),
 
-    /// Calling [`decide`] returned an error.
+    /// Calling [`Type::decide`] returned an error.
     #[error("decide error: {0}")]
     Decide(String),
 
-    /// Gadget returned an error.
+    /// Calling a gadget returned an error.
     #[error("gadget error: {0}")]
     Gadget(String),
 
-    /// Validity circuit returned an error.
+    /// Calling the validity circuit returned an error.
     #[error("validity circuit error: {0}")]
     Valid(String),
 
-    /// Value error.
+    /// Calling [`Type::encode`] returned an error.
     #[error("value error: {0}")]
-    Value(String),
+    Encode(String),
+
+    /// Calling [`Type::truncate`] returned an error.
+    #[error("truncate error: {0}")]
+    Truncate(String),
 
     /// Returned if an FFT operation propagates an error.
     #[error("FFT error: {0}")]
@@ -112,88 +118,368 @@ pub enum PcpError {
     Test(String),
 }
 
-/// Parameters of a value. An implementation of this trait is used to construct a value from a
-/// vector of field elements. It also defines the lengths of inputs and outputs of [`prove`],
-/// [`query`], and [`decide`].
-pub trait ValueParam: Clone + Debug {
-    /// The length of the input for this type.
-    fn input_len(&self) -> usize;
+/// A type. Implementations of this trait specify how a particular kind of measurement is encoded
+/// as a vector of field elements and how validity of the encoded measurement is determined.
+/// Validity is determined via an arithmetic circuit evaluated over the encoded measurement.
+pub trait Type: Sized + Eq + Clone + Debug {
+    /// The type of raw measurement to be encoded.
+    type Measurement;
 
-    /// The length of the proof generated for this type.
-    fn proof_len(&self) -> usize;
-
-    /// The length of the verifier message generated for this type.
-    fn verifier_len(&self) -> usize;
-
-    /// The length of the random input used by both the prover and the verifier.
-    fn joint_rand_len(&self) -> usize;
-
-    /// The length of the random input consumed by the prover to generate a proof. This is the same
-    /// as the sum of the arity of each gadget in the validity circuit.
-    fn prove_rand_len(&self) -> usize;
-
-    /// The length of the random input consumed by the verifier to make queries against inputs and
-    /// proofs. This is the same as the number of gadgets in the validity circuit.
-    fn query_rand_len(&self) -> usize;
-}
-
-/// A value. Implementations of this trait specify an arithmetic circuit that determines whether an
-/// input of this type is valid.
-pub trait Value: Sized + Eq + Clone + Debug {
     /// The finite field used for this type.
     type Field: FieldElement;
 
-    /// Parameters used to construct a value of this type from a vector of field elements.
-    type Param: ValueParam;
-
-    /// Constructs an instance of a value from an additive share of the input (`data`) and type
-    /// parameter (`param`). For some types, the validity circuit may depend on the total number of
-    /// shares (`num_shares`).
-    fn new_share(
-        data: Vec<Self::Field>,
-        param: &Self::Param,
-        num_shares: usize,
-    ) -> Result<Self, PcpError>;
-
-    /// Evaluates the validity circuit on the given input (i.e., `self`) and returns the output.
-    /// `joint_rand` is the joint randomness shared by the prover and verifier. `g` is the sequence
-    /// of gadgets called by the circuit.
-    ///
-    /// ```
-    /// use prio::pcp::types::Count;
-    /// use prio::pcp::{Value, ValueParam};
-    /// use prio::field::{random_vector, FieldElement, Field64};
-    ///
-    /// let x: Count<Field64> = Count::new(1).unwrap();
-    /// let joint_rand = random_vector(x.param().joint_rand_len()).unwrap();
-    /// let v = x.valid(&mut x.gadget(), &joint_rand).unwrap();
-    /// assert_eq!(v, Field64::zero());
-    /// ```
-    fn valid(
-        &self,
-        gadgets: &mut Vec<Box<dyn Gadget<Self::Field>>>,
-        joint_rand: &[Self::Field],
-    ) -> Result<Self::Field, PcpError>;
-
-    /// Returns a reference to the underlying data.
-    fn as_slice(&self) -> &[Self::Field];
+    /// Encodes a measurement as a vector of [`Self::input_len`] field elements.
+    fn encode(&self, measurement: &Self::Measurement) -> Result<Vec<Self::Field>, PcpError>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
-    /// NOTE The construction of [[BBCG+19], Theorem 4.3] uses a single gadget rather than many.
-    /// The idea to generalize the proof system to allow multiple gadgets is discussed briefly in
+    /// # Notes
+    ///
+    /// The construction of [[BBCG+19], Theorem 4.3] uses a single gadget rather than many.  The
+    /// idea to generalize the proof system to allow multiple gadgets is discussed briefly in
     /// [[BBCG+19], Remark 4.5], but no construction is given. The construction implemented here
     /// requires security analysis.
     ///
     /// [BBCG+19]: https://ia.cr/2019/188
     fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>>;
 
-    /// Returns a copy of the associated type parameters for this value.
-    fn param(&self) -> Self::Param;
+    /// Evaluates the validity circuit on an input and returns the output.
+    ///
+    /// # Parameters
+    ///
+    /// * `gadgets` is the sequence of gadgets, presumably output by [`Self::gadget`].
+    /// * `input` is the input to be validated.
+    /// * `joint_rand` is the joint randomness shared by the prover and verifier.
+    /// * `num_shares` is the number of input shares.
+    ///
+    /// # Example usage
+    ///
+    /// Applications typically do not call this method directly. It is used internally by
+    /// [`Self::prove`] and [`Self::query`] to generate and verify the proof respectively.
+    ///
+    /// ```
+    /// use prio::pcp::types::Count;
+    /// use prio::pcp::Type;
+    /// use prio::field::{random_vector, FieldElement, Field64};
+    ///
+    /// let count = Count::new();
+    /// let input: Vec<Field64> = count.encode(&1).unwrap();
+    /// let joint_rand = random_vector(count.joint_rand_len()).unwrap();
+    /// let v = count.valid(&mut count.gadget(), &input, &joint_rand, 1).unwrap();
+    /// assert_eq!(v, Field64::zero());
+    /// ```
+    fn valid(
+        &self,
+        gadgets: &mut Vec<Box<dyn Gadget<Self::Field>>>,
+        input: &[Self::Field],
+        joint_rand: &[Self::Field],
+        num_shares: usize,
+    ) -> Result<Self::Field, PcpError>;
 
-    /// Converts this value into an aggregatable output. This operation is only safe after the
-    /// input has been validated.
-    fn into_output(self) -> Vec<Self::Field>;
+    /// Constructs an aggregatable output from an encoded input. Calling this method is only safe
+    /// once `input` has been validated.
+    fn truncate(&self, input: &[Self::Field]) -> Result<Vec<Self::Field>, PcpError>;
+
+    /// The length in field elements of the encoded input returned by [`Self::encode`].
+    fn input_len(&self) -> usize;
+
+    /// The length in field elements of the proof generated for this type.
+    fn proof_len(&self) -> usize;
+
+    /// The length in field elements of the verifier message constructed by [`Self::query`].
+    fn verifier_len(&self) -> usize;
+
+    /// The length in field elements of the joint random input.
+    fn joint_rand_len(&self) -> usize;
+
+    /// The length in field elements of the random input consumed by the prover to generate a
+    /// proof. This is the same as the sum of the arity of each gadget in the validity circuit.
+    fn prove_rand_len(&self) -> usize;
+
+    /// The length in field elements of the random input consumed by the verifier to make queries
+    /// against inputs and proofs. This is the same as the number of gadgets in the validity
+    /// circuit.
+    fn query_rand_len(&self) -> usize;
+
+    /// Generate a proof of an input's validity. The return value is a sequence of
+    /// [`Self::proof_len`] field elements.
+    ///
+    /// # Parameters
+    ///
+    /// * `input` is the input.
+    /// * `prove_rand` is the prover' randomness.
+    /// * `joint_rand` is the randomness shared by the prover and verifier.
+    #[allow(clippy::needless_range_loop)]
+    fn prove(
+        &self,
+        input: &[Self::Field],
+        prove_rand: &[Self::Field],
+        joint_rand: &[Self::Field],
+    ) -> Result<Vec<Self::Field>, PcpError> {
+        if input.len() != self.input_len() {
+            return Err(PcpError::Prove(format!(
+                "unexpected input length: got {}; want {}",
+                input.len(),
+                self.input_len()
+            )));
+        }
+
+        if prove_rand.len() != self.prove_rand_len() {
+            return Err(PcpError::Prove(format!(
+                "unexpected prove randomness length: got {}; want {}",
+                prove_rand.len(),
+                self.prove_rand_len()
+            )));
+        }
+
+        if joint_rand.len() != self.joint_rand_len() {
+            return Err(PcpError::Prove(format!(
+                "unexpected joint randomness length: got {}; want {}",
+                joint_rand.len(),
+                self.joint_rand_len()
+            )));
+        }
+
+        let mut prove_rand_len = 0;
+        let mut shim = self
+            .gadget()
+            .into_iter()
+            .map(|inner| {
+                let inner_arity = inner.arity();
+                if prove_rand_len + inner_arity > prove_rand.len() {
+                    return Err(PcpError::Prove(format!(
+                        "short prove randomness: got {}; want {}",
+                        prove_rand.len(),
+                        self.prove_rand_len()
+                    )));
+                }
+
+                let gadget = Box::new(ProveShimGadget::new(
+                    inner,
+                    &prove_rand[prove_rand_len..prove_rand_len + inner_arity],
+                )?) as Box<dyn Gadget<Self::Field>>;
+                prove_rand_len += inner_arity;
+
+                Ok(gadget)
+            })
+            .collect::<Result<Vec<_>, PcpError>>()?;
+        assert_eq!(prove_rand_len, self.prove_rand_len());
+
+        // Create a buffer for storing the proof. The buffer is longer than the proof itself; the extra
+        // length is to accommodate the computation of each gadget polynomial.
+        let data_len = (0..shim.len())
+            .map(|idx| {
+                shim[idx].arity() + shim[idx].degree() * (1 + shim[idx].calls()).next_power_of_two()
+            })
+            .sum();
+        let mut proof = vec![Self::Field::zero(); data_len];
+
+        // Run the validity circuit with a sequence of "shim" gadgets that record the value of each
+        // input wire of each gadget evaluation. These values are used to construct the wire
+        // polynomials for each gadget in the next step.
+        let _ = self.valid(&mut shim, input, joint_rand, 1)?;
+
+        // Fill the buffer with the proof. `proof_len` keeps track of the amount of data written to the
+        // buffer so far.
+        let mut proof_len = 0;
+        for idx in 0..shim.len() {
+            let gadget = shim[idx]
+                .as_any()
+                .downcast_mut::<ProveShimGadget<Self::Field>>()
+                .unwrap();
+
+            // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
+            // evaluation of the gadget.
+            let m = (1 + gadget.calls()).next_power_of_two();
+            let m_inv =
+                Self::Field::from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                    .inv();
+            let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
+            for wire in 0..gadget.arity() {
+                discrete_fourier_transform(&mut f[wire], &gadget.f_vals[wire], m)?;
+                discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
+
+                // The first point on each wire polynomial is a random value chosen by the prover. This
+                // point is stored in the proof so that the verifier can reconstruct the wire
+                // polynomials.
+                proof[proof_len + wire] = gadget.f_vals[wire][0];
+            }
+
+            // Construct the gadget polynomial `G(f[0], ..., f[g_arity-1])` and append it to `proof`.
+            gadget.call_poly(&mut proof[proof_len + gadget.arity()..], &f)?;
+            proof_len += gadget.arity() + gadget.degree() * (m - 1) + 1;
+        }
+
+        // Truncate the buffer to the size of the proof.
+        assert_eq!(proof_len, self.proof_len());
+        proof.truncate(proof_len);
+        Ok(proof)
+    }
+
+    /// Query an input and proof and return the verifier message. The return value has length
+    /// [`Self::verifier_len`].
+    ///
+    /// # Parameters
+    ///
+    /// * `input` is the input or input share.
+    /// * `proof` is the proof or proof share.
+    /// * `query_rand` is the verifier's randomness.
+    /// * `joint_rand` is the randomness shared by the prover and verifier.
+    /// * `num_shares` is the total number of input shares.
+    fn query(
+        &self,
+        input: &[Self::Field],
+        proof: &[Self::Field],
+        query_rand: &[Self::Field],
+        joint_rand: &[Self::Field],
+        num_shares: usize,
+    ) -> Result<Vec<Self::Field>, PcpError> {
+        if input.len() != self.input_len() {
+            return Err(PcpError::Query(format!(
+                "unexpected input length: got {}; want {}",
+                input.len(),
+                self.input_len()
+            )));
+        }
+
+        if proof.len() != self.proof_len() {
+            return Err(PcpError::Query(format!(
+                "unexpected proof length: got {}; want {}",
+                proof.len(),
+                self.proof_len()
+            )));
+        }
+
+        if query_rand.len() != self.query_rand_len() {
+            return Err(PcpError::Query(format!(
+                "unexpected query randomness length: got {}; want {}",
+                query_rand.len(),
+                self.query_rand_len()
+            )));
+        }
+
+        if joint_rand.len() != self.joint_rand_len() {
+            return Err(PcpError::Query(format!(
+                "unexpected joint randomness length: got {}; want {}",
+                joint_rand.len(),
+                self.joint_rand_len()
+            )));
+        }
+
+        let mut proof_len = 0;
+        let mut shim = self
+            .gadget()
+            .into_iter()
+            .enumerate()
+            .map(|(idx, gadget)| {
+                let gadget_degree = gadget.degree();
+                let gadget_arity = gadget.arity();
+                let m = (1 + gadget.calls()).next_power_of_two();
+                let r = query_rand[idx];
+
+                // Make sure the query randomness isn't a root of unity. Evaluating the gadget
+                // polynomial at any of these points would be a privacy violation, since these points
+                // were used by the prover to construct the wire polynomials.
+                if r.pow(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                    == Self::Field::one()
+                {
+                    return Err(PcpError::Query(format!(
+                        "invalid query randomness: encountered 2^{}-th root of unity",
+                        m
+                    )));
+                }
+
+                // Compute the length of the sub-proof corresponding to the `idx`-th gadget.
+                let next_len = gadget_arity + gadget_degree * (m - 1) + 1;
+                let proof_data = &proof[proof_len..proof_len + next_len];
+                proof_len += next_len;
+
+                Ok(Box::new(QueryShimGadget::new(gadget, r, proof_data)?)
+                    as Box<dyn Gadget<Self::Field>>)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Create a buffer for the verifier data. This includes the output of the validity circuit and,
+        // for each gadget `shim[idx].inner`, the wire polynomials evaluated at the query randomness
+        // `query_rand[idx]` and the gadget polynomial evaluated at `query_rand[idx]`.
+        let data_len = 1
+            + (0..shim.len())
+                .map(|idx| shim[idx].arity() + 1)
+                .sum::<usize>();
+        let mut verifier = Vec::with_capacity(data_len);
+
+        // Run the validity circuit with a sequence of "shim" gadgets that record the inputs to each
+        // wire for each gadget call. Record the output of the circuit and append it to the verifier
+        // message.
+        //
+        // NOTE The proof of [BBC+19, Theorem 4.3] assumes that the output of the validity circuit is
+        // equal to the output of the last gadget evaluation. Here we relax this assumption. This
+        // should be OK, since it's possible to transform any circuit into one for which this is true.
+        // (Needs security analysis.)
+        let validity = self.valid(&mut shim, input, joint_rand, num_shares)?;
+        verifier.push(validity);
+
+        // Fill the buffer with the verifier message.
+        for idx in 0..shim.len() {
+            let r = query_rand[idx];
+            let gadget = shim[idx]
+                .as_any()
+                .downcast_ref::<QueryShimGadget<Self::Field>>()
+                .unwrap();
+
+            // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
+            // polynomial at query randomness `r`.
+            let m = (1 + gadget.calls()).next_power_of_two();
+            let m_inv =
+                Self::Field::from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                    .inv();
+            let mut f = vec![Self::Field::zero(); m];
+            for wire in 0..gadget.arity() {
+                discrete_fourier_transform(&mut f, &gadget.f_vals[wire], m)?;
+                discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
+                verifier.push(poly_eval(&f, r));
+            }
+
+            // Add the value of the gadget polynomial evaluated at `r`.
+            verifier.push(gadget.p_at_r);
+        }
+
+        assert_eq!(verifier.len(), self.verifier_len());
+        Ok(verifier)
+    }
+
+    /// Returns true if the verifier message indicates that the input from which it was generated is valid.
+    #[allow(clippy::needless_range_loop)]
+    fn decide(&self, verifier: &[Self::Field]) -> Result<bool, PcpError> {
+        if verifier.len() != self.verifier_len() {
+            return Err(PcpError::Decide(format!(
+                "unexpected verifier length: got {}; want {}",
+                verifier.len(),
+                self.verifier_len()
+            )));
+        }
+
+        // Check if the output of the circuit is 0.
+        if verifier[0] != Self::Field::zero() {
+            return Ok(false);
+        }
+
+        // Check that each of the proof polynomials are well-formed.
+        let mut gadgets = self.gadget();
+        let mut verifier_len = 1;
+        for idx in 0..gadgets.len() {
+            let next_len = 1 + gadgets[idx].arity();
+
+            let e = gadgets[idx].call(&verifier[verifier_len..verifier_len + next_len - 1])?;
+            if e != verifier[verifier_len + next_len - 1] {
+                return Ok(false);
+            }
+
+            verifier_len += next_len;
+        }
+
+        Ok(true)
+    }
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
@@ -217,94 +503,6 @@ pub trait Gadget<F: FieldElement> {
 
     /// This call is used to downcast a `Box<dyn Gadget<F>>` to a concrete type.
     fn as_any(&mut self) -> &mut dyn Any;
-}
-
-/// Generate a proof of an input's validity.
-///
-/// # Parameters
-///
-/// * `input` is the input.
-/// * `prove_rand` is the prover' randomness.
-/// * `joint_rand` is the randomness shared by the prover and verifier.
-#[allow(clippy::needless_range_loop)]
-pub fn prove<V: Value>(
-    input: &V,
-    prove_rand: &[V::Field],
-    joint_rand: &[V::Field],
-) -> Result<Proof<V::Field>, PcpError> {
-    let param = input.param();
-    let mut prove_rand_len = 0;
-    let mut shim = input
-        .gadget()
-        .into_iter()
-        .map(|inner| {
-            let inner_arity = inner.arity();
-            if prove_rand_len + inner_arity > prove_rand.len() {
-                return Err(PcpError::Prove(format!(
-                    "short prove randomness: got {}; want {}",
-                    prove_rand.len(),
-                    param.prove_rand_len()
-                )));
-            }
-
-            let gadget = Box::new(ProveShimGadget::new(
-                inner,
-                &prove_rand[prove_rand_len..prove_rand_len + inner_arity],
-            )?) as Box<dyn Gadget<V::Field>>;
-            prove_rand_len += inner_arity;
-
-            Ok(gadget)
-        })
-        .collect::<Result<Vec<_>, PcpError>>()?;
-
-    // Create a buffer for storing the proof. The buffer is longer than the proof itself; the extra
-    // length is to accommodate the computation of each gadget polynomial.
-    let data_len = (0..shim.len())
-        .map(|idx| {
-            shim[idx].arity() + shim[idx].degree() * (1 + shim[idx].calls()).next_power_of_two()
-        })
-        .sum();
-    let mut data = vec![V::Field::zero(); data_len];
-
-    // Run the validity circuit with a sequence of "shim" gadgets that record the value of each
-    // input wire of each gadget evaluation. These values are used to construct the wire
-    // polynomials for each gadget in the next step.
-    let _ = input.valid(&mut shim, joint_rand);
-
-    // Fill the buffer with the proof. `proof_len` keeps track of the amount of data written to the
-    // buffer so far.
-    let mut proof_len = 0;
-    for idx in 0..shim.len() {
-        let gadget = shim[idx]
-            .as_any()
-            .downcast_mut::<ProveShimGadget<V::Field>>()
-            .unwrap();
-
-        // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
-        // evaluation of the gadget.
-        let m = (1 + gadget.calls()).next_power_of_two();
-        let m_inv =
-            V::Field::from(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
-                .inv();
-        let mut f = vec![vec![V::Field::zero(); m]; gadget.arity()];
-        for wire in 0..gadget.arity() {
-            discrete_fourier_transform(&mut f[wire], &gadget.f_vals[wire], m)?;
-            discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
-
-            // The first point on each wire polynomial is a random value chosen by the prover. This
-            // point is stored in the proof so that the verifier can reconstruct the wire
-            // polynomials.
-            data[proof_len + wire] = gadget.f_vals[wire][0];
-        }
-
-        // Construct the gadget polynomial `G(f[0], ..., f[g_arity-1])` and append it to `data`.
-        gadget.call_poly(&mut data[proof_len + gadget.arity()..], &f)?;
-        proof_len += gadget.arity() + gadget.degree() * (m - 1) + 1;
-    }
-
-    // Truncate the buffer to the size of the proof.
-    data.truncate(proof_len);
-    Ok(Proof { data })
 }
 
 // A "shim" gadget used during proof generation to record the input wires each time a gadget is
@@ -366,157 +564,6 @@ impl<F: FieldElement> Gadget<F> for ProveShimGadget<F> {
     fn as_any(&mut self) -> &mut dyn Any {
         self
     }
-}
-
-/// The output of `prove`, a proof of an input's validity.
-#[derive(Clone, Debug)]
-pub struct Proof<F: FieldElement> {
-    pub(crate) data: Vec<F>,
-}
-
-impl<F: FieldElement> Proof<F> {
-    /// Returns a reference to the underlying data.
-    pub fn as_slice(&self) -> &[F] {
-        &self.data
-    }
-}
-
-impl<F: FieldElement> From<Vec<F>> for Proof<F> {
-    fn from(data: Vec<F>) -> Self {
-        Self { data }
-    }
-}
-
-impl<F: FieldElement> From<Proof<F>> for Vec<u8> {
-    fn from(proof: Proof<F>) -> Self {
-        F::slice_into_byte_vec(&proof.data)
-    }
-}
-
-/// Generate a verifier message for an input and proof (or the verifier share for an input share
-/// and proof share).
-///
-/// # Parameters
-///
-/// * `input` is the input or input share.
-/// * `proof` is the proof or proof share.
-/// * `query_rand` is the verifier's randomness.
-/// * `joint_rand` is the randomness shared by the prover and verifier.
-pub fn query<V: Value>(
-    input: &V,
-    proof: &Proof<V::Field>,
-    query_rand: &[V::Field],
-    joint_rand: &[V::Field],
-) -> Result<Verifier<V::Field>, PcpError> {
-    let param = input.param();
-    let mut proof_len = 0;
-    let mut shim = input
-        .gadget()
-        .into_iter()
-        .enumerate()
-        .map(|(idx, gadget)| {
-            if idx >= query_rand.len() {
-                return Err(PcpError::Query(format!(
-                    "short query randomness: got {}; want {}",
-                    query_rand.len(),
-                    param.query_rand_len()
-                )));
-            }
-
-            let gadget_degree = gadget.degree();
-            let gadget_arity = gadget.arity();
-            let m = (1 + gadget.calls()).next_power_of_two();
-            let r = query_rand[idx];
-
-            // Make sure the query randomness isn't a root of unity. Evaluating the gadget
-            // polynomial at any of these points would be a privacy violation, since these points
-            // were used by the prover to construct the wire polynomials.
-            if r.pow(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
-                == V::Field::one()
-            {
-                return Err(PcpError::Query(format!(
-                    "invalid query randomness: encountered 2^{}-th root of unity",
-                    m
-                )));
-            }
-
-            // Compute the length of the sub-proof corresponding to the `idx`-th gadget.
-            let next_len = gadget_arity + gadget_degree * (m - 1) + 1;
-            if proof_len + next_len > proof.data.len() {
-                return Err(PcpError::Query(format!(
-                    "short proof (expected length {})",
-                    param.proof_len(),
-                )));
-            }
-
-            let proof_data = &proof.data[proof_len..proof_len + next_len];
-            proof_len += next_len;
-
-            Ok(Box::new(QueryShimGadget::new(gadget, r, proof_data)?) as Box<dyn Gadget<V::Field>>)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
-
-    if proof_len < proof.data.len() {
-        return Err(PcpError::Query(format!(
-            "long proof (expected length {})",
-            param.proof_len(),
-        )));
-    }
-
-    if query_rand.len() > shim.len() {
-        return Err(PcpError::Query(format!(
-            "long query randomness: got {}; want {}",
-            query_rand.len(),
-            param.query_rand_len()
-        )));
-    }
-
-    // Create a buffer for the verifier data. This includes the output of the validity circuit and,
-    // for each gadget `shim[idx].inner`, the wire polynomials evaluated at the query randomness
-    // `query_rand[idx]` and the gadget polynomial evaluated at `query_rand[idx]`.
-    let data_len = 1
-        + (0..shim.len())
-            .map(|idx| shim[idx].arity() + 1)
-            .sum::<usize>();
-    let mut data = Vec::with_capacity(data_len);
-
-    // Run the validity circuit with a sequence of "shim" gadgets that record the inputs to each
-    // wire for each gadget call. Record the output of the circuit and append it to the verifier
-    // message.
-    //
-    // NOTE The proof of [BBC+19, Theorem 4.3] assumes that the output of the validity circuit is
-    // equal to the output of the last gadget evaluation. Here we relax this assumption. This
-    // should be OK, since it's possible to transform any circuit into one for which this is true.
-    // (Needs security analysis.)
-    let validity = input.valid(&mut shim, joint_rand)?;
-    data.push(validity);
-
-    // Fill the buffer with the verifier message.
-    for idx in 0..shim.len() {
-        let r = query_rand[idx];
-        let gadget = shim[idx]
-            .as_any()
-            .downcast_ref::<QueryShimGadget<V::Field>>()
-            .unwrap();
-
-        // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
-        // polynomial at query randomness `r`.
-        let m = (1 + gadget.calls()).next_power_of_two();
-        let m_inv =
-            V::Field::from(<<V as Value>::Field as FieldElement>::Integer::try_from(m).unwrap())
-                .inv();
-        let mut f = vec![V::Field::zero(); m];
-        for wire in 0..gadget.arity() {
-            discrete_fourier_transform(&mut f, &gadget.f_vals[wire], m)?;
-            discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
-            data.push(poly_eval(&f, r));
-        }
-
-        // Add the value of the gadget polynomial evaluated at `r`.
-        data.push(gadget.p_at_r);
-    }
-
-    Ok(Verifier { data })
 }
 
 // A "shim" gadget used during proof verification to record the points at which the intermediate
@@ -610,81 +657,6 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
     }
 }
 
-/// The output of `query`, the verifier message generated for a proof.
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Verifier<F> {
-    data: Vec<F>,
-}
-
-impl<F: FieldElement> Verifier<F> {
-    /// Returns a reference to the underlying data. The first element of the output is the output
-    /// of the validity circuit. The remainder is a sequence of chunks, where the `idx`-th chunk
-    /// corresponds to the `idx`-th gadget for the validity circuit. The last element of a chunk is
-    /// the gadget polynomial evaluated on a random input `r`; the rest are the intermediate proof
-    /// polynomials evaluated at `r`.
-    pub fn as_slice(&self) -> &[F] {
-        &self.data
-    }
-}
-
-impl<F: FieldElement> From<Vec<F>> for Verifier<F> {
-    fn from(data: Vec<F>) -> Self {
-        Self { data }
-    }
-}
-
-/// Decide if the input (or input share) is valid using the given verifier.
-///
-/// # Parameters
-///
-/// * `input` is the input or input share.
-/// * `verifier` is the verifier message or a share of the verifier message.
-pub fn decide<V: Value>(input: &V, verifier: &Verifier<V::Field>) -> Result<bool, PcpError> {
-    let param = input.param();
-    let mut gadgets = input.gadget();
-
-    if verifier.data.is_empty() {
-        return Err(PcpError::Decide(format!(
-            "zero-length verifier (expected length {})",
-            param.verifier_len()
-        )));
-    }
-
-    // Check if the output of the circuit is 0.
-    if verifier.data[0] != V::Field::zero() {
-        return Ok(false);
-    }
-
-    // Check that each of the proof polynomials are well-formed.
-    let mut verifier_len = 1;
-    #[allow(clippy::needless_range_loop)]
-    for idx in 0..gadgets.len() {
-        let next_len = 1 + gadgets[idx].arity();
-        if verifier_len + next_len > verifier.data.len() {
-            return Err(PcpError::Decide(format!(
-                "short verifier (expected length {})",
-                param.verifier_len()
-            )));
-        }
-
-        let e = gadgets[idx].call(&verifier.data[verifier_len..verifier_len + next_len - 1])?;
-        if e != verifier.data[verifier_len + next_len - 1] {
-            return Ok(false);
-        }
-
-        verifier_len += next_len;
-    }
-
-    if verifier_len != verifier.data.len() {
-        return Err(PcpError::Decide(format!(
-            "long verifier (expected length {})",
-            param.verifier_len()
-        )));
-    }
-
-    Ok(true)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -692,118 +664,97 @@ mod tests {
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::polynomial::poly_range_check;
 
+    use std::marker::PhantomData;
+
     // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
     #[test]
     fn test_pcp() {
         const NUM_SHARES: usize = 2;
 
-        let input: TestValue<Field126> = TestValue::new(Field126::from(3));
-        let param = input.param();
-        assert_eq!(input.as_slice().len(), param.input_len());
+        let typ: TestType<Field126> = TestType::new();
+        let input = typ.encode(&3).unwrap();
+        assert_eq!(input.len(), typ.input_len());
 
-        let input_shares: Vec<TestValue<Field126>> = split_vector(input.as_slice(), NUM_SHARES)
+        let input_shares: Vec<Vec<Field126>> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
-            .map(|data| TestValue::new_share(data, &param, NUM_SHARES).unwrap())
             .collect();
 
-        let joint_rand = random_vector(param.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(param.prove_rand_len()).unwrap();
-        let query_rand = random_vector(param.query_rand_len()).unwrap();
+        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
+        let query_rand = random_vector(typ.query_rand_len()).unwrap();
 
-        let proof = prove(&input, &prove_rand, &joint_rand).unwrap();
-        assert_eq!(proof.as_slice().len(), param.proof_len());
+        let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
+        assert_eq!(proof.len(), typ.proof_len());
 
-        let proof_shares: Vec<Proof<Field126>> = split_vector(proof.as_slice(), NUM_SHARES)
+        let proof_shares: Vec<Vec<Field126>> = split_vector(&proof, NUM_SHARES)
             .unwrap()
             .into_iter()
-            .map(Proof::from)
             .collect();
 
-        let verifier: Verifier<Field126> = (0..NUM_SHARES)
-            .map(|i| query(&input_shares[i], &proof_shares[i], &query_rand, &joint_rand).unwrap())
+        let verifier: Vec<Field126> = (0..NUM_SHARES)
+            .map(|i| {
+                typ.query(
+                    &input_shares[i],
+                    &proof_shares[i],
+                    &query_rand,
+                    &joint_rand,
+                    NUM_SHARES,
+                )
+                .unwrap()
+            })
             .reduce(|mut left, right| {
-                for (x, y) in left.data.iter_mut().zip(right.data.iter()) {
+                for (x, y) in left.iter_mut().zip(right.iter()) {
                     *x += *y;
                 }
-                Verifier { data: left.data }
+                left
             })
             .unwrap();
-        assert_eq!(verifier.as_slice().len(), param.verifier_len());
+        assert_eq!(verifier.len(), typ.verifier_len());
 
-        assert!(decide(&input, &verifier).unwrap());
+        assert!(typ.decide(&verifier).unwrap());
     }
 
     /// A toy type used for testing the functionality in this module. Valid inputs of this type
     /// consist of a pair of field elements `(x, y)` where `2 <= x < 5` and `x^3 == y`.
     #[derive(Clone, Debug, PartialEq, Eq)]
-    struct TestValue<F: FieldElement> {
-        data: Vec<F>, // The encoded input
-    }
+    struct TestType<F>(PhantomData<F>);
 
-    impl<F: FieldElement> TestValue<F> {
-        pub fn new(inp: F) -> Self {
-            Self {
-                data: vec![inp, inp * inp * inp],
-            }
+    impl<F> TestType<F> {
+        fn new() -> Self {
+            Self(PhantomData)
         }
     }
 
-    impl<F: FieldElement> Value for TestValue<F> {
+    impl<F: FieldElement> Type for TestType<F> {
+        type Measurement = F::Integer;
         type Field = F;
-        type Param = TestValueParam;
 
-        fn new_share(
-            data: Vec<F>,
-            _param: &TestValueParam,
+        fn valid(
+            &self,
+            g: &mut Vec<Box<dyn Gadget<F>>>,
+            input: &[F],
+            joint_rand: &[F],
             _num_shares: usize,
-        ) -> Result<Self, PcpError> {
-            Ok(Self { data })
-        }
-
-        fn valid(&self, g: &mut Vec<Box<dyn Gadget<F>>>, joint_rand: &[F]) -> Result<F, PcpError> {
+        ) -> Result<F, PcpError> {
             let r = joint_rand[0];
             let mut res = F::zero();
 
             // Check that `data[0]^3 == data[1]`.
-            let mut inp = [self.data[0], self.data[0]];
+            let mut inp = [input[0], input[0]];
             inp[0] = g[0].call(&inp)?;
             inp[0] = g[0].call(&inp)?;
-            let x3_diff = inp[0] - self.data[1];
+            let x3_diff = inp[0] - input[1];
             res += r * x3_diff;
 
             // Check that `data[0]` is in the correct range.
-            let x_checked = g[1].call(&[self.data[0]])?;
+            let x_checked = g[1].call(&[input[0]])?;
             res += (r * r) * x_checked;
 
             Ok(res)
         }
 
-        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-            vec![
-                Box::new(Mul::new(2)),
-                Box::new(PolyEval::new(poly_range_check(2, 5), 1)),
-            ]
-        }
-
-        fn as_slice(&self) -> &[F] {
-            &self.data
-        }
-
-        fn param(&self) -> TestValueParam {
-            TestValueParam()
-        }
-
-        fn into_output(self) -> Vec<F> {
-            self.data
-        }
-    }
-
-    #[derive(Clone, Debug)]
-    struct TestValueParam();
-
-    impl ValueParam for TestValueParam {
         fn input_len(&self) -> usize {
             2
         }
@@ -840,6 +791,24 @@ mod tests {
 
         fn query_rand_len(&self) -> usize {
             2
+        }
+
+        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+            vec![
+                Box::new(Mul::new(2)),
+                Box::new(PolyEval::new(poly_range_check(2, 5), 1)),
+            ]
+        }
+
+        fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, PcpError> {
+            Ok(vec![
+                F::from(*measurement),
+                F::from(*measurement).pow(F::Integer::try_from(3).unwrap()),
+            ])
+        }
+
+        fn truncate(&self, input: &[F]) -> Result<Vec<F>, PcpError> {
+            Ok(input.to_vec())
         }
     }
 }
