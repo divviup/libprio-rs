@@ -115,18 +115,73 @@ pub trait Client: Vdaf {
 
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator: Vdaf {
-    /// Initial state of the Aggregator during the Prepare process.
-    type PrepareInit: PrepareStep<Self::OutputShare>;
+    /// State of the Aggregator during the Prepare process.
+    type PrepareStep;
+
+    /// The type of messages exchanged among the Aggregators during the Prepare process.
+    type PrepareMessage;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
-    fn prepare(
+    fn prepare_init(
         &self,
         verify_param: &Self::VerifyParam,
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<Self::PrepareInit, VdafError>;
+    ) -> Result<Self::PrepareStep, VdafError>;
+
+    /// Compute the next state transition from the current state and the previous round of input
+    /// messages.
+    fn prepare_step<M: IntoIterator<Item = Self::PrepareMessage>>(
+        &self,
+        state: Self::PrepareStep,
+        inputs: M,
+    ) -> PrepareTransition<Self::PrepareStep, Self::PrepareMessage, Self::OutputShare>;
+
+    /// Compute the Aggregator's first message.
+    fn prepare_start(
+        &self,
+        state: Self::PrepareStep,
+    ) -> Result<(Self::PrepareStep, Self::PrepareMessage), VdafError> {
+        match self.prepare_step(state, std::iter::empty()) {
+            PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
+            PrepareTransition::Fail(err) => Err(err),
+            PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
+                "start() resulted in early Finish transition".to_string(),
+            )),
+        }
+    }
+
+    /// Compute the Aggregator's next message from the previous round of messages.
+    fn prepare_next<M: IntoIterator<Item = Self::PrepareMessage>>(
+        &self,
+        state: Self::PrepareStep,
+        inputs: M,
+    ) -> Result<(Self::PrepareStep, Self::PrepareMessage), VdafError> {
+        match self.prepare_step(state, inputs) {
+            PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
+            PrepareTransition::Fail(err) => Err(err),
+            PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
+                "next() resulted in early Finish transition".to_string(),
+            )),
+        }
+    }
+
+    /// Recover the Aggregator's output share.
+    fn prepare_finish<M: IntoIterator<Item = Self::PrepareMessage>>(
+        &self,
+        step: Self::PrepareStep,
+        inputs: M,
+    ) -> Result<Self::OutputShare, VdafError> {
+        match self.prepare_step(step, inputs) {
+            PrepareTransition::Continue(_, _) => Err(VdafError::Uncategorized(
+                "finish() resulted in Continue transition".to_string(),
+            )),
+            PrepareTransition::Fail(err) => Err(err),
+            PrepareTransition::Finish(output_share) => Ok(output_share),
+        }
+    }
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -146,56 +201,10 @@ pub trait Collector: Vdaf {
     ) -> Result<Self::AggregateResult, VdafError>;
 }
 
-/// Intermediate state of an Aggregator during the Prepare process.
-pub trait PrepareStep<O>: Sized {
-    /// The data type for messages exchanged among the aggregators.
-    type Message;
-
-    /// Compute the next state transition from the current state and the previous round of input
-    /// messages.
-    fn step<M: IntoIterator<Item = Self::Message>>(self, inputs: M) -> PrepareTransition<Self, O>;
-
-    /// Compute the Aggregator's first message.
-    fn start(self) -> Result<(Self, Self::Message), VdafError> {
-        match self.step(std::iter::empty()) {
-            PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
-            PrepareTransition::Fail(err) => Err(err),
-            PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
-                "start() resulted in early Finish transition".to_string(),
-            )),
-        }
-    }
-
-    /// Compute the Aggregator's next message from the previous round of messages.
-    fn next<M: IntoIterator<Item = Self::Message>>(
-        self,
-        inputs: M,
-    ) -> Result<(Self, Self::Message), VdafError> {
-        match self.step(inputs) {
-            PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
-            PrepareTransition::Fail(err) => Err(err),
-            PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
-                "next() resulted in early Finish transition".to_string(),
-            )),
-        }
-    }
-
-    /// Recover the Aggregator's output share.
-    fn finish<M: IntoIterator<Item = Self::Message>>(self, inputs: M) -> Result<O, VdafError> {
-        match self.step(inputs) {
-            PrepareTransition::Continue(_, _) => Err(VdafError::Uncategorized(
-                "finish() resulted in Continue transition".to_string(),
-            )),
-            PrepareTransition::Fail(err) => Err(err),
-            PrepareTransition::Finish(output_share) => Ok(output_share),
-        }
-    }
-}
-
 /// A state transition of an Aggregator during the Prepare process.
-pub enum PrepareTransition<S: PrepareStep<O>, O> {
+pub enum PrepareTransition<S, M, O> {
     /// Continue processing.
-    Continue(S, S::Message),
+    Continue(S, M),
 
     /// Finish processing and return the output share.
     Finish(O),

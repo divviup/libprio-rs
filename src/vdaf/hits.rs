@@ -27,8 +27,7 @@ use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{
-    Aggregatable, Aggregator, Client, Collector, PrepareStep, PrepareTransition, Share, Vdaf,
-    VdafError,
+    Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share, Vdaf, VdafError,
 };
 
 /// An input for an IDPF ([`Idpf`]).
@@ -347,9 +346,10 @@ fn get_level(agg_param: &BTreeSet<IdpfInput>) -> Result<usize, VdafError> {
 }
 
 impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
-    type PrepareInit = HitsPrepareStep<I::Field>;
+    type PrepareStep = HitsPrepareStep<I::Field>;
+    type PrepareMessage = Vec<I::Field>;
 
-    fn prepare(
+    fn prepare_init(
         &self,
         verify_param: &HitsVerifyParam,
         agg_param: &BTreeSet<IdpfInput>,
@@ -413,13 +413,107 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
         };
 
         Ok(HitsPrepareStep {
-            state: SketchState::Ready,
+            sketch: SketchState::Ready,
             output_share,
             z,
             d,
             e,
             x,
         })
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn prepare_step<M: IntoIterator<Item = Vec<I::Field>>>(
+        &self,
+        mut state: HitsPrepareStep<I::Field>,
+        inputs: M,
+    ) -> PrepareTransition<HitsPrepareStep<I::Field>, Vec<I::Field>, Vec<I::Field>> {
+        match state.sketch {
+            SketchState::Ready => {
+                let inputs: Vec<_> = inputs.into_iter().collect();
+                if !inputs.is_empty() {
+                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                        "unexpected message count ({:?}): got {}; want 0",
+                        state.sketch,
+                        inputs.len()
+                    )));
+                }
+
+                let z_share = state.z.to_vec();
+
+                state.sketch = SketchState::RoundOne;
+                PrepareTransition::Continue(state, z_share)
+            }
+
+            SketchState::RoundOne => {
+                let inputs: Vec<_> = inputs.into_iter().collect();
+                if inputs.len() != 2 {
+                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                        "unexpected message count ({:?}): got {}; want 2",
+                        state.sketch,
+                        inputs.len()
+                    )));
+                }
+
+                // Compute polynomial coefficients.
+                let mut z = [I::Field::zero(); 3];
+                for z_share in inputs.iter() {
+                    if z_share.len() != 3 {
+                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                            "unexpected message length ({:?}): got {}; want 3",
+                            state.sketch,
+                            z_share.len(),
+                        )));
+                    }
+
+                    z[0] += z_share[0];
+                    z[1] += z_share[1];
+                    z[2] += z_share[2];
+                }
+
+                // Compute our share of the polynomial evaluation.
+                let y_share =
+                    vec![(state.d * z[0]) + state.e + state.x * ((z[0] * z[0]) - z[1] - z[2])];
+
+                state.sketch = SketchState::RoundTwo;
+                PrepareTransition::Continue(state, y_share)
+            }
+
+            SketchState::RoundTwo => {
+                let inputs: Vec<_> = inputs.into_iter().collect();
+                if inputs.len() != 2 {
+                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                        "unexpected message count ({:?}): got {}; want 2",
+                        state.sketch,
+                        inputs.len()
+                    )));
+                }
+
+                // Compute the polynomial evaluation.
+                let mut y = I::Field::zero();
+                for y_share in inputs.iter() {
+                    if y_share.len() != 1 {
+                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                            "unexpected message length ({:?}): got {}; want 1",
+                            state.sketch,
+                            y_share.len(),
+                        )));
+                    }
+
+                    y += y_share[0];
+                }
+
+                if y != I::Field::zero() {
+                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                        "output is invalid: polynomial evaluated to {}; want {}",
+                        y,
+                        I::Field::zero(),
+                    )));
+                }
+
+                PrepareTransition::Finish(state.output_share)
+            }
+        }
     }
 
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -449,7 +543,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 /// The state of each Aggregator during the Prepare process.
 pub struct HitsPrepareStep<F> {
     /// State of the secure sketching protocol.
-    state: SketchState,
+    sketch: SketchState,
 
     /// The output share.
     output_share: Vec<F>,
@@ -472,102 +566,6 @@ enum SketchState {
     Ready,
     RoundOne,
     RoundTwo,
-}
-
-impl<F: FieldElement> PrepareStep<Vec<F>> for HitsPrepareStep<F> {
-    type Message = Vec<F>;
-
-    fn step<M: IntoIterator<Item = Vec<F>>>(
-        mut self,
-        inputs: M,
-    ) -> PrepareTransition<Self, Vec<F>> {
-        match self.state {
-            SketchState::Ready => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if !inputs.is_empty() {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count ({:?}): got {}; want 0",
-                        self.state,
-                        inputs.len()
-                    )));
-                }
-
-                let z_share = self.z.to_vec();
-
-                self.state = SketchState::RoundOne;
-                PrepareTransition::Continue(self, z_share)
-            }
-
-            SketchState::RoundOne => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if inputs.len() != 2 {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count ({:?}): got {}; want 2",
-                        self.state,
-                        inputs.len()
-                    )));
-                }
-
-                // Compute polynomial coefficients.
-                let mut z = [F::zero(); 3];
-                for z_share in inputs.iter() {
-                    if z_share.len() != 3 {
-                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                            "unexpected message length ({:?}): got {}; want 3",
-                            self.state,
-                            z_share.len(),
-                        )));
-                    }
-
-                    z[0] += z_share[0];
-                    z[1] += z_share[1];
-                    z[2] += z_share[2];
-                }
-
-                // Compute our share of the polynomial evaluation.
-                let y_share =
-                    vec![(self.d * z[0]) + self.e + self.x * ((z[0] * z[0]) - z[1] - z[2])];
-
-                self.state = SketchState::RoundTwo;
-                PrepareTransition::Continue(self, y_share)
-            }
-
-            SketchState::RoundTwo => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if inputs.len() != 2 {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count ({:?}): got {}; want 2",
-                        self.state,
-                        inputs.len()
-                    )));
-                }
-
-                // Compute the polynomial evaluation.
-                let mut y = F::zero();
-                for y_share in inputs.iter() {
-                    if y_share.len() != 1 {
-                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                            "unexpected message length ({:?}): got {}; want 1",
-                            self.state,
-                            y_share.len(),
-                        )));
-                    }
-
-                    y += y_share[0];
-                }
-
-                if y != F::zero() {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "output is invalid: polynomial evaluated to {}; want {}",
-                        y,
-                        F::zero(),
-                    )));
-                }
-
-                PrepareTransition::Finish(self.output_share)
-            }
-        }
-    }
 }
 
 impl<I: Idpf<2, 2>> Collector for Hits<I> {
@@ -844,14 +842,14 @@ mod tests {
     ) -> Result<(), VdafError> {
         let mut state0: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
         for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
-            let state = hits.prepare(verify_param, agg_param, nonce, input_share)?;
+            let state = hits.prepare_init(verify_param, agg_param, nonce, input_share)?;
             state0.push(state);
         }
 
         let mut round1: Vec<Vec<I::Field>> = Vec::with_capacity(2);
         let mut state1: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state0.into_iter() {
-            let (state, msg) = state.start()?;
+            let (state, msg) = hits.prepare_start(state)?;
             state1.push(state);
             round1.push(msg);
         }
@@ -859,14 +857,14 @@ mod tests {
         let mut round2: Vec<Vec<I::Field>> = Vec::with_capacity(2);
         let mut state2: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state1.into_iter() {
-            let (state, msg) = state.next(round1.clone())?;
+            let (state, msg) = hits.prepare_next(state, round1.clone())?;
             state2.push(state);
             round2.push(msg);
         }
 
         let mut agg_shares: Vec<Vec<I::Field>> = Vec::with_capacity(2);
         for state in state2.into_iter() {
-            let output_share = state.finish(round2.clone())?;
+            let output_share = hits.prepare_finish(state, round2.clone())?;
             agg_shares.push(hits.aggregate(agg_param, [output_share])?);
         }
 
