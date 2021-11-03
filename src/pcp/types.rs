@@ -85,6 +85,10 @@ impl<F: FieldElement> Type for Count<F> {
         4
     }
 
+    fn output_len(&self) -> usize {
+        self.input_len()
+    }
+
     fn joint_rand_len(&self) -> usize {
         0
     }
@@ -201,6 +205,10 @@ impl<F: FieldElement> Type for Sum<F> {
         3
     }
 
+    fn output_len(&self) -> usize {
+        1
+    }
+
     fn joint_rand_len(&self) -> usize {
         1
     }
@@ -314,6 +322,10 @@ impl<F: FieldElement> Type for Histogram<F> {
 
     fn verifier_len(&self) -> usize {
         3
+    }
+
+    fn output_len(&self) -> usize {
+        self.input_len()
     }
 
     fn joint_rand_len(&self) -> usize {
@@ -733,6 +745,15 @@ mod tests {
 
         if let Some(ref want) = t.expected_output {
             let got = typ.truncate(input)?;
+
+            if got.len() != typ.output_len() {
+                return Err(PcpError::Test(format!(
+                    "unexpected output length: got {}; want {}",
+                    got.len(),
+                    typ.output_len()
+                )));
+            }
+
             if &got != want {
                 return Err(PcpError::Test(format!(
                     "unexpected output: got {:?}; want {:?}",

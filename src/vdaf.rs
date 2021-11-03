@@ -10,8 +10,8 @@
 
 use crate::field::FieldElement;
 use crate::pcp::PcpError;
-use crate::prng::{Prng, PrngError};
-use crate::vdaf::suite::{Key, KeyStream, SuiteError};
+use crate::prng::PrngError;
+use crate::vdaf::suite::{Key, SuiteError};
 use serde::{Deserialize, Serialize};
 
 /// Errors emitted by this module.
@@ -42,27 +42,6 @@ pub enum Share<F> {
 
     /// A compressed share, typically sent to the helper.
     Helper(Key),
-}
-
-impl<F: FieldElement> Share<F> {
-    fn into_vec(self, len: usize) -> Result<Vec<F>, VdafError> {
-        match self {
-            Share::Leader(data) => {
-                if data.len() != len {
-                    return Err(VdafError::Uncategorized(format!(
-                        "unexpected length: got {}; want {}",
-                        data.len(),
-                        len
-                    )));
-                }
-                Ok(data)
-            }
-            Share::Helper(seed) => {
-                let prng: Prng<F> = Prng::from_key_stream(KeyStream::from_key(&seed));
-                Ok(prng.take(len).collect())
-            }
-        }
-    }
 }
 
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
@@ -217,6 +196,24 @@ pub enum PrepareTransition<S, M, O> {
 pub trait Aggregatable {
     /// Update an aggregate share by merging it with another (`agg_share`).
     fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError>;
+}
+
+impl<F: FieldElement> Aggregatable for Vec<F> {
+    fn merge(&mut self, agg_share: &Vec<F>) -> Result<(), VdafError> {
+        if self.len() != agg_share.len() {
+            return Err(VdafError::Uncategorized(format!(
+                "cannot merge aggregate shares of different lengths (left = {}, right = {})",
+                self.len(),
+                agg_share.len()
+            )));
+        }
+
+        for (x, y) in self.iter_mut().zip(agg_share.iter()) {
+            *x += *y;
+        }
+
+        Ok(())
+    }
 }
 
 pub mod hits;
