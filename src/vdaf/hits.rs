@@ -475,8 +475,7 @@ enum SketchState {
 }
 
 impl<F: FieldElement> PrepareStep<Vec<F>> for HitsPrepareStep<F> {
-    type Input = Vec<F>;
-    type Output = Vec<F>;
+    type Message = Vec<F>;
 
     fn step<M: IntoIterator<Item = Vec<F>>>(
         mut self,

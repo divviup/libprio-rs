@@ -148,18 +148,15 @@ pub trait Collector: Vdaf {
 
 /// Intermediate state of an Aggregator during the Prepare process.
 pub trait PrepareStep<O>: Sized {
-    /// The type of input messages.
-    type Input;
-
-    /// The type of output message.
-    type Output;
+    /// The data type for messages exchanged among the aggregators.
+    type Message;
 
     /// Compute the next state transition from the current state and the previous round of input
     /// messages.
-    fn step<M: IntoIterator<Item = Self::Input>>(self, inputs: M) -> PrepareTransition<Self, O>;
+    fn step<M: IntoIterator<Item = Self::Message>>(self, inputs: M) -> PrepareTransition<Self, O>;
 
     /// Compute the Aggregator's first message.
-    fn start(self) -> Result<(Self, Self::Output), VdafError> {
+    fn start(self) -> Result<(Self, Self::Message), VdafError> {
         match self.step(std::iter::empty()) {
             PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
             PrepareTransition::Fail(err) => Err(err),
@@ -170,10 +167,10 @@ pub trait PrepareStep<O>: Sized {
     }
 
     /// Compute the Aggregator's next message from the previous round of messages.
-    fn next<M: IntoIterator<Item = Self::Input>>(
+    fn next<M: IntoIterator<Item = Self::Message>>(
         self,
         inputs: M,
-    ) -> Result<(Self, Self::Output), VdafError> {
+    ) -> Result<(Self, Self::Message), VdafError> {
         match self.step(inputs) {
             PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
             PrepareTransition::Fail(err) => Err(err),
@@ -184,7 +181,7 @@ pub trait PrepareStep<O>: Sized {
     }
 
     /// Recover the Aggregator's output share.
-    fn finish<M: IntoIterator<Item = Self::Input>>(self, inputs: M) -> Result<O, VdafError> {
+    fn finish<M: IntoIterator<Item = Self::Message>>(self, inputs: M) -> Result<O, VdafError> {
         match self.step(inputs) {
             PrepareTransition::Continue(_, _) => Err(VdafError::Uncategorized(
                 "finish() resulted in Continue transition".to_string(),
@@ -198,7 +195,7 @@ pub trait PrepareStep<O>: Sized {
 /// A state transition of an Aggregator during the Prepare process.
 pub enum PrepareTransition<S: PrepareStep<O>, O> {
     /// Continue processing.
-    Continue(S, S::Output),
+    Continue(S, S::Message),
 
     /// Finish processing and return the output share.
     Finish(O),
