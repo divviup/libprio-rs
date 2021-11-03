@@ -20,15 +20,14 @@ pub struct Count<'a, F: FieldElement> {
 
 impl<'a, F: FieldElement> Count<'a, F> {
     /// Construct a new counter.
-    pub fn new(value: u64, param: &'a CountParam<F>) -> Result<Self, PcpError> {
+    pub fn new(value: F::Integer, param: &'a CountParam<F>) -> Result<Self, PcpError> {
+        let max = F::Integer::try_from(1).unwrap();
+        if value > max {
+            return Err(PcpError::Value("Count value must be 0 or 1".to_string()));
+        }
+
         Ok(Self {
-            data: vec![match value {
-                1 => F::one(),
-                0 => F::zero(),
-                _ => {
-                    return Err(PcpError::Value("Count value must be 0 or 1".to_string()));
-                }
-            }],
+            data: vec![F::from(value)],
             param,
         })
     }
@@ -138,32 +137,25 @@ pub struct Sum<'a, F: FieldElement> {
 
 impl<'a, F: FieldElement> Sum<'a, F> {
     /// Constructs a new summand. The value of `summand` must be in `[0, 2^bits)`.
-    pub fn new(summand: u64, param: &'a SumParam<F>) -> Result<Self, PcpError> {
-        let summand = usize::try_from(summand).unwrap();
-        let bits = usize::try_from(param.bits).unwrap();
-
-        if bits > (size_of::<F::Integer>() << 3) {
+    pub fn new(summand: F::Integer, param: &'a SumParam<F>) -> Result<Self, PcpError> {
+        if param.bits > (size_of::<F::Integer>() << 3) {
             return Err(PcpError::Value(
                 "bits exceeds bit length of the field's integer representation".to_string(),
             ));
         }
 
-        let int = F::Integer::try_from(summand).map_err(|err| {
-            PcpError::Value(format!("failed to convert summand to field: {:?}", err))
-        })?;
-
-        let max = F::Integer::try_from(1 << bits).unwrap();
-        if int >= max {
+        let max = F::Integer::try_from(1 << param.bits).unwrap();
+        if summand >= max {
             return Err(PcpError::Value(
                 "value of summand exceeds bit length".to_string(),
             ));
         }
 
         let one = F::Integer::try_from(1).unwrap();
-        let mut data: Vec<F> = Vec::with_capacity(bits);
-        for l in 0..bits {
+        let mut data: Vec<F> = Vec::with_capacity(param.bits);
+        for l in 0..param.bits {
             let l = F::Integer::try_from(l).unwrap();
-            let w = F::from((int >> l) & one);
+            let w = F::from((summand >> l) & one);
             data.push(w);
         }
 
@@ -275,7 +267,7 @@ impl<F: FieldElement> ValueParam<F> for SumParam<F> {
 /// The histogram type. Each measurement is a non-negative integer and the aggregate is a histogram
 /// approximating the distribution of the measurements.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Histogram<'a, F> {
+pub struct Histogram<'a, F: FieldElement> {
     data: Vec<F>,
     sum_check_share: F,
     param: &'a HistogramParam<F>,
@@ -283,7 +275,7 @@ pub struct Histogram<'a, F> {
 
 impl<'a, F: FieldElement> Histogram<'a, F> {
     /// Constructs a new histogram input. The values of `buckets` must be strictly increasing.
-    pub fn new(measurement: u64, param: &'a HistogramParam<F>) -> Result<Self, PcpError> {
+    pub fn new(measurement: F::Integer, param: &'a HistogramParam<F>) -> Result<Self, PcpError> {
         let buckets = &param.buckets;
         let mut data = vec![F::zero(); buckets.len() + 1];
 
@@ -378,14 +370,14 @@ impl<'a, F: FieldElement> Value<'a> for Histogram<'a, F> {
 
 /// Parameters for the [`Histogram`] type.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct HistogramParam<F> {
-    buckets: Vec<u64>,
+pub struct HistogramParam<F: FieldElement> {
+    buckets: Vec<F::Integer>,
     range_checker: Vec<F>,
 }
 
 impl<F: FieldElement> HistogramParam<F> {
     /// Return a new [`Histogram`] type parameter with the given buckets.
-    pub fn new(buckets: Vec<u64>) -> Self {
+    pub fn new(buckets: Vec<F::Integer>) -> Self {
         Self {
             buckets,
             range_checker: poly_range_check(0, 2),
