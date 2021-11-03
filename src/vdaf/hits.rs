@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
-//! implements the `hits` [VDAF]. This is the core component of the privacy-preserving heavy
+//! implements the hits [VDAF]. This is the core component of the privacy-preserving heavy
 //! hitters protocol of [[BBCG+21]].
 //!
 //! TODO Make the input shares stateful so that applications can efficiently evaluate the IDPF over
@@ -26,9 +26,7 @@ use crate::field::{split_vector, FieldElement};
 use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
-use crate::vdaf::{
-    Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share, Vdaf, VdafError,
-};
+use crate::vdaf::{Aggregator, Client, Collector, PrepareTransition, Share, Vdaf, VdafError};
 
 /// An input for an IDPF ([`Idpf`]).
 ///
@@ -422,6 +420,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
         })
     }
 
+    // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
     fn prepare_step<M: IntoIterator<Item = Vec<I::Field>>>(
         &self,
@@ -598,24 +597,6 @@ impl<I: Idpf<2, 2>> Collector for Hits<I> {
             agg.insert(*prefix, count);
         }
         Ok(agg)
-    }
-}
-
-impl<F: FieldElement> Aggregatable for Vec<F> {
-    fn merge(&mut self, agg_share: &Vec<F>) -> Result<(), VdafError> {
-        if self.len() != agg_share.len() {
-            return Err(VdafError::Uncategorized(format!(
-                "cannot merge aggregate shares of different lengths (left = {}, right = {})",
-                self.len(),
-                agg_share.len()
-            )));
-        }
-
-        for (x, y) in self.iter_mut().zip(agg_share.iter()) {
-            *x += *y;
-        }
-
-        Ok(())
     }
 }
 

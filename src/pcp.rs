@@ -189,7 +189,10 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// The length in field elements of the verifier message constructed by [`Self::query`].
     fn verifier_len(&self) -> usize;
 
-    /// The length in field elements of the joint random input.
+    /// The length of the truncated output (i.e., the output of [`Type::truncate`]).
+    fn output_len(&self) -> usize;
+
+    /// The length of the joint random input.
     fn joint_rand_len(&self) -> usize;
 
     /// The length in field elements of the random input consumed by the prover to generate a
@@ -779,6 +782,10 @@ mod tests {
             let poly = 1 + 1 /* gadget arity */;
 
             1 + mul + poly
+        }
+
+        fn output_len(&self) -> usize {
+            self.input_len()
         }
 
         fn joint_rand_len(&self) -> usize {
