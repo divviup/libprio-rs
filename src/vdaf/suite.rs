@@ -81,6 +81,13 @@ impl Key {
         }
     }
 
+    /// Return the length in bytes of the key.
+    pub fn size(&self) -> usize {
+        match self {
+            Self::Aes128CtrHmacSha256(_) | Self::Blake3(_) => 32,
+        }
+    }
+
     /// Returns an uninitialized (i.e., zero-valued) key. The caller is expected to initialize the
     /// key with a (pseudo)random input.
     pub(crate) fn uninitialized(suite: Suite) -> Self {
