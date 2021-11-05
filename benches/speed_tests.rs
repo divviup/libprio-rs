@@ -3,11 +3,16 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use prio::benchmarked::*;
-use prio::client::Client;
+use prio::client::Client as Prio2Client;
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field126 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::server::{generate_verification_message, ValidationMemory};
+use prio::vdaf::{
+    prio3::{Prio3Count64, Prio3Histogram64, Prio3InputShare, Prio3Sum64},
+    suite::Suite,
+    Client as Prio3Client, Share,
+};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
 pub fn fft(c: &mut Criterion) {
@@ -81,7 +86,8 @@ pub fn bool_vec(c: &mut Criterion) {
         // v2
         let pk1 = PublicKey::from_base64(PUBKEY1).unwrap();
         let pk2 = PublicKey::from_base64(PUBKEY2).unwrap();
-        let mut client: Client<F> = Client::new(data.len(), pk1.clone(), pk2.clone()).unwrap();
+        let mut client: Prio2Client<F> =
+            Prio2Client::new(data.len(), pk1.clone(), pk2.clone()).unwrap();
 
         c.bench_function(&format!("bool vec v2 prove, size={}", *size), |b| {
             b.iter(|| {
@@ -110,9 +116,86 @@ pub fn bool_vec(c: &mut Criterion) {
             })
         });
 
-        // TODO(cjpatton) Add benchmark for comparable "v3" functionality.
+        // TODO(cjpatton) Add benchmark for comparable pcp functionality.
     }
 }
 
-criterion_group!(benches, bool_vec, poly_mul, prng, fft);
+/// Benchmark prio3 client performance.
+pub fn prio3_client(c: &mut Criterion) {
+    let num_shares = 2;
+    let suite = Suite::Aes128CtrHmacSha256;
+
+    let prio3 = Prio3Count64::new(suite, num_shares).unwrap();
+    let measurement = 1;
+    println!(
+        "prio3 count64 size = {}",
+        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+    );
+    c.bench_function(&format!("prio3 count64"), |b| {
+        b.iter(|| {
+            prio3.shard(&(), &1).unwrap();
+        })
+    });
+
+    let buckets: Vec<u64> = (1..10).collect();
+    let prio3 = Prio3Histogram64::new(suite, num_shares, &buckets).unwrap();
+    let measurement = 17;
+    println!(
+        "prio3 histogram64 ({} buckets) size = {}",
+        buckets.len() + 1,
+        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+    );
+    c.bench_function(
+        &format!("prio3 histogram64 ({} buckets)", buckets.len() + 1),
+        |b| {
+            b.iter(|| {
+                prio3.shard(&(), &measurement).unwrap();
+            })
+        },
+    );
+
+    let bits = 32;
+    let prio3 = Prio3Sum64::new(suite, num_shares, bits).unwrap();
+    let measurement = 1337;
+    println!(
+        "prio3 sum64 ({} bits) size = {}",
+        bits,
+        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+    );
+    c.bench_function(&format!("prio3 sum64 ({} bits)", bits), |b| {
+        b.iter(|| {
+            prio3.shard(&(), &measurement).unwrap();
+        })
+    });
+}
+
+fn prio3_input_share_size<F: FieldElement>(input_shares: &[Prio3InputShare<F>]) -> usize {
+    let mut size = 0;
+    for input_share in input_shares {
+        match input_share.input_share {
+            Share::Leader(ref data) => {
+                size += data.len() * F::ENCODED_SIZE;
+            }
+            Share::Helper(ref seed) => {
+                size += seed.size();
+            }
+        };
+
+        match input_share.input_share {
+            Share::Leader(ref data) => {
+                size += data.len() * F::ENCODED_SIZE;
+            }
+            Share::Helper(ref seed) => {
+                size += seed.size();
+            }
+        }
+
+        size += input_share.joint_rand_seed_hint.size();
+        size += input_share.blind.size();
+    }
+
+    size
+}
+
+criterion_group!(benches, prio3_client, bool_vec, poly_mul, prng, fft);
 criterion_main!(benches);
