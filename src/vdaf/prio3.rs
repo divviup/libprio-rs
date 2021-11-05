@@ -21,7 +21,7 @@ use std::iter::IntoIterator;
 use std::marker::PhantomData;
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
-pub type Prio3Count64 = Prio3<Count<Field64>, Prio3Result<u64>>;
+pub type Prio3Count64 = Prio3<Count<Field64>, Prio3CountResult<u64>>;
 
 impl Prio3Count64 {
     /// Construct an instance of this VDAF with the given suite and the given number of aggregators.
@@ -37,9 +37,21 @@ impl Prio3Count64 {
     }
 }
 
+/// Aggregate result for the count type.
+#[derive(PartialEq, Eq)]
+pub struct Prio3CountResult<T: Eq>(T);
+
+impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for Prio3CountResult<u64> {
+    type Error = VdafError;
+
+    fn try_from((_agg_param, agg): (usize, Vec<F>)) -> Result<Self, VdafError> {
+        Ok(Prio3CountResult(to_u64(agg)?))
+    }
+}
+
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum64 = Prio3<Sum<Field96>, Prio3Result<u64>>;
+pub type Prio3Sum64 = Prio3<Sum<Field96>, Prio3SumResult<u64>>;
 
 impl Prio3Sum64 {
     /// Construct an instance of this VDAF with the given suite, number of aggregators and required
@@ -63,9 +75,21 @@ impl Prio3Sum64 {
     }
 }
 
+/// Aggregate result for the sum type.
+#[derive(PartialEq, Eq)]
+pub struct Prio3SumResult<T: Eq>(T);
+
+impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for Prio3SumResult<u64> {
+    type Error = VdafError;
+
+    fn try_from((_agg_param, agg): (usize, Vec<F>)) -> Result<Self, VdafError> {
+        Ok(Prio3SumResult(to_u64(agg)?))
+    }
+}
+
 /// the histogram type. Each measurement is an unsigned, 64-bit integer and the result is a
-/// histogram representation of the measurement.
-pub type Prio3Histogram64 = Prio3<Histogram<Field96>, Prio3ResultVec<u64>>;
+/// histogram representation of the measurements.
+pub type Prio3Histogram64 = Prio3<Histogram<Field96>, Prio3HistogramResult<u64>>;
 
 impl Prio3Histogram64 {
     /// Constructs an instance of this VDAF with the given suite, number of aggregators, and
@@ -84,45 +108,22 @@ impl Prio3Histogram64 {
     }
 }
 
-/// Aggregate result for singleton data types.
+/// Aggregate result for the histogram type.
 #[derive(PartialEq, Eq)]
-pub struct Prio3Result<T: Eq>(T);
+pub struct Prio3HistogramResult<T: Eq>(Vec<T>);
 
-impl<F: FieldElement> TryFrom<Vec<F>> for Prio3Result<u64> {
+impl<F: FieldElement> TryFrom<(usize, Vec<F>)> for Prio3HistogramResult<u64> {
     type Error = VdafError;
 
-    fn try_from(data: Vec<F>) -> Result<Self, VdafError> {
-        if data.len() != 1 {
-            return Err(VdafError::Uncategorized(format!(
-                "unexpected aggregate length for count type: got {}; want 1",
-                data.len()
-            )));
-        }
-
-        let out: u64 = F::Integer::from(data[0]).try_into().map_err(|err| {
-            VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
-        })?;
-
-        Ok(Prio3Result(out))
-    }
-}
-
-/// Aggregate result for vector data types.
-#[derive(PartialEq, Eq)]
-pub struct Prio3ResultVec<T: Eq>(Vec<T>);
-
-impl<F: FieldElement> TryFrom<Vec<F>> for Prio3ResultVec<u64> {
-    type Error = VdafError;
-
-    fn try_from(data: Vec<F>) -> Result<Self, VdafError> {
-        let mut out = Vec::with_capacity(data.len());
-        for elem in data.into_iter() {
+    fn try_from((_agg_param, agg): (usize, Vec<F>)) -> Result<Self, VdafError> {
+        let mut out = Vec::with_capacity(agg.len());
+        for elem in agg.into_iter() {
             out.push(F::Integer::from(elem).try_into().map_err(|err| {
                 VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
             })?);
         }
 
-        Ok(Prio3ResultVec(out))
+        Ok(Prio3HistogramResult(out))
     }
 }
 
@@ -142,6 +143,21 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
     Ok(())
 }
 
+fn to_u64<F: FieldElement>(agg: Vec<F>) -> Result<u64, VdafError> {
+    if agg.len() != 1 {
+        return Err(VdafError::Uncategorized(format!(
+            "unexpected aggregate length for count type: got {}; want 1",
+            agg.len()
+        )));
+    }
+
+    let out: u64 = F::Integer::from(agg[0]).try_into().map_err(|err| {
+        VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
+    })?;
+
+    Ok(out)
+}
+
 /// The base type for prio3.
 pub struct Prio3<T: Type, A> {
     num_aggregators: u8,
@@ -153,7 +169,7 @@ pub struct Prio3<T: Type, A> {
 impl<T: Type, A> Vdaf for Prio3<T, A> {
     type Measurement = T::Measurement;
     type AggregateResult = A;
-    type AggregationParam = ();
+    type AggregationParam = usize; // Number of measurements
     type PublicParam = ();
     type VerifyParam = Prio3VerifyParam;
     type InputShare = Prio3InputShare<T::Field>;
@@ -352,7 +368,7 @@ impl<T: Type, A> Aggregator for Prio3<T, A> {
     fn prepare_init(
         &self,
         verify_param: &Prio3VerifyParam,
-        _agg_param: &(),
+        _agg_param: &usize,
         nonce: &[u8],
         msg: &Prio3InputShare<T::Field>,
     ) -> Result<Prio3PrepareStep<T::Field>, VdafError> {
@@ -521,7 +537,7 @@ impl<T: Type, A> Aggregator for Prio3<T, A> {
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<It: IntoIterator<Item = Vec<T::Field>>>(
         &self,
-        _agg_param: &(),
+        _agg_param: &usize,
         output_shares: It,
     ) -> Result<Vec<T::Field>, VdafError> {
         let mut agg_share = vec![T::Field::zero(); self.typ.output_len()];
@@ -559,12 +575,12 @@ pub struct Prio3VerifierMessage<F> {
 impl<T, A> Collector for Prio3<T, A>
 where
     T: Type,
-    A: TryFrom<Vec<T::Field>, Error = VdafError> + Eq,
+    A: TryFrom<(usize, Vec<T::Field>), Error = VdafError> + Eq,
 {
     /// Combines aggregate shares into the aggregate result.
     fn unshard<It: IntoIterator<Item = Vec<T::Field>>>(
         &self,
-        _agg_param: &(),
+        agg_param: &usize,
         agg_shares: It,
     ) -> Result<A, VdafError> {
         let mut agg = vec![T::Field::zero(); self.typ.output_len()];
@@ -582,7 +598,7 @@ where
             }
         }
 
-        A::try_from(agg)
+        A::try_from((*agg_param, agg))
     }
 }
 
@@ -620,7 +636,7 @@ mod tests {
             &input_shares,
             &verify_params,
             nonce,
-            Some(Prio3Result(1)),
+            Some(Prio3CountResult(1)),
         )
         .unwrap();
 
@@ -667,12 +683,12 @@ mod tests {
     ) -> Result<(), VdafError>
     where
         T: Type,
-        A: TryFrom<Vec<T::Field>, Error = VdafError> + Eq,
+        A: TryFrom<(usize, Vec<T::Field>), Error = VdafError> + Eq,
     {
         let mut state0: Vec<Prio3PrepareStep<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
         for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
-            let state = prio3.prepare_init(verify_param, &(), nonce, input_share)?;
+            let state = prio3.prepare_init(verify_param, &1, nonce, input_share)?;
             state0.push(state);
         }
 
@@ -689,11 +705,11 @@ mod tests {
         let mut agg_shares: Vec<Vec<T::Field>> = Vec::with_capacity(prio3.num_aggregators());
         for state in state1.into_iter() {
             let output_share = prio3.prepare_finish(state, round1.clone())?;
-            agg_shares.push(prio3.aggregate(&(), [output_share])?);
+            agg_shares.push(prio3.aggregate(&1, [output_share])?);
         }
 
         if let Some(want) = expected_agg {
-            let got = prio3.unshard(&(), agg_shares)?;
+            let got = prio3.unshard(&1, agg_shares)?;
             if got != want {
                 return Err(VdafError::Uncategorized(
                     "unexpected output for test case".to_string(),
