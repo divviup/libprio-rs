@@ -594,7 +594,7 @@ pub(crate) fn merge_vector<F: FieldElement>(
 }
 
 /// Outputs an additive secret sharing of the input.
-pub fn split_vector<F: FieldElement>(
+pub(crate) fn split_vector<F: FieldElement>(
     inp: &[F],
     num_shares: usize,
 ) -> Result<Vec<Vec<F>>, PrngError> {
