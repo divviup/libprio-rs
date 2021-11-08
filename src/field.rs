@@ -686,8 +686,8 @@ mod tests {
 
         // add + sub
         for _ in 0..100 {
-            let f = prng.next().unwrap();
-            let g = prng.next().unwrap();
+            let f = prng.get();
+            let g = prng.get();
             assert_eq!(f + g - f - g, zero);
             assert_eq!(f + g - g, f);
             assert_eq!(f + g - f, g);
@@ -708,7 +708,7 @@ mod tests {
 
         // mul + div
         for _ in 0..100 {
-            let f = prng.next().unwrap();
+            let f = prng.get();
             if f == zero {
                 continue;
             }
@@ -736,12 +736,7 @@ mod tests {
         }
 
         // serialization
-        let test_inputs = vec![
-            zero,
-            one,
-            prng.next().unwrap(),
-            F::from(int_modulus - int_one),
-        ];
+        let test_inputs = vec![zero, one, prng.get(), F::from(int_modulus - int_one)];
         for want in test_inputs.iter() {
             println!("check {:?}", want);
             let mut bytes: Vec<u8> = vec![];

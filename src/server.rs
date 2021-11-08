@@ -6,15 +6,18 @@ use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
-    prng::{extract_share_from_seed, Prng, PrngError},
+    prng::{Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
-    vdaf::suite::Suite,
+    vdaf::suite::{Key, KeyStream, Suite},
 };
 use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
+    /// Unexpected Share Length
+    #[error("unexpected share length")]
+    ShareLength,
     /// Encryption/decryption error
     #[error("encryption/decryption error")]
     Encrypt(#[from] EncryptError),
@@ -91,12 +94,19 @@ impl<F: FieldElement> Server<F> {
 
     /// Decrypt and deserialize
     fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<F>, ServerError> {
+        let len = proof_length(self.dimension);
         let share = decrypt_share(encrypted_share, &self.private_key)?;
         Ok(if self.is_first_server {
             F::byte_slice_into_vec(&share)?
         } else {
-            let len = proof_length(self.dimension);
-            extract_share_from_seed(len, &share)?
+            if share.len() != 32 {
+                return Err(ServerError::ShareLength);
+            }
+
+            let mut key = [0; 32];
+            key.copy_from_slice(&share);
+            let key_stream = KeyStream::from_key(&Key::Aes128CtrHmacSha256(key));
+            Prng::from_key_stream(key_stream).take(len).collect()
         })
     }
 
@@ -169,7 +179,7 @@ impl<F: FieldElement> Server<F> {
     /// evaluation.
     pub fn choose_eval_at(&mut self) -> F {
         loop {
-            let eval_at = self.prng.next().unwrap();
+            let eval_at = self.prng.get();
             if !self.validation_mem.poly_mem.roots_2n.contains(&eval_at) {
                 break eval_at;
             }
