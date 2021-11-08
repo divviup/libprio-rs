@@ -306,10 +306,10 @@ mod tests {
         let mut poly_outp = vec![F::zero(); (g.degree() * (1 + num_calls)).next_power_of_two()];
         let mut poly_inp = vec![vec![F::zero(); 1 + num_calls]; g.arity()];
 
-        let r = prng.next().unwrap();
+        let r = prng.get();
         for i in 0..g.arity() {
             for j in 0..num_calls {
-                poly_inp[i][j] = prng.next().unwrap();
+                poly_inp[i][j] = prng.get();
             }
             inp[i] = poly_eval(&poly_inp[i], r);
         }

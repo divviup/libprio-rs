@@ -12,46 +12,12 @@ use std::marker::PhantomData;
 
 const BUFFER_SIZE_IN_ELEMENTS: usize = 128;
 
-pub(crate) fn secret_share<F: FieldElement>(share1: &mut [F]) -> Result<Vec<u8>, PrngError> {
-    let key = Key::generate(Suite::Aes128CtrHmacSha256)?;
-
-    // get prng array
-    let data: Vec<F> = Prng::from_key_stream(KeyStream::from_key(&key))
-        .take(share1.len())
-        .collect();
-
-    // secret share
-    for (s1, d) in share1.iter_mut().zip(data.iter()) {
-        *s1 -= *d;
-    }
-
-    Ok(key.as_slice().to_vec())
-}
-
-pub(crate) fn extract_share_from_seed<F: FieldElement>(
-    length: usize,
-    seed: &[u8],
-) -> Result<Vec<F>, PrngError> {
-    if seed.len() != aes::BLOCK_SIZE * 2 {
-        return Err(PrngError::SeedSize);
-    }
-
-    let mut key = [0; aes::BLOCK_SIZE * 2];
-    key.copy_from_slice(seed);
-    let key_stream = KeyStream::from_key(&Key::Aes128CtrHmacSha256(key));
-    Ok(Prng::from_key_stream(key_stream).take(length).collect())
-}
-
 /// Errors propagated by methods in this module.
 #[derive(Debug, PartialEq, thiserror::Error)]
 pub enum PrngError {
-    /// Tried to construct a PRNG from a seed of invalid length.
-    #[error("invalid seed length")]
-    SeedSize,
-
-    /// VDAF suite error.
-    #[error("vdaf suite error: {0}")]
-    VdafSuite(#[from] SuiteError),
+    /// Suite error.
+    #[error("suite error: {0}")]
+    Suite(#[from] SuiteError),
 }
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
@@ -86,12 +52,8 @@ impl<F: FieldElement> Prng<F> {
             output_written: 0,
         }
     }
-}
 
-impl<F: FieldElement> Iterator for Prng<F> {
-    type Item = F;
-
-    fn next(&mut self) -> Option<F> {
+    pub(crate) fn get(&mut self) -> F {
         loop {
             // Seek to the next chunk of the buffer that encodes an element of F.
             for i in (self.buffer_index..self.buffer.len()).step_by(F::ENCODED_SIZE) {
@@ -104,7 +66,7 @@ impl<F: FieldElement> Iterator for Prng<F> {
                     // Set the buffer index to the next chunk.
                     self.buffer_index = j;
                     self.output_written += 1;
-                    return Some(x);
+                    return x;
                 }
             }
 
@@ -118,32 +80,18 @@ impl<F: FieldElement> Iterator for Prng<F> {
     }
 }
 
+impl<F: FieldElement> Iterator for Prng<F> {
+    type Item = F;
+
+    fn next(&mut self) -> Option<F> {
+        Some(self.get())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{Field32, FieldPriov2};
-
-    #[test]
-    fn secret_sharing() {
-        let mut data = vec![Field32::from(0); 123];
-        data[3] = 23.into();
-
-        let data_clone = data.clone();
-
-        let seed = secret_share(&mut data).unwrap();
-        assert_ne!(data, data_clone);
-
-        let share2 = extract_share_from_seed(data.len(), &seed).unwrap();
-
-        assert_eq!(data.len(), share2.len());
-
-        // recombine
-        for (d, d2) in data.iter_mut().zip(share2.iter()) {
-            *d += *d2;
-        }
-
-        assert_eq!(data, data_clone);
-    }
+    use crate::field::FieldPriov2;
 
     #[test]
     fn secret_sharing_interop() {
@@ -161,7 +109,7 @@ mod tests {
             0xacb8b748, 0x6f5b9d49, 0x887d061b, 0x86db0c58,
         ];
 
-        let share2 = extract_share_from_seed::<FieldPriov2>(reference.len(), &seed).unwrap();
+        let share2 = extract_share_from_seed::<FieldPriov2>(reference.len(), &seed);
 
         assert_eq!(share2, reference);
     }
@@ -169,7 +117,7 @@ mod tests {
     /// takes a seed and hash as base64 encoded strings
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = base64::decode(seed_base64).unwrap();
-        let random_data = extract_share_from_seed::<FieldPriov2>(len, &seed).unwrap();
+        let random_data = extract_share_from_seed::<FieldPriov2>(len, &seed);
 
         let random_bytes = FieldPriov2::slice_into_byte_vec(&random_data);
 
@@ -209,5 +157,13 @@ mod tests {
             "iBiDaqLrv7/rX/+vs6akPiprGgYfULdh/XhoD61HQXA=",
             100_000,
         );
+    }
+
+    fn extract_share_from_seed<F: FieldElement>(length: usize, seed: &[u8]) -> Vec<F> {
+        assert_eq!(seed.len(), aes::BLOCK_SIZE * 2);
+        let mut key = [0; aes::BLOCK_SIZE * 2];
+        key.copy_from_slice(seed);
+        let key_stream = KeyStream::from_key(&Key::Aes128CtrHmacSha256(key));
+        Prng::from_key_stream(key_stream).take(length).collect()
     }
 }

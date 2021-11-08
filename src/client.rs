@@ -9,7 +9,7 @@ use crate::{
     polynomial::{poly_fft, PolyAuxMemory},
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof_mut},
-    vdaf::suite::Suite,
+    vdaf::suite::{Key, KeyStream, Suite},
 };
 
 use std::convert::TryFrom;
@@ -99,11 +99,15 @@ impl<F: FieldElement> Client<F> {
 
         // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
         // in-place
-        let share2 = crate::prng::secret_share(&mut proof)?;
+        let share2 = Key::generate(Suite::Aes128CtrHmacSha256)?;
+        let share2_prng = Prng::from_key_stream(KeyStream::from_key(&share2));
+        for (s1, d) in proof.iter_mut().zip(share2_prng.into_iter()) {
+            *s1 -= d;
+        }
         let share1 = F::slice_into_byte_vec(&proof);
         // encrypt shares with respective keys
         let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
-        let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
+        let encrypted_share2 = encrypt_share(share2.as_slice(), &self.public_key2)?;
         Ok((encrypted_share1, encrypted_share2))
     }
 
@@ -185,8 +189,8 @@ fn construct_proof<F: FieldElement>(
     let n = (dimension + 1).next_power_of_two();
 
     // set zero terms to random
-    *f0 = mem.prng.next().unwrap();
-    *g0 = mem.prng.next().unwrap();
+    *f0 = mem.prng.get();
+    *g0 = mem.prng.get();
     mem.points_f[0] = *f0;
     mem.points_g[0] = *g0;
 
@@ -219,7 +223,6 @@ fn construct_proof<F: FieldElement>(
 #[test]
 fn test_encode() {
     use crate::field::Field32;
-
     let pub_key1 = PublicKey::from_base64(
         "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
     )

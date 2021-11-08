@@ -271,19 +271,16 @@ impl<I: Idpf<2, 2>> Client for Hits<I> {
             // [BBCG+21, Appendix C.4]
             //
             // $(a, b, c)$
-            let a =
-                leader_sketch_start_prng.next().unwrap() + helper_sketch_start_prng.next().unwrap();
-            let b =
-                leader_sketch_start_prng.next().unwrap() + helper_sketch_start_prng.next().unwrap();
-            let c =
-                leader_sketch_start_prng.next().unwrap() + helper_sketch_start_prng.next().unwrap();
+            let a = leader_sketch_start_prng.get() + helper_sketch_start_prng.get();
+            let b = leader_sketch_start_prng.get() + helper_sketch_start_prng.get();
+            let c = leader_sketch_start_prng.get() + helper_sketch_start_prng.get();
 
             // $A = -2a + k$
             // $B = a^2 + b + -ak + c$
             let d = k - (a + a);
             let e = (a * a) + b - (a * k) + c;
-            leader_sketch_next.push(d - helper_sketch_next_prng.next().unwrap());
-            leader_sketch_next.push(e - helper_sketch_next_prng.next().unwrap());
+            leader_sketch_next.push(d - helper_sketch_next_prng.get());
+            leader_sketch_next.push(e - helper_sketch_next_prng.get());
         }
 
         // Generate IDPF shares of the data and authentication vectors.
@@ -369,7 +366,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
         for prefix in agg_param.iter() {
             let value = input_share.idpf.eval(prefix)?;
             let (v, k) = (value[0], value[1]);
-            let r = verify_rand_prng.next().unwrap();
+            let r = verify_rand_prng.get();
 
             // [BBCG+21, Appendix C.4]
             //
