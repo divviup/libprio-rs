@@ -131,7 +131,7 @@ pub fn prio3_client(c: &mut Criterion) {
         "prio3 count64 size = {}",
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
-    c.bench_function(&format!("prio3 count64"), |b| {
+    c.bench_function("prio3 count64", |b| {
         b.iter(|| {
             prio3.shard(&(), &1).unwrap();
         })

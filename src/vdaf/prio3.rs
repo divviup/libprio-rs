@@ -636,19 +636,17 @@ mod tests {
         for (i, x) in input_shares.iter().enumerate() {
             for (j, y) in input_shares.iter().enumerate() {
                 if i != j {
-                    match (&x.input_share, &y.input_share) {
-                        (Share::Helper(left), Share::Helper(right)) => {
-                            assert_ne!(left, right);
-                        }
-                        _ => (),
-                    };
+                    if let (Share::Helper(left), Share::Helper(right)) =
+                        (&x.input_share, &y.input_share)
+                    {
+                        assert_ne!(left, right);
+                    }
 
-                    match (&x.proof_share, &y.proof_share) {
-                        (Share::Helper(left), Share::Helper(right)) => {
-                            assert_ne!(left, right);
-                        }
-                        _ => (),
-                    };
+                    if let (Share::Helper(left), Share::Helper(right)) =
+                        (&x.proof_share, &y.proof_share)
+                    {
+                        assert_ne!(left, right);
+                    }
 
                     assert_ne!(x.joint_rand_seed_hint, y.joint_rand_seed_hint);
                     assert_ne!(x.blind, y.blind);
