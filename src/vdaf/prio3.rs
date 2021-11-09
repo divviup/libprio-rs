@@ -15,6 +15,7 @@ use crate::pcp::Type;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{Aggregator, Client, Collector, PrepareTransition, Share, Vdaf, VdafError};
+use derivative::Derivative;
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
 use std::iter::IntoIterator;
@@ -85,8 +86,8 @@ impl Prio3Histogram64 {
 }
 
 /// Aggregate result for singleton data types.
-#[derive(PartialEq, Eq)]
-pub struct Prio3Result<T: Eq>(T);
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Prio3Result<T: Eq>(pub T);
 
 impl<F: FieldElement> TryFrom<Vec<F>> for Prio3Result<u64> {
     type Error = VdafError;
@@ -109,7 +110,7 @@ impl<F: FieldElement> TryFrom<Vec<F>> for Prio3Result<u64> {
 
 /// Aggregate result for vector data types.
 #[derive(PartialEq, Eq)]
-pub struct Prio3ResultVec<T: Eq>(Vec<T>);
+pub struct Prio3ResultVec<T: Eq>(pub Vec<T>);
 
 impl<F: FieldElement> TryFrom<Vec<F>> for Prio3ResultVec<u64> {
     type Error = VdafError;
@@ -143,11 +144,25 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
 }
 
 /// The base type for prio3.
+#[derive(Derivative)]
+#[derivative(Debug)]
 pub struct Prio3<T: Type, A> {
     num_aggregators: u8,
     suite: Suite,
     typ: T,
+    #[derivative(Debug = "ignore")]
     phantom: PhantomData<A>,
+}
+
+impl<T: Type, A> Clone for Prio3<T, A> {
+    fn clone(&self) -> Self {
+        Self {
+            num_aggregators: self.num_aggregators,
+            suite: self.suite,
+            typ: self.typ.clone(),
+            phantom: PhantomData,
+        }
+    }
 }
 
 impl<T: Type, A> Vdaf for Prio3<T, A> {
@@ -327,6 +342,7 @@ impl<T: Type, A> Client for Prio3<T, A> {
 
 /// State of each aggregator during the Prepare process.
 #[allow(missing_docs)]
+#[derive(Clone, Debug)]
 pub enum Prio3PrepareStep<F> {
     /// Ready to send the verifier message.
     Ready {
@@ -543,7 +559,7 @@ impl<T: Type, A> Aggregator for Prio3<T, A> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// The verification message emitted by each aggregator during the Prepare process.
 pub struct Prio3VerifierMessage<F> {
     /// The aggregator's share of the FLP verifier message. (See [`Type`](crate::pcp::Type).)

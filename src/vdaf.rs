@@ -12,7 +12,9 @@ use crate::field::FieldElement;
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
 use crate::vdaf::suite::{Key, SuiteError};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -47,7 +49,7 @@ pub enum Share<F> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
-pub trait Vdaf {
+pub trait Vdaf: Clone + Debug {
     /// The type of Client measurement to be aggregated.
     type Measurement;
 
@@ -66,10 +68,10 @@ pub trait Vdaf {
     type VerifyParam;
 
     /// An input share sent by a Client.
-    type InputShare;
+    type InputShare: Clone + Debug + Serialize + DeserializeOwned;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare;
+    type OutputShare: Clone + Debug + Serialize + DeserializeOwned;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable;
@@ -95,10 +97,10 @@ pub trait Client: Vdaf {
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator: Vdaf {
     /// State of the Aggregator during the Prepare process.
-    type PrepareStep;
+    type PrepareStep: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage;
+    type PrepareMessage: Clone + Debug + Serialize + DeserializeOwned;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
@@ -193,7 +195,7 @@ pub enum PrepareTransition<S, M, O> {
 }
 
 /// An aggregate share that can merged with aggregate shares of the same type.
-pub trait Aggregatable {
+pub trait Aggregatable: Clone + Debug + Serialize + DeserializeOwned {
     /// Update an aggregate share by merging it with another (`agg_share`).
     fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError>;
 }

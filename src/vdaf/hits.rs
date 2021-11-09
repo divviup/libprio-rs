@@ -16,10 +16,13 @@
 //! [VDAF]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
 
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use std::array::IntoIter;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Debug;
 use std::marker::PhantomData;
 
 use crate::field::{split_vector, FieldElement};
@@ -96,7 +99,9 @@ impl PartialOrd for IdpfInput {
 /// [BBCG+21]: https://eprint.iacr.org/2021/017
 //
 // NOTE(cjpatton) The real IDPF API probably needs to be stateful.
-pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>: Sized {
+pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
+    Sized + Clone + Debug + Serialize + DeserializeOwned
+{
     /// The finite field over which the IDPF is defined.
     //
     // NOTE(cjpatton) The IDPF of [BBCG+21] might use different fields for different levels of the
@@ -121,6 +126,7 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>: Sized {
 //
 // NOTE(cjpatton) It would be straight-forward to generalize this construction to any `KEY_LEN` and
 // `OUT_LEN`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToyIdpf<F> {
     data0: Vec<F>,
     data1: Vec<F>,
@@ -186,6 +192,7 @@ impl<F: FieldElement> Idpf<2, 2> for ToyIdpf<F> {
 }
 
 /// The hits VDAF.
+#[derive(Debug)]
 pub struct Hits<I> {
     suite: Suite,
     phantom: PhantomData<I>,
@@ -199,6 +206,12 @@ impl<I> Hits<I> {
             suite,
             phantom: PhantomData,
         }
+    }
+}
+
+impl<I> Clone for Hits<I> {
+    fn clone(&self) -> Self {
+        Self::new(self.suite)
     }
 }
 
@@ -229,8 +242,11 @@ impl<I: Idpf<2, 2>> Vdaf for Hits<I> {
 }
 
 /// An input share for the heavy hitters VDAF.
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HitsInputShare<I: Idpf<2, 2>> {
     /// IDPF share of input
+    // Workaround for alleged compiler bug: https://github.com/serde-rs/serde/issues/1296
+    #[serde(deserialize_with = "I::deserialize")]
     pub idpf: I,
 
     /// PRNG seed used to generate the aggregator's share of the randomness used in the first part
@@ -540,6 +556,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 }
 
 /// The state of each Aggregator during the Prepare process.
+#[derive(Clone, Debug)]
 pub struct HitsPrepareStep<F> {
     /// State of the secure sketching protocol.
     sketch: SketchState,
@@ -560,7 +577,7 @@ pub struct HitsPrepareStep<F> {
     x: F,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 enum SketchState {
     Ready,
     RoundOne,

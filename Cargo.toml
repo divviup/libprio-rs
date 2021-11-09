@@ -9,15 +9,16 @@ repository = "https://github.com/abetterinternet/libprio-rs"
 
 [dependencies]
 aes = { version = "0.7.5", features = ["ctr"] }
-blake3 = "1.2.0"
-cipher = "0.3.0"
 aes-gcm = "^0.9"
 base64 = "0.13.0"
+blake3 = "1.2.0"
+cipher = "0.3.0"
+derivative = "2.1.1"
 getrandom = { version = "0.2.3", features = ["std"] }
 ring = "0.16.20"
-thiserror = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 static_assertions = "1.1.0"
+thiserror = "1.0"
 
 # dependencies required if feature "test-vector" is enabled
 rand = { version = "0.8", optional = true }
