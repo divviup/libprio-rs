@@ -22,7 +22,7 @@ use std::{
     hash::{Hash, Hasher},
     io::{Cursor, Read},
     marker::PhantomData,
-    ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shr, Sub, SubAssign},
+    ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub, SubAssign},
 };
 
 /// Possible errors from finite field operations.
@@ -96,6 +96,7 @@ pub trait FieldElement:
         + Ord
         + BitAnd<Output = <Self as FieldElement>::Integer>
         + Div<Output = <Self as FieldElement>::Integer>
+        + Shl<Output = <Self as FieldElement>::Integer>
         + Shr<Output = <Self as FieldElement>::Integer>
         + Sub<Output = <Self as FieldElement>::Integer>
         + From<Self>
