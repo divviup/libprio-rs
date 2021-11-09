@@ -29,7 +29,10 @@ use crate::field::{split_vector, FieldElement};
 use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
-use crate::vdaf::{Aggregator, Client, Collector, PrepareTransition, Share, Vdaf, VdafError};
+use crate::vdaf::{
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
+    Share, Vdaf, VdafError,
+};
 
 /// An input for an IDPF ([`Idpf`]).
 ///
@@ -222,8 +225,8 @@ impl<I: Idpf<2, 2>> Vdaf for Hits<I> {
     type PublicParam = ();
     type VerifyParam = HitsVerifyParam;
     type InputShare = HitsInputShare<I>;
-    type OutputShare = Vec<I::Field>;
-    type AggregateShare = Vec<I::Field>;
+    type OutputShare = OutputShare<I::Field>;
+    type AggregateShare = AggregateShare<I::Field>;
 
     fn setup(&self) -> Result<((), Vec<HitsVerifyParam>), VdafError> {
         let verify_rand_init = Key::generate(self.suite)?;
@@ -245,6 +248,7 @@ impl<I: Idpf<2, 2>> Vdaf for Hits<I> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HitsInputShare<I: Idpf<2, 2>> {
     /// IDPF share of input
+    //
     // Workaround for alleged compiler bug: https://github.com/serde-rs/serde/issues/1296
     #[serde(deserialize_with = "I::deserialize")]
     pub idpf: I,
@@ -361,7 +365,7 @@ fn get_level(agg_param: &BTreeSet<IdpfInput>) -> Result<usize, VdafError> {
 
 impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
     type PrepareStep = HitsPrepareStep<I::Field>;
-    type PrepareMessage = Vec<I::Field>;
+    type PrepareMessage = HitsPrepareMessage<I::Field>;
 
     fn prepare_init(
         &self,
@@ -428,7 +432,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 
         Ok(HitsPrepareStep {
             sketch: SketchState::Ready,
-            output_share,
+            output_share: OutputShare(output_share),
             z,
             d,
             e,
@@ -438,11 +442,15 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 
     // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
-    fn prepare_step<M: IntoIterator<Item = Vec<I::Field>>>(
+    fn prepare_step<M: IntoIterator<Item = HitsPrepareMessage<I::Field>>>(
         &self,
         mut state: HitsPrepareStep<I::Field>,
         inputs: M,
-    ) -> PrepareTransition<HitsPrepareStep<I::Field>, Vec<I::Field>, Vec<I::Field>> {
+    ) -> PrepareTransition<
+        HitsPrepareStep<I::Field>,
+        HitsPrepareMessage<I::Field>,
+        OutputShare<I::Field>,
+    > {
         match state.sketch {
             SketchState::Ready => {
                 let inputs: Vec<_> = inputs.into_iter().collect();
@@ -457,7 +465,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
                 let z_share = state.z.to_vec();
 
                 state.sketch = SketchState::RoundOne;
-                PrepareTransition::Continue(state, z_share)
+                PrepareTransition::Continue(state, HitsPrepareMessage(z_share))
             }
 
             SketchState::RoundOne => {
@@ -472,7 +480,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 
                 // Compute polynomial coefficients.
                 let mut z = [I::Field::zero(); 3];
-                for z_share in inputs.iter() {
+                for z_share in inputs.iter().map(|i| i.as_ref()) {
                     if z_share.len() != 3 {
                         return PrepareTransition::Fail(VdafError::Uncategorized(format!(
                             "unexpected message length ({:?}): got {}; want 3",
@@ -491,7 +499,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
                     vec![(state.d * z[0]) + state.e + state.x * ((z[0] * z[0]) - z[1] - z[2])];
 
                 state.sketch = SketchState::RoundTwo;
-                PrepareTransition::Continue(state, y_share)
+                PrepareTransition::Continue(state, HitsPrepareMessage(y_share))
             }
 
             SketchState::RoundTwo => {
@@ -506,7 +514,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 
                 // Compute the polynomial evaluation.
                 let mut y = I::Field::zero();
-                for y_share in inputs.iter() {
+                for y_share in inputs.iter().map(|y| y.as_ref()) {
                     if y_share.len() != 1 {
                         return PrepareTransition::Fail(VdafError::Uncategorized(format!(
                             "unexpected message length ({:?}): got {}; want 1",
@@ -531,27 +539,27 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
         }
     }
 
-    fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
+    fn aggregate<M: IntoIterator<Item = OutputShare<I::Field>>>(
         &self,
         agg_param: &BTreeSet<IdpfInput>,
         output_shares: M,
-    ) -> Result<Vec<I::Field>, VdafError> {
-        let mut agg_share = vec![I::Field::zero(); agg_param.len()];
+    ) -> Result<AggregateShare<I::Field>, VdafError> {
+        let mut agg_share = AggregateShare(vec![I::Field::zero(); agg_param.len()]);
         for output_share in output_shares.into_iter() {
-            if output_share.len() != agg_share.len() {
-                return Err(VdafError::Uncategorized(format!(
-                    "unexpected output share length: got {}; want {}",
-                    output_share.len(),
-                    agg_share.len()
-                )));
-            }
-
-            for (x, y) in agg_share.iter_mut().zip(output_share) {
-                *x += y;
-            }
+            agg_share.accumulate(&output_share)?;
         }
 
         Ok(agg_share)
+    }
+}
+
+/// A prepare message sent exchanged between Hits aggregators
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct HitsPrepareMessage<F>(Vec<F>);
+
+impl<F> AsRef<[F]> for HitsPrepareMessage<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
     }
 }
 
@@ -562,7 +570,7 @@ pub struct HitsPrepareStep<F> {
     sketch: SketchState,
 
     /// The output share.
-    output_share: Vec<F>,
+    output_share: OutputShare<F>,
 
     /// Shares of the blinded polynomial coefficients. See [BBCG+21, Appendix C.4] for details.
     z: [F; 3],
@@ -585,28 +593,18 @@ enum SketchState {
 }
 
 impl<I: Idpf<2, 2>> Collector for Hits<I> {
-    fn unshard<M: IntoIterator<Item = Vec<I::Field>>>(
+    fn unshard<M: IntoIterator<Item = AggregateShare<I::Field>>>(
         &self,
         agg_param: &BTreeSet<IdpfInput>,
         agg_shares: M,
     ) -> Result<BTreeMap<IdpfInput, u64>, VdafError> {
-        let mut agg_data = vec![I::Field::zero(); agg_param.len()];
+        let mut agg_data = AggregateShare(vec![I::Field::zero(); agg_param.len()]);
         for agg_share in agg_shares.into_iter() {
-            if agg_share.len() != agg_data.len() {
-                return Err(VdafError::Uncategorized(format!(
-                    "unexpected aggregate share length: got {}; want {}",
-                    agg_share.len(),
-                    agg_data.len()
-                )));
-            }
-
-            for (x, y) in agg_data.iter_mut().zip(agg_share.iter()) {
-                *x += *y;
-            }
+            agg_data.merge(&agg_share)?;
         }
 
         let mut agg = BTreeMap::new();
-        for (prefix, count) in agg_param.iter().zip(agg_data.iter()) {
+        for (prefix, count) in agg_param.iter().zip(agg_data.as_ref()) {
             let count = <I::Field as FieldElement>::Integer::from(*count);
             let count: u64 = count
                 .try_into()
@@ -844,7 +842,7 @@ mod tests {
             state0.push(state);
         }
 
-        let mut round1: Vec<Vec<I::Field>> = Vec::with_capacity(2);
+        let mut round1: Vec<HitsPrepareMessage<I::Field>> = Vec::with_capacity(2);
         let mut state1: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state0.into_iter() {
             let (state, msg) = hits.prepare_start(state)?;
@@ -852,7 +850,7 @@ mod tests {
             round1.push(msg);
         }
 
-        let mut round2: Vec<Vec<I::Field>> = Vec::with_capacity(2);
+        let mut round2: Vec<HitsPrepareMessage<I::Field>> = Vec::with_capacity(2);
         let mut state2: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state1.into_iter() {
             let (state, msg) = hits.prepare_next(state, round1.clone())?;
@@ -860,7 +858,7 @@ mod tests {
             round2.push(msg);
         }
 
-        let mut agg_shares: Vec<Vec<I::Field>> = Vec::with_capacity(2);
+        let mut agg_shares: Vec<AggregateShare<I::Field>> = Vec::with_capacity(2);
         for state in state2.into_iter() {
             let output_share = hits.prepare_finish(state, round2.clone())?;
             agg_shares.push(hits.aggregate(agg_param, [output_share])?);
