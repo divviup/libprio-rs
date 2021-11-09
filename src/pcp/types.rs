@@ -8,7 +8,6 @@ use crate::pcp::{Gadget, PcpError, Type};
 use crate::polynomial::poly_range_check;
 
 use std::convert::TryFrom;
-use std::mem::size_of;
 
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of
 /// the measurements (i.e., the total number of `1s`).
@@ -108,8 +107,10 @@ impl<F: FieldElement> Type for Count<F> {
 ///
 /// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sum<F> {
+pub struct Sum<F: FieldElement> {
     bits: usize,
+    one: F::Integer,
+    max_summand: F::Integer,
     range_checker: Vec<F>,
 }
 
@@ -117,16 +118,27 @@ impl<F: FieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
     pub fn new(bits: usize) -> Result<Self, PcpError> {
-        let max_bits = size_of::<F::Integer>() << 3;
-        if bits > max_bits {
+        let bits_int = F::Integer::try_from(bits).map_err(|err| {
+            PcpError::Encode(format!(
+                "bit length ({}) cannot be represented as a field element: {:?}",
+                bits, err,
+            ))
+        })?;
+
+        if F::modulus() >> bits_int == F::Integer::from(F::zero()) {
             return Err(PcpError::Encode(format!(
-                "bits ({}) exceeds bit length of the field's integer representation ({})",
-                bits, max_bits,
+                "bit length ({}) exceeds field modulus",
+                bits,
             )));
         }
 
+        let one = F::Integer::from(F::one());
+        let max_summand = (one << bits_int) - one;
+
         Ok(Self {
             bits,
+            one,
+            max_summand,
             range_checker: poly_range_check(0, 2),
         })
     }
@@ -137,18 +149,16 @@ impl<F: FieldElement> Type for Sum<F> {
     type Field = F;
 
     fn encode(&self, summand: &F::Integer) -> Result<Vec<F>, PcpError> {
-        let max = F::Integer::try_from(1 << self.bits).unwrap();
-        if *summand >= max {
+        if *summand > self.max_summand {
             return Err(PcpError::Encode(
                 "value of summand exceeds bit length".to_string(),
             ));
         }
 
-        let one = F::Integer::try_from(1).unwrap();
         let mut encoded: Vec<F> = Vec::with_capacity(self.bits);
         for l in 0..self.bits {
             let l = F::Integer::try_from(l).unwrap();
-            let w = F::from((*summand >> l) & one);
+            let w = F::from((*summand >> l) & self.one);
             encoded.push(w);
         }
 
