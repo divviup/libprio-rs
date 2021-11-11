@@ -12,7 +12,9 @@ use crate::field::FieldElement;
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
 use crate::vdaf::suite::{Key, SuiteError};
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use std::fmt::Debug;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -47,7 +49,7 @@ pub enum Share<F> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
-pub trait Vdaf {
+pub trait Vdaf: Clone + Debug {
     /// The type of Client measurement to be aggregated.
     type Measurement;
 
@@ -66,13 +68,13 @@ pub trait Vdaf {
     type VerifyParam;
 
     /// An input share sent by a Client.
-    type InputShare;
+    type InputShare: Clone + Debug + Serialize + DeserializeOwned;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare;
+    type OutputShare: Clone + Debug + Serialize + DeserializeOwned;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>;
 
     /// Generates the long-lived parameters used by the Clients and Aggregators.
     fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
@@ -95,10 +97,10 @@ pub trait Client: Vdaf {
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator: Vdaf {
     /// State of the Aggregator during the Prepare process.
-    type PrepareStep;
+    type PrepareStep: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage;
+    type PrepareMessage: Clone + Debug + Serialize + DeserializeOwned;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
@@ -192,23 +194,66 @@ pub enum PrepareTransition<S, M, O> {
     Fail(VdafError),
 }
 
-/// An aggregate share that can merged with aggregate shares of the same type.
-pub trait Aggregatable {
+/// An aggregate share resulting from aggregating output shares together that
+/// can merged with aggregate shares of the same type.
+pub trait Aggregatable: Clone + Debug + Serialize + DeserializeOwned {
+    /// Type of output shares that can be accumulated into an aggregate share.
+    type OutputShare;
+
     /// Update an aggregate share by merging it with another (`agg_share`).
     fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError>;
+
+    /// Update an aggregate share by adding `output share`
+    fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError>;
 }
 
-impl<F: FieldElement> Aggregatable for Vec<F> {
-    fn merge(&mut self, agg_share: &Vec<F>) -> Result<(), VdafError> {
-        if self.len() != agg_share.len() {
+/// An output share comprised of a vector of `F` elements.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct OutputShare<F>(Vec<F>);
+
+impl<F> AsRef<[F]> for OutputShare<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+/// An aggregate share suitable for VDAFs whose output shares and aggregate
+/// shares are vectors of `F` elements, and an output share needs no special
+/// transformation to be merged into an aggregate share.
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct AggregateShare<F>(Vec<F>);
+
+impl<F> AsRef<[F]> for AggregateShare<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F: FieldElement> Aggregatable for AggregateShare<F> {
+    type OutputShare = OutputShare<F>;
+
+    fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError> {
+        self.sum(agg_share.as_ref())
+    }
+
+    fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError> {
+        // In Prio3 and Hits, no conversion is needed between output shares and
+        // aggregation shares
+        self.sum(output_share.as_ref())
+    }
+}
+
+impl<F: FieldElement> AggregateShare<F> {
+    fn sum(&mut self, other: &[F]) -> Result<(), VdafError> {
+        if self.0.len() != other.len() {
             return Err(VdafError::Uncategorized(format!(
-                "cannot merge aggregate shares of different lengths (left = {}, right = {})",
-                self.len(),
-                agg_share.len()
+                "cannot sum shares of different lengths (left = {}, right = {}",
+                self.0.len(),
+                other.len()
             )));
         }
 
-        for (x, y) in self.iter_mut().zip(agg_share.iter()) {
+        for (x, y) in self.0.iter_mut().zip(other) {
             *x += *y;
         }
 

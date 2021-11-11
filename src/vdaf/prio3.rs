@@ -14,9 +14,13 @@ use crate::pcp::types::{Count, Histogram, Sum};
 use crate::pcp::Type;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
-use crate::vdaf::{Aggregator, Client, Collector, PrepareTransition, Share, Vdaf, VdafError};
+use crate::vdaf::{
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
+    Share, Vdaf, VdafError,
+};
 use serde::{Deserialize, Serialize};
 use std::convert::{TryFrom, TryInto};
+use std::fmt::Debug;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
 
@@ -85,21 +89,21 @@ impl Prio3Histogram64 {
 }
 
 /// Aggregate result for singleton data types.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prio3Result<T: Eq>(T);
 
-impl<F: FieldElement> TryFrom<Vec<F>> for Prio3Result<u64> {
+impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3Result<u64> {
     type Error = VdafError;
 
-    fn try_from(data: Vec<F>) -> Result<Self, VdafError> {
-        if data.len() != 1 {
+    fn try_from(data: AggregateShare<F>) -> Result<Self, VdafError> {
+        if data.0.len() != 1 {
             return Err(VdafError::Uncategorized(format!(
                 "unexpected aggregate length for count type: got {}; want 1",
-                data.len()
+                data.0.len()
             )));
         }
 
-        let out: u64 = F::Integer::from(data[0]).try_into().map_err(|err| {
+        let out: u64 = F::Integer::from(data.0[0]).try_into().map_err(|err| {
             VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
         })?;
 
@@ -108,15 +112,15 @@ impl<F: FieldElement> TryFrom<Vec<F>> for Prio3Result<u64> {
 }
 
 /// Aggregate result for vector data types.
-#[derive(PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prio3ResultVec<T: Eq>(Vec<T>);
 
-impl<F: FieldElement> TryFrom<Vec<F>> for Prio3ResultVec<u64> {
+impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3ResultVec<u64> {
     type Error = VdafError;
 
-    fn try_from(data: Vec<F>) -> Result<Self, VdafError> {
-        let mut out = Vec::with_capacity(data.len());
-        for elem in data.into_iter() {
+    fn try_from(data: AggregateShare<F>) -> Result<Self, VdafError> {
+        let mut out = Vec::with_capacity(data.0.len());
+        for elem in data.0.into_iter() {
             out.push(F::Integer::from(elem).try_into().map_err(|err| {
                 VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
             })?);
@@ -143,22 +147,34 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
 }
 
 /// The base type for prio3.
-pub struct Prio3<T: Type, A> {
+#[derive(Debug)]
+pub struct Prio3<T: Type, A: Debug> {
     num_aggregators: u8,
     suite: Suite,
     typ: T,
     phantom: PhantomData<A>,
 }
 
-impl<T: Type, A> Vdaf for Prio3<T, A> {
+impl<T: Type, A: Debug> Clone for Prio3<T, A> {
+    fn clone(&self) -> Self {
+        Self {
+            num_aggregators: self.num_aggregators,
+            suite: self.suite,
+            typ: self.typ.clone(),
+            phantom: PhantomData,
+        }
+    }
+}
+
+impl<T: Type, A: Debug> Vdaf for Prio3<T, A> {
     type Measurement = T::Measurement;
     type AggregateResult = A;
     type AggregationParam = ();
     type PublicParam = ();
     type VerifyParam = Prio3VerifyParam;
     type InputShare = Prio3InputShare<T::Field>;
-    type OutputShare = Vec<T::Field>;
-    type AggregateShare = Vec<T::Field>;
+    type OutputShare = OutputShare<T::Field>;
+    type AggregateShare = AggregateShare<T::Field>;
 
     fn setup(&self) -> Result<((), Vec<Prio3VerifyParam>), VdafError> {
         let query_rand_init = Key::generate(self.suite)?;
@@ -208,7 +224,7 @@ pub struct Prio3InputShare<F> {
     pub blind: Key,
 }
 
-impl<T: Type, A> Client for Prio3<T, A> {
+impl<T: Type, A: Debug> Client for Prio3<T, A> {
     fn shard(
         &self,
         _public_param: &(),
@@ -327,23 +343,24 @@ impl<T: Type, A> Client for Prio3<T, A> {
 
 /// State of each aggregator during the Prepare process.
 #[allow(missing_docs)]
+#[derive(Clone, Debug)]
 pub enum Prio3PrepareStep<F> {
     /// Ready to send the verifier message.
     Ready {
-        output_share: Vec<F>,
+        output_share: OutputShare<F>,
         joint_rand_seed: Key,
-        verifier_msg: Prio3VerifierMessage<F>,
+        verifier_msg: Prio3PrepareMessage<F>,
     },
     /// Waiting for the set of verifier messages.
     Waiting {
-        output_share: Vec<F>,
+        output_share: OutputShare<F>,
         joint_rand_seed: Key,
     },
 }
 
-impl<T: Type, A> Aggregator for Prio3<T, A> {
+impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
     type PrepareStep = Prio3PrepareStep<T::Field>;
-    type PrepareMessage = Prio3VerifierMessage<T::Field>;
+    type PrepareMessage = Prio3PrepareMessage<T::Field>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is
     /// the aggregator's output share.
@@ -417,12 +434,12 @@ impl<T: Type, A> Aggregator for Prio3<T, A> {
         )?;
 
         // Compute the output share.
-        let output_share = self.typ.truncate(input_share)?;
+        let output_share = OutputShare(self.typ.truncate(input_share)?);
 
         Ok(Prio3PrepareStep::Ready {
             output_share,
             joint_rand_seed,
-            verifier_msg: Prio3VerifierMessage {
+            verifier_msg: Prio3PrepareMessage {
                 verifier_share,
                 joint_rand_seed_share,
             },
@@ -431,12 +448,15 @@ impl<T: Type, A> Aggregator for Prio3<T, A> {
 
     // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
-    fn prepare_step<M: IntoIterator<Item = Prio3VerifierMessage<T::Field>>>(
+    fn prepare_step<M: IntoIterator<Item = Prio3PrepareMessage<T::Field>>>(
         &self,
         state: Prio3PrepareStep<T::Field>,
         inputs: M,
-    ) -> PrepareTransition<Prio3PrepareStep<T::Field>, Prio3VerifierMessage<T::Field>, Vec<T::Field>>
-    {
+    ) -> PrepareTransition<
+        Prio3PrepareStep<T::Field>,
+        Prio3PrepareMessage<T::Field>,
+        OutputShare<T::Field>,
+    > {
         match state {
             Prio3PrepareStep::Ready {
                 output_share,
@@ -519,33 +539,23 @@ impl<T: Type, A> Aggregator for Prio3<T, A> {
     }
 
     /// Aggregates a sequence of output shares into an aggregate share.
-    fn aggregate<It: IntoIterator<Item = Vec<T::Field>>>(
+    fn aggregate<It: IntoIterator<Item = OutputShare<T::Field>>>(
         &self,
         _agg_param: &(),
         output_shares: It,
-    ) -> Result<Vec<T::Field>, VdafError> {
-        let mut agg_share = vec![T::Field::zero(); self.typ.output_len()];
+    ) -> Result<AggregateShare<T::Field>, VdafError> {
+        let mut agg_share = AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
         for output_share in output_shares.into_iter() {
-            if output_share.len() != self.typ.output_len() {
-                return Err(VdafError::Uncategorized(format!(
-                    "unexpected output share length: got {}; want {}",
-                    output_share.len(),
-                    self.typ.output_len()
-                )));
-            }
-
-            for (x, y) in agg_share.iter_mut().zip(output_share) {
-                *x += y;
-            }
+            agg_share.accumulate(&output_share)?;
         }
 
         Ok(agg_share)
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 /// The verification message emitted by each aggregator during the Prepare process.
-pub struct Prio3VerifierMessage<F> {
+pub struct Prio3PrepareMessage<F> {
     /// The aggregator's share of the FLP verifier message. (See [`Type`](crate::pcp::Type).)
     pub verifier_share: Vec<F>,
 
@@ -559,27 +569,17 @@ pub struct Prio3VerifierMessage<F> {
 impl<T, A> Collector for Prio3<T, A>
 where
     T: Type,
-    A: TryFrom<Vec<T::Field>, Error = VdafError> + Eq,
+    A: TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq + Debug,
 {
     /// Combines aggregate shares into the aggregate result.
-    fn unshard<It: IntoIterator<Item = Vec<T::Field>>>(
+    fn unshard<It: IntoIterator<Item = AggregateShare<T::Field>>>(
         &self,
         _agg_param: &(),
         agg_shares: It,
     ) -> Result<A, VdafError> {
-        let mut agg = vec![T::Field::zero(); self.typ.output_len()];
+        let mut agg = AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
         for agg_share in agg_shares.into_iter() {
-            if agg_share.len() != self.typ.output_len() {
-                return Err(VdafError::Uncategorized(format!(
-                    "unexpected aggregate share length: got {}; want {}",
-                    agg_share.len(),
-                    self.typ.output_len()
-                )));
-            }
-
-            for (x, y) in agg.iter_mut().zip(agg_share) {
-                *x += y;
-            }
+            agg.merge(&agg_share)?;
         }
 
         A::try_from(agg)
@@ -636,19 +636,17 @@ mod tests {
         for (i, x) in input_shares.iter().enumerate() {
             for (j, y) in input_shares.iter().enumerate() {
                 if i != j {
-                    match (&x.input_share, &y.input_share) {
-                        (Share::Helper(left), Share::Helper(right)) => {
-                            assert_ne!(left, right);
-                        }
-                        _ => (),
-                    };
+                    if let (Share::Helper(left), Share::Helper(right)) =
+                        (&x.input_share, &y.input_share)
+                    {
+                        assert_ne!(left, right);
+                    }
 
-                    match (&x.proof_share, &y.proof_share) {
-                        (Share::Helper(left), Share::Helper(right)) => {
-                            assert_ne!(left, right);
-                        }
-                        _ => (),
-                    };
+                    if let (Share::Helper(left), Share::Helper(right)) =
+                        (&x.proof_share, &y.proof_share)
+                    {
+                        assert_ne!(left, right);
+                    }
 
                     assert_ne!(x.joint_rand_seed_hint, y.joint_rand_seed_hint);
                     assert_ne!(x.blind, y.blind);
@@ -667,7 +665,7 @@ mod tests {
     ) -> Result<(), VdafError>
     where
         T: Type,
-        A: TryFrom<Vec<T::Field>, Error = VdafError> + Eq,
+        A: TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq + Debug,
     {
         let mut state0: Vec<Prio3PrepareStep<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
@@ -676,7 +674,7 @@ mod tests {
             state0.push(state);
         }
 
-        let mut round1: Vec<Prio3VerifierMessage<T::Field>> =
+        let mut round1: Vec<Prio3PrepareMessage<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
         let mut state1: Vec<Prio3PrepareStep<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
@@ -686,7 +684,8 @@ mod tests {
             round1.push(msg);
         }
 
-        let mut agg_shares: Vec<Vec<T::Field>> = Vec::with_capacity(prio3.num_aggregators());
+        let mut agg_shares: Vec<AggregateShare<T::Field>> =
+            Vec::with_capacity(prio3.num_aggregators());
         for state in state1.into_iter() {
             let output_share = prio3.prepare_finish(state, round1.clone())?;
             agg_shares.push(prio3.aggregate(&(), [output_share])?);

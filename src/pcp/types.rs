@@ -732,25 +732,25 @@ mod tests {
         // Try verifying a proof that is too short.
         let mut mutated_proof = proof.clone();
         mutated_proof.truncate(gadgets[0].arity() - 1);
-        if !typ
+        if typ
             .query(input, &mutated_proof, &query_rand, &joint_rand, 1)
-            .is_err()
+            .is_ok()
         {
-            return Err(PcpError::Test(format!(
-                "query on short proof succeeded; want failure",
-            )));
+            return Err(PcpError::Test(
+                "query on short proof succeeded; want failure".to_string(),
+            ));
         }
 
         // Try verifying a proof that is too long.
-        let mut mutated_proof = proof.clone();
+        let mut mutated_proof = proof;
         mutated_proof.extend_from_slice(&[T::Field::one(); 17]);
-        if !typ
+        if typ
             .query(input, &mutated_proof, &query_rand, &joint_rand, 1)
-            .is_err()
+            .is_ok()
         {
-            return Err(PcpError::Test(format!(
-                "query on long proof succeeded; want failure",
-            )));
+            return Err(PcpError::Test(
+                "query on long proof succeeded; want failure".to_string(),
+            ));
         }
 
         if let Some(ref want) = t.expected_output {
