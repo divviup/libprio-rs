@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 #![warn(missing_docs)]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 //! Libprio-rs
 //!
