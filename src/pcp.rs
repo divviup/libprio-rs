@@ -486,7 +486,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
-pub trait Gadget<F: FieldElement> {
+pub trait Gadget<F: FieldElement>: Debug {
     /// Evaluates the gadget on input `inp` and returns the output.
     fn call(&mut self, inp: &[F]) -> Result<F, PcpError>;
 
@@ -510,6 +510,7 @@ pub trait Gadget<F: FieldElement> {
 
 // A "shim" gadget used during proof generation to record the input wires each time a gadget is
 // evaluated.
+#[derive(Debug)]
 struct ProveShimGadget<F: FieldElement> {
     inner: Box<dyn Gadget<F>>,
 
@@ -571,6 +572,7 @@ impl<F: FieldElement> Gadget<F> for ProveShimGadget<F> {
 
 // A "shim" gadget used during proof verification to record the points at which the intermediate
 // proof polynomials are evaluated.
+#[derive(Debug)]
 struct QueryShimGadget<F: FieldElement> {
     inner: Box<dyn Gadget<F>>,
 
@@ -765,11 +767,11 @@ mod tests {
         fn proof_len(&self) -> usize {
             // First chunk
             let mul = 2 /* gadget arity */ + 2 /* gadget degree */ * (
-                (1 + 2 /* gadget calls */ as usize).next_power_of_two() - 1) + 1;
+                (1 + 2_usize /* gadget calls */).next_power_of_two() - 1) + 1;
 
             // Second chunk
             let poly = 1 /* gadget arity */ + 3 /* gadget degree */ * (
-                (1 + 1 /* gadget calls */ as usize).next_power_of_two() - 1) + 1;
+                (1 + 1_usize /* gadget calls */).next_power_of_two() - 1) + 1;
 
             mul + poly
         }

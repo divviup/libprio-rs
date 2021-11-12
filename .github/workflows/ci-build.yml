@@ -17,10 +17,14 @@ jobs:
     - uses: actions/checkout@v2
     - name: Lint
       run: cargo fmt --message-format human -- --check
-    - name: Build
+    - name: Build (default features)
       run: cargo build --verbose --workspace
-    - name: Run tests
+    - name: Build (all features)
+      run: cargo build --verbose --workspace --all-features
+    - name: Run tests (default features)
       run: cargo test --verbose
+    - name: Run tests (all features)
+      run: cargo test --verbose --all-features
     - name: Build benchmarks
       run: cargo bench --no-run
     - name: clippy
