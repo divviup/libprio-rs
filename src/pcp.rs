@@ -178,7 +178,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
     /// Constructs an aggregatable output from an encoded input. Calling this method is only safe
     /// once `input` has been validated.
-    fn truncate(&self, input: &[Self::Field]) -> Result<Vec<Self::Field>, PcpError>;
+    fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, PcpError>;
 
     /// The length in field elements of the encoded input returned by [`Self::encode`].
     fn input_len(&self) -> usize;
@@ -814,8 +814,8 @@ mod tests {
             ])
         }
 
-        fn truncate(&self, input: &[F]) -> Result<Vec<F>, PcpError> {
-            Ok(input.to_vec())
+        fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+            Ok(input)
         }
     }
 }

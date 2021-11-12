@@ -347,13 +347,13 @@ impl<T: Type, A: Debug> Client for Prio3<T, A> {
 pub enum Prio3PrepareStep<F> {
     /// Ready to send the verifier message.
     Ready {
-        output_share: OutputShare<F>,
+        input_share: Share<F>,
         joint_rand_seed: Key,
         verifier_msg: Prio3PrepareMessage<F>,
     },
     /// Waiting for the set of verifier messages.
     Waiting {
-        output_share: OutputShare<F>,
+        input_share: Share<F>,
         joint_rand_seed: Key,
     },
 }
@@ -433,11 +433,8 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
             self.num_aggregators as usize,
         )?;
 
-        // Compute the output share.
-        let output_share = OutputShare(self.typ.truncate(input_share)?);
-
         Ok(Prio3PrepareStep::Ready {
-            output_share,
+            input_share: msg.input_share.clone(),
             joint_rand_seed,
             verifier_msg: Prio3PrepareMessage {
                 verifier_share,
@@ -459,7 +456,7 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
     > {
         match state {
             Prio3PrepareStep::Ready {
-                output_share,
+                input_share,
                 joint_rand_seed,
                 verifier_msg,
             } => {
@@ -473,7 +470,7 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
 
                 PrepareTransition::Continue(
                     Prio3PrepareStep::Waiting {
-                        output_share,
+                        input_share,
                         joint_rand_seed,
                     },
                     verifier_msg,
@@ -481,7 +478,7 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
             }
 
             Prio3PrepareStep::Waiting {
-                output_share,
+                input_share,
                 joint_rand_seed,
             } => {
                 // Combine the verifier messages.
@@ -532,6 +529,22 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
                         "proof check failed".to_string(),
                     ));
                 }
+
+                // Compute the output share.
+                let input_share = match input_share {
+                    Share::Leader(data) => data,
+                    Share::Helper(seed) => {
+                        let prng = Prng::from_key_stream(KeyStream::from_key(&seed));
+                        prng.take(self.typ.input_len()).collect()
+                    }
+                };
+
+                let output_share = match self.typ.truncate(input_share) {
+                    Ok(data) => OutputShare(data),
+                    Err(err) => {
+                        return PrepareTransition::Fail(VdafError::from(err));
+                    }
+                };
 
                 PrepareTransition::Finish(output_share)
             }
