@@ -67,9 +67,9 @@ impl<F: FieldElement> Type for Count<F> {
         Ok(v)
     }
 
-    fn truncate(&self, input: &[F]) -> Result<Vec<F>, PcpError> {
-        truncate_call_check(self, input)?;
-        Ok(input.to_vec())
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+        truncate_call_check(self, &input)?;
+        Ok(input)
     }
 
     fn input_len(&self) -> usize {
@@ -192,8 +192,8 @@ impl<F: FieldElement> Type for Sum<F> {
         Ok(range_check)
     }
 
-    fn truncate(&self, input: &[F]) -> Result<Vec<F>, PcpError> {
-        truncate_call_check(self, input)?;
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+        truncate_call_check(self, &input)?;
 
         let mut decoded = F::zero();
         for (l, bit) in input.iter().enumerate() {
@@ -317,9 +317,9 @@ impl<F: FieldElement> Type for Histogram<F> {
         Ok(out)
     }
 
-    fn truncate(&self, input: &[F]) -> Result<Vec<F>, PcpError> {
-        truncate_call_check(self, input)?;
-        Ok(input.to_vec())
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+        truncate_call_check(self, &input)?;
+        Ok(input)
     }
 
     fn input_len(&self) -> usize {
@@ -754,7 +754,7 @@ mod tests {
         }
 
         if let Some(ref want) = t.expected_output {
-            let got = typ.truncate(input)?;
+            let got = typ.truncate(input.to_vec())?;
 
             if got.len() != typ.output_len() {
                 return Err(PcpError::Test(format!(
