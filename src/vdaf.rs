@@ -205,6 +205,7 @@ pub trait Collector: Vdaf {
 }
 
 /// A state transition of an Aggregator during the Prepare process.
+#[derive(Debug)]
 pub enum PrepareTransition<S, M, O> {
     /// Continue processing.
     Continue(S, M),

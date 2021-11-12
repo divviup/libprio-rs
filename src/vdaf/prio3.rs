@@ -238,6 +238,7 @@ where
                     aggregator_id,
                     input_len: self.typ.input_len(),
                     proof_len: self.typ.proof_len(),
+                    verifier_len: self.typ.verifier_len(),
                     joint_rand_len: self.typ.joint_rand_len(),
                 })
                 .collect(),
@@ -420,6 +421,9 @@ pub struct Prio3VerifyParam<const L: usize> {
     /// Length in field elements of an uncompressed proof.
     proof_len: usize,
 
+    /// Length of the verifier message.
+    verifier_len: usize,
+
     /// Length of the joint randomness.
     joint_rand_len: usize,
 }
@@ -557,14 +561,61 @@ where
     }
 }
 
-/// State of each aggregator during the Prepare process.
-#[derive(Clone, Debug)]
+/// State of each aggregator during the preparation phase.
+///
+/// Serialization traits [`Encode` and `ParameterizedDecoded`] are implemented for this type.
+/// However, the prepare step may only be encoded in the "waiting" state (i.e., after completing
+/// the first call to [`Prio3::prepare_step`]). In particular, the [`Prio3PrepareStep::encode`]
+/// panics if called in the "ready" state (i.e., on the output of [`Prio3::prepare_init`]).
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3PrepareStep<F, const L: usize> {
     input_share: Share<F, L>,
     joint_rand_seed: Option<Seed<L>>,
     aggregator_id: u8,
     verifier_len: usize,
     state: PrepareStep<F, L>,
+}
+
+impl<F: FieldElement, const L: usize> Encode for Prio3PrepareStep<F, L> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        if let PrepareStep::Ready(..) = self.state {
+            panic!("encooding of ready state is not permitted (see documentation for details)");
+        }
+        self.input_share.encode(bytes);
+        if let Some(ref seed) = self.joint_rand_seed {
+            seed.encode(bytes);
+        }
+    }
+}
+
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
+    for Prio3PrepareStep<F, L>
+{
+    fn decode_with_param(
+        verify_param: &Prio3VerifyParam<L>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let share_decoder = if verify_param.aggregator_id == 0 {
+            ShareDecodingParameter::Leader(verify_param.input_len)
+        } else {
+            ShareDecodingParameter::Helper
+        };
+        let input_share = Share::decode_with_param(&share_decoder, bytes)?;
+
+        let joint_rand_seed = if verify_param.joint_rand_len > 0 {
+            Some(Seed::decode(bytes)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            input_share,
+            joint_rand_seed,
+            aggregator_id: verify_param.aggregator_id,
+            verifier_len: verify_param.verifier_len,
+            state: PrepareStep::Waiting,
+        })
+    }
 }
 
 impl<T, A, P, const L: usize> Aggregator for Prio3<T, A, P, L>
@@ -855,7 +906,7 @@ impl<const L: usize> HelperShare<L> {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 enum PrepareStep<F, const L: usize> {
     Ready(Prio3PrepareMessage<F, L>),
     Waiting,
@@ -884,6 +935,8 @@ mod tests {
 
         let input_shares = prio3.shard(&(), &1).unwrap();
         run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares).unwrap();
+
+        test_prepare_step_serialization(&prio3, &1).unwrap();
     }
 
     #[test]
@@ -926,6 +979,8 @@ mod tests {
         });
         let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+        test_prepare_step_serialization(&prio3, &1).unwrap();
     }
 
     #[test]
@@ -966,6 +1021,8 @@ mod tests {
             run_vdaf(&prio3, &(), [25]).unwrap(),
             Prio3ResultVec(vec![0, 0, 0, 1])
         );
+
+        test_prepare_step_serialization(&prio3, &23).unwrap();
     }
 
     #[test]
@@ -993,5 +1050,26 @@ mod tests {
                 }
             }
         }
+    }
+
+    fn test_prepare_step_serialization<T, A, P, const L: usize>(
+        prio3: &Prio3<T, A, P, L>,
+        measurement: &T::Measurement,
+    ) -> Result<(), VdafError>
+    where
+        T: Type,
+        A: Clone + Debug + Sync + Send,
+        P: Prg<L>,
+    {
+        let (_, verify_param) = prio3.setup()?;
+        let input_shares = prio3.shard(&(), measurement)?;
+        for (verify_param, input_share) in verify_param.iter().zip(input_shares.iter()) {
+            let step = prio3.prepare_init(verify_param, &(), &[], input_share)?;
+            let want = assert_matches!(prio3.prepare_step(step, None), PrepareTransition::Continue(step, _) => step);
+            let got = Prio3PrepareStep::get_decoded_with_param(verify_param, &want.get_encoded())
+                .expect("failed to decode prepare step");
+            assert_eq!(got, want);
+        }
+        Ok(())
     }
 }
