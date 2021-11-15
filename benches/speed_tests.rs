@@ -181,7 +181,7 @@ fn prio3_input_share_size<F: FieldElement>(input_shares: &[Prio3InputShare<F>]) 
             }
         };
 
-        match input_share.input_share {
+        match input_share.proof_share {
             Share::Leader(ref data) => {
                 size += data.len() * F::ENCODED_SIZE;
             }
