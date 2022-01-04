@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
-//! implements the hits [VDAF]. This is the core component of the privacy-preserving heavy
-//! hitters protocol of [[BBCG+21]].
+//! implemets the poplar1 [VDAF]. This is the core component of the Poplar protocol for
+//! privacy-preserving heavy hitters [[BBCG+21]].
 //!
 //! TODO Make the input shares stateful so that applications can efficiently evaluate the IDPF over
 //! multiple rounds. Question: Will this require API changes to [`crate::vdaf::Vdaf`]?
@@ -194,15 +194,15 @@ impl<F: FieldElement> Idpf<2, 2> for ToyIdpf<F> {
     }
 }
 
-/// The hits VDAF.
+/// The poplar1 VDAF.
 #[derive(Debug)]
-pub struct Hits<I> {
+pub struct Poplar1<I> {
     suite: Suite,
     phantom: PhantomData<I>,
 }
 
-impl<I> Hits<I> {
-    /// Create an instance of the hits VDAF. The caller provides a cipher suite `suite` used for
+impl<I> Poplar1<I> {
+    /// Create an instance of the poplar1 VDAF. The caller provides a cipher suite `suite` used for
     /// deriving pseudorandom sequences of field elements.
     pub fn new(suite: Suite) -> Self {
         Self {
@@ -212,29 +212,29 @@ impl<I> Hits<I> {
     }
 }
 
-impl<I> Clone for Hits<I> {
+impl<I> Clone for Poplar1<I> {
     fn clone(&self) -> Self {
         Self::new(self.suite)
     }
 }
 
-impl<I: Idpf<2, 2>> Vdaf for Hits<I> {
+impl<I: Idpf<2, 2>> Vdaf for Poplar1<I> {
     type Measurement = IdpfInput;
     type AggregateResult = BTreeMap<IdpfInput, u64>;
     type AggregationParam = BTreeSet<IdpfInput>;
     type PublicParam = ();
-    type VerifyParam = HitsVerifyParam;
-    type InputShare = HitsInputShare<I>;
+    type VerifyParam = Poplar1VerifyParam;
+    type InputShare = Poplar1InputShare<I>;
     type OutputShare = OutputShare<I::Field>;
     type AggregateShare = AggregateShare<I::Field>;
 
-    fn setup(&self) -> Result<((), Vec<HitsVerifyParam>), VdafError> {
+    fn setup(&self) -> Result<((), Vec<Poplar1VerifyParam>), VdafError> {
         let verify_rand_init = Key::generate(self.suite)?;
         Ok((
             (),
             vec![
-                HitsVerifyParam::new(&verify_rand_init, true),
-                HitsVerifyParam::new(&verify_rand_init, false),
+                Poplar1VerifyParam::new(&verify_rand_init, true),
+                Poplar1VerifyParam::new(&verify_rand_init, false),
             ],
         ))
     }
@@ -246,7 +246,7 @@ impl<I: Idpf<2, 2>> Vdaf for Hits<I> {
 
 /// An input share for the heavy hitters VDAF.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct HitsInputShare<I: Idpf<2, 2>> {
+pub struct Poplar1InputShare<I: Idpf<2, 2>> {
     /// IDPF share of input
     //
     // Workaround for alleged compiler bug: https://github.com/serde-rs/serde/issues/1296
@@ -261,13 +261,13 @@ pub struct HitsInputShare<I: Idpf<2, 2>> {
     pub sketch_next: Share<I::Field>,
 }
 
-impl<I: Idpf<2, 2>> Client for Hits<I> {
+impl<I: Idpf<2, 2>> Client for Poplar1<I> {
     #[allow(clippy::many_single_char_names)]
     fn shard(
         &self,
         _public_param: &(),
         input: &IdpfInput,
-    ) -> Result<Vec<HitsInputShare<I>>, VdafError> {
+    ) -> Result<Vec<Poplar1InputShare<I>>, VdafError> {
         let idpf_values: Vec<[I::Field; 2]> = Prng::generate(self.suite)?
             .take(input.level + 1)
             .map(|k| [I::Field::one(), k])
@@ -307,12 +307,12 @@ impl<I: Idpf<2, 2>> Client for Hits<I> {
         let mut idpf_shares = IntoIter::new(I::gen(input, idpf_values)?);
 
         Ok(vec![
-            HitsInputShare {
+            Poplar1InputShare {
                 idpf: idpf_shares.next().unwrap(),
                 sketch_start_seed: leader_sketch_start_seed,
                 sketch_next: Share::Leader(leader_sketch_next),
             },
-            HitsInputShare {
+            Poplar1InputShare {
                 idpf: idpf_shares.next().unwrap(),
                 sketch_start_seed: helper_sketch_start_seed,
                 sketch_next: Share::Helper(helper_sketch_next_seed),
@@ -322,7 +322,7 @@ impl<I: Idpf<2, 2>> Client for Hits<I> {
 }
 
 /// The verification parameter used by the aggregators to evaluate the VDAF on a distributed input.
-pub struct HitsVerifyParam {
+pub struct Poplar1VerifyParam {
     /// Key used to derive the verification randomness from the nonce.
     rand_init: Key,
 
@@ -330,7 +330,7 @@ pub struct HitsVerifyParam {
     is_leader: bool,
 }
 
-impl HitsVerifyParam {
+impl Poplar1VerifyParam {
     /// Construct a new verification parameter.
     pub fn new(key: &Key, is_leader: bool) -> Self {
         Self {
@@ -360,17 +360,17 @@ fn get_level(agg_param: &BTreeSet<IdpfInput>) -> Result<usize, VdafError> {
     }
 }
 
-impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
-    type PrepareStep = HitsPrepareStep<I::Field>;
-    type PrepareMessage = HitsPrepareMessage<I::Field>;
+impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
+    type PrepareStep = Poplar1PrepareStep<I::Field>;
+    type PrepareMessage = Poplar1PrepareMessage<I::Field>;
 
     fn prepare_init(
         &self,
-        verify_param: &HitsVerifyParam,
+        verify_param: &Poplar1VerifyParam,
         agg_param: &BTreeSet<IdpfInput>,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<HitsPrepareStep<I::Field>, VdafError> {
+    ) -> Result<Poplar1PrepareStep<I::Field>, VdafError> {
         let level = get_level(agg_param)?;
 
         // Derive the verification randomness.
@@ -427,7 +427,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
             I::Field::zero()
         };
 
-        Ok(HitsPrepareStep {
+        Ok(Poplar1PrepareStep {
             sketch: SketchState::Ready,
             output_share: OutputShare(output_share),
             z,
@@ -439,13 +439,13 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
 
     // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
-    fn prepare_step<M: IntoIterator<Item = HitsPrepareMessage<I::Field>>>(
+    fn prepare_step<M: IntoIterator<Item = Poplar1PrepareMessage<I::Field>>>(
         &self,
-        mut state: HitsPrepareStep<I::Field>,
+        mut state: Poplar1PrepareStep<I::Field>,
         inputs: M,
     ) -> PrepareTransition<
-        HitsPrepareStep<I::Field>,
-        HitsPrepareMessage<I::Field>,
+        Poplar1PrepareStep<I::Field>,
+        Poplar1PrepareMessage<I::Field>,
         OutputShare<I::Field>,
     > {
         match state.sketch {
@@ -462,7 +462,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
                 let z_share = state.z.to_vec();
 
                 state.sketch = SketchState::RoundOne;
-                PrepareTransition::Continue(state, HitsPrepareMessage(z_share))
+                PrepareTransition::Continue(state, Poplar1PrepareMessage(z_share))
             }
 
             SketchState::RoundOne => {
@@ -496,7 +496,7 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
                     vec![(state.d * z[0]) + state.e + state.x * ((z[0] * z[0]) - z[1] - z[2])];
 
                 state.sketch = SketchState::RoundTwo;
-                PrepareTransition::Continue(state, HitsPrepareMessage(y_share))
+                PrepareTransition::Continue(state, Poplar1PrepareMessage(y_share))
             }
 
             SketchState::RoundTwo => {
@@ -550,11 +550,11 @@ impl<I: Idpf<2, 2>> Aggregator for Hits<I> {
     }
 }
 
-/// A prepare message sent exchanged between Hits aggregators
+/// A prepare message sent exchanged between Poplar1 aggregators
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct HitsPrepareMessage<F>(Vec<F>);
+pub struct Poplar1PrepareMessage<F>(Vec<F>);
 
-impl<F> AsRef<[F]> for HitsPrepareMessage<F> {
+impl<F> AsRef<[F]> for Poplar1PrepareMessage<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
     }
@@ -562,7 +562,7 @@ impl<F> AsRef<[F]> for HitsPrepareMessage<F> {
 
 /// The state of each Aggregator during the Prepare process.
 #[derive(Clone, Debug)]
-pub struct HitsPrepareStep<F> {
+pub struct Poplar1PrepareStep<F> {
     /// State of the secure sketching protocol.
     sketch: SketchState,
 
@@ -589,7 +589,7 @@ enum SketchState {
     RoundTwo,
 }
 
-impl<I: Idpf<2, 2>> Collector for Hits<I> {
+impl<I: Idpf<2, 2>> Collector for Poplar1<I> {
     fn unshard<M: IntoIterator<Item = AggregateShare<I::Field>>>(
         &self,
         agg_param: &BTreeSet<IdpfInput>,
@@ -710,21 +710,21 @@ mod tests {
     }
 
     #[test]
-    fn test_hits() {
-        let hits: Hits<ToyIdpf<Field126>> = Hits::new(Suite::Blake3);
-        assert_eq!(hits.num_aggregators(), 2);
+    fn test_poplar1() {
+        let vdaf: Poplar1<ToyIdpf<Field126>> = Poplar1::new(Suite::Blake3);
+        assert_eq!(vdaf.num_aggregators(), 2);
 
-        let (public_param, verify_params) = hits.setup().unwrap();
+        let (public_param, verify_params) = vdaf.setup().unwrap();
 
         // Run the VDAF input-distribution algorithm.
         let input = IdpfInput::new(b"hi", 16).unwrap();
-        let input_shares = hits.shard(&public_param, &input).unwrap();
+        let input_shares = vdaf.shard(&public_param, &input).unwrap();
         let nonce = b"This is a nonce";
 
         let mut agg_param = BTreeSet::new();
         agg_param.insert(input);
         let res = eval_vdaf(
-            &hits,
+            &vdaf,
             &input_shares,
             &verify_params,
             &nonce[..],
@@ -738,7 +738,7 @@ mod tests {
             let mut agg_param = BTreeSet::new();
             agg_param.insert(input.prefix(prefix_len));
             let res = eval_vdaf(
-                &hits,
+                &vdaf,
                 &input_shares,
                 &verify_params,
                 &nonce[..],
@@ -761,7 +761,7 @@ mod tests {
         agg_param.insert(IdpfInput::new(b"kk", prefix_len).unwrap());
         agg_param.insert(IdpfInput::new(b"xy", prefix_len).unwrap());
         let res = eval_vdaf(
-            &hits,
+            &vdaf,
             &input_shares,
             &verify_params,
             &nonce[..],
@@ -776,7 +776,7 @@ mod tests {
         agg_param.insert(IdpfInput::new(b"xx", 12).unwrap());
         agg_param.insert(IdpfInput::new(b"hi", 13).unwrap());
         eval_vdaf(
-            &hits,
+            &vdaf,
             &input_shares,
             &verify_params,
             &nonce[..],
@@ -788,7 +788,7 @@ mod tests {
         // Try evaluating the VDAF with malformed inputs.
         //
         // This IDPF key pair evaluates to 1 everywhere, which is illegal.
-        let mut input_shares = hits.shard(&public_param, &input).unwrap();
+        let mut input_shares = vdaf.shard(&public_param, &input).unwrap();
         for (i, x) in input_shares[0].idpf.data0.iter_mut().enumerate() {
             if i != input.index {
                 *x += Field126::one();
@@ -797,7 +797,7 @@ mod tests {
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(b"xx", 16).unwrap());
         eval_vdaf(
-            &hits,
+            &vdaf,
             &input_shares,
             &verify_params,
             &nonce[..],
@@ -807,14 +807,14 @@ mod tests {
         .unwrap_err();
 
         // This IDPF key pair has a garbled authentication vector.
-        let mut input_shares = hits.shard(&public_param, &input).unwrap();
+        let mut input_shares = vdaf.shard(&public_param, &input).unwrap();
         for x in input_shares[0].idpf.data1.iter_mut() {
             *x = Field126::zero();
         }
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(b"xx", 16).unwrap());
         eval_vdaf(
-            &hits,
+            &vdaf,
             &input_shares,
             &verify_params,
             &nonce[..],
@@ -826,43 +826,43 @@ mod tests {
 
     // Execute the VDAF end-to-end on a single user measurement.
     fn eval_vdaf<I: Idpf<2, 2>>(
-        hits: &Hits<I>,
-        input_shares: &[HitsInputShare<I>],
-        verify_params: &[HitsVerifyParam],
+        vdaf: &Poplar1<I>,
+        input_shares: &[Poplar1InputShare<I>],
+        verify_params: &[Poplar1VerifyParam],
         nonce: &[u8],
         agg_param: &BTreeSet<IdpfInput>,
         expected_counts: Option<&[u64]>,
     ) -> Result<(), VdafError> {
-        let mut state0: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
+        let mut state0: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
         for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
-            let state = hits.prepare_init(verify_param, agg_param, nonce, input_share)?;
+            let state = vdaf.prepare_init(verify_param, agg_param, nonce, input_share)?;
             state0.push(state);
         }
 
-        let mut round1: Vec<HitsPrepareMessage<I::Field>> = Vec::with_capacity(2);
-        let mut state1: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
+        let mut round1: Vec<Poplar1PrepareMessage<I::Field>> = Vec::with_capacity(2);
+        let mut state1: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state0.into_iter() {
-            let (state, msg) = hits.prepare_start(state)?;
+            let (state, msg) = vdaf.prepare_start(state)?;
             state1.push(state);
             round1.push(msg);
         }
 
-        let mut round2: Vec<HitsPrepareMessage<I::Field>> = Vec::with_capacity(2);
-        let mut state2: Vec<HitsPrepareStep<I::Field>> = Vec::with_capacity(2);
+        let mut round2: Vec<Poplar1PrepareMessage<I::Field>> = Vec::with_capacity(2);
+        let mut state2: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state1.into_iter() {
-            let (state, msg) = hits.prepare_next(state, round1.clone())?;
+            let (state, msg) = vdaf.prepare_next(state, round1.clone())?;
             state2.push(state);
             round2.push(msg);
         }
 
         let mut agg_shares: Vec<AggregateShare<I::Field>> = Vec::with_capacity(2);
         for state in state2.into_iter() {
-            let output_share = hits.prepare_finish(state, round2.clone())?;
-            agg_shares.push(hits.aggregate(agg_param, [output_share])?);
+            let output_share = vdaf.prepare_finish(state, round2.clone())?;
+            agg_shares.push(vdaf.aggregate(agg_param, [output_share])?);
         }
 
         if let Some(counts) = expected_counts {
-            let agg = hits.unshard(agg_param, agg_shares)?;
+            let agg = vdaf.unshard(agg_param, agg_shares)?;
             for (got, want) in agg.values().zip(counts.iter()) {
                 if got != want {
                     return Err(VdafError::Uncategorized(
