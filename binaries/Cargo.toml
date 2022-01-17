@@ -9,7 +9,7 @@ repository = "https://github.com/abetterinternet/libprio-rs"
 [dependencies]
 base64 = "0.13.0"
 prio = { path = "..", features = ["test-vector"] }
-color-eyre = { version = "^0.5" }
+color-eyre = { version = "^0.6" }
 serde_json = { version = "1.0" }
 structopt = { version = "0.3.25" }
 
