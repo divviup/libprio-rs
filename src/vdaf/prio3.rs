@@ -473,87 +473,107 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
             input_share: msg.input_share.clone(),
             joint_rand_seed,
             verifier_msg: Prio3PrepareMessage {
-                verifier_share,
-                joint_rand_seed_share,
+                verifier: verifier_share,
+                joint_rand_seed: joint_rand_seed_share,
             },
+        })
+    }
+
+    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareMessage<T::Field>>>(
+        &self,
+        inputs: M,
+    ) -> Result<Self::PrepareMessage, VdafError> {
+        let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
+        let mut joint_rand_seed = Key::uninitialized(self.suite);
+        let mut count = 0;
+        for share in inputs.into_iter() {
+            count += 1;
+
+            if share.verifier.len() != verifier.len() {
+                return Err(VdafError::Uncategorized(format!(
+                    "unexpected verifier share length: got {}; want {}",
+                    share.verifier.len(),
+                    verifier.len(),
+                )));
+            }
+
+            if share.joint_rand_seed.suite() != self.suite {
+                return Err(VdafError::Uncategorized(format!(
+                    "unexpected suite for joint randomness seed share: got {:?}; want {:?}",
+                    share.joint_rand_seed.suite(),
+                    self.suite,
+                )));
+            }
+
+            for (x, y) in verifier.iter_mut().zip(share.verifier) {
+                *x += y;
+            }
+
+            for (x, y) in joint_rand_seed
+                .as_mut_slice()
+                .iter_mut()
+                .zip(share.joint_rand_seed.as_slice())
+            {
+                *x ^= y;
+            }
+        }
+
+        if count != self.num_aggregators {
+            return Err(VdafError::Uncategorized(format!(
+                "unexpected message count: got {}; want {}",
+                count, self.num_aggregators,
+            )));
+        }
+
+        Ok(Prio3PrepareMessage {
+            verifier,
+            joint_rand_seed,
         })
     }
 
     // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
-    fn prepare_step<M: IntoIterator<Item = Prio3PrepareMessage<T::Field>>>(
+    fn prepare_step(
         &self,
         state: Prio3PrepareStep<T::Field>,
-        inputs: M,
+        input: Option<Prio3PrepareMessage<T::Field>>,
     ) -> PrepareTransition<
         Prio3PrepareStep<T::Field>,
         Prio3PrepareMessage<T::Field>,
         OutputShare<T::Field>,
     > {
-        match state {
-            Prio3PrepareStep::Ready {
-                input_share,
-                joint_rand_seed,
-                verifier_msg,
-            } => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if !inputs.is_empty() {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count in ready state: got {}; want 0",
-                        inputs.len()
-                    )));
-                }
-
-                PrepareTransition::Continue(
-                    Prio3PrepareStep::Waiting {
-                        input_share,
-                        joint_rand_seed,
-                    },
+        match (state, input) {
+            (
+                Prio3PrepareStep::Ready {
+                    input_share,
+                    joint_rand_seed,
                     verifier_msg,
-                )
-            }
+                },
+                None,
+            ) => PrepareTransition::Continue(
+                Prio3PrepareStep::Waiting {
+                    input_share,
+                    joint_rand_seed,
+                },
+                verifier_msg,
+            ),
 
-            Prio3PrepareStep::Waiting {
-                input_share,
-                joint_rand_seed,
-            } => {
-                // Combine the verifier messages.
-                //
-                // TODO(cjpatton) Check that there are exactly `self.num_aggregators` messages.
-                // TODO(cjpatton) Check that see matches `self.suite`.
-                let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
-                let mut joint_rand_seed_check = Key::uninitialized(self.suite);
-                for msg in inputs.into_iter() {
-                    if msg.verifier_share.len() != verifier.len() {
-                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                            "unexpected verifier share length: got {}; want {}",
-                            msg.verifier_share.len(),
-                            verifier.len(),
-                        )));
-                    }
-
-                    for (x, y) in verifier.iter_mut().zip(msg.verifier_share) {
-                        *x += y;
-                    }
-
-                    for (x, y) in joint_rand_seed_check
-                        .as_mut_slice()
-                        .iter_mut()
-                        .zip(msg.joint_rand_seed_share.as_slice())
-                    {
-                        *x ^= y;
-                    }
-                }
-
+            (
+                Prio3PrepareStep::Waiting {
+                    input_share,
+                    joint_rand_seed,
+                },
+                Some(msg),
+            ) => {
                 // Check that the joint randomness was correct.
-                if joint_rand_seed != joint_rand_seed_check {
+                if joint_rand_seed != msg.joint_rand_seed {
                     return PrepareTransition::Fail(VdafError::Uncategorized(
                         "joint randomness mismatch".to_string(),
                     ));
                 }
 
                 // Check the proof.
-                let res = match self.typ.decide(&verifier) {
+                let res = match self.typ.decide(&msg.verifier) {
                     Ok(res) => res,
                     Err(err) => {
                         return PrepareTransition::Fail(VdafError::from(err));
@@ -584,6 +604,9 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
 
                 PrepareTransition::Finish(output_share)
             }
+            _ => PrepareTransition::Fail(VdafError::Uncategorized(
+                "invalid state transition".to_string(),
+            )),
         }
     }
 
@@ -605,14 +628,14 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 /// The verification message emitted by each aggregator during the Prepare process.
 pub struct Prio3PrepareMessage<F> {
-    /// The aggregator's share of the FLP verifier message. (See [`Type`](crate::pcp::Type).)
-    pub verifier_share: Vec<F>,
+    /// (A share of) the FLP verifier message. (See [`Type`](crate::pcp::Type).)
+    pub verifier: Vec<F>,
 
-    /// The aggregator's share of the joint randomness, derived from its input share.
+    /// (A share of) the joint randomness seed.
     //
     // TODO(cjpatton) If `joint_rand_len == 0`, then we don't need to bother with the
     // joint randomness seed at all and make this optional.
-    pub joint_rand_seed_share: Key,
+    pub joint_rand_seed: Key,
 }
 
 impl<T, A> Collector for Prio3<T, A>
@@ -736,7 +759,8 @@ mod tests {
         let mut agg_shares: Vec<AggregateShare<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
         for state in state1.into_iter() {
-            let output_share = prio3.prepare_finish(state, round1.clone())?;
+            let output_share =
+                prio3.prepare_finish(state, prio3.prepare_preprocess(round1.clone())?)?;
             agg_shares.push(prio3.aggregate(&(), [output_share])?);
         }
 

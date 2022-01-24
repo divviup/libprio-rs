@@ -437,61 +437,70 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
         })
     }
 
+    fn prepare_preprocess<M: IntoIterator<Item = Poplar1PrepareMessage<I::Field>>>(
+        &self,
+        inputs: M,
+    ) -> Result<Poplar1PrepareMessage<I::Field>, VdafError> {
+        let mut output: Option<Vec<I::Field>> = None;
+        let mut count = 0;
+        for data_share in inputs.into_iter() {
+            count += 1;
+            if let Some(ref mut data) = output {
+                if data_share.0.len() != data.len() {
+                    return Err(VdafError::Uncategorized(format!(
+                        "unexpected message length: got {}; want {}",
+                        data_share.0.len(),
+                        data.len(),
+                    )));
+                }
+
+                for (x, y) in data.iter_mut().zip(data_share.0.iter()) {
+                    *x += *y;
+                }
+            } else {
+                output = Some(data_share.0);
+            }
+        }
+
+        if count != 2 {
+            return Err(VdafError::Uncategorized(format!(
+                "unexpected message count: got {}; want 2",
+                count,
+            )));
+        }
+
+        Ok(Poplar1PrepareMessage(output.unwrap()))
+    }
+
     // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
-    fn prepare_step<M: IntoIterator<Item = Poplar1PrepareMessage<I::Field>>>(
+    fn prepare_step(
         &self,
         mut state: Poplar1PrepareStep<I::Field>,
-        inputs: M,
+        input: Option<Poplar1PrepareMessage<I::Field>>,
     ) -> PrepareTransition<
         Poplar1PrepareStep<I::Field>,
         Poplar1PrepareMessage<I::Field>,
         OutputShare<I::Field>,
     > {
-        match state.sketch {
-            SketchState::Ready => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if !inputs.is_empty() {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count ({:?}): got {}; want 0",
-                        state.sketch,
-                        inputs.len()
-                    )));
-                }
-
+        match (&state.sketch, input) {
+            (SketchState::Ready, None) => {
                 let z_share = state.z.to_vec();
-
                 state.sketch = SketchState::RoundOne;
                 PrepareTransition::Continue(state, Poplar1PrepareMessage(z_share))
             }
 
-            SketchState::RoundOne => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if inputs.len() != 2 {
+            (SketchState::RoundOne, Some(msg)) => {
+                if msg.0.len() != 3 {
                     return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count ({:?}): got {}; want 2",
+                        "unexpected message length ({:?}): got {}; want 3",
                         state.sketch,
-                        inputs.len()
+                        msg.0.len(),
                     )));
                 }
 
                 // Compute polynomial coefficients.
-                let mut z = [I::Field::zero(); 3];
-                for z_share in inputs.iter().map(|i| i.as_ref()) {
-                    if z_share.len() != 3 {
-                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                            "unexpected message length ({:?}): got {}; want 3",
-                            state.sketch,
-                            z_share.len(),
-                        )));
-                    }
-
-                    z[0] += z_share[0];
-                    z[1] += z_share[1];
-                    z[2] += z_share[2];
-                }
-
-                // Compute our share of the polynomial evaluation.
+                let z: [I::Field; 3] = msg.0.try_into().unwrap();
                 let y_share =
                     vec![(state.d * z[0]) + state.e + state.x * ((z[0] * z[0]) - z[1] - z[2])];
 
@@ -499,30 +508,16 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
                 PrepareTransition::Continue(state, Poplar1PrepareMessage(y_share))
             }
 
-            SketchState::RoundTwo => {
-                let inputs: Vec<_> = inputs.into_iter().collect();
-                if inputs.len() != 2 {
+            (SketchState::RoundTwo, Some(msg)) => {
+                if msg.0.len() != 1 {
                     return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                        "unexpected message count ({:?}): got {}; want 2",
+                        "unexpected message length ({:?}): got {}; want 1",
                         state.sketch,
-                        inputs.len()
+                        msg.0.len(),
                     )));
                 }
 
-                // Compute the polynomial evaluation.
-                let mut y = I::Field::zero();
-                for y_share in inputs.iter().map(|y| y.as_ref()) {
-                    if y_share.len() != 1 {
-                        return PrepareTransition::Fail(VdafError::Uncategorized(format!(
-                            "unexpected message length ({:?}): got {}; want 1",
-                            state.sketch,
-                            y_share.len(),
-                        )));
-                    }
-
-                    y += y_share[0];
-                }
-
+                let y = msg.0[0];
                 if y != I::Field::zero() {
                     return PrepareTransition::Fail(VdafError::Uncategorized(format!(
                         "output is invalid: polynomial evaluated to {}; want {}",
@@ -533,6 +528,9 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
 
                 PrepareTransition::Finish(state.output_share)
             }
+            _ => PrepareTransition::Fail(VdafError::Uncategorized(
+                "invalid state transition".to_string(),
+            )),
         }
     }
 
@@ -850,14 +848,16 @@ mod tests {
         let mut round2: Vec<Poplar1PrepareMessage<I::Field>> = Vec::with_capacity(2);
         let mut state2: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
         for state in state1.into_iter() {
-            let (state, msg) = vdaf.prepare_next(state, round1.clone())?;
+            let (state, msg) =
+                vdaf.prepare_next(state, vdaf.prepare_preprocess(round1.clone())?)?;
             state2.push(state);
             round2.push(msg);
         }
 
         let mut agg_shares: Vec<AggregateShare<I::Field>> = Vec::with_capacity(2);
         for state in state2.into_iter() {
-            let output_share = vdaf.prepare_finish(state, round2.clone())?;
+            let output_share =
+                vdaf.prepare_finish(state, vdaf.prepare_preprocess(round2.clone())?)?;
             agg_shares.push(vdaf.aggregate(agg_param, [output_share])?);
         }
 
