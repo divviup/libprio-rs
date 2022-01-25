@@ -5,7 +5,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 use prio::benchmarked::*;
 use prio::client::Client as Prio2Client;
 use prio::encrypt::PublicKey;
-use prio::field::{random_vector, Field126 as F, FieldElement};
+use prio::field::{random_vector, Field128 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::server::{generate_verification_message, ValidationMemory};
 #[cfg(feature = "multithreaded")]

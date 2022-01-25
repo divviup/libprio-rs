@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Finite field arithmetic for any field GF(p) for which p < 2^126.
+//! Finite field arithmetic for any field GF(p) for which p < 2^128.
 
 #[cfg(test)]
 use rand::{prelude::*, Rng};
@@ -10,13 +10,11 @@ use rand::{prelude::*, Rng};
 /// is the largest input size we would ever need for the cryptographic applications in this crate.
 pub(crate) const MAX_ROOTS: usize = 20;
 
-/// This structure represents the parameters of a finite field GF(p) for which p < 2^126.
+/// This structure represents the parameters of a finite field GF(p) for which p < 2^128.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct FieldParameters {
     /// The prime modulus `p`.
     pub p: u128,
-    /// `p * 2`.
-    pub p2: u128,
     /// `mu = -p^(-1) mod 2^64`.
     pub mu: u64,
     /// `r2 = (2^128)^2 mod p`.
@@ -36,21 +34,42 @@ pub(crate) struct FieldParameters {
 impl FieldParameters {
     /// Addition.
     pub fn add(&self, x: u128, y: u128) -> u128 {
-        let (z, carry) = x.wrapping_add(y).overflowing_sub(self.p2);
-        let m = 0u128.wrapping_sub(carry as u128);
-        z.wrapping_add(m & self.p2)
+        //   0,x
+        // + 0,y
+        // =====
+        //   c,z
+        let (z, carry) = x.overflowing_add(y);
+        //     c, z
+        // -   0, p
+        // ========
+        // b1,s1,s0
+        let (s0, b0) = z.overflowing_sub(self.p);
+        let (_s1, b1) = (carry as u128).overflowing_sub(b0 as u128);
+        // if b1 == 1: return z
+        // else:       return s0
+        let m = 0u128.wrapping_sub(b1 as u128);
+        (z & m) | (s0 & !m)
     }
 
     /// Subtraction.
     pub fn sub(&self, x: u128, y: u128) -> u128 {
-        let (z, carry) = x.overflowing_sub(y);
-        let m = 0u128.wrapping_sub(carry as u128);
-        z.wrapping_add(m & self.p2)
+        //     0, x
+        // -   0, y
+        // ========
+        // b1,z1,z0
+        let (z0, b0) = x.overflowing_sub(y);
+        let (_z1, b1) = 0u128.overflowing_sub(b0 as u128);
+        let m = 0u128.wrapping_sub(b1 as u128);
+        //   z1,z0
+        // +  0, p
+        // ========
+        //   s1,s0
+        z0.wrapping_add(m & self.p)
     }
 
     /// Multiplication of field elements in the Montgomery domain. This uses the REDC algorithm
     /// described
-    /// [here](https://www.ams.org/journals/mcom/1985-44-170/S0025-5718-1985-0777282-X/S0025-5718-1985-0777282-X.pdfA).
+    /// [here](https://www.ams.org/journals/mcom/1985-44-170/S0025-5718-1985-0777282-X/S0025-5718-1985-0777282-X.pdf).
     ///
     /// Example usage:
     /// assert_eq!(fp.from_elem(fp.mul(fp.elem(23), fp.elem(2))), 46);
@@ -66,6 +85,12 @@ impl FieldParameters {
         let mut cc: u128;
 
         // Integer multiplication
+        // z = x * y
+
+        //       x1,x0
+        // *     y1,y0
+        // ===========
+        // z3,z2,z1,z0
         result = x[0] * y[0];
         carry = hi64(result);
         zz[0] = lo64(result);
@@ -101,7 +126,14 @@ impl FieldParameters {
         result = hi + cc;
         zz[3] = lo64(result);
 
-        // Reduction
+        // Montgomery Reduction
+        // z = z + p * mu*(z mod 2^64), where mu = (-p)^(-1) mod 2^64.
+
+        // z3,z2,z1,z0
+        // +     p1,p0
+        // *         w = mu*z0
+        // ===========
+        // z3,z2,z1, 0
         let w = self.mu.wrapping_mul(zz[0] as u64);
         result = p[0] * (w as u128);
         hi = hi64(result);
@@ -129,6 +161,11 @@ impl FieldParameters {
         result = zz[3] + cc;
         zz[3] = lo64(result);
 
+        //    z3,z2,z1
+        // +     p1,p0
+        // *         w = mu*z1
+        // ===========
+        //    z3,z2, 0
         let w = self.mu.wrapping_mul(zz[1] as u64);
         result = p[0] * (w as u128);
         hi = hi64(result);
@@ -152,8 +189,24 @@ impl FieldParameters {
         cc = hi64(result);
         result = zz[3] + hi + cc;
         zz[3] = lo64(result);
+        cc = hi64(result);
 
-        zz[2] | (zz[3] << 64)
+        // z = (z3,z2)
+        let prod = zz[2] | (zz[3] << 64);
+
+        // Final subtraction
+        // If z >= p, then z = z - p
+
+        //     0, z
+        // -   0, p
+        // ========
+        // b1,s1,s0
+        let (s0, b0) = prod.overflowing_sub(self.p);
+        let (_s1, b1) = (cc as u128).overflowing_sub(b0 as u128);
+        // if b1 == 1: return z
+        // else:       return s0
+        let mask = 0u128.wrapping_sub(b1 as u128);
+        (prod & mask) | (s0 & !mask)
     }
 
     /// Modular exponentiation, i.e., `x^exp (mod p)` where `p` is the modulus. Note that the
@@ -169,7 +222,7 @@ impl FieldParameters {
         t
     }
 
-    /// Modular inversion, i.e., x^-1 (mod p) where `p` is the modulu. Note that the runtime of
+    /// Modular inversion, i.e., x^-1 (mod p) where `p` is the modulus. Note that the runtime of
     /// this algorithm is linear in the bit length of `p`.
     pub fn inv(&self, x: u128) -> u128 {
         self.pow(x, self.p - 2)
@@ -214,15 +267,7 @@ impl FieldParameters {
         use num_bigint::{BigInt, ToBigInt};
         use std::cmp::max;
 
-        if let Some(x) = p.checked_next_power_of_two() {
-            if x > 1 << 126 {
-                panic!("p >= 2^126");
-            }
-        } else {
-            panic!("p >= 2^126");
-        }
         assert_eq!(self.p, p, "p mismatch");
-        assert_eq!(self.p2, p << 1, "p2 mismatch");
 
         let mu = match modinverse((-(p as i128)).rem_euclid(1 << 64), 1 << 64) {
             Some(mu) => mu as u64,
@@ -260,8 +305,12 @@ impl FieldParameters {
         assert_eq!(&self.roots, &roots[..MAX_ROOTS + 1], "roots mismatch");
         assert_eq!(self.from_elem(self.roots[0]), 1, "first root is not one");
 
-        let bit_mask: u128 = p.next_power_of_two() - 1;
-        assert_eq!(self.bit_mask, bit_mask, "bit_mask mismatch");
+        let bit_mask = (BigInt::from(1) << big_p.bits()) - BigInt::from(1);
+        assert_eq!(
+            self.bit_mask.to_bigint().unwrap(),
+            bit_mask,
+            "bit_mask mismatch"
+        );
     }
 }
 
@@ -281,7 +330,6 @@ fn modp(x: u128, p: u128) -> u128 {
 
 pub(crate) const FP32: FieldParameters = FieldParameters {
     p: 4293918721, // 32-bit prime
-    p2: 8587837442,
     mu: 17302828673139736575,
     r2: 1676699750,
     g: 1074114499,
@@ -296,7 +344,6 @@ pub(crate) const FP32: FieldParameters = FieldParameters {
 
 pub(crate) const FP64: FieldParameters = FieldParameters {
     p: 18446744069414584321, // 64-bit prime
-    p2: 36893488138829168642,
     mu: 18446744069414584319,
     r2: 4294967295,
     g: 959634606461954525,
@@ -329,7 +376,6 @@ pub(crate) const FP64: FieldParameters = FieldParameters {
 
 pub(crate) const FP96: FieldParameters = FieldParameters {
     p: 79228148845226978974766202881, // 96-bit prime
-    p2: 158456297690453957949532405762,
     mu: 18446744073709551615,
     r2: 69162923446439011319006025217,
     g: 11329412859948499305522312170,
@@ -360,36 +406,35 @@ pub(crate) const FP96: FieldParameters = FieldParameters {
     ],
 };
 
-pub(crate) const FP126: FieldParameters = FieldParameters {
-    p: 85070591730234613043491808580380655617, // 126-bit prime
-    p2: 170141183460469226086983617160761311234,
+pub(crate) const FP128: FieldParameters = FieldParameters {
+    p: 340282366920938462946865773367900766209, // 128-bit prime
     mu: 18446744073709551615,
-    r2: 4228289479895218941917209552,
-    g: 64132991420990267358698281226844529554,
-    num_roots: 64,
-    bit_mask: 85070591730234615865843651857942052863,
+    r2: 403909908237944342183153,
+    g: 107630958476043550189608038630704257141,
+    num_roots: 66,
+    bit_mask: 340282366920938463463374607431768211455,
     roots: [
-        85070591730234624332899181690626244605,
-        85070591730234601754084435470135066629,
-        38137617727210006121801958903729016440,
-        8688340227897707017283728584977967178,
-        50356378283019641467766742940691527450,
-        33550949333748454978718892503921695778,
-        47992546207817536319642646308549364948,
-        40842705777252249605217191958775728119,
-        89236517585491498085722663868093517978,
-        63067092524540968535007362257738426824,
-        89031567408593428196542541013322467020,
-        41527756442199241501616896479704917226,
-        27942344825010058474020272302955536377,
-        36893509478604971204958162271142169833,
-        77313788438105850413543617102369725114,
-        66303272676638993803236953822843236868,
-        7505587139693091429406100867350473894,
-        24726071555371336713058093105331355614,
-        14146496786913858079253200761825179484,
-        66750945294819701976251551632766384780,
-        39883619804504909766529131424051012626,
+        516508834063867445247,
+        340282366920938462430356939304033320962,
+        129526470195413442198896969089616959958,
+        169031622068548287099117778531474117974,
+        81612939378432101163303892927894236156,
+        122401220764524715189382260548353967708,
+        199453575871863981432000940507837456190,
+        272368408887745135168960576051472383806,
+        24863773656265022616993900367764287617,
+        257882853788779266319541142124730662203,
+        323732363244658673145040701829006542956,
+        57532865270871759635014308631881743007,
+        149571414409418047452773959687184934208,
+        177018931070866797456844925926211239962,
+        268896136799800963964749917185333891349,
+        244556960591856046954834420512544511831,
+        118945432085812380213390062516065622346,
+        202007153998709986841225284843501908420,
+        332677126194796691532164818746739771387,
+        258279638927684931537542082169183965856,
+        148221243758794364405224645520862378432,
     ],
 };
 
@@ -402,7 +447,6 @@ pub(crate) fn log2(x: u128) -> u128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use modinverse::modinverse;
     use num_bigint::ToBigInt;
 
     #[test]
@@ -448,10 +492,10 @@ mod tests {
                 expected_order: 1 << 64,
             },
             TestFieldParametersData {
-                fp: FP126,
-                expected_p: 85070591730234613043491808580380655617,
-                expected_g: 31797354429379572309620216906993098145,
-                expected_order: 1 << 64,
+                fp: FP128,
+                expected_p: 340282366920938462946865773367900766209,
+                expected_g: 145091266659756586618791329697897684742,
+                expected_order: 1 << 66,
             },
         ];
 
@@ -498,14 +542,14 @@ mod tests {
 
             // Test inversion.
             let got = fp.inv(x);
-            let want = modinverse(fp.from_elem(x) as i128, fp.p as i128).unwrap();
-            assert_eq!(fp.from_elem(got) as i128, want);
+            let want = big_x.modpow(&(big_p - 2u128), big_p);
+            assert_eq!(fp.from_elem(got).to_bigint().unwrap(), want);
             assert_eq!(fp.from_elem(fp.mul(got, x)), 1);
 
             // Test negation.
             let got = fp.neg(x);
-            let want = (-(fp.from_elem(x) as i128)).rem_euclid(fp.p as i128);
-            assert_eq!(fp.from_elem(got) as i128, want);
+            let want = (big_p - big_x) % big_p;
+            assert_eq!(fp.from_elem(got).to_bigint().unwrap(), want);
             assert_eq!(fp.from_elem(fp.add(got, x)), 0);
         }
     }
