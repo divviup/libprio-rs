@@ -126,7 +126,7 @@ impl Prio3Histogram64 {
 
 /// Aggregate result for singleton data types.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Prio3Result<T: Eq>(T);
+pub struct Prio3Result<T: Eq>(pub T);
 
 impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3Result<u64> {
     type Error = VdafError;
@@ -149,7 +149,7 @@ impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3Result<u64> {
 
 /// Aggregate result for vector data types.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Prio3ResultVec<T: Eq>(Vec<T>);
+pub struct Prio3ResultVec<T: Eq>(pub Vec<T>);
 
 impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3ResultVec<u64> {
     type Error = VdafError;
