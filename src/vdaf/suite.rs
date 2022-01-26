@@ -37,7 +37,7 @@ pub enum Suite {
 }
 
 /// A Key used to instantiate a [`KeyStream`] or [`KeyDeriver`].
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
 pub enum Key {
     #[allow(missing_docs)]
     Aes128CtrHmacSha256([u8; 32]),

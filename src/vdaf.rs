@@ -8,13 +8,12 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
-use crate::field::FieldElement;
+use crate::field::{FieldElement, FieldError};
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
-use crate::vdaf::suite::{Key, SuiteError};
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
+use crate::vdaf::suite::{Key, Suite, SuiteError};
 use std::fmt::Debug;
+use std::io::Read;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -22,6 +21,14 @@ pub enum VdafError {
     /// An error occurred.
     #[error("vdaf error: {0}")]
     Uncategorized(String),
+
+    /// Field error.
+    #[error("field error: {0}")]
+    Field(#[from] FieldError),
+
+    /// An error occured while parsing a message.
+    #[error("io error: {0}")]
+    IoError(#[from] std::io::Error),
 
     /// PCP error.
     #[error("pcp error: {0}")]
@@ -37,13 +44,29 @@ pub enum VdafError {
 }
 
 /// An additive share of a vector of field elements.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum Share<F> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
 
     /// A compressed share, typically sent to the helper.
     Helper(Key),
+}
+
+impl<F: FieldElement> Share<F> {
+    pub(crate) fn read_leader<R: Read>(length: usize, reader: &mut R) -> Result<Self, VdafError> {
+        let mut data = Vec::with_capacity(length);
+        for _ in 0..length {
+            data.push(F::try_from_reader(reader)?);
+        }
+        Ok(Share::Leader(data))
+    }
+
+    pub(crate) fn read_helper<R: Read>(suite: Suite, reader: &mut R) -> Result<Self, VdafError> {
+        let mut seed = Key::uninitialized(suite);
+        reader.read_exact(seed.as_mut_slice())?;
+        Ok(Share::Helper(seed))
+    }
 }
 
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
@@ -68,10 +91,10 @@ pub trait Vdaf: Clone + Debug {
     type VerifyParam;
 
     /// An input share sent by a Client.
-    type InputShare: Clone + Debug + Serialize + DeserializeOwned;
+    type InputShare: Clone + Debug;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare: Clone + Debug + Serialize + DeserializeOwned;
+    type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>;
@@ -100,7 +123,7 @@ pub trait Aggregator: Vdaf {
     type PrepareStep: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage: Clone + Debug + Serialize + DeserializeOwned;
+    type PrepareMessage: Clone + Debug;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
@@ -202,7 +225,7 @@ pub enum PrepareTransition<S, M, O> {
 
 /// An aggregate share resulting from aggregating output shares together that
 /// can merged with aggregate shares of the same type.
-pub trait Aggregatable: Clone + Debug + Serialize + DeserializeOwned {
+pub trait Aggregatable: Clone + Debug {
     /// Type of output shares that can be accumulated into an aggregate share.
     type OutputShare;
 
@@ -214,7 +237,7 @@ pub trait Aggregatable: Clone + Debug + Serialize + DeserializeOwned {
 }
 
 /// An output share comprised of a vector of `F` elements.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct OutputShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for OutputShare<F> {
@@ -226,7 +249,7 @@ impl<F> AsRef<[F]> for OutputShare<F> {
 /// An aggregate share suitable for VDAFs whose output shares and aggregate
 /// shares are vectors of `F` elements, and an output share needs no special
 /// transformation to be merged into an aggregate share.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct AggregateShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for AggregateShare<F> {
