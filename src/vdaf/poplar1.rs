@@ -16,8 +16,6 @@
 //! [VDAF]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
 
-use serde::de::DeserializeOwned;
-use serde::{Deserialize, Serialize};
 use std::array::IntoIter;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -102,9 +100,7 @@ impl PartialOrd for IdpfInput {
 /// [BBCG+21]: https://eprint.iacr.org/2021/017
 //
 // NOTE(cjpatton) The real IDPF API probably needs to be stateful.
-pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
-    Sized + Clone + Debug + Serialize + DeserializeOwned
-{
+pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>: Sized + Clone + Debug {
     /// The finite field over which the IDPF is defined.
     //
     // NOTE(cjpatton) The IDPF of [BBCG+21] might use different fields for different levels of the
@@ -129,7 +125,7 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
 //
 // NOTE(cjpatton) It would be straight-forward to generalize this construction to any `KEY_LEN` and
 // `OUT_LEN`.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct ToyIdpf<F> {
     data0: Vec<F>,
     data1: Vec<F>,
@@ -245,12 +241,9 @@ impl<I: Idpf<2, 2>> Vdaf for Poplar1<I> {
 }
 
 /// An input share for the heavy hitters VDAF.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct Poplar1InputShare<I: Idpf<2, 2>> {
     /// IDPF share of input
-    //
-    // Workaround for alleged compiler bug: https://github.com/serde-rs/serde/issues/1296
-    #[serde(deserialize_with = "I::deserialize")]
     pub idpf: I,
 
     /// PRNG seed used to generate the aggregator's share of the randomness used in the first part
@@ -549,7 +542,7 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
 }
 
 /// A prepare message sent exchanged between Poplar1 aggregators
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug)]
 pub struct Poplar1PrepareMessage<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for Poplar1PrepareMessage<F> {
