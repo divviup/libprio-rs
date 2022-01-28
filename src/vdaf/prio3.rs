@@ -208,7 +208,6 @@ impl<T: Type, A: Debug> Vdaf for Prio3<T, A> {
     type AggregationParam = ();
     type PublicParam = ();
     type VerifyParam = Prio3VerifyParam;
-    type InputShare = Prio3InputShare<T::Field>;
     type OutputShare = OutputShare<T::Field>;
     type AggregateShare = AggregateShare<T::Field>;
 
@@ -243,7 +242,7 @@ pub struct Prio3VerifyParam {
 /// The message sent by the client to each aggregator. This includes the client's input share and
 /// the initial message of the input-validation protocol.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Prio3InputShare<F> {
+struct Prio3InputShare<F> {
     /// The input share.
     pub input_share: Share<F>,
 
@@ -260,9 +259,8 @@ pub struct Prio3InputShare<F> {
     pub blind: Key,
 }
 
-#[allow(dead_code)]
 impl<F: FieldElement> Prio3InputShare<F> {
-    pub(crate) fn append<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+    fn append<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
         match (&self.input_share, &self.proof_share) {
             (Share::Leader(input_share_data), Share::Leader(proof_share_data)) => {
                 for x in input_share_data {
@@ -281,30 +279,6 @@ impl<F: FieldElement> Prio3InputShare<F> {
         writer.write_all(self.joint_rand_seed_hint.as_slice())?;
         writer.write_all(self.blind.as_slice())?;
         Ok(())
-    }
-
-    pub(crate) fn read_leader<R, A, T>(
-        vdaf: &Prio3<T, A>,
-        reader: &mut R,
-    ) -> Result<Self, VdafError>
-    where
-        R: Read,
-        A: Debug,
-        T: Type<Field = F>,
-    {
-        Self::read(true, vdaf, reader)
-    }
-
-    pub(crate) fn read_helper<R, A, T>(
-        vdaf: &Prio3<T, A>,
-        reader: &mut R,
-    ) -> Result<Self, VdafError>
-    where
-        R: Read,
-        A: Debug,
-        T: Type<Field = F>,
-    {
-        Self::read(false, vdaf, reader)
     }
 
     fn read<R, A, T>(is_leader: bool, vdaf: &Prio3<T, A>, reader: &mut R) -> Result<Self, VdafError>
@@ -341,7 +315,7 @@ impl<F: FieldElement> Prio3InputShare<F> {
 
 #[derive(Clone, Debug)]
 /// The verification message emitted by each aggregator during the Prepare process.
-pub struct Prio3PrepareMessage<F> {
+struct Prio3PrepareMessage<F> {
     /// (A share of) the FLP verifier message. (See [`Type`](crate::pcp::Type).)
     pub verifier: Vec<F>,
 
@@ -352,9 +326,8 @@ pub struct Prio3PrepareMessage<F> {
     pub joint_rand_seed: Key,
 }
 
-#[allow(dead_code)]
 impl<F: FieldElement> Prio3PrepareMessage<F> {
-    pub(crate) fn append<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
+    fn append<W: Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
         for x in self.verifier.iter() {
             writer.write_all(&(*x).into())?;
         }
@@ -362,7 +335,7 @@ impl<F: FieldElement> Prio3PrepareMessage<F> {
         Ok(())
     }
 
-    pub(crate) fn read<R, A, T>(vdaf: &Prio3<T, A>, reader: &mut R) -> Result<Self, VdafError>
+    fn read<R, A, T>(vdaf: &Prio3<T, A>, reader: &mut R) -> Result<Self, VdafError>
     where
         R: Read,
         A: Debug,
@@ -389,7 +362,7 @@ impl<T: Type, A: Debug> Client for Prio3<T, A> {
         &self,
         _public_param: &(),
         measurement: &T::Measurement,
-    ) -> Result<Vec<Prio3InputShare<T::Field>>, VdafError> {
+    ) -> Result<Vec<Vec<u8>>, VdafError> {
         let num_aggregators = self.num_aggregators;
         let input = self.typ.encode(measurement)?;
 
@@ -479,25 +452,36 @@ impl<T: Type, A: Debug> Client for Prio3<T, A> {
             *x ^= y;
         }
 
-        // Prep the output messages.
-        let mut out = Vec::with_capacity(num_aggregators as usize);
-        out.push(Prio3InputShare {
+        let mut input_shares = Vec::with_capacity(num_aggregators as usize);
+        let base_len = leader_joint_rand_seed_hint.size() + leader_blind.size();
+
+        let mut encoded = Vec::with_capacity(
+            base_len + T::Field::ENCODED_SIZE * (self.typ.input_len() + self.typ.proof_len()),
+        );
+        Prio3InputShare {
             input_share: Share::Leader(leader_input_share),
             proof_share: Share::Leader(leader_proof_share),
             joint_rand_seed_hint: leader_joint_rand_seed_hint,
             blind: leader_blind,
-        });
+        }
+        .append(&mut encoded)?;
+        input_shares.push(encoded);
 
         for helper in helper_shares.into_iter() {
-            out.push(Prio3InputShare {
+            let mut encoded = Vec::with_capacity(
+                base_len + helper.input_share.size() + helper.proof_share.size(),
+            );
+            Prio3InputShare::<T::Field> {
                 input_share: Share::Helper(helper.input_share),
                 proof_share: Share::Helper(helper.proof_share),
                 joint_rand_seed_hint: helper.joint_rand_seed_hint,
                 blind: helper.blind,
-            });
+            }
+            .append(&mut encoded)?;
+            input_shares.push(encoded);
         }
 
-        Ok(out)
+        Ok(input_shares)
     }
 }
 
@@ -509,7 +493,7 @@ pub enum Prio3PrepareStep<F> {
     Ready {
         input_share: Share<F>,
         joint_rand_seed: Key,
-        verifier_msg: Prio3PrepareMessage<F>,
+        verifier_msg: Vec<u8>,
     },
     /// Waiting for the set of verifier messages.
     Waiting {
@@ -520,7 +504,6 @@ pub enum Prio3PrepareStep<F> {
 
 impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
     type PrepareStep = Prio3PrepareStep<T::Field>;
-    type PrepareMessage = Prio3PrepareMessage<T::Field>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is
     /// the aggregator's output share.
@@ -531,12 +514,20 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
         verify_param: &Prio3VerifyParam,
         _agg_param: &(),
         nonce: &[u8],
-        msg: &Prio3InputShare<T::Field>,
+        input_share: &[u8],
     ) -> Result<Prio3PrepareStep<T::Field>, VdafError> {
         let mut deriver = KeyDeriver::from_key(&verify_param.query_rand_init);
         deriver.update(&[255]);
         deriver.update(nonce);
         let query_rand_seed = deriver.finish();
+
+        let mut reader = std::io::Cursor::new(input_share);
+        let msg = Prio3InputShare::read(verify_param.aggregator_id == 0, self, &mut reader)?;
+        if reader.position() as usize != input_share.len() {
+            return Err(VdafError::Uncategorized(
+                "unparsed data in input buffer".to_string(),
+            ));
+        }
 
         // Create a reference to the (expanded) input share.
         let expanded_input_share: Option<Vec<T::Field>> = match msg.input_share {
@@ -593,25 +584,39 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
             self.num_aggregators as usize,
         )?;
 
+        let mut verifier_msg = Vec::with_capacity(
+            T::Field::ENCODED_SIZE * self.typ.verifier_len() + joint_rand_seed.size(),
+        );
+        Prio3PrepareMessage {
+            verifier: verifier_share,
+            joint_rand_seed: joint_rand_seed_share,
+        }
+        .append(&mut verifier_msg)?;
+
         Ok(Prio3PrepareStep::Ready {
             input_share: msg.input_share.clone(),
             joint_rand_seed,
-            verifier_msg: Prio3PrepareMessage {
-                verifier: verifier_share,
-                joint_rand_seed: joint_rand_seed_share,
-            },
+            verifier_msg,
         })
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareMessage<T::Field>>>(
+    fn prepare_preprocess<M: AsRef<[u8]>, I: IntoIterator<Item = M>>(
         &self,
-        inputs: M,
-    ) -> Result<Self::PrepareMessage, VdafError> {
+        inputs: I,
+    ) -> Result<Vec<u8>, VdafError> {
         let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
         let mut joint_rand_seed = Key::uninitialized(self.suite);
         let mut count = 0;
-        for share in inputs.into_iter() {
+        for input in inputs.into_iter() {
             count += 1;
+
+            let mut reader = std::io::Cursor::new(&input);
+            let share = Prio3PrepareMessage::read(self, &mut reader)?;
+            if reader.position() as usize != input.as_ref().len() {
+                return Err(VdafError::Uncategorized(
+                    "unparsed data in buffer".to_string(),
+                ));
+            }
 
             if share.verifier.len() != verifier.len() {
                 return Err(VdafError::Uncategorized(format!(
@@ -649,23 +654,25 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
             )));
         }
 
-        Ok(Prio3PrepareMessage {
+        let mut output = Vec::with_capacity(
+            T::Field::ENCODED_SIZE * self.typ.verifier_len() + joint_rand_seed.size(),
+        );
+        Prio3PrepareMessage {
             verifier,
             joint_rand_seed,
-        })
+        }
+        .append(&mut output)?;
+
+        Ok(output)
     }
 
     // TODO Fix this clippy warning instead of bypassing it.
     #[allow(clippy::type_complexity)]
-    fn prepare_step(
+    fn prepare_step<M: AsRef<[u8]>>(
         &self,
         state: Prio3PrepareStep<T::Field>,
-        input: Option<Prio3PrepareMessage<T::Field>>,
-    ) -> PrepareTransition<
-        Prio3PrepareStep<T::Field>,
-        Prio3PrepareMessage<T::Field>,
-        OutputShare<T::Field>,
-    > {
+        input: Option<M>,
+    ) -> PrepareTransition<Prio3PrepareStep<T::Field>, OutputShare<T::Field>> {
         match (state, input) {
             (
                 Prio3PrepareStep::Ready {
@@ -681,14 +688,25 @@ impl<T: Type, A: Debug> Aggregator for Prio3<T, A> {
                 },
                 verifier_msg,
             ),
-
             (
                 Prio3PrepareStep::Waiting {
                     input_share,
                     joint_rand_seed,
                 },
-                Some(msg),
+                Some(encoded),
             ) => {
+                let mut reader = std::io::Cursor::new(&encoded);
+                let msg = Prio3PrepareMessage::read(self, &mut reader);
+                if msg.is_err() {
+                    return PrepareTransition::Fail(msg.unwrap_err());
+                }
+                if reader.position() as usize != encoded.as_ref().len() {
+                    return PrepareTransition::Fail(VdafError::Uncategorized(
+                        "unparsed data in input buffer".to_string(),
+                    ));
+                }
+                let msg = msg.unwrap();
+
                 // Check that the joint randomness was correct.
                 if joint_rand_seed != msg.joint_rand_seed {
                     return PrepareTransition::Fail(VdafError::Uncategorized(
@@ -813,7 +831,16 @@ mod tests {
     #[test]
     fn test_prio3_input_share() {
         let prio3 = Prio3Count64::new(Suite::Blake3, 5).unwrap();
-        let input_shares = prio3.shard(&(), &1).unwrap();
+        let input_shares: Vec<_> = prio3
+            .shard(&(), &1)
+            .unwrap()
+            .iter()
+            .enumerate()
+            .map(|(i, encoded)| {
+                let mut reader = std::io::Cursor::new(encoded);
+                Prio3InputShare::read(i == 0, &prio3, &mut reader).unwrap()
+            })
+            .collect();
 
         // Check that seed shares are distinct.
         for (i, x) in input_shares.iter().enumerate() {
@@ -841,7 +868,7 @@ mod tests {
     // Execute the VDAF end-to-end on a single user measurement.
     fn eval_vdaf<T, A>(
         prio3: &Prio3<T, A>,
-        input_shares: &[Prio3InputShare<T::Field>],
+        input_shares: &Vec<Vec<u8>>,
         verify_params: &[Prio3VerifyParam],
         nonce: &[u8],
         expected_agg: Option<A>,
@@ -850,34 +877,14 @@ mod tests {
         T: Type,
         A: TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq + Debug,
     {
-        // Emulate sending the input shares over the network by encoding them.
-        let encoded_input_shares: Vec<_> = input_shares
-            .iter()
-            .map(|input_share| {
-                let mut encoded_input_share = vec![];
-                input_share.append(&mut encoded_input_share).unwrap();
-                encoded_input_share
-            })
-            .collect();
-
         let mut state0: Vec<Prio3PrepareStep<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
-        for i in 0..prio3.num_aggregators() {
-            // Parse the input share.
-            let mut reader = std::io::Cursor::new(&encoded_input_shares[i]);
-            let input_share = match verify_params[i].aggregator_id {
-                0 => Prio3InputShare::read_leader(prio3, &mut reader).unwrap(),
-                _ => Prio3InputShare::read_helper(prio3, &mut reader).unwrap(),
-            };
-            assert_eq!(reader.position(), encoded_input_shares[i].len() as u64);
-
-            // Initializze the preparation state.
-            let state = prio3.prepare_init(&verify_params[i], &(), nonce, &input_share)?;
+        for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
+            let state = prio3.prepare_init(verify_param, &(), nonce, input_share)?;
             state0.push(state);
         }
 
-        let mut round1: Vec<Prio3PrepareMessage<T::Field>> =
-            Vec::with_capacity(prio3.num_aggregators());
+        let mut round1 = Vec::with_capacity(prio3.num_aggregators());
         let mut state1: Vec<Prio3PrepareStep<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
         for state in state0.into_iter() {
@@ -886,29 +893,13 @@ mod tests {
             round1.push(msg);
         }
 
-        // Emulate broadcasting the prepare messages over the network by encoding them.
-        let encoded_prep_messages: Vec<_> = round1
-            .iter()
-            .map(|msg| {
-                let mut encoded_msg = vec![];
-                msg.append(&mut encoded_msg).unwrap();
-                encoded_msg
-            })
-            .collect();
-
-        // Parse and preprocess the prepare messages.
-        let round1_preprocessed =
-            prio3.prepare_preprocess(encoded_prep_messages.iter().map(|encoded_msg| {
-                let mut reader = std::io::Cursor::new(encoded_msg);
-                let msg = Prio3PrepareMessage::read(prio3, &mut reader).unwrap();
-                assert_eq!(reader.position(), encoded_msg.len() as u64);
-                msg
-            }))?;
+        // Preprocess the prepare messages.
+        let round1_preprocessed = prio3.prepare_preprocess(round1)?;
 
         let mut agg_shares: Vec<AggregateShare<T::Field>> =
             Vec::with_capacity(prio3.num_aggregators());
         for state in state1.into_iter() {
-            let output_share = prio3.prepare_finish(state, round1_preprocessed.clone())?;
+            let output_share = prio3.prepare_finish(state, &round1_preprocessed)?;
             agg_shares.push(prio3.aggregate(&(), [output_share])?);
         }
 

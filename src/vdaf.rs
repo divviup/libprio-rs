@@ -90,9 +90,6 @@ pub trait Vdaf: Clone + Debug {
     /// Aggregators have recovered valid output shares.
     type VerifyParam;
 
-    /// An input share sent by a Client.
-    type InputShare: Clone + Debug;
-
     /// An output share recovered from an input share by an Aggregator.
     type OutputShare: Clone + Debug;
 
@@ -114,16 +111,13 @@ pub trait Client: Vdaf {
         &self,
         public_param: &Self::PublicParam,
         measurement: &Self::Measurement,
-    ) -> Result<Vec<Self::InputShare>, VdafError>;
+    ) -> Result<Vec<Vec<u8>>, VdafError>;
 }
 
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator: Vdaf {
     /// State of the Aggregator during the Prepare process.
     type PrepareStep: Clone + Debug;
-
-    /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage: Clone + Debug;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
@@ -132,29 +126,29 @@ pub trait Aggregator: Vdaf {
         verify_param: &Self::VerifyParam,
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
-        input_share: &Self::InputShare,
+        input_share: &[u8],
     ) -> Result<Self::PrepareStep, VdafError>;
 
     /// Preprocess a round of messages into a single input to [`Aggregator::prepare_step`].
-    fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareMessage>>(
+    fn prepare_preprocess<M: AsRef<[u8]>, I: IntoIterator<Item = M>>(
         &self,
-        inputs: M,
-    ) -> Result<Self::PrepareMessage, VdafError>;
+        inputs: I,
+    ) -> Result<Vec<u8>, VdafError>;
 
     /// Compute the next state transition from the current state and the previous round of input
     /// messages.
-    fn prepare_step(
+    fn prepare_step<M: AsRef<[u8]>>(
         &self,
         state: Self::PrepareStep,
-        input: Option<Self::PrepareMessage>,
-    ) -> PrepareTransition<Self::PrepareStep, Self::PrepareMessage, Self::OutputShare>;
+        input: Option<M>,
+    ) -> PrepareTransition<Self::PrepareStep, Self::OutputShare>;
 
     /// Compute the Aggregator's first message.
     fn prepare_start(
         &self,
         state: Self::PrepareStep,
-    ) -> Result<(Self::PrepareStep, Self::PrepareMessage), VdafError> {
-        match self.prepare_step(state, None) {
+    ) -> Result<(Self::PrepareStep, Vec<u8>), VdafError> {
+        match self.prepare_step::<&[u8]>(state, None) {
             PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
             PrepareTransition::Fail(err) => Err(err),
             PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
@@ -167,8 +161,8 @@ pub trait Aggregator: Vdaf {
     fn prepare_next(
         &self,
         state: Self::PrepareStep,
-        input: Self::PrepareMessage,
-    ) -> Result<(Self::PrepareStep, Self::PrepareMessage), VdafError> {
+        input: &[u8],
+    ) -> Result<(Self::PrepareStep, Vec<u8>), VdafError> {
         match self.prepare_step(state, Some(input)) {
             PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
             PrepareTransition::Fail(err) => Err(err),
@@ -182,7 +176,7 @@ pub trait Aggregator: Vdaf {
     fn prepare_finish(
         &self,
         step: Self::PrepareStep,
-        input: Self::PrepareMessage,
+        input: &[u8],
     ) -> Result<Self::OutputShare, VdafError> {
         match self.prepare_step(step, Some(input)) {
             PrepareTransition::Continue(_, _) => Err(VdafError::Uncategorized(
@@ -212,9 +206,9 @@ pub trait Collector: Vdaf {
 }
 
 /// A state transition of an Aggregator during the Prepare process.
-pub enum PrepareTransition<S, M, O> {
+pub enum PrepareTransition<S, O> {
     /// Continue processing.
-    Continue(S, M),
+    Continue(S, Vec<u8>),
 
     /// Finish processing and return the output share.
     Finish(O),
@@ -290,6 +284,6 @@ impl<F: FieldElement> AggregateShare<F> {
     }
 }
 
-pub mod poplar1;
+//pub mod poplar1; // XXX Temporarily muting while this PR is a draft
 pub mod prio3;
 pub mod suite;
