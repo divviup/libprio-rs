@@ -7,7 +7,7 @@
 //! subgroup of order `2^n` for some `n`.
 
 use crate::{
-    fp::{FP126, FP32, FP64, FP96},
+    fp::{FP128, FP32, FP64, FP96},
     prng::{Prng, PrngError},
     vdaf::suite::Suite,
 };
@@ -567,10 +567,10 @@ make_field!(
 );
 
 make_field!(
-    /// `GF(85070591730234613043491808580380655617)`, a 126-bit field.
-    Field126,
+    /// `GF(340282366920938462946865773367900766209)`, a 128-bit field.
+    Field128,
     u128,
-    FP126,
+    FP128,
     16,
     ByteOrder::BigEndian,
 );
@@ -775,7 +775,7 @@ mod tests {
     }
 
     #[test]
-    fn test_field126() {
-        field_element_test::<Field126>();
+    fn test_field128() {
+        field_element_test::<Field128>();
     }
 }

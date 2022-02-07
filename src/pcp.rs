@@ -665,7 +665,7 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split_vector, Field126};
+    use crate::field::{random_vector, split_vector, Field128};
     use crate::pcp::gadgets::{Mul, PolyEval};
     use crate::polynomial::poly_range_check;
 
@@ -677,11 +677,11 @@ mod tests {
     fn test_pcp() {
         const NUM_SHARES: usize = 2;
 
-        let typ: TestType<Field126> = TestType::new();
+        let typ: TestType<Field128> = TestType::new();
         let input = typ.encode(&3).unwrap();
         assert_eq!(input.len(), typ.input_len());
 
-        let input_shares: Vec<Vec<Field126>> = split_vector(input.as_slice(), NUM_SHARES)
+        let input_shares: Vec<Vec<Field128>> = split_vector(input.as_slice(), NUM_SHARES)
             .unwrap()
             .into_iter()
             .collect();
@@ -693,12 +693,12 @@ mod tests {
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         assert_eq!(proof.len(), typ.proof_len());
 
-        let proof_shares: Vec<Vec<Field126>> = split_vector(&proof, NUM_SHARES)
+        let proof_shares: Vec<Vec<Field128>> = split_vector(&proof, NUM_SHARES)
             .unwrap()
             .into_iter()
             .collect();
 
-        let verifier: Vec<Field126> = (0..NUM_SHARES)
+        let verifier: Vec<Field128> = (0..NUM_SHARES)
             .map(|i| {
                 typ.query(
                     &input_shares[i],

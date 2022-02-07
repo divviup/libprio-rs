@@ -607,7 +607,7 @@ impl<I: Idpf<2, 2>> Collector for Poplar1<I> {
 mod tests {
     use super::*;
 
-    use crate::field::Field126;
+    use crate::field::Field128;
 
     #[test]
     fn test_ipdf() {
@@ -642,9 +642,9 @@ mod tests {
 
         // Generate IPDF keys.
         let input = IdpfInput::new(b"hi", 16).unwrap();
-        let keys = ToyIdpf::<Field126>::gen(
+        let keys = ToyIdpf::<Field128>::gen(
             &input,
-            std::iter::repeat([Field126::one(), Field126::one()]),
+            std::iter::repeat([Field128::one(), Field128::one()]),
         )
         .unwrap();
 
@@ -653,7 +653,7 @@ mod tests {
             let res = eval_idpf(
                 &keys,
                 &input.prefix(prefix_len),
-                &[Field126::one(), Field126::one()],
+                &[Field128::one(), Field128::one()],
             );
             assert!(res.is_ok(), "prefix_len={} error: {:?}", prefix_len, res);
         }
@@ -662,14 +662,14 @@ mod tests {
         eval_idpf(
             &keys,
             &IdpfInput::new(&[2], 2).unwrap(),
-            &[Field126::zero(), Field126::zero()],
+            &[Field128::zero(), Field128::zero()],
         )
         .unwrap();
 
         eval_idpf(
             &keys,
             &IdpfInput::new(&[23, 1], 12).unwrap(),
-            &[Field126::zero(), Field126::zero()],
+            &[Field128::zero(), Field128::zero()],
         )
         .unwrap();
     }
@@ -702,7 +702,7 @@ mod tests {
 
     #[test]
     fn test_poplar1() {
-        let vdaf: Poplar1<ToyIdpf<Field126>> = Poplar1::new(Suite::Blake3);
+        let vdaf: Poplar1<ToyIdpf<Field128>> = Poplar1::new(Suite::Blake3);
         assert_eq!(vdaf.num_aggregators(), 2);
 
         let (public_param, verify_params) = vdaf.setup().unwrap();
@@ -782,7 +782,7 @@ mod tests {
         let mut input_shares = vdaf.shard(&public_param, &input).unwrap();
         for (i, x) in input_shares[0].idpf.data0.iter_mut().enumerate() {
             if i != input.index {
-                *x += Field126::one();
+                *x += Field128::one();
             }
         }
         let mut agg_param = BTreeSet::new();
@@ -800,7 +800,7 @@ mod tests {
         // This IDPF key pair has a garbled authentication vector.
         let mut input_shares = vdaf.shard(&public_param, &input).unwrap();
         for x in input_shares[0].idpf.data1.iter_mut() {
-            *x = Field126::zero();
+            *x = Field128::zero();
         }
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(b"xx", 16).unwrap());
