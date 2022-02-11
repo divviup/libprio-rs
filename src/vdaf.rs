@@ -102,30 +102,30 @@ impl<F: FieldElement> Encode for Share<F> {
 /// the VDAF.
 pub trait Vdaf: Clone + Debug {
     /// The type of Client measurement to be aggregated.
-    type Measurement;
+    type Measurement: Clone + Debug;
 
     /// The aggregate result of the VDAF execution.
-    type AggregateResult;
+    type AggregateResult: Clone + Debug;
 
     /// The aggregation parameter, used by the Aggregators to map their input shares to output
     /// shares.
-    type AggregationParam;
+    type AggregationParam: Clone + Debug + Decode<()> + Encode;
 
     /// The public parameter used by Clients to shard their measurement into input shares.
-    type PublicParam;
+    type PublicParam: Clone + Debug;
 
     /// A verification parameter, used by an Aggregator in the Prepare process to ensure that the
     /// Aggregators have recovered valid output shares.
-    type VerifyParam;
+    type VerifyParam: Clone + Debug;
 
     /// An input share sent by a Client.
-    type InputShare: Clone + Debug;
+    type InputShare: Clone + Debug + Decode<Self::VerifyParam> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
     type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + Decode<usize> + Encode;
 
     /// Generates the long-lived parameters used by the Clients and Aggregators.
     fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
@@ -151,7 +151,7 @@ pub trait Aggregator: Vdaf {
     type PrepareStep: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage: Clone + Debug;
+    type PrepareMessage: Clone + Debug + Decode<Self::PrepareStep> + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.

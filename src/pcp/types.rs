@@ -426,7 +426,7 @@ impl<F: FieldElement, S> Clone for CountVec<F, S> {
 
 impl<F, S> Type for CountVec<F, S>
 where
-    F: FieldElement + Send + Sync,
+    F: FieldElement,
     S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static,
 {
     type Measurement = Vec<F::Integer>;
