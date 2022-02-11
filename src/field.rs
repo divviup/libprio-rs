@@ -7,6 +7,7 @@
 //! subgroup of order `2^n` for some `n`.
 
 use crate::{
+    codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64, FP96},
     prng::{Prng, PrngError},
     vdaf::suite::Suite,
@@ -41,6 +42,9 @@ pub enum FieldError {
     /// Error while performing I/O.
     #[error("I/O error")]
     Io(#[from] std::io::Error),
+    /// Error encoding or decoding a field.
+    #[error("Codec error")]
+    Codec(#[from] CodecError),
 }
 
 /// Byte order for encoding FieldElement values into byte sequences.
@@ -78,6 +82,8 @@ pub trait FieldElement:
     + Into<Vec<u8>>
     + Serialize
     + DeserializeOwned
+    + Encode
+    + Decode<()>
     + 'static // NOTE This bound is needed for downcasting a `dyn Gadget<F>>` to a concrete type.
 {
     /// Size in bytes of the encoding of a value.
@@ -194,7 +200,7 @@ pub trait FieldElement:
         }
         let mut vec = Vec::with_capacity(bytes.len() / Self::ENCODED_SIZE);
         for chunk in bytes.chunks_exact(Self::ENCODED_SIZE) {
-            vec.push(Self::try_from_reader(&mut Cursor::new(chunk))?);
+            vec.push(Self::get_decoded(&(), chunk)?);
         }
         Ok(vec)
     }
@@ -475,6 +481,23 @@ macro_rules! make_field {
             }
         }
 
+        impl Encode for $elem {
+            fn encode(&self, bytes: &mut Vec<u8>) {
+                let slice = <[u8; $elem::ENCODED_SIZE]>::from(*self);
+                bytes.extend_from_slice(&slice);
+            }
+        }
+
+        impl Decode<()> for $elem {
+            fn decode(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+                let mut value = [0u8; $elem::ENCODED_SIZE];
+                bytes.read_exact(&mut value)?;
+                $elem::try_from_bytes(&value, u128::MAX).map_err(|e| {
+                    CodecError::Other(Box::new(e) as Box<dyn std::error::Error + 'static + Send + Sync>)
+                })
+            }
+        }
+
         impl FieldElement for $elem {
             const ENCODED_SIZE: usize = $encoding_size;
             type Integer = $int;
@@ -630,7 +653,6 @@ mod tests {
     use crate::fp::MAX_ROOTS;
     use crate::prng::Prng;
     use assert_matches::assert_matches;
-    use std::io::{Cursor, Write};
 
     #[test]
     fn test_endianness() {
@@ -738,15 +760,13 @@ mod tests {
         // serialization
         let test_inputs = vec![zero, one, prng.get(), F::from(int_modulus - int_one)];
         for want in test_inputs.iter() {
-            println!("check {:?}", want);
-            let mut bytes: Vec<u8> = vec![];
-            bytes.write_all(&(*want).into()).unwrap();
+            let mut bytes = vec![];
+            want.encode(&mut bytes);
 
             assert_eq!(bytes.len(), F::ENCODED_SIZE);
 
-            let got = F::try_from_reader(&mut Cursor::new(&bytes)).unwrap();
+            let got = F::get_decoded(&(), &bytes).unwrap();
             assert_eq!(got, *want);
-            assert_eq!(bytes.len(), F::ENCODED_SIZE);
         }
 
         let serialized_vec = F::slice_into_byte_vec(&test_inputs);
