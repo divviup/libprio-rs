@@ -29,7 +29,7 @@ pub enum SuiteError {
 }
 
 /// A suite uniquely determines a [`KeyStream`] and [`KeyDeriver`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Suite {
     /// The [`KeyStream`] is implemented from AES128 in CTR mode and the [`KeyDeriver`] is
     /// implemented from HMAC-SHA256.
