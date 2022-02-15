@@ -97,6 +97,14 @@ impl<F: FieldElement> Encode for Share<F> {
     }
 }
 
+/// PrepareStep is the state associated with the multi-round VDAF input preparation process.
+pub trait PrepareStep {
+    /// Returns true if the prepare process is on the last round, meaning clients should call
+    /// [`Vdaf::prepare_finish`] to recover an output share, or false otherwise, in which case
+    /// clients should call [`Vdaf::prepare_next`] to get the next prepare message share.
+    fn is_last_round(&self) -> bool;
+}
+
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
@@ -148,7 +156,7 @@ pub trait Client: Vdaf {
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator: Vdaf {
     /// State of the Aggregator during the Prepare process.
-    type PrepareStep: Clone + Debug;
+    type PrepareStep: Clone + Debug + PrepareStep;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
     type PrepareMessage: Clone + Debug + Decode<Self::PrepareStep> + Encode;

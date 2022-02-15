@@ -19,8 +19,8 @@ use crate::pcp::Type;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{
-    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, ShareDecodingParameter, Vdaf, VdafError,
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareStep,
+    PrepareTransition, Share, ShareDecodingParameter, Vdaf, VdafError,
 };
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
@@ -501,6 +501,12 @@ impl<F> Prio3PrepareStep<F> {
                 joint_rand_seed, ..
             } => joint_rand_seed.suite(),
         }
+    }
+}
+
+impl<F> PrepareStep for Prio3PrepareStep<F> {
+    fn is_last_round(&self) -> bool {
+        matches!(self, Self::Waiting { .. })
     }
 }
 

@@ -34,8 +34,8 @@ use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{
-    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, ShareDecodingParameter, Vdaf, VdafError,
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareStep,
+    PrepareTransition, Share, ShareDecodingParameter, Vdaf, VdafError,
 };
 
 /// An input for an IDPF ([`Idpf`]).
@@ -698,6 +698,12 @@ enum SketchState {
     Ready,
     RoundOne,
     RoundTwo,
+}
+
+impl<F> PrepareStep for Poplar1PrepareStep<F> {
+    fn is_last_round(&self) -> bool {
+        matches!(self.sketch, SketchState::RoundTwo)
+    }
 }
 
 impl<I: Idpf<2, 2>> Collector for Poplar1<I> {
