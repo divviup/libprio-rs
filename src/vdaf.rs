@@ -8,12 +8,13 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
+use crate::codec::{CodecError, Decode, Encode};
 use crate::field::{FieldElement, FieldError};
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
 use crate::vdaf::suite::{Key, Suite, SuiteError};
 use std::fmt::Debug;
-use std::io::Read;
+use std::io::Cursor;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -53,19 +54,46 @@ pub enum Share<F> {
     Helper(Key),
 }
 
-impl<F: FieldElement> Share<F> {
-    pub(crate) fn read_leader<R: Read>(length: usize, reader: &mut R) -> Result<Self, VdafError> {
-        let mut data = Vec::with_capacity(length);
-        for _ in 0..length {
-            data.push(F::try_from_reader(reader)?);
-        }
-        Ok(Share::Leader(data))
-    }
+/// Parameters needed to decode a [`Share`]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ShareDecodingParameter {
+    Leader(usize),
+    Helper(Suite),
+}
 
-    pub(crate) fn read_helper<R: Read>(suite: Suite, reader: &mut R) -> Result<Self, VdafError> {
-        let mut seed = Key::uninitialized(suite);
-        reader.read_exact(seed.as_mut_slice())?;
-        Ok(Share::Helper(seed))
+impl<F: FieldElement> Decode<ShareDecodingParameter> for Share<F> {
+    fn decode(
+        decoding_parameter: &ShareDecodingParameter,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        match decoding_parameter {
+            ShareDecodingParameter::Leader(share_length) => {
+                let mut data = Vec::with_capacity(*share_length);
+                for _ in 0..*share_length {
+                    data.push(F::decode(&(), bytes)?)
+                }
+                Ok(Self::Leader(data))
+            }
+            ShareDecodingParameter::Helper(suite) => {
+                let key = Key::decode(suite, bytes)?;
+                Ok(Self::Helper(key))
+            }
+        }
+    }
+}
+
+impl<F: FieldElement> Encode for Share<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Share::Leader(share_data) => {
+                for x in share_data {
+                    x.encode(bytes);
+                }
+            }
+            Share::Helper(share_seed) => {
+                share_seed.encode(bytes);
+            }
+        }
     }
 }
 
@@ -74,30 +102,30 @@ impl<F: FieldElement> Share<F> {
 /// the VDAF.
 pub trait Vdaf: Clone + Debug {
     /// The type of Client measurement to be aggregated.
-    type Measurement;
+    type Measurement: Clone + Debug;
 
     /// The aggregate result of the VDAF execution.
-    type AggregateResult;
+    type AggregateResult: Clone + Debug;
 
     /// The aggregation parameter, used by the Aggregators to map their input shares to output
     /// shares.
-    type AggregationParam;
+    type AggregationParam: Clone + Debug + Decode<()> + Encode;
 
     /// The public parameter used by Clients to shard their measurement into input shares.
-    type PublicParam;
+    type PublicParam: Clone + Debug;
 
     /// A verification parameter, used by an Aggregator in the Prepare process to ensure that the
     /// Aggregators have recovered valid output shares.
-    type VerifyParam;
+    type VerifyParam: Clone + Debug;
 
     /// An input share sent by a Client.
-    type InputShare: Clone + Debug;
+    type InputShare: Clone + Debug + Decode<Self::VerifyParam> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
     type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + Decode<usize> + Encode;
 
     /// Generates the long-lived parameters used by the Clients and Aggregators.
     fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
@@ -123,7 +151,7 @@ pub trait Aggregator: Vdaf {
     type PrepareStep: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage: Clone + Debug;
+    type PrepareMessage: Clone + Debug + Decode<Self::PrepareStep> + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The result of this process is
     /// the Aggregator's output share.
@@ -287,6 +315,25 @@ impl<F: FieldElement> AggregateShare<F> {
         }
 
         Ok(())
+    }
+}
+
+impl<F: FieldElement> Encode for AggregateShare<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        for field in &self.0 {
+            field.encode(bytes);
+        }
+    }
+}
+
+impl<F: FieldElement> Decode<usize> for AggregateShare<F> {
+    fn decode(vector_length: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let mut items = Vec::with_capacity(*vector_length);
+        for _ in 0..*vector_length {
+            items.push(F::decode(&(), bytes)?);
+        }
+
+        Ok(Self(items))
     }
 }
 

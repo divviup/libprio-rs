@@ -123,7 +123,7 @@ pub enum PcpError {
 /// Validity is determined via an arithmetic circuit evaluated over the encoded measurement.
 pub trait Type: Sized + Eq + Clone + Debug {
     /// The type of raw measurement to be encoded.
-    type Measurement;
+    type Measurement: Clone + Debug;
 
     /// The finite field used for this type.
     type Field: FieldElement;

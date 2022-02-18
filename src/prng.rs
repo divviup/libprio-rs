@@ -13,7 +13,7 @@ use std::marker::PhantomData;
 const BUFFER_SIZE_IN_ELEMENTS: usize = 128;
 
 /// Errors propagated by methods in this module.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum PrngError {
     /// Suite error.
     #[error("suite error: {0}")]

@@ -21,15 +21,21 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
 use std::fmt::Debug;
+use std::io::Cursor;
+use std::iter::FromIterator;
 use std::marker::PhantomData;
 
+use crate::codec::{
+    decode_u16_items, decode_u24_items, encode_u16_items, encode_u24_items, CodecError, Decode,
+    Encode,
+};
 use crate::field::{split_vector, FieldElement};
 use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, Vdaf, VdafError,
+    Share, ShareDecodingParameter, Vdaf, VdafError,
 };
 
 /// An input for an IDPF ([`Idpf`]).
@@ -95,12 +101,30 @@ impl PartialOrd for IdpfInput {
     }
 }
 
+impl Encode for IdpfInput {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        (self.index as u64).encode(bytes);
+        (self.level as u64).encode(bytes);
+    }
+}
+
+impl Decode<()> for IdpfInput {
+    fn decode(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let index = u64::decode(&(), bytes)? as usize;
+        let level = u64::decode(&(), bytes)? as usize;
+
+        Ok(Self { index, level })
+    }
+}
+
 /// An Incremental Distributed Point Function (IDPF), as defined by [[BBCG+21]].
 ///
 /// [BBCG+21]: https://eprint.iacr.org/2021/017
 //
 // NOTE(cjpatton) The real IDPF API probably needs to be stateful.
-pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>: Sized + Clone + Debug {
+pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
+    Sized + Clone + Debug + Encode + Decode<()>
+{
     /// The finite field over which the IDPF is defined.
     //
     // NOTE(cjpatton) The IDPF of [BBCG+21] might use different fields for different levels of the
@@ -190,6 +214,92 @@ impl<F: FieldElement> Idpf<2, 2> for ToyIdpf<F> {
     }
 }
 
+impl<F: FieldElement> Encode for ToyIdpf<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u24_items(bytes, &self.data0);
+        encode_u24_items(bytes, &self.data1);
+        (self.level as u64).encode(bytes);
+    }
+}
+
+impl<F: FieldElement> Decode<()> for ToyIdpf<F> {
+    fn decode(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let data0 = decode_u24_items(&(), bytes)?;
+        let data1 = decode_u24_items(&(), bytes)?;
+        let level = u64::decode(&(), bytes)? as usize;
+
+        Ok(Self {
+            data0,
+            data1,
+            level,
+        })
+    }
+}
+
+impl Encode for BTreeSet<IdpfInput> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        // Encodes the aggregation parameter as a variable length vector of
+        // [`IdpfInput`], because the size of the aggregation parameter is not
+        // determined by the VDAF.
+        let items: Vec<IdpfInput> = self.iter().map(IdpfInput::clone).collect();
+        encode_u24_items(bytes, &items);
+    }
+}
+
+impl Decode<()> for BTreeSet<IdpfInput> {
+    fn decode(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let inputs = decode_u24_items(&(), bytes)?;
+        Ok(Self::from_iter(inputs.into_iter()))
+    }
+}
+
+/// An input share for the `poplar1` VDAF.
+#[derive(Debug, Clone)]
+pub struct Poplar1InputShare<I: Idpf<2, 2>> {
+    /// IDPF share of input
+    pub idpf: I,
+
+    /// PRNG seed used to generate the aggregator's share of the randomness used in the first part
+    /// of the sketching protocol.
+    pub sketch_start_seed: Key,
+
+    /// Aggregator's share of the randomness used in the second part of the sketching protocol.
+    pub sketch_next: Share<I::Field>,
+}
+
+impl<I: Idpf<2, 2>> Encode for Poplar1InputShare<I> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.idpf.encode(bytes);
+        self.sketch_start_seed.encode(bytes);
+        self.sketch_next.encode(bytes);
+    }
+}
+
+impl<I: Idpf<2, 2>> Decode<Poplar1VerifyParam> for Poplar1InputShare<I> {
+    fn decode(
+        decoding_parameter: &Poplar1VerifyParam,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let idpf = I::decode(&(), bytes)?;
+        let sketch_start_seed = Key::decode(&decoding_parameter.rand_init.suite(), bytes)?;
+
+        let share_decoding_parameter = if decoding_parameter.is_leader {
+            // TODO: I think this is correct for `Idpf<2, 2>`
+            ShareDecodingParameter::Leader(2)
+        } else {
+            ShareDecodingParameter::Helper(decoding_parameter.rand_init.suite())
+        };
+
+        let sketch_next = <Share<I::Field>>::decode(&share_decoding_parameter, bytes)?;
+
+        Ok(Self {
+            idpf,
+            sketch_start_seed,
+            sketch_next,
+        })
+    }
+}
+
 /// The poplar1 VDAF.
 #[derive(Debug)]
 pub struct Poplar1<I> {
@@ -238,20 +348,6 @@ impl<I: Idpf<2, 2>> Vdaf for Poplar1<I> {
     fn num_aggregators(&self) -> usize {
         2
     }
-}
-
-/// An input share for the heavy hitters VDAF.
-#[derive(Debug, Clone)]
-pub struct Poplar1InputShare<I: Idpf<2, 2>> {
-    /// IDPF share of input
-    pub idpf: I,
-
-    /// PRNG seed used to generate the aggregator's share of the randomness used in the first part
-    /// of the sketching protocol.
-    pub sketch_start_seed: Key,
-
-    /// Aggregator's share of the randomness used in the second part of the sketching protocol.
-    pub sketch_next: Share<I::Field>,
 }
 
 impl<I: Idpf<2, 2>> Client for Poplar1<I> {
@@ -315,6 +411,7 @@ impl<I: Idpf<2, 2>> Client for Poplar1<I> {
 }
 
 /// The verification parameter used by the aggregators to evaluate the VDAF on a distributed input.
+#[derive(Clone, Debug)]
 pub struct Poplar1VerifyParam {
     /// Key used to derive the verification randomness from the nonce.
     rand_init: Key,
@@ -548,6 +645,29 @@ pub struct Poplar1PrepareMessage<F>(Vec<F>);
 impl<F> AsRef<[F]> for Poplar1PrepareMessage<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
+    }
+}
+
+impl<F: FieldElement> Encode for Poplar1PrepareMessage<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        // TODO: This is encoded as a variable length vector of F, but we may
+        // be able to make this a fixed-length vector for specific Poplar1
+        // instantations
+        encode_u16_items(bytes, &self.0);
+    }
+}
+
+impl<F: FieldElement> Decode<Poplar1PrepareStep<F>> for Poplar1PrepareMessage<F> {
+    fn decode(
+        _decoding_parameter: &Poplar1PrepareStep<F>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        // TODO: This is decoded as a variable length vector of F, but we may be
+        // able to make this a fixed-length vector for specific Poplar1
+        // instantiations.
+        let items = decode_u16_items(&(), bytes)?;
+
+        Ok(Self(items))
     }
 }
 

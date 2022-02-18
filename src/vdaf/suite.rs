@@ -6,26 +6,30 @@
 //
 // TODO(cjpatton) Add unit test with test vectors.
 
+use crate::codec::{CodecError, Decode, Encode};
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{FromBlockCipher, NewBlockCipher, StreamCipher as AesStreamCipher};
 use aes::{Aes128, Aes128Ctr};
 use getrandom::getrandom;
 use ring::hmac;
-use serde::{Deserialize, Serialize};
+use std::io::{Cursor, Read};
 
 const BLAKE3_DERIVE_PREFIX: &[u8] = b"blake3 key derive";
 const BLAKE3_STREAM_PREFIX: &[u8] = b"blake3 key stream";
 
 /// Errors propagated by methods in this module.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, thiserror::Error)]
 pub enum SuiteError {
     /// Failure when calling getrandom().
     #[error("getrandom: {0}")]
     GetRandom(#[from] getrandom::Error),
+    /// Failure performing I/O
+    #[error("I/O error: {0}")]
+    Io(#[from] std::io::Error),
 }
 
 /// A suite uniquely determines a [`KeyStream`] and [`KeyDeriver`].
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Suite {
     /// The [`KeyStream`] is implemented from AES128 in CTR mode and the [`KeyDeriver`] is
     /// implemented from HMAC-SHA256.
@@ -37,7 +41,7 @@ pub enum Suite {
 }
 
 /// A Key used to instantiate a [`KeyStream`] or [`KeyDeriver`].
-#[derive(Clone, Debug, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq)]
 pub enum Key {
     #[allow(missing_docs)]
     Aes128CtrHmacSha256([u8; 32]),
@@ -117,6 +121,29 @@ impl Key {
         match self {
             Key::Aes128CtrHmacSha256(_) => Suite::Aes128CtrHmacSha256,
             Key::Blake3(_) => Suite::Blake3,
+        }
+    }
+}
+
+impl Encode for Key {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        let seed = match self {
+            Self::Aes128CtrHmacSha256(entropy) => entropy,
+            Self::Blake3(entropy) => entropy,
+        };
+
+        bytes.extend_from_slice(seed);
+    }
+}
+
+impl Decode<Suite> for Key {
+    fn decode(decoding_parameter: &Suite, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let mut seed = [0u8; 32];
+        bytes.read_exact(&mut seed)?;
+
+        match decoding_parameter {
+            Suite::Aes128CtrHmacSha256 => Ok(Self::Aes128CtrHmacSha256(seed)),
+            Suite::Blake3 => Ok(Self::Blake3(seed)),
         }
     }
 }

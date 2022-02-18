@@ -14,6 +14,7 @@ extern crate static_assertions;
 
 pub mod benchmarked;
 pub mod client;
+pub mod codec;
 pub mod encrypt;
 mod fft;
 pub mod field;
