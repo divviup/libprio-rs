@@ -7,7 +7,7 @@
 //! TODO Make the input shares stateful so that applications can efficiently evaluate the IDPF over
 //! multiple rounds. Question: Will this require API changes to [`crate::vdaf::Vdaf`]?
 //!
-//! TODO Update trait [`Idpf`] so thtat the IPDF can have a different field type at the leaves than
+//! TODO Update trait [`Idpf`] so that the IDPF can have a different field type at the leaves than
 //! at the inner nodes.
 //!
 //! TODO Implement the efficient IDPF of [[BBCG+21]]. [`ToyIdpf`] is not space efficient and is
@@ -40,7 +40,7 @@ use crate::vdaf::{
 
 /// An input for an IDPF ([`Idpf`]).
 ///
-/// TODO Make this an associated type of `Ipdf`.
+/// TODO Make this an associated type of `Idpf`.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct IdpfInput {
     index: usize,
@@ -143,7 +143,7 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
     fn eval(&self, prefix: &IdpfInput) -> Result<[Self::Field; OUT_LEN], VdafError>;
 }
 
-/// A "toy" IPDF used for demonstration purposes. The space consumed by each share is `O(2^n)`,
+/// A "toy" IDPF used for demonstration purposes. The space consumed by each share is `O(2^n)`,
 /// where `n` is the length of the input. The size of each share is restricted to 1MB, so this IDPF
 /// is only suitable for very short inputs.
 //
@@ -730,7 +730,7 @@ mod tests {
     use crate::field::Field128;
 
     #[test]
-    fn test_ipdf() {
+    fn test_idpf() {
         // IDPF input equality tests.
         assert_eq!(
             IdpfInput::new(b"hello", 40).unwrap(),
@@ -760,7 +760,7 @@ mod tests {
         assert!(unique.insert(IdpfInput::new(b"hello", 39).unwrap()));
         assert!(unique.insert(IdpfInput::new(b"bye", 20).unwrap()));
 
-        // Generate IPDF keys.
+        // Generate IDPF keys.
         let input = IdpfInput::new(b"hi", 16).unwrap();
         let keys = ToyIdpf::<Field128>::gen(
             &input,
@@ -768,7 +768,7 @@ mod tests {
         )
         .unwrap();
 
-        // Try evaluating the IPDF keys on all prefixes.
+        // Try evaluating the IDPF keys on all prefixes.
         for prefix_len in 0..input.level + 1 {
             let res = eval_idpf(
                 &keys,
@@ -778,7 +778,7 @@ mod tests {
             assert!(res.is_ok(), "prefix_len={} error: {:?}", prefix_len, res);
         }
 
-        // Try evaluating the IPDF keys on incorrect prefixes.
+        // Try evaluating the IDPF keys on incorrect prefixes.
         eval_idpf(
             &keys,
             &IdpfInput::new(&[2], 2).unwrap(),
