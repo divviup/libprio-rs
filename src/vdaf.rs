@@ -292,6 +292,12 @@ impl<F> From<OutputShare<F>> for AggregateShare<F> {
     }
 }
 
+impl<F> From<Vec<F>> for AggregateShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
 impl<F: FieldElement> Aggregatable for AggregateShare<F> {
     type OutputShare = OutputShare<F>;
 
