@@ -779,23 +779,103 @@ impl HelperShare {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vdaf::{run_vdaf, run_vdaf_prepare};
+    use assert_matches::assert_matches;
 
     #[test]
     fn test_prio3_count64() {
-        let prio3 = Prio3Count64::new(Suite::Blake3, 23).unwrap();
+        let prio3 = Prio3Count64::new(Suite::Blake3, 2).unwrap();
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(),
+            Prio3Result(3)
+        );
+
         let (_, verify_params) = prio3.setup().unwrap();
         let nonce = b"This is a good nonce.";
-        let input_shares = prio3.shard(&(), &1).unwrap();
-        eval_vdaf(
-            &prio3,
-            &input_shares,
-            &verify_params,
-            nonce,
-            Some(Prio3Result(1)),
-        )
-        .unwrap();
 
-        // TODO(cjpatton) Add failure test cases.
+        let input_shares = prio3.shard(&(), &0).unwrap();
+        run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares).unwrap();
+
+        let input_shares = prio3.shard(&(), &1).unwrap();
+        run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares).unwrap();
+    }
+
+    #[test]
+    fn test_prio3_sum64() {
+        let prio3 = Prio3Sum64::new(Suite::Blake3, 3, 16).unwrap();
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [0, (1 << 16) - 1, 0, 1, 1]).unwrap(),
+            Prio3Result((1 << 16) + 1)
+        );
+
+        let (_, verify_params) = prio3.setup().unwrap();
+        let nonce = b"This is a good nonce.";
+
+        let mut input_shares = prio3.shard(&(), &1).unwrap();
+        input_shares[0].blind.as_mut_slice()[0] ^= 255;
+        let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
+        assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+        let mut input_shares = prio3.shard(&(), &1).unwrap();
+        input_shares[0].joint_rand_seed_hint.as_mut_slice()[0] ^= 255;
+        let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
+        assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+        let mut input_shares = prio3.shard(&(), &1).unwrap();
+        assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
+            data[0] += Field96::one();
+        });
+        let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
+        assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+        let mut input_shares = prio3.shard(&(), &1).unwrap();
+        assert_matches!(input_shares[0].proof_share, Share::Leader(ref mut data) => {
+                data[0] += Field96::one();
+        });
+        let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
+        assert_matches!(result, Err(VdafError::Uncategorized(_)));
+    }
+
+    #[test]
+    fn test_prio3_histogram64() {
+        let prio3 = Prio3Histogram64::new(Suite::Blake3, 2, &[0, 10, 20]).unwrap();
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [0, 10, 20, 9999]).unwrap(),
+            Prio3ResultVec(vec![1, 1, 1, 1])
+        );
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [0]).unwrap(),
+            Prio3ResultVec(vec![1, 0, 0, 0])
+        );
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [5]).unwrap(),
+            Prio3ResultVec(vec![0, 1, 0, 0])
+        );
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [10]).unwrap(),
+            Prio3ResultVec(vec![0, 1, 0, 0])
+        );
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [15]).unwrap(),
+            Prio3ResultVec(vec![0, 0, 1, 0])
+        );
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [20]).unwrap(),
+            Prio3ResultVec(vec![0, 0, 1, 0])
+        );
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [25]).unwrap(),
+            Prio3ResultVec(vec![0, 0, 0, 1])
+        );
     }
 
     #[test]
@@ -824,94 +904,5 @@ mod tests {
                 }
             }
         }
-    }
-
-    // Execute the VDAF end-to-end on a single user measurement.
-    fn eval_vdaf<T, A>(
-        prio3: &Prio3<T, A>,
-        input_shares: &[Prio3InputShare<T::Field>],
-        verify_params: &[Prio3VerifyParam],
-        nonce: &[u8],
-        expected_agg: Option<A>,
-    ) -> Result<(), VdafError>
-    where
-        T: Type,
-        A: TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq + Clone + Debug + Sync + Send,
-    {
-        // Emulate sending the input shares over the network by encoding them.
-        let encoded_input_shares: Vec<_> = input_shares
-            .iter()
-            .map(|input_share| {
-                let mut encoded_input_share = vec![];
-                input_share.encode(&mut encoded_input_share);
-                encoded_input_share
-            })
-            .collect();
-
-        let mut state0: Vec<Prio3PrepareStep<T::Field>> =
-            Vec::with_capacity(prio3.num_aggregators());
-        for i in 0..prio3.num_aggregators() {
-            // Parse the input share.
-            let mut reader = Cursor::new(encoded_input_shares[i].as_slice());
-            let input_share = Prio3InputShare::decode(&verify_params[i], &mut reader).unwrap();
-            assert_eq!(reader.position(), encoded_input_shares[i].len() as u64);
-
-            // Initialize the preparation state.
-            let state = prio3.prepare_init(&verify_params[i], &(), nonce, &input_share)?;
-            state0.push(state);
-        }
-
-        let mut round1: Vec<Prio3PrepareMessage<T::Field>> =
-            Vec::with_capacity(prio3.num_aggregators());
-        let mut state1: Vec<Prio3PrepareStep<T::Field>> =
-            Vec::with_capacity(prio3.num_aggregators());
-        for state in state0.into_iter() {
-            let (state, msg) = prio3.prepare_start(state)?;
-            state1.push(state);
-            round1.push(msg);
-        }
-
-        // Emulate broadcasting the prepare messages over the network by encoding them.
-        let encoded_prep_messages: Vec<_> = round1
-            .iter()
-            .map(|msg| {
-                let mut encoded_msg = vec![];
-                msg.encode(&mut encoded_msg);
-                encoded_msg
-            })
-            .collect();
-
-        // Parse and preprocess the prepare messages.
-        let round1_preprocessed =
-            prio3.prepare_preprocess(encoded_prep_messages.iter().zip(&state1).map(
-                |(encoded_msg, state)| {
-                    let mut reader = Cursor::new(encoded_msg.as_slice());
-                    let msg = Prio3PrepareMessage::decode(state, &mut reader).unwrap();
-                    assert_eq!(reader.position(), encoded_msg.len() as u64);
-                    msg
-                },
-            ))?;
-
-        let mut agg_shares: Vec<AggregateShare<T::Field>> =
-            Vec::with_capacity(prio3.num_aggregators());
-        for state in state1.into_iter() {
-            let output_share = prio3.prepare_finish(state, round1_preprocessed.clone())?;
-            agg_shares.push(prio3.aggregate(&(), [output_share])?);
-        }
-
-        if let Some(want) = expected_agg {
-            let got = prio3.unshard(&(), agg_shares)?;
-            if got != want {
-                return Err(VdafError::Uncategorized(
-                    "unexpected output for test case".to_string(),
-                ));
-            }
-        } else {
-            return Err(VdafError::Uncategorized(
-                "test case expected no output, got some".to_string(),
-            ));
-        }
-
-        Ok(())
     }
 }
