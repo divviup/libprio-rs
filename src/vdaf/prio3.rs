@@ -192,6 +192,23 @@ pub struct Prio3<T: Type, A: Clone + Debug> {
     phantom: PhantomData<A>,
 }
 
+impl<T: Type, A: Clone + Debug> Prio3<T, A> {
+    /// The suite used for this instance of prio3.
+    pub fn suite(&self) -> Suite {
+        self.suite
+    }
+
+    /// The output length of the underlying FLP.
+    pub fn output_len(&self) -> usize {
+        self.typ.output_len()
+    }
+
+    /// The verifier length of the underlying FLP.
+    pub fn verifier_len(&self) -> usize {
+        self.typ.verifier_len()
+    }
+}
+
 impl<T: Type, A: Clone + Debug + Sync + Send> Vdaf for Prio3<T, A> {
     type Measurement = T::Measurement;
     type AggregateResult = A;
