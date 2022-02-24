@@ -153,8 +153,9 @@ pub trait Aggregator: Vdaf {
     /// The type of messages exchanged among the Aggregators during the Prepare process.
     type PrepareMessage: Clone + Debug + Decode<Self::PrepareStep> + Encode;
 
-    /// Begins the Prepare process with the other Aggregators. The result of this process is
-    /// the Aggregator's output share.
+    /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareStep`] returned
+    /// is passed to [`Aggregator::prepare_step`] to get this aggregator's first-round prepare
+    /// message.
     fn prepare_init(
         &self,
         verify_param: &Self::VerifyParam,
@@ -163,63 +164,24 @@ pub trait Aggregator: Vdaf {
         input_share: &Self::InputShare,
     ) -> Result<Self::PrepareStep, VdafError>;
 
-    /// Preprocess a round of messages into a single input to [`Aggregator::prepare_step`].
+    /// Preprocess a round of prepare messages into a single input to [`Aggregator::prepare_step`].
     fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareMessage>>(
         &self,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError>;
 
     /// Compute the next state transition from the current state and the previous round of input
-    /// messages.
+    /// messages. If this returns [`PrepareTransition::Continue`], then the returned
+    /// [`Self::PrepareMessage`] should be combined with the other aggregator's `PrepareMessage`s from
+    /// this round and passed into another call to this method. This continues until this method
+    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
+    /// aggregated. If the method returns [`PrepareTransition::Fail`], the aggregator should
+    /// consider its input share invalid and not attempt to process it any further.
     fn prepare_step(
         &self,
         state: Self::PrepareStep,
         input: Option<Self::PrepareMessage>,
     ) -> PrepareTransition<Self::PrepareStep, Self::PrepareMessage, Self::OutputShare>;
-
-    /// Compute the Aggregator's first message.
-    fn prepare_start(
-        &self,
-        state: Self::PrepareStep,
-    ) -> Result<(Self::PrepareStep, Self::PrepareMessage), VdafError> {
-        match self.prepare_step(state, None) {
-            PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
-            PrepareTransition::Fail(err) => Err(err),
-            PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
-                "start() resulted in early Finish transition".to_string(),
-            )),
-        }
-    }
-
-    /// Compute the Aggregator's next message from the previous round of messages.
-    fn prepare_next(
-        &self,
-        state: Self::PrepareStep,
-        input: Self::PrepareMessage,
-    ) -> Result<(Self::PrepareStep, Self::PrepareMessage), VdafError> {
-        match self.prepare_step(state, Some(input)) {
-            PrepareTransition::Continue(new_state, output) => Ok((new_state, output)),
-            PrepareTransition::Fail(err) => Err(err),
-            PrepareTransition::Finish(_) => Err(VdafError::Uncategorized(
-                "next() resulted in early Finish transition".to_string(),
-            )),
-        }
-    }
-
-    /// Recover the Aggregator's output share.
-    fn prepare_finish(
-        &self,
-        step: Self::PrepareStep,
-        input: Self::PrepareMessage,
-    ) -> Result<Self::OutputShare, VdafError> {
-        match self.prepare_step(step, Some(input)) {
-            PrepareTransition::Continue(_, _) => Err(VdafError::Uncategorized(
-                "finish() resulted in Continue transition".to_string(),
-            )),
-            PrepareTransition::Fail(err) => Err(err),
-            PrepareTransition::Finish(output_share) => Ok(output_share),
-        }
-    }
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -432,7 +394,7 @@ where
                 V::PrepareMessage::get_decoded(&states[0], encoded)
                     .expect("failed to decode papare message")
             }))?);
-        } else if outbound.len() == 0 {
+        } else if outbound.is_empty() {
             // Each Aggregator recovered an output share.
             break;
         } else {
