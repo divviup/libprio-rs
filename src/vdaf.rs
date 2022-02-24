@@ -253,7 +253,7 @@ pub enum PrepareTransition<S, M, O> {
 
 /// An aggregate share resulting from aggregating output shares together that
 /// can merged with aggregate shares of the same type.
-pub trait Aggregatable: Clone + Debug {
+pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
     /// Type of output shares that can be accumulated into an aggregate share.
     type OutputShare;
 
@@ -283,6 +283,12 @@ pub struct AggregateShare<F>(Vec<F>);
 impl<F> AsRef<[F]> for AggregateShare<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
+    }
+}
+
+impl<F> From<OutputShare<F>> for AggregateShare<F> {
+    fn from(other: OutputShare<F>) -> Self {
+        Self(other.0)
     }
 }
 
@@ -335,6 +341,106 @@ impl<F: FieldElement> Decode<usize> for AggregateShare<F> {
 
         Ok(Self(items))
     }
+}
+
+#[cfg(test)]
+pub(crate) fn run_vdaf<V, M>(
+    vdaf: &V,
+    agg_param: &V::AggregationParam,
+    measurements: M,
+) -> Result<V::AggregateResult, VdafError>
+where
+    V: Client + Aggregator + Collector,
+    M: IntoIterator<Item = V::Measurement>,
+{
+    // NOTE Here we use the same nonce for each measurement for testing purposes. However, this is
+    // not secure. In use, the Aggregators MUST ensure that nonces are unique for each measurement.
+    let nonce = b"this is a nonce";
+
+    let (public_param, verify_params) = vdaf.setup()?;
+
+    let mut agg_shares: Vec<Option<V::AggregateShare>> = vec![None; vdaf.num_aggregators()];
+    for measurement in measurements.into_iter() {
+        let input_shares = vdaf.shard(&public_param, &measurement)?;
+        let out_shares = run_vdaf_prepare(vdaf, &verify_params, agg_param, nonce, input_shares)?;
+        for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
+            if let Some(ref mut inner) = agg_share {
+                inner.merge(&out_share.into())?;
+            } else {
+                *agg_share = Some(out_share.into());
+            }
+        }
+    }
+
+    let res = vdaf.unshard(
+        agg_param,
+        agg_shares.into_iter().map(|option| option.unwrap()),
+    )?;
+    Ok(res)
+}
+
+#[cfg(test)]
+pub(crate) fn run_vdaf_prepare<V, M>(
+    vdaf: &V,
+    verify_params: &[V::VerifyParam],
+    agg_param: &V::AggregationParam,
+    nonce: &[u8],
+    input_shares: M,
+) -> Result<Vec<V::OutputShare>, VdafError>
+where
+    V: Client + Aggregator + Collector,
+    M: IntoIterator<Item = V::InputShare>,
+{
+    let input_shares = input_shares
+        .into_iter()
+        .map(|input_share| input_share.get_encoded());
+
+    let mut states = Vec::new();
+    for (verify_param, input_share) in verify_params.iter().zip(input_shares) {
+        let state = vdaf.prepare_init(
+            verify_param,
+            agg_param,
+            nonce,
+            &V::InputShare::get_decoded(verify_param, &input_share)
+                .expect("failed to decode input share"),
+        )?;
+        states.push(state);
+    }
+
+    let mut inbound = None;
+    let mut out_shares = Vec::new();
+    loop {
+        let mut outbound = Vec::new();
+        for state in states.iter_mut() {
+            match vdaf.prepare_step(state.clone(), inbound.clone()) {
+                PrepareTransition::Continue(new_state, msg) => {
+                    outbound.push(msg.get_encoded());
+                    *state = new_state
+                }
+                PrepareTransition::Finish(out_share) => {
+                    out_shares.push(out_share);
+                }
+                PrepareTransition::Fail(err) => {
+                    return Err(err);
+                }
+            }
+        }
+
+        if outbound.len() == vdaf.num_aggregators() {
+            // Another round is required before output shares are computed.
+            inbound = Some(vdaf.prepare_preprocess(outbound.iter().map(|encoded| {
+                V::PrepareMessage::get_decoded(&states[0], encoded)
+                    .expect("failed to decode papare message")
+            }))?);
+        } else if outbound.len() == 0 {
+            // Each Aggregator recovered an output share.
+            break;
+        } else {
+            panic!("Aggregators did not finish the prepare phase at the same time");
+        }
+    }
+
+    Ok(out_shares)
 }
 
 pub mod poplar1;
