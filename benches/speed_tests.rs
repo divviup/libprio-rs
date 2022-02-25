@@ -4,6 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use prio::benchmarked::*;
 use prio::client::Client as Prio2Client;
+use prio::codec::Encode;
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field128 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
@@ -13,7 +14,7 @@ use prio::vdaf::prio3::Prio3CountVec64Multithreaded;
 use prio::vdaf::{
     prio3::{Prio3Count64, Prio3CountVec64, Prio3Histogram64, Prio3InputShare, Prio3Sum64},
     suite::Suite,
-    Client as Prio3Client, Share,
+    Client as Prio3Client,
 };
 
 /// This benchmark compares the performance of recursive and iterative FFT.
@@ -204,26 +205,7 @@ pub fn prio3_client(c: &mut Criterion) {
 fn prio3_input_share_size<F: FieldElement>(input_shares: &[Prio3InputShare<F>]) -> usize {
     let mut size = 0;
     for input_share in input_shares {
-        match input_share.input_share {
-            Share::Leader(ref data) => {
-                size += data.len() * F::ENCODED_SIZE;
-            }
-            Share::Helper(ref seed) => {
-                size += seed.size();
-            }
-        };
-
-        match input_share.proof_share {
-            Share::Leader(ref data) => {
-                size += data.len() * F::ENCODED_SIZE;
-            }
-            Share::Helper(ref seed) => {
-                size += seed.size();
-            }
-        }
-
-        size += input_share.joint_rand_seed_hint.size();
-        size += input_share.blind.size();
+        size += input_share.get_encoded().len();
     }
 
     size
