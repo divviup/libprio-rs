@@ -10,7 +10,7 @@
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
 use crate::codec::{CodecError, Decode, Encode};
-use crate::field::{Field64, Field96, FieldElement};
+use crate::field::{Field128, Field64, FieldElement};
 #[cfg(feature = "multithreaded")]
 use crate::pcp::gadgets::ParallelSumMultithreaded;
 use crate::pcp::gadgets::{BlindPolyEval, ParallelSum, ParallelSumGadget};
@@ -48,7 +48,7 @@ impl Prio3Count64 {
 /// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
 /// the element-wise sum.
 pub type Prio3CountVec64 =
-    Prio3<CountVec<Field96, ParallelSum<Field96, BlindPolyEval<Field96>>>, Prio3ResultVec<u64>>;
+    Prio3<CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, Prio3ResultVec<u64>>;
 
 /// Like [`Prio3CountVec64`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
@@ -56,13 +56,13 @@ pub type Prio3CountVec64 =
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3CountVec64Multithreaded = Prio3<
-    CountVec<Field96, ParallelSumMultithreaded<Field96, BlindPolyEval<Field96>>>,
+    CountVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
     Prio3ResultVec<u64>,
 >;
 
-impl<S> Prio3<CountVec<Field96, S>, Prio3ResultVec<u64>>
+impl<S> Prio3<CountVec<Field128, S>, Prio3ResultVec<u64>>
 where
-    S: 'static + ParallelSumGadget<Field96, BlindPolyEval<Field96>> + Eq,
+    S: 'static + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Eq,
 {
     /// Construct an instance of this VDAF with the given suite and the given number of
     /// aggregators. `len` defines the length of each measurement.
@@ -80,7 +80,7 @@ where
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum64 = Prio3<Sum<Field96>, Prio3Result<u64>>;
+pub type Prio3Sum64 = Prio3<Sum<Field128>, Prio3Result<u64>>;
 
 impl Prio3Sum64 {
     /// Construct an instance of this VDAF with the given suite, number of aggregators and required
@@ -106,7 +106,7 @@ impl Prio3Sum64 {
 
 /// the histogram type. Each measurement is an unsigned, 64-bit integer and the result is a
 /// histogram representation of the measurement.
-pub type Prio3Histogram64 = Prio3<Histogram<Field96>, Prio3ResultVec<u64>>;
+pub type Prio3Histogram64 = Prio3<Histogram<Field128>, Prio3ResultVec<u64>>;
 
 impl Prio3Histogram64 {
     /// Constructs an instance of this VDAF with the given suite, number of aggregators, and
@@ -119,7 +119,7 @@ impl Prio3Histogram64 {
         Ok(Prio3 {
             num_aggregators,
             suite,
-            typ: Histogram::<Field96>::new(buckets)?,
+            typ: Histogram::<Field128>::new(buckets)?,
             phantom: PhantomData,
         })
     }
@@ -825,14 +825,14 @@ mod tests {
 
         let mut input_shares = prio3.shard(&(), &1).unwrap();
         assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
-            data[0] += Field96::one();
+            data[0] += Field128::one();
         });
         let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
         let mut input_shares = prio3.shard(&(), &1).unwrap();
         assert_matches!(input_shares[0].proof_share, Share::Leader(ref mut data) => {
-                data[0] += Field96::one();
+                data[0] += Field128::one();
         });
         let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
