@@ -284,8 +284,9 @@ impl<I: Idpf<2, 2>> Decode<Poplar1VerifyParam> for Poplar1InputShare<I> {
         let sketch_start_seed = Key::decode(&decoding_parameter.rand_init.suite(), bytes)?;
 
         let share_decoding_parameter = if decoding_parameter.is_leader {
-            // TODO: I think this is correct for `Idpf<2, 2>`
-            ShareDecodingParameter::Leader(2)
+            // The sketch is two field elements for every bit of input, plus two more, corresponding
+            // to construction of shares in `Poplar1::shard`.
+            ShareDecodingParameter::Leader((decoding_parameter.input_length + 1) * 2)
         } else {
             ShareDecodingParameter::Helper(decoding_parameter.rand_init.suite())
         };
@@ -304,15 +305,20 @@ impl<I: Idpf<2, 2>> Decode<Poplar1VerifyParam> for Poplar1InputShare<I> {
 #[derive(Debug)]
 pub struct Poplar1<I> {
     suite: Suite,
+    input_length: usize,
     phantom: PhantomData<I>,
 }
 
 impl<I> Poplar1<I> {
     /// Create an instance of the poplar1 VDAF. The caller provides a cipher suite `suite` used for
-    /// deriving pseudorandom sequences of field elements.
-    pub fn new(suite: Suite) -> Self {
+    /// deriving pseudorandom sequences of field elements, and a input length in bits, corresponding
+    /// to `BITS` as defined in the [VDAF specification][1].
+    ///
+    /// [1]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html#name-poplar1
+    pub fn new(suite: Suite, bits: usize) -> Self {
         Self {
             suite,
+            input_length: bits,
             phantom: PhantomData,
         }
     }
@@ -320,7 +326,7 @@ impl<I> Poplar1<I> {
 
 impl<I> Clone for Poplar1<I> {
     fn clone(&self) -> Self {
-        Self::new(self.suite)
+        Self::new(self.suite, self.input_length)
     }
 }
 
@@ -339,8 +345,8 @@ impl<I: Idpf<2, 2>> Vdaf for Poplar1<I> {
         Ok((
             (),
             vec![
-                Poplar1VerifyParam::new(&verify_rand_init, true),
-                Poplar1VerifyParam::new(&verify_rand_init, false),
+                Poplar1VerifyParam::new(&verify_rand_init, true, self.input_length),
+                Poplar1VerifyParam::new(&verify_rand_init, false, self.input_length),
             ],
         ))
     }
@@ -373,7 +379,7 @@ impl<I: Idpf<2, 2>> Client for Poplar1<I> {
             Prng::from_key_stream(KeyStream::from_key(&helper_sketch_start_seed));
         let mut helper_sketch_next_prng: Prng<I::Field> =
             Prng::from_key_stream(KeyStream::from_key(&helper_sketch_next_seed));
-        let mut leader_sketch_next: Vec<I::Field> = Vec::with_capacity(2 * input.level);
+        let mut leader_sketch_next: Vec<I::Field> = Vec::with_capacity(2 * idpf_values.len());
         for value in idpf_values.iter() {
             let k = value[1];
 
@@ -416,15 +422,19 @@ pub struct Poplar1VerifyParam {
     /// Key used to derive the verification randomness from the nonce.
     rand_init: Key,
 
+    /// Length of
+    input_length: usize,
+
     /// Indicates whether this Aggregator is the leader.
     is_leader: bool,
 }
 
 impl Poplar1VerifyParam {
     /// Construct a new verification parameter.
-    pub fn new(key: &Key, is_leader: bool) -> Self {
+    pub fn new(key: &Key, is_leader: bool, input_length: usize) -> Self {
         Self {
             rand_init: key.clone(),
+            input_length,
             is_leader,
         }
     }
@@ -728,6 +738,7 @@ mod tests {
     use super::*;
 
     use crate::field::Field128;
+    use crate::vdaf::{run_vdaf, run_vdaf_prepare};
 
     #[test]
     fn test_idpf() {
@@ -822,173 +833,82 @@ mod tests {
 
     #[test]
     fn test_poplar1() {
-        let vdaf: Poplar1<ToyIdpf<Field128>> = Poplar1::new(Suite::Blake3);
+        const INPUT_LEN: usize = 8;
+
+        let vdaf: Poplar1<ToyIdpf<Field128>> = Poplar1::new(Suite::Blake3, INPUT_LEN);
         assert_eq!(vdaf.num_aggregators(), 2);
 
-        let (public_param, verify_params) = vdaf.setup().unwrap();
-
         // Run the VDAF input-distribution algorithm.
-        let input = IdpfInput::new(b"hi", 16).unwrap();
-        let input_shares = vdaf.shard(&public_param, &input).unwrap();
-        let nonce = b"This is a nonce";
+        let input = vec![IdpfInput::new(&[0b0110_1000], INPUT_LEN).unwrap()];
 
         let mut agg_param = BTreeSet::new();
-        agg_param.insert(input);
-        let res = eval_vdaf(
-            &vdaf,
-            &input_shares,
-            &verify_params,
-            &nonce[..],
-            &agg_param,
-            Some(&[1]),
-        );
-        assert!(res.is_ok(), "error: {:?}", res);
+        agg_param.insert(input[0]);
+        check_btree(&run_vdaf(&vdaf, &agg_param, input.clone()).unwrap(), &[1]);
 
         // Try evaluating the VDAF on each prefix of the input.
-        for prefix_len in 0..input.level + 1 {
+        for prefix_len in 0..input[0].level + 1 {
             let mut agg_param = BTreeSet::new();
-            agg_param.insert(input.prefix(prefix_len));
-            let res = eval_vdaf(
-                &vdaf,
-                &input_shares,
-                &verify_params,
-                &nonce[..],
-                &agg_param,
-                Some(&[1]),
-            );
-            assert!(res.is_ok(), "prefix_len={} error: {:?}", prefix_len, res);
+            agg_param.insert(input[0].prefix(prefix_len));
+            check_btree(&run_vdaf(&vdaf, &agg_param, input.clone()).unwrap(), &[1]);
         }
 
         // Try various prefixes.
-        let prefix_len = 9;
+        let prefix_len = 4;
         let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(&[0, 0], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[0, 1], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[13, 1], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[16, 1], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[23, 1], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(b"aa", prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(b"hi", prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(b"kk", prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(b"xy", prefix_len).unwrap());
-        let res = eval_vdaf(
-            &vdaf,
-            &input_shares,
-            &verify_params,
-            &nonce[..],
-            &agg_param,
-            Some(&[0, 0, 0, 0, 0, 0, 1, 0, 0]),
+        // At length 4, the next two prefixes are equal. Neither one matches the input.
+        agg_param.insert(IdpfInput::new(&[0b0000_0000], prefix_len).unwrap());
+        agg_param.insert(IdpfInput::new(&[0b0001_0000], prefix_len).unwrap());
+        agg_param.insert(IdpfInput::new(&[0b0000_0001], prefix_len).unwrap());
+        agg_param.insert(IdpfInput::new(&[0b0000_1101], prefix_len).unwrap());
+        // At length 4, the next two prefixes are equal. Both match the input.
+        agg_param.insert(IdpfInput::new(&[0b0111_1101], prefix_len).unwrap());
+        agg_param.insert(IdpfInput::new(&[0b0000_1101], prefix_len).unwrap());
+        let aggregate = run_vdaf(&vdaf, &agg_param, input.clone()).unwrap();
+        assert_eq!(aggregate.len(), agg_param.len());
+        check_btree(
+            &aggregate,
+            // We put six prefixes in the aggregation parameter, but the vector we get back is only
+            // 4 elements because at the given prefix length, some of the prefixes are equal.
+            &[0, 0, 0, 1],
         );
-        assert!(res.is_ok(), "error: {:?}", res);
+
+        let (public_param, verify_params) = vdaf.setup().unwrap();
+        let nonce = b"this is a nonce";
 
         // Try evaluating the VDAF with an invalid aggregation parameter. (It's an error to have a
         // mixture of prefix lengths.)
         let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(b"xx", 12).unwrap());
-        agg_param.insert(IdpfInput::new(b"hi", 13).unwrap());
-        eval_vdaf(
-            &vdaf,
-            &input_shares,
-            &verify_params,
-            &nonce[..],
-            &agg_param,
-            None,
-        )
-        .unwrap_err();
+        agg_param.insert(IdpfInput::new(&[0b0000_0111], 6).unwrap());
+        agg_param.insert(IdpfInput::new(&[0b0000_1000], 7).unwrap());
+        let input_shares = vdaf.shard(&public_param, &input[0]).unwrap();
+        run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
 
         // Try evaluating the VDAF with malformed inputs.
         //
         // This IDPF key pair evaluates to 1 everywhere, which is illegal.
-        let mut input_shares = vdaf.shard(&public_param, &input).unwrap();
+        let mut input_shares = vdaf.shard(&public_param, &input[0]).unwrap();
         for (i, x) in input_shares[0].idpf.data0.iter_mut().enumerate() {
-            if i != input.index {
+            if i != input[0].index {
                 *x += Field128::one();
             }
         }
         let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(b"xx", 16).unwrap());
-        eval_vdaf(
-            &vdaf,
-            &input_shares,
-            &verify_params,
-            &nonce[..],
-            &agg_param,
-            None,
-        )
-        .unwrap_err();
+        agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
+        run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
 
         // This IDPF key pair has a garbled authentication vector.
-        let mut input_shares = vdaf.shard(&public_param, &input).unwrap();
+        let mut input_shares = vdaf.shard(&public_param, &input[0]).unwrap();
         for x in input_shares[0].idpf.data1.iter_mut() {
             *x = Field128::zero();
         }
         let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(b"xx", 16).unwrap());
-        eval_vdaf(
-            &vdaf,
-            &input_shares,
-            &verify_params,
-            &nonce[..],
-            &agg_param,
-            None,
-        )
-        .unwrap_err();
+        agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
+        run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
     }
 
-    // Execute the VDAF end-to-end on a single user measurement.
-    fn eval_vdaf<I: Idpf<2, 2>>(
-        vdaf: &Poplar1<I>,
-        input_shares: &[Poplar1InputShare<I>],
-        verify_params: &[Poplar1VerifyParam],
-        nonce: &[u8],
-        agg_param: &BTreeSet<IdpfInput>,
-        expected_counts: Option<&[u64]>,
-    ) -> Result<(), VdafError> {
-        let mut state0: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
-        for (verify_param, input_share) in verify_params.iter().zip(input_shares.iter()) {
-            let state = vdaf.prepare_init(verify_param, agg_param, nonce, input_share)?;
-            state0.push(state);
+    fn check_btree(btree: &BTreeMap<IdpfInput, u64>, counts: &[u64]) {
+        for (got, want) in btree.values().zip(counts.iter()) {
+            assert_eq!(got, want, "got {:?} want {:?}", btree.values(), counts);
         }
-
-        let mut round1: Vec<Poplar1PrepareMessage<I::Field>> = Vec::with_capacity(2);
-        let mut state1: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
-        for state in state0.into_iter() {
-            let (state, msg) = vdaf.prepare_start(state)?;
-            state1.push(state);
-            round1.push(msg);
-        }
-
-        let mut round2: Vec<Poplar1PrepareMessage<I::Field>> = Vec::with_capacity(2);
-        let mut state2: Vec<Poplar1PrepareStep<I::Field>> = Vec::with_capacity(2);
-        for state in state1.into_iter() {
-            let (state, msg) =
-                vdaf.prepare_next(state, vdaf.prepare_preprocess(round1.clone())?)?;
-            state2.push(state);
-            round2.push(msg);
-        }
-
-        let mut agg_shares: Vec<AggregateShare<I::Field>> = Vec::with_capacity(2);
-        for state in state2.into_iter() {
-            let output_share =
-                vdaf.prepare_finish(state, vdaf.prepare_preprocess(round2.clone())?)?;
-            agg_shares.push(vdaf.aggregate(agg_param, [output_share])?);
-        }
-
-        if let Some(counts) = expected_counts {
-            let agg = vdaf.unshard(agg_param, agg_shares)?;
-            for (got, want) in agg.values().zip(counts.iter()) {
-                if got != want {
-                    return Err(VdafError::Uncategorized(
-                        "unexpected output for test case".to_string(),
-                    ));
-                }
-            }
-        } else {
-            return Err(VdafError::Uncategorized(
-                "test case expected no output, got some".to_string(),
-            ));
-        }
-
-        Ok(())
     }
 }
