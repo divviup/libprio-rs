@@ -10,7 +10,6 @@ use crate::{
     codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64, FP96},
     prng::{Prng, PrngError},
-    vdaf::suite::Suite,
 };
 use serde::{
     de::{DeserializeOwned, Visitor},
@@ -622,9 +621,7 @@ pub(crate) fn split_vector<F: FieldElement>(
 
 /// Generate a vector of uniform random field elements.
 pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
-    Ok(Prng::generate(Suite::Aes128CtrHmacSha256)?
-        .take(len)
-        .collect())
+    Ok(Prng::new()?.take(len).collect())
 }
 
 #[cfg(test)]
@@ -667,7 +664,7 @@ mod tests {
     // experimental" https://github.com/rust-lang/rust/issues/15701
     #[allow(clippy::eq_op)]
     fn field_element_test<F: FieldElement>() {
-        let mut prng: Prng<F> = Prng::generate(Suite::Aes128CtrHmacSha256).unwrap();
+        let mut prng: Prng<F, _> = Prng::new().unwrap();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();

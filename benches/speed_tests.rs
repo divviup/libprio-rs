@@ -10,10 +10,12 @@ use prio::field::{random_vector, Field128 as F, FieldElement};
 use prio::pcp::gadgets::Mul;
 use prio::server::{generate_verification_message, ValidationMemory};
 #[cfg(feature = "multithreaded")]
-use prio::vdaf::prio3::Prio3CountVec64Multithreaded;
+use prio::vdaf::prio3::Prio3Aes128CountVecMultithreaded;
 use prio::vdaf::{
-    prio3::{Prio3Count64, Prio3CountVec64, Prio3Histogram64, Prio3InputShare, Prio3Sum64},
-    suite::Suite,
+    prio3::{
+        Prio3Aes128Count, Prio3Aes128CountVec, Prio3Aes128Histogram, Prio3Aes128Sum,
+        Prio3InputShare,
+    },
     Client as Prio3Client,
 };
 
@@ -126,12 +128,11 @@ pub fn bool_vec(c: &mut Criterion) {
 /// Benchmark prio3 client performance.
 pub fn prio3_client(c: &mut Criterion) {
     let num_shares = 2;
-    let suite = Suite::Aes128CtrHmacSha256;
 
-    let prio3 = Prio3Count64::new(suite, num_shares).unwrap();
+    let prio3 = Prio3Aes128Count::new(num_shares).unwrap();
     let measurement = 1;
     println!(
-        "prio3 count64 size = {}",
+        "prio3 count size = {}",
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
     c.bench_function("prio3 count64", |b| {
@@ -141,15 +142,15 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let buckets: Vec<u64> = (1..10).collect();
-    let prio3 = Prio3Histogram64::new(suite, num_shares, &buckets).unwrap();
+    let prio3 = Prio3Aes128Histogram::new(num_shares, &buckets).unwrap();
     let measurement = 17;
     println!(
-        "prio3 histogram64 ({} buckets) size = {}",
+        "prio3 histogram ({} buckets) size = {}",
         buckets.len() + 1,
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
     c.bench_function(
-        &format!("prio3 histogram64 ({} buckets)", buckets.len() + 1),
+        &format!("prio3 histogram ({} buckets)", buckets.len() + 1),
         |b| {
             b.iter(|| {
                 prio3.shard(&(), &measurement).unwrap();
@@ -158,7 +159,7 @@ pub fn prio3_client(c: &mut Criterion) {
     );
 
     let bits = 32;
-    let prio3 = Prio3Sum64::new(suite, num_shares, bits).unwrap();
+    let prio3 = Prio3Aes128Sum::new(num_shares, bits).unwrap();
     let measurement = 1337;
     println!(
         "prio3 sum64 ({} bits) size = {}",
@@ -172,10 +173,10 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let len = 1000;
-    let prio3 = Prio3CountVec64::new(suite, num_shares, len).unwrap();
+    let prio3 = Prio3Aes128CountVec::new(num_shares, len).unwrap();
     let measurement = vec![0; len];
     println!(
-        "prio3 countvec64 ({} len) size = {}",
+        "prio3 countvec ({} len) size = {}",
         len,
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
@@ -187,10 +188,10 @@ pub fn prio3_client(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        let prio3 = Prio3CountVec64Multithreaded::new(suite, num_shares, len).unwrap();
+        let prio3 = Prio3Aes128CountVecMultithreaded::new(num_shares, len).unwrap();
         let measurement = vec![0; len];
         println!(
-            "prio3 countvec64 multithreaded ({} len) size = {}",
+            "prio3 countvec multithreaded ({} len) size = {}",
             len,
             prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
         );
@@ -202,7 +203,9 @@ pub fn prio3_client(c: &mut Criterion) {
     }
 }
 
-fn prio3_input_share_size<F: FieldElement>(input_shares: &[Prio3InputShare<F>]) -> usize {
+fn prio3_input_share_size<F: FieldElement, const L: usize>(
+    input_shares: &[Prio3InputShare<F, L>],
+) -> usize {
     let mut size = 0;
     for input_share in input_shares {
         size += input_share.get_encoded().len();

@@ -8,9 +8,10 @@ use crate::{
     polynomial::{poly_interpret_eval, PolyAuxMemory},
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
-    vdaf::suite::{Key, KeyStream, Suite},
+    vdaf::prg::SeedStreamAes128,
 };
 use serde::{Deserialize, Serialize};
+use std::convert::TryInto;
 
 /// Possible errors from server operations
 #[derive(Debug, thiserror::Error)]
@@ -62,7 +63,7 @@ impl<F: FieldElement> ValidationMemory<F> {
 /// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server<F> {
-    prng: Prng<F>,
+    prng: Prng<F, SeedStreamAes128>,
     dimension: usize,
     is_first_server: bool,
     accumulator: Vec<F>,
@@ -83,7 +84,7 @@ impl<F: FieldElement> Server<F> {
         private_key: PrivateKey,
     ) -> Result<Server<F>, ServerError> {
         Ok(Server {
-            prng: Prng::generate(Suite::Aes128CtrHmacSha256)?,
+            prng: Prng::new()?,
             dimension,
             is_first_server,
             accumulator: vec![F::zero(); dimension],
@@ -103,10 +104,9 @@ impl<F: FieldElement> Server<F> {
                 return Err(ServerError::ShareLength);
             }
 
-            let mut key = [0; 32];
-            key.copy_from_slice(&share);
-            let key_stream = KeyStream::from_key(&Key::Aes128CtrHmacSha256(key));
-            Prng::from_key_stream(key_stream).take(len).collect()
+            Prng::from_prio2_seed(&share.try_into().unwrap())
+                .take(len)
+                .collect()
         })
     }
 
