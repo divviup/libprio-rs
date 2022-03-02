@@ -9,9 +9,9 @@ repository = "https://github.com/abetterinternet/libprio-rs"
 
 [dependencies]
 aes = { version = "0.7.5", features = ["ctr"] }
+cmac = "0.6.0"
 aes-gcm = "^0.9"
 base64 = "0.13.0"
-blake3 = "1.3.1"
 byteorder = "1.4.3"
 cipher = "0.3.0"
 getrandom = { version = "0.2.5", features = ["std"] }

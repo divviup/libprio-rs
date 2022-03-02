@@ -4,7 +4,6 @@
 //! Utilities for ECIES encryption / decryption used by the Prio client and server.
 
 use crate::prng::PrngError;
-use crate::vdaf::suite::SuiteError;
 
 use aes_gcm::aead::generic_array::typenum::U16;
 use aes_gcm::aead::generic_array::GenericArray;
@@ -40,9 +39,9 @@ pub enum EncryptError {
     /// PRNG error
     #[error("prng error: {0}")]
     Prng(#[from] PrngError),
-    /// Suite error
-    #[error("suite error: {0}")]
-    Suite(#[from] SuiteError),
+    /// failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 /// NIST P-256, public key in X9.62 uncompressed format

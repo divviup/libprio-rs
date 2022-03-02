@@ -12,7 +12,7 @@ use crate::codec::{CodecError, Decode, Encode};
 use crate::field::{FieldElement, FieldError};
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
-use crate::vdaf::suite::{Key, Suite, SuiteError};
+use crate::vdaf::prg::Seed;
 use std::fmt::Debug;
 use std::io::Cursor;
 
@@ -39,31 +39,31 @@ pub enum VdafError {
     #[error("prng error: {0}")]
     Prng(#[from] PrngError),
 
-    /// Suite error.
-    #[error("suite error: {0}")]
-    Suite(#[from] SuiteError),
+    /// failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 /// An additive share of a vector of field elements.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Share<F> {
+pub enum Share<F, const L: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
 
     /// A compressed share, typically sent to the helper.
-    Helper(Key),
+    Helper(Seed<L>),
 }
 
 /// Parameters needed to decode a [`Share`]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ShareDecodingParameter {
+pub(crate) enum ShareDecodingParameter<const L: usize> {
     Leader(usize),
-    Helper(Suite),
+    Helper,
 }
 
-impl<F: FieldElement> Decode<ShareDecodingParameter> for Share<F> {
+impl<F: FieldElement, const L: usize> Decode<ShareDecodingParameter<L>> for Share<F, L> {
     fn decode(
-        decoding_parameter: &ShareDecodingParameter,
+        decoding_parameter: &ShareDecodingParameter<L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match decoding_parameter {
@@ -74,15 +74,15 @@ impl<F: FieldElement> Decode<ShareDecodingParameter> for Share<F> {
                 }
                 Ok(Self::Leader(data))
             }
-            ShareDecodingParameter::Helper(suite) => {
-                let key = Key::decode(suite, bytes)?;
-                Ok(Self::Helper(key))
+            ShareDecodingParameter::Helper => {
+                let seed = Seed::decode(&(), bytes)?;
+                Ok(Self::Helper(seed))
             }
         }
     }
 }
 
-impl<F: FieldElement> Encode for Share<F> {
+impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Share::Leader(share_data) => {
@@ -412,5 +412,5 @@ where
 }
 
 pub mod poplar1;
+pub mod prg;
 pub mod prio3;
-pub mod suite;

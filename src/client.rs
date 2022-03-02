@@ -9,7 +9,7 @@ use crate::{
     polynomial::{poly_fft, PolyAuxMemory},
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof_mut},
-    vdaf::suite::{Key, KeyStream, Suite},
+    vdaf::prg::SeedStreamAes128,
 };
 
 use std::convert::TryFrom;
@@ -19,7 +19,7 @@ use std::convert::TryFrom;
 /// Client is used to create Prio shares.
 #[derive(Debug)]
 pub struct Client<F: FieldElement> {
-    prng: Prng<F>,
+    prng: Prng<F, SeedStreamAes128>,
     dimension: usize,
     points_f: Vec<F>,
     points_g: Vec<F>,
@@ -67,7 +67,7 @@ impl<F: FieldElement> Client<F> {
         }
 
         Ok(Client {
-            prng: Prng::generate(Suite::Aes128CtrHmacSha256)?,
+            prng: Prng::new()?,
             dimension,
             points_f: vec![F::zero(); n],
             points_g: vec![F::zero(); n],
@@ -99,15 +99,16 @@ impl<F: FieldElement> Client<F> {
 
         // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
         // in-place
-        let share2 = Key::generate(Suite::Aes128CtrHmacSha256)?;
-        let share2_prng = Prng::from_key_stream(KeyStream::from_key(&share2));
+        let mut share2 = [0; 32];
+        getrandom::getrandom(&mut share2)?;
+        let share2_prng = Prng::from_prio2_seed(&share2);
         for (s1, d) in proof.iter_mut().zip(share2_prng.into_iter()) {
             *s1 -= d;
         }
         let share1 = F::slice_into_byte_vec(&proof);
         // encrypt shares with respective keys
         let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
-        let encrypted_share2 = encrypt_share(share2.as_slice(), &self.public_key2)?;
+        let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
         Ok((encrypted_share1, encrypted_share2))
     }
 
