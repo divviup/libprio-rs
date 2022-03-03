@@ -28,9 +28,14 @@ use std::io::Cursor;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
 
-// TODO Add domain separation tag to field element generation as required by spec.
-
 // TODO Add test vectors and make sure they pass.
+
+// Domain-separation tag used to bind the VDAF operations to the document version. This will be
+// reved with each new draft.
+//
+// NOTE The CFRG has not yet adopted this spec. Version "vdaf-00" will match
+// draft-irtf-cfrg-vdaf-00.
+const VERS_PRIO3: &[u8] = b"vdaf-00 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
 pub type Prio3Aes128Count = Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>;
@@ -405,6 +410,9 @@ where
         _public_param: &(),
         measurement: &T::Measurement,
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
+        let mut info = [0; VERS_PRIO3.len() + 1];
+        info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
+
         let num_aggregators = self.num_aggregators;
         let input = self.typ.encode(measurement)?;
 
@@ -417,8 +425,9 @@ where
 
             let mut deriver = P::init(&helper.joint_rand_param.blind);
             deriver.update(&[aggregator_id]);
+            info[VERS_PRIO3.len()] = aggregator_id;
             let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&helper.input_share, b"input share"));
+                Prng::from_seed_stream(P::seed_stream(&helper.input_share, &info));
             for (x, y) in leader_input_share
                 .iter_mut()
                 .zip(prng)
@@ -447,17 +456,18 @@ where
 
         // Run the proof-generation algorithm.
         let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, b"joint rand"));
+            Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, VERS_PRIO3));
         let joint_rand: Vec<T::Field> = prng.take(self.typ.joint_rand_len()).collect();
         let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&Seed::generate()?, b"prove rand"));
+            Prng::from_seed_stream(P::seed_stream(&Seed::generate()?, VERS_PRIO3));
         let prove_rand: Vec<T::Field> = prng.take(self.typ.prove_rand_len()).collect();
         let mut leader_proof_share = self.typ.prove(&input, &prove_rand, &joint_rand)?;
 
         // Generate the proof shares and finalize the joint randomness seed hints.
-        for helper in helper_shares.iter_mut() {
+        for (j, helper) in helper_shares.iter_mut().enumerate() {
+            info[VERS_PRIO3.len()] = j as u8 + 1;
             let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&helper.proof_share, b"proof share"));
+                Prng::from_seed_stream(P::seed_stream(&helper.proof_share, &info));
             for (x, y) in leader_proof_share
                 .iter_mut()
                 .zip(prng)
@@ -510,6 +520,8 @@ where
 }
 
 /// State of each aggregator during the Prepare process.
+//
+// TODO Replace this enum with a struct whose fields are all module-private.
 #[allow(missing_docs)]
 #[derive(Clone, Debug)]
 pub enum Prio3PrepareStep<F, const L: usize> {
@@ -518,12 +530,14 @@ pub enum Prio3PrepareStep<F, const L: usize> {
         input_share: Share<F, L>,
         joint_rand_seed: Option<Seed<L>>,
         verifier_msg: Prio3PrepareMessage<F, L>,
+        aggregator_id: u8,
     },
     /// Waiting for the set of verifier messages.
     Waiting {
         input_share: Share<F, L>,
         joint_rand_seed: Option<Seed<L>>,
         verifier_len: usize,
+        aggregator_id: u8,
     },
 }
 
@@ -570,6 +584,10 @@ where
         nonce: &[u8],
         msg: &Prio3InputShare<T::Field, L>,
     ) -> Result<Prio3PrepareStep<T::Field, L>, VdafError> {
+        let mut info = [0; VERS_PRIO3.len() + 1];
+        info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
+        info[VERS_PRIO3.len()] = verify_param.aggregator_id;
+
         let mut deriver = P::init(&verify_param.query_rand_init);
         deriver.update(&[255]);
         deriver.update(nonce);
@@ -579,7 +597,7 @@ where
         let expanded_input_share: Option<Vec<T::Field>> = match msg.input_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let prng = Prng::from_seed_stream(P::seed_stream(seed, b"input share"));
+                let prng = Prng::from_seed_stream(P::seed_stream(seed, &info));
                 Some(prng.take(self.typ.input_len()).collect())
             }
         };
@@ -592,7 +610,7 @@ where
         let expanded_proof_share: Option<Vec<T::Field>> = match msg.proof_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let prng = Prng::from_seed_stream(P::seed_stream(seed, b"proof share"));
+                let prng = Prng::from_seed_stream(P::seed_stream(seed, &info));
                 Some(prng.take(self.typ.proof_len()).collect())
             }
         };
@@ -618,7 +636,7 @@ where
             );
 
             let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, b"joint rand"));
+                Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, VERS_PRIO3));
             (
                 Some(joint_rand_seed),
                 Some(joint_rand_seed_share),
@@ -630,7 +648,7 @@ where
 
         // Compute the query randomness.
         let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&query_rand_seed, b"query rand"));
+            Prng::from_seed_stream(P::seed_stream(&query_rand_seed, VERS_PRIO3));
         let query_rand: Vec<T::Field> = prng.take(self.typ.query_rand_len()).collect();
 
         // Run the query-generation algorithm.
@@ -649,6 +667,7 @@ where
                 verifier: verifier_share,
                 joint_rand_seed: joint_rand_seed_share,
             },
+            aggregator_id: verify_param.aggregator_id,
         })
     }
 
@@ -716,6 +735,7 @@ where
                     input_share,
                     joint_rand_seed,
                     verifier_msg,
+                    aggregator_id,
                 },
                 None,
             ) => PrepareTransition::Continue(
@@ -723,6 +743,7 @@ where
                     input_share,
                     joint_rand_seed,
                     verifier_len: verifier_msg.verifier.len(),
+                    aggregator_id,
                 },
                 verifier_msg,
             ),
@@ -731,7 +752,8 @@ where
                 Prio3PrepareStep::Waiting {
                     input_share,
                     joint_rand_seed,
-                    ..
+                    verifier_len: _,
+                    aggregator_id,
                 },
                 Some(msg),
             ) => {
@@ -762,7 +784,10 @@ where
                 let input_share = match input_share {
                     Share::Leader(data) => data,
                     Share::Helper(seed) => {
-                        let prng = Prng::from_seed_stream(P::seed_stream(&seed, b"input share"));
+                        let mut info = [0; VERS_PRIO3.len() + 1];
+                        info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
+                        info[VERS_PRIO3.len()] = aggregator_id;
+                        let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
                         prng.take(self.typ.input_len()).collect()
                     }
                 };
