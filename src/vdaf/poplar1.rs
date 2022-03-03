@@ -32,7 +32,7 @@ use crate::codec::{
 use crate::field::{split_vector, FieldElement};
 use crate::fp::log2;
 use crate::prng::Prng;
-use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
+use crate::vdaf::prg::{Prg, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -255,19 +255,19 @@ impl Decode for BTreeSet<IdpfInput> {
 
 /// An input share for the `poplar1` VDAF.
 #[derive(Debug, Clone)]
-pub struct Poplar1InputShare<I: Idpf<2, 2>> {
+pub struct Poplar1InputShare<I: Idpf<2, 2>, const L: usize> {
     /// IDPF share of input
     pub idpf: I,
 
     /// PRNG seed used to generate the aggregator's share of the randomness used in the first part
     /// of the sketching protocol.
-    pub sketch_start_seed: Key,
+    pub sketch_start_seed: Seed<L>,
 
     /// Aggregator's share of the randomness used in the second part of the sketching protocol.
-    pub sketch_next: Share<I::Field>,
+    pub sketch_next: Share<I::Field, L>,
 }
 
-impl<I: Idpf<2, 2>> Encode for Poplar1InputShare<I> {
+impl<I: Idpf<2, 2>, const L: usize> Encode for Poplar1InputShare<I, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.idpf.encode(bytes);
         self.sketch_start_seed.encode(bytes);
@@ -275,24 +275,26 @@ impl<I: Idpf<2, 2>> Encode for Poplar1InputShare<I> {
     }
 }
 
-impl<I: Idpf<2, 2>> ParameterizedDecode<Poplar1VerifyParam> for Poplar1InputShare<I> {
+impl<I: Idpf<2, 2>, const L: usize> ParameterizedDecode<Poplar1VerifyParam<L>>
+    for Poplar1InputShare<I, L>
+{
     fn decode_with_param(
-        decoding_parameter: &Poplar1VerifyParam,
+        decoding_parameter: &Poplar1VerifyParam<L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let idpf = I::decode(bytes)?;
-        let sketch_start_seed =
-            Key::decode_with_param(&decoding_parameter.rand_init.suite(), bytes)?;
+        let sketch_start_seed = Seed::decode(bytes)?;
 
         let share_decoding_parameter = if decoding_parameter.is_leader {
             // The sketch is two field elements for every bit of input, plus two more, corresponding
             // to construction of shares in `Poplar1::shard`.
             ShareDecodingParameter::Leader((decoding_parameter.input_length + 1) * 2)
         } else {
-            ShareDecodingParameter::Helper(decoding_parameter.rand_init.suite())
+            ShareDecodingParameter::Helper
         };
 
-        let sketch_next = <Share<I::Field>>::decode_with_param(&share_decoding_parameter, bytes)?;
+        let sketch_next =
+            <Share<I::Field, L>>::decode_with_param(&share_decoding_parameter, bytes)?;
 
         Ok(Self {
             idpf,
@@ -304,45 +306,46 @@ impl<I: Idpf<2, 2>> ParameterizedDecode<Poplar1VerifyParam> for Poplar1InputShar
 
 /// The poplar1 VDAF.
 #[derive(Debug)]
-pub struct Poplar1<I> {
-    suite: Suite,
+pub struct Poplar1<I, P, const L: usize> {
     input_length: usize,
-    phantom: PhantomData<I>,
+    phantom: PhantomData<(I, P)>,
 }
 
-impl<I> Poplar1<I> {
+impl<I, P, const L: usize> Poplar1<I, P, L> {
     /// Create an instance of the poplar1 VDAF. The caller provides a cipher suite `suite` used for
     /// deriving pseudorandom sequences of field elements, and a input length in bits, corresponding
     /// to `BITS` as defined in the [VDAF specification][1].
     ///
     /// [1]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html#name-poplar1
-    pub fn new(suite: Suite, bits: usize) -> Self {
+    pub fn new(bits: usize) -> Self {
         Self {
-            suite,
             input_length: bits,
             phantom: PhantomData,
         }
     }
 }
 
-impl<I> Clone for Poplar1<I> {
+impl<I, P, const L: usize> Clone for Poplar1<I, P, L> {
     fn clone(&self) -> Self {
-        Self::new(self.suite, self.input_length)
+        Self::new(self.input_length)
     }
 }
-
-impl<I: Idpf<2, 2>> Vdaf for Poplar1<I> {
+impl<I, P, const L: usize> Vdaf for Poplar1<I, P, L>
+where
+    I: Idpf<2, 2>,
+    P: Prg<L>,
+{
     type Measurement = IdpfInput;
     type AggregateResult = BTreeMap<IdpfInput, u64>;
     type AggregationParam = BTreeSet<IdpfInput>;
     type PublicParam = ();
-    type VerifyParam = Poplar1VerifyParam;
-    type InputShare = Poplar1InputShare<I>;
+    type VerifyParam = Poplar1VerifyParam<L>;
+    type InputShare = Poplar1InputShare<I, L>;
     type OutputShare = OutputShare<I::Field>;
     type AggregateShare = AggregateShare<I::Field>;
 
-    fn setup(&self) -> Result<((), Vec<Poplar1VerifyParam>), VdafError> {
-        let verify_rand_init = Key::generate(self.suite)?;
+    fn setup(&self) -> Result<((), Vec<Poplar1VerifyParam<L>>), VdafError> {
+        let verify_rand_init = Seed::generate()?;
         Ok((
             (),
             vec![
@@ -357,29 +360,33 @@ impl<I: Idpf<2, 2>> Vdaf for Poplar1<I> {
     }
 }
 
-impl<I: Idpf<2, 2>> Client for Poplar1<I> {
+impl<I, P, const L: usize> Client for Poplar1<I, P, L>
+where
+    I: Idpf<2, 2>,
+    P: Prg<L>,
+{
     #[allow(clippy::many_single_char_names)]
     fn shard(
         &self,
         _public_param: &(),
         input: &IdpfInput,
-    ) -> Result<Vec<Poplar1InputShare<I>>, VdafError> {
-        let idpf_values: Vec<[I::Field; 2]> = Prng::generate(self.suite)?
+    ) -> Result<Vec<Poplar1InputShare<I, L>>, VdafError> {
+        let idpf_values: Vec<[I::Field; 2]> = Prng::new()?
             .take(input.level + 1)
             .map(|k| [I::Field::one(), k])
             .collect();
 
         // For each level of the prefix tree, generate correlated randomness that the aggregators use
         // to validate the output. See [BBCG+21, Appendix C.4].
-        let leader_sketch_start_seed = Key::generate(self.suite)?;
-        let helper_sketch_start_seed = Key::generate(self.suite)?;
-        let helper_sketch_next_seed = Key::generate(self.suite)?;
-        let mut leader_sketch_start_prng: Prng<I::Field> =
-            Prng::from_key_stream(KeyStream::from_key(&leader_sketch_start_seed));
-        let mut helper_sketch_start_prng: Prng<I::Field> =
-            Prng::from_key_stream(KeyStream::from_key(&helper_sketch_start_seed));
-        let mut helper_sketch_next_prng: Prng<I::Field> =
-            Prng::from_key_stream(KeyStream::from_key(&helper_sketch_next_seed));
+        let leader_sketch_start_seed = Seed::generate()?;
+        let helper_sketch_start_seed = Seed::generate()?;
+        let helper_sketch_next_seed = Seed::generate()?;
+        let mut leader_sketch_start_prng: Prng<I::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&leader_sketch_start_seed, b""));
+        let mut helper_sketch_start_prng: Prng<I::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&helper_sketch_start_seed, b""));
+        let mut helper_sketch_next_prng: Prng<I::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&helper_sketch_next_seed, b""));
         let mut leader_sketch_next: Vec<I::Field> = Vec::with_capacity(2 * idpf_values.len());
         for value in idpf_values.iter() {
             let k = value[1];
@@ -419,9 +426,9 @@ impl<I: Idpf<2, 2>> Client for Poplar1<I> {
 
 /// The verification parameter used by the aggregators to evaluate the VDAF on a distributed input.
 #[derive(Clone, Debug)]
-pub struct Poplar1VerifyParam {
+pub struct Poplar1VerifyParam<const L: usize> {
     /// Key used to derive the verification randomness from the nonce.
-    rand_init: Key,
+    rand_init: Seed<L>,
 
     /// Length of
     input_length: usize,
@@ -430,11 +437,11 @@ pub struct Poplar1VerifyParam {
     is_leader: bool,
 }
 
-impl Poplar1VerifyParam {
+impl<const L: usize> Poplar1VerifyParam<L> {
     /// Construct a new verification parameter.
-    pub fn new(key: &Key, is_leader: bool, input_length: usize) -> Self {
+    pub fn new(seed: &Seed<L>, is_leader: bool, input_length: usize) -> Self {
         Self {
-            rand_init: key.clone(),
+            rand_init: seed.clone(),
             input_length,
             is_leader,
         }
@@ -461,13 +468,17 @@ fn get_level(agg_param: &BTreeSet<IdpfInput>) -> Result<usize, VdafError> {
     }
 }
 
-impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
+impl<I, P, const L: usize> Aggregator for Poplar1<I, P, L>
+where
+    I: Idpf<2, 2>,
+    P: Prg<L>,
+{
     type PrepareStep = Poplar1PrepareStep<I::Field>;
     type PrepareMessage = Poplar1PrepareMessage<I::Field>;
 
     fn prepare_init(
         &self,
-        verify_param: &Poplar1VerifyParam,
+        verify_param: &Poplar1VerifyParam<L>,
         agg_param: &BTreeSet<IdpfInput>,
         nonce: &[u8],
         input_share: &Self::InputShare,
@@ -475,11 +486,8 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
         let level = get_level(agg_param)?;
 
         // Derive the verification randomness.
-        let mut deriver = KeyDeriver::from_key(&verify_param.rand_init);
-        deriver.update(nonce);
-        let verify_rand_seed = deriver.finish();
-        let mut verify_rand_prng: Prng<I::Field> =
-            Prng::from_key_stream(KeyStream::from_key(&verify_rand_seed));
+        let mut verify_rand_prng: Prng<I::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&verify_param.rand_init, nonce));
 
         // Evaluate the IDPF shares and compute the polynomial coefficients.
         let mut z = [I::Field::zero(); 3];
@@ -506,9 +514,11 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
         // NOTE(cjpatton) We can make this faster by a factor of 3 by using three seed shares instead
         // of one. On the other hand, if the input shares are made stateful, then we could store
         // the PRNG state theire and avoid fast-forwarding.
-        let mut prng =
-            Prng::<I::Field>::from_key_stream(KeyStream::from_key(&input_share.sketch_start_seed))
-                .skip(3 * level);
+        let mut prng = Prng::<I::Field, _>::from_seed_stream(P::seed_stream(
+            &input_share.sketch_start_seed,
+            b"",
+        ))
+        .skip(3 * level);
         z[0] += prng.next().unwrap();
         z[1] += prng.next().unwrap();
         z[2] += prng.next().unwrap();
@@ -516,8 +526,8 @@ impl<I: Idpf<2, 2>> Aggregator for Poplar1<I> {
         let (d, e) = match &input_share.sketch_next {
             Share::Leader(data) => (data[2 * level], data[2 * level + 1]),
             Share::Helper(seed) => {
-                let mut prng =
-                    Prng::<I::Field>::from_key_stream(KeyStream::from_key(seed)).skip(2 * level);
+                let mut prng = Prng::<I::Field, _>::from_seed_stream(P::seed_stream(seed, b""))
+                    .skip(2 * level);
                 (prng.next().unwrap(), prng.next().unwrap())
             }
         };
@@ -711,7 +721,11 @@ enum SketchState {
     RoundTwo,
 }
 
-impl<I: Idpf<2, 2>> Collector for Poplar1<I> {
+impl<I, P, const L: usize> Collector for Poplar1<I, P, L>
+where
+    I: Idpf<2, 2>,
+    P: Prg<L>,
+{
     fn unshard<M: IntoIterator<Item = AggregateShare<I::Field>>>(
         &self,
         agg_param: &BTreeSet<IdpfInput>,
@@ -739,6 +753,7 @@ mod tests {
     use super::*;
 
     use crate::field::Field128;
+    use crate::vdaf::prg::PrgAes128;
     use crate::vdaf::{run_vdaf, run_vdaf_prepare};
 
     #[test]
@@ -836,7 +851,7 @@ mod tests {
     fn test_poplar1() {
         const INPUT_LEN: usize = 8;
 
-        let vdaf: Poplar1<ToyIdpf<Field128>> = Poplar1::new(Suite::Blake3, INPUT_LEN);
+        let vdaf: Poplar1<ToyIdpf<Field128>, PrgAes128, 16> = Poplar1::new(INPUT_LEN);
         assert_eq!(vdaf.num_aggregators(), 2);
 
         // Run the VDAF input-distribution algorithm.

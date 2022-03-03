@@ -532,9 +532,8 @@ where
 mod tests {
     use super::*;
 
-    use crate::field::Field96 as TestField;
+    use crate::field::{random_vector, Field96 as TestField};
     use crate::prng::Prng;
-    use crate::vdaf::suite::Suite;
 
     #[test]
     fn test_mul() {
@@ -553,7 +552,7 @@ mod tests {
 
     #[test]
     fn test_poly_eval() {
-        let poly: Vec<TestField> = Prng::generate(Suite::Blake3).unwrap().take(10).collect();
+        let poly: Vec<TestField> = random_vector(10).unwrap();
 
         let num_calls = FFT_THRESHOLD / 2;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
@@ -566,7 +565,7 @@ mod tests {
 
     #[test]
     fn test_blind_poly_eval() {
-        let poly: Vec<TestField> = Prng::generate(Suite::Blake3).unwrap().take(10).collect();
+        let poly: Vec<TestField> = random_vector(10).unwrap();
 
         let num_calls = FFT_THRESHOLD / 2;
         let mut g: BlindPolyEval<TestField> = BlindPolyEval::new(poly.clone(), num_calls);
@@ -579,7 +578,7 @@ mod tests {
 
     #[test]
     fn test_parallel_sum() {
-        let poly: Vec<TestField> = Prng::generate(Suite::Blake3).unwrap().take(10).collect();
+        let poly: Vec<TestField> = random_vector(10).unwrap();
         let num_calls = 10;
         let chunks = 23;
 
@@ -590,7 +589,7 @@ mod tests {
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_parallel_sum_multithreaded() {
-        let poly: Vec<TestField> = Prng::generate(Suite::Blake3).unwrap().take(10).collect();
+        let poly: Vec<TestField> = random_vector(10).unwrap();
         let num_calls = 10;
         let chunks = 23;
 
@@ -608,7 +607,7 @@ mod tests {
         let degree = g.degree();
 
         // Test that both gadgets evaluate to the same value when run on scalar inputs.
-        let inp: Vec<TestField> = Prng::generate(Suite::Blake3).unwrap().take(arity).collect();
+        let inp: Vec<TestField> = random_vector(arity).unwrap();
         let result = g.call(&inp).unwrap();
         let result_serial = g_serial.call(&inp).unwrap();
         assert_eq!(result, result_serial);
@@ -618,7 +617,7 @@ mod tests {
         let mut poly_outp_serial =
             vec![TestField::zero(); (degree * (1 + num_calls)).next_power_of_two()];
         let mut poly_inp = vec![vec![TestField::zero(); 1 + num_calls]; arity];
-        let mut prng: Prng<TestField> = Prng::generate(Suite::Blake3).unwrap();
+        let mut prng: Prng<TestField, _> = Prng::new().unwrap();
         for i in 0..arity {
             for j in 0..num_calls {
                 poly_inp[i][j] = prng.get();
@@ -634,7 +633,7 @@ mod tests {
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     // to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
-        let mut prng: Prng<F> = Prng::generate(Suite::Blake3).unwrap();
+        let mut prng = Prng::new().unwrap();
         let mut inp = vec![F::zero(); g.arity()];
         let mut poly_outp = vec![F::zero(); (g.degree() * (1 + num_calls)).next_power_of_two()];
         let mut poly_inp = vec![vec![F::zero(); 1 + num_calls]; g.arity()];

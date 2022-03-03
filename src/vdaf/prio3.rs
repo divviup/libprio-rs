@@ -9,7 +9,7 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
-use crate::codec::{CodecError, Encode, ParameterizedDecode};
+use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};
 #[cfg(feature = "multithreaded")]
 use crate::pcp::gadgets::ParallelSumMultithreaded;
@@ -17,7 +17,7 @@ use crate::pcp::gadgets::{BlindPolyEval, ParallelSum, ParallelSumGadget};
 use crate::pcp::types::{Count, CountVec, Histogram, Sum};
 use crate::pcp::Type;
 use crate::prng::Prng;
-use crate::vdaf::suite::{Key, KeyDeriver, KeyStream, Suite};
+use crate::vdaf::prg::{Prg, PrgAes128, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -28,17 +28,20 @@ use std::io::Cursor;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
 
-/// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
-pub type Prio3Count64 = Prio3<Count<Field64>, Prio3Result<u64>>;
+// TODO Add domain separation tag to field element generation as required by spec.
 
-impl Prio3Count64 {
+// TODO Add test vectors and make sure they pass.
+
+/// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
+pub type Prio3Aes128Count = Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>;
+
+impl Prio3Aes128Count {
     /// Construct an instance of this VDAF with the given suite and the given number of aggregators.
-    pub fn new(suite: Suite, num_aggregators: u8) -> Result<Self, VdafError> {
+    pub fn new(num_aggregators: u8) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
         Ok(Prio3 {
             num_aggregators,
-            suite,
             typ: Count::new(),
             phantom: PhantomData,
         })
@@ -47,31 +50,37 @@ impl Prio3Count64 {
 
 /// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
 /// the element-wise sum.
-pub type Prio3CountVec64 =
-    Prio3<CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, Prio3ResultVec<u64>>;
+pub type Prio3Aes128CountVec = Prio3<
+    CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>,
+    Prio3ResultVec<u64>,
+    PrgAes128,
+    16,
+>;
 
-/// Like [`Prio3CountVec64`] except this type uses multithreading to improve sharding and
+/// Like [`Prio3CountVec`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
 /// e.g., 200 and up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
-pub type Prio3CountVec64Multithreaded = Prio3<
+pub type Prio3Aes128CountVecMultithreaded = Prio3<
     CountVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
     Prio3ResultVec<u64>,
+    PrgAes128,
+    16,
 >;
 
-impl<S> Prio3<CountVec<Field128, S>, Prio3ResultVec<u64>>
+impl<S, P, const L: usize> Prio3<CountVec<Field128, S>, Prio3ResultVec<u64>, P, L>
 where
     S: 'static + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Eq,
+    P: Prg<L>,
 {
     /// Construct an instance of this VDAF with the given suite and the given number of
     /// aggregators. `len` defines the length of each measurement.
-    pub fn new(suite: Suite, num_aggregators: u8, len: usize) -> Result<Self, VdafError> {
+    pub fn new(num_aggregators: u8, len: usize) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
         Ok(Prio3 {
             num_aggregators,
-            suite,
             typ: CountVec::new(len),
             phantom: PhantomData,
         })
@@ -80,12 +89,12 @@ where
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum64 = Prio3<Sum<Field128>, Prio3Result<u64>>;
+pub type Prio3Aes128Sum = Prio3<Sum<Field128>, Prio3Result<u64>, PrgAes128, 16>;
 
-impl Prio3Sum64 {
+impl Prio3Aes128Sum {
     /// Construct an instance of this VDAF with the given suite, number of aggregators and required
     /// bit length. The bit length must not exceed 64.
-    pub fn new(suite: Suite, num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
+    pub fn new(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
         if bits > 64 {
@@ -97,7 +106,6 @@ impl Prio3Sum64 {
 
         Ok(Prio3 {
             num_aggregators,
-            suite,
             typ: Sum::new(bits as usize)?,
             phantom: PhantomData,
         })
@@ -106,19 +114,18 @@ impl Prio3Sum64 {
 
 /// the histogram type. Each measurement is an unsigned, 64-bit integer and the result is a
 /// histogram representation of the measurement.
-pub type Prio3Histogram64 = Prio3<Histogram<Field128>, Prio3ResultVec<u64>>;
+pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, Prio3ResultVec<u64>, PrgAes128, 16>;
 
-impl Prio3Histogram64 {
+impl Prio3Aes128Histogram {
     /// Constructs an instance of this VDAF with the given suite, number of aggregators, and
     /// desired histogram bucket boundaries.
-    pub fn new(suite: Suite, num_aggregators: u8, buckets: &[u64]) -> Result<Self, VdafError> {
+    pub fn new(num_aggregators: u8, buckets: &[u64]) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
         let buckets = buckets.iter().map(|bucket| *bucket as u128).collect();
 
         Ok(Prio3 {
             num_aggregators,
-            suite,
             typ: Histogram::<Field128>::new(buckets)?,
             phantom: PhantomData,
         })
@@ -185,19 +192,23 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
 
 /// The base type for prio3.
 #[derive(Clone, Debug)]
-pub struct Prio3<T: Type, A: Clone + Debug> {
+pub struct Prio3<T, A, P, const L: usize>
+where
+    T: Type,
+    A: Clone + Debug,
+    P: Prg<L>,
+{
     num_aggregators: u8,
-    suite: Suite,
     typ: T,
-    phantom: PhantomData<A>,
+    phantom: PhantomData<(A, P)>,
 }
 
-impl<T: Type, A: Clone + Debug> Prio3<T, A> {
-    /// The suite used for this instance of prio3.
-    pub fn suite(&self) -> Suite {
-        self.suite
-    }
-
+impl<T, A, P, const L: usize> Prio3<T, A, P, L>
+where
+    T: Type,
+    A: Clone + Debug,
+    P: Prg<L>,
+{
     /// The output length of the underlying FLP.
     pub fn output_len(&self) -> usize {
         self.typ.output_len()
@@ -209,18 +220,23 @@ impl<T: Type, A: Clone + Debug> Prio3<T, A> {
     }
 }
 
-impl<T: Type, A: Clone + Debug + Sync + Send> Vdaf for Prio3<T, A> {
+impl<T, A, P, const L: usize> Vdaf for Prio3<T, A, P, L>
+where
+    T: Type,
+    A: Clone + Debug + Sync + Send,
+    P: Prg<L>,
+{
     type Measurement = T::Measurement;
     type AggregateResult = A;
     type AggregationParam = ();
     type PublicParam = ();
-    type VerifyParam = Prio3VerifyParam;
-    type InputShare = Prio3InputShare<T::Field>;
+    type VerifyParam = Prio3VerifyParam<L>;
+    type InputShare = Prio3InputShare<T::Field, L>;
     type OutputShare = OutputShare<T::Field>;
     type AggregateShare = AggregateShare<T::Field>;
 
-    fn setup(&self) -> Result<((), Vec<Prio3VerifyParam>), VdafError> {
-        let query_rand_init = Key::generate(self.suite)?;
+    fn setup(&self) -> Result<((), Vec<Prio3VerifyParam<L>>), VdafError> {
+        let query_rand_init = Seed::generate()?;
         Ok((
             (),
             (0..self.num_aggregators)
@@ -242,9 +258,9 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Vdaf for Prio3<T, A> {
 
 /// The verification parameter used by each aggregator to evaluate the VDAF.
 #[derive(Clone, Debug)]
-pub struct Prio3VerifyParam {
+pub struct Prio3VerifyParam<const L: usize> {
     /// Key used to derive the query randomness from the nonce.
-    pub query_rand_init: Key,
+    pub query_rand_init: Seed<L>,
 
     /// The identity of the aggregator.
     pub aggregator_id: u8,
@@ -262,19 +278,19 @@ pub struct Prio3VerifyParam {
 /// The message sent by the client to each aggregator. This includes the client's input share and
 /// the initial message of the input-validation protocol.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Prio3InputShare<F> {
+pub struct Prio3InputShare<F, const L: usize> {
     /// The input share.
-    input_share: Share<F>,
+    input_share: Share<F, L>,
 
     /// The proof share.
-    proof_share: Share<F>,
+    proof_share: Share<F, L>,
 
     /// Parameters used by the Aggregator to compute the joint randomness. This field is optional
     /// because not every [`pcp::Type`] requires joint randomness.
-    joint_rand_param: Option<JointRandParam>,
+    joint_rand_param: Option<JointRandParam<L>>,
 }
 
-impl<F: FieldElement> Encode for Prio3InputShare<F> {
+impl<F: FieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if matches!(
             (&self.input_share, &self.proof_share),
@@ -292,12 +308,13 @@ impl<F: FieldElement> Encode for Prio3InputShare<F> {
     }
 }
 
-impl<F: FieldElement> ParameterizedDecode<Prio3VerifyParam> for Prio3InputShare<F> {
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
+    for Prio3InputShare<F, L>
+{
     fn decode_with_param(
-        decoding_parameter: &Prio3VerifyParam,
+        decoding_parameter: &Prio3VerifyParam<L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let suite = decoding_parameter.query_rand_init.suite();
         let (input_decoding_parameter, proof_decoding_parameter) =
             if decoding_parameter.aggregator_id == 0 {
                 (
@@ -306,8 +323,8 @@ impl<F: FieldElement> ParameterizedDecode<Prio3VerifyParam> for Prio3InputShare<
                 )
             } else {
                 (
-                    ShareDecodingParameter::Helper(suite),
-                    ShareDecodingParameter::Helper(suite),
+                    ShareDecodingParameter::Helper,
+                    ShareDecodingParameter::Helper,
                 )
             };
 
@@ -315,8 +332,8 @@ impl<F: FieldElement> ParameterizedDecode<Prio3VerifyParam> for Prio3InputShare<
         let proof_share = Share::decode_with_param(&proof_decoding_parameter, bytes)?;
         let joint_rand_param = if decoding_parameter.joint_rand_len > 0 {
             Some(JointRandParam {
-                seed_hint: Key::decode_with_param(&suite, bytes)?,
-                blind: Key::decode_with_param(&suite, bytes)?,
+                seed_hint: Seed::decode(bytes)?,
+                blind: Seed::decode(bytes)?,
             })
         } else {
             None
@@ -332,15 +349,15 @@ impl<F: FieldElement> ParameterizedDecode<Prio3VerifyParam> for Prio3InputShare<
 
 #[derive(Clone, Debug)]
 /// The verification message emitted by each aggregator during the Prepare process.
-pub struct Prio3PrepareMessage<F> {
+pub struct Prio3PrepareMessage<F, const L: usize> {
     /// (A share of) the FLP verifier message. (See [`Type`](crate::pcp::Type).)
     pub verifier: Vec<F>,
 
     /// (A share of) the joint randomness seed.
-    pub joint_rand_seed: Option<Key>,
+    pub joint_rand_seed: Option<Seed<L>>,
 }
 
-impl<F: FieldElement> Encode for Prio3PrepareMessage<F> {
+impl<F: FieldElement, const L: usize> Encode for Prio3PrepareMessage<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         for x in &self.verifier {
             x.encode(bytes);
@@ -351,9 +368,11 @@ impl<F: FieldElement> Encode for Prio3PrepareMessage<F> {
     }
 }
 
-impl<F: FieldElement> ParameterizedDecode<Prio3PrepareStep<F>> for Prio3PrepareMessage<F> {
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareStep<F, L>>
+    for Prio3PrepareMessage<F, L>
+{
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareStep<F>,
+        decoding_parameter: &Prio3PrepareStep<F, L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let verifier_len = decoding_parameter.verifier_len();
@@ -362,8 +381,8 @@ impl<F: FieldElement> ParameterizedDecode<Prio3PrepareStep<F>> for Prio3PrepareM
             verifier.push(F::decode(bytes)?);
         }
 
-        let joint_rand_seed = if let Some(suite) = decoding_parameter.suite() {
-            Some(Key::decode_with_param(&suite, bytes)?)
+        let joint_rand_seed = if decoding_parameter.check_joint_rand() {
+            Some(Seed::decode(bytes)?)
         } else {
             None
         };
@@ -375,26 +394,31 @@ impl<F: FieldElement> ParameterizedDecode<Prio3PrepareStep<F>> for Prio3PrepareM
     }
 }
 
-impl<T: Type, A: Clone + Debug + Sync + Send> Client for Prio3<T, A> {
+impl<T, A, P, const L: usize> Client for Prio3<T, A, P, L>
+where
+    T: Type,
+    A: Clone + Debug + Sync + Send,
+    P: Prg<L>,
+{
     fn shard(
         &self,
         _public_param: &(),
         measurement: &T::Measurement,
-    ) -> Result<Vec<Prio3InputShare<T::Field>>, VdafError> {
+    ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
         let num_aggregators = self.num_aggregators;
         let input = self.typ.encode(measurement)?;
 
         // Generate the input shares and compute the joint randomness.
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
         let mut leader_input_share = input.clone();
-        let mut joint_rand_seed = Key::uninitialized(self.suite);
+        let mut joint_rand_seed = Seed::uninitialized();
         for aggregator_id in 1..num_aggregators {
-            let mut helper = HelperShare::new(self.suite)?;
+            let mut helper = HelperShare::new()?;
 
-            let mut deriver = KeyDeriver::from_key(&helper.joint_rand_param.blind);
+            let mut deriver = P::init(&helper.joint_rand_param.blind);
             deriver.update(&[aggregator_id]);
-            let prng: Prng<T::Field> =
-                Prng::from_key_stream(KeyStream::from_key(&helper.input_share));
+            let prng: Prng<T::Field, _> =
+                Prng::from_seed_stream(P::seed_stream(&helper.input_share, b"input share"));
             for (x, y) in leader_input_share
                 .iter_mut()
                 .zip(prng)
@@ -404,46 +428,36 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Client for Prio3<T, A> {
                 deriver.update(&y.into());
             }
 
-            helper.joint_rand_param.seed_hint = deriver.finish();
-            for (x, y) in joint_rand_seed
-                .as_mut_slice()
-                .iter_mut()
-                .zip(helper.joint_rand_param.seed_hint.as_slice().iter())
-            {
-                *x ^= y;
-            }
+            helper.joint_rand_param.seed_hint = deriver.into_seed();
+            joint_rand_seed.xor_accumulate(&helper.joint_rand_param.seed_hint);
 
             helper_shares.push(helper);
         }
 
-        let leader_blind = Key::generate(self.suite)?;
+        let leader_blind = Seed::generate()?;
 
-        let mut deriver = KeyDeriver::from_key(&leader_blind);
+        let mut deriver = P::init(&leader_blind);
         deriver.update(&[0]); // ID of the leader
         for x in leader_input_share.iter() {
             deriver.update(&(*x).into());
         }
 
-        let mut leader_joint_rand_seed_hint = deriver.finish();
-        for (x, y) in joint_rand_seed
-            .as_mut_slice()
-            .iter_mut()
-            .zip(leader_joint_rand_seed_hint.as_slice().iter())
-        {
-            *x ^= y;
-        }
+        let mut leader_joint_rand_seed_hint = deriver.into_seed();
+        joint_rand_seed.xor_accumulate(&leader_joint_rand_seed_hint);
 
         // Run the proof-generation algorithm.
-        let prng: Prng<T::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
+        let prng: Prng<T::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, b"joint rand"));
         let joint_rand: Vec<T::Field> = prng.take(self.typ.joint_rand_len()).collect();
-        let prng: Prng<T::Field> = Prng::generate(self.suite)?;
+        let prng: Prng<T::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&Seed::generate()?, b"prove rand"));
         let prove_rand: Vec<T::Field> = prng.take(self.typ.prove_rand_len()).collect();
         let mut leader_proof_share = self.typ.prove(&input, &prove_rand, &joint_rand)?;
 
         // Generate the proof shares and finalize the joint randomness seed hints.
         for helper in helper_shares.iter_mut() {
-            let prng: Prng<T::Field> =
-                Prng::from_key_stream(KeyStream::from_key(&helper.proof_share));
+            let prng: Prng<T::Field, _> =
+                Prng::from_seed_stream(P::seed_stream(&helper.proof_share, b"proof share"));
             for (x, y) in leader_proof_share
                 .iter_mut()
                 .zip(prng)
@@ -452,24 +466,13 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Client for Prio3<T, A> {
                 *x -= y;
             }
 
-            for (x, y) in helper
+            helper
                 .joint_rand_param
                 .seed_hint
-                .as_mut_slice()
-                .iter_mut()
-                .zip(joint_rand_seed.as_slice().iter())
-            {
-                *x ^= y;
-            }
+                .xor_accumulate(&joint_rand_seed);
         }
 
-        for (x, y) in leader_joint_rand_seed_hint
-            .as_mut_slice()
-            .iter_mut()
-            .zip(joint_rand_seed.as_slice().iter())
-        {
-            *x ^= y;
-        }
+        leader_joint_rand_seed_hint.xor_accumulate(&joint_rand_seed);
 
         let leader_joint_rand_param = if self.typ.joint_rand_len() > 0 {
             Some(JointRandParam {
@@ -509,22 +512,22 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Client for Prio3<T, A> {
 /// State of each aggregator during the Prepare process.
 #[allow(missing_docs)]
 #[derive(Clone, Debug)]
-pub enum Prio3PrepareStep<F> {
+pub enum Prio3PrepareStep<F, const L: usize> {
     /// Ready to send the verifier message.
     Ready {
-        input_share: Share<F>,
-        joint_rand_seed: Option<Key>,
-        verifier_msg: Prio3PrepareMessage<F>,
+        input_share: Share<F, L>,
+        joint_rand_seed: Option<Seed<L>>,
+        verifier_msg: Prio3PrepareMessage<F, L>,
     },
     /// Waiting for the set of verifier messages.
     Waiting {
-        input_share: Share<F>,
-        joint_rand_seed: Option<Key>,
+        input_share: Share<F, L>,
+        joint_rand_seed: Option<Seed<L>>,
         verifier_len: usize,
     },
 }
 
-impl<F> Prio3PrepareStep<F> {
+impl<F, const L: usize> Prio3PrepareStep<F, L> {
     fn verifier_len(&self) -> usize {
         match self {
             Self::Ready { verifier_msg, .. } => verifier_msg.verifier.len(),
@@ -532,7 +535,7 @@ impl<F> Prio3PrepareStep<F> {
         }
     }
 
-    fn suite(&self) -> Option<Suite> {
+    fn check_joint_rand(&self) -> bool {
         let joint_rand_seed = match self {
             Self::Ready {
                 joint_rand_seed, ..
@@ -542,35 +545,41 @@ impl<F> Prio3PrepareStep<F> {
             } => joint_rand_seed,
         };
 
-        joint_rand_seed.as_ref().map(|seed| seed.suite())
+        if joint_rand_seed.is_some() {
+            return true;
+        }
+        false
     }
 }
 
-impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
-    type PrepareStep = Prio3PrepareStep<T::Field>;
-    type PrepareMessage = Prio3PrepareMessage<T::Field>;
+impl<T, A, P, const L: usize> Aggregator for Prio3<T, A, P, L>
+where
+    T: Type,
+    A: Clone + Debug + Sync + Send,
+    P: Prg<L>,
+{
+    type PrepareStep = Prio3PrepareStep<T::Field, L>;
+    type PrepareMessage = Prio3PrepareMessage<T::Field, L>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is
     /// the aggregator's output share.
-    //
-    // TODO(cjpatton) Check that the input share matches `self.suite`.
     fn prepare_init(
         &self,
-        verify_param: &Prio3VerifyParam,
+        verify_param: &Prio3VerifyParam<L>,
         _agg_param: &(),
         nonce: &[u8],
-        msg: &Prio3InputShare<T::Field>,
-    ) -> Result<Prio3PrepareStep<T::Field>, VdafError> {
-        let mut deriver = KeyDeriver::from_key(&verify_param.query_rand_init);
+        msg: &Prio3InputShare<T::Field, L>,
+    ) -> Result<Prio3PrepareStep<T::Field, L>, VdafError> {
+        let mut deriver = P::init(&verify_param.query_rand_init);
         deriver.update(&[255]);
         deriver.update(nonce);
-        let query_rand_seed = deriver.finish();
+        let query_rand_seed = deriver.into_seed();
 
         // Create a reference to the (expanded) input share.
         let expanded_input_share: Option<Vec<T::Field>> = match msg.input_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let prng = Prng::from_key_stream(KeyStream::from_key(seed));
+                let prng = Prng::from_seed_stream(P::seed_stream(seed, b"input share"));
                 Some(prng.take(self.typ.input_len()).collect())
             }
         };
@@ -583,7 +592,7 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
         let expanded_proof_share: Option<Vec<T::Field>> = match msg.proof_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let prng = Prng::from_key_stream(KeyStream::from_key(seed));
+                let prng = Prng::from_seed_stream(P::seed_stream(seed, b"proof share"));
                 Some(prng.take(self.typ.proof_len()).collect())
             }
         };
@@ -595,20 +604,21 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
         // Compute the joint randomness.
         let (joint_rand_seed, joint_rand_seed_share, joint_rand) = if self.typ.joint_rand_len() > 0
         {
-            let mut deriver = KeyDeriver::from_key(&msg.joint_rand_param.as_ref().unwrap().blind);
+            let mut deriver = P::init(&msg.joint_rand_param.as_ref().unwrap().blind);
             deriver.update(&[verify_param.aggregator_id]);
             for x in input_share {
                 deriver.update(&(*x).into());
             }
-            let joint_rand_seed_share = deriver.finish();
+            let joint_rand_seed_share = deriver.into_seed();
 
-            let mut joint_rand_seed = Key::uninitialized(query_rand_seed.suite());
-            for (j, x) in joint_rand_seed.as_mut_slice().iter_mut().enumerate() {
-                *x = msg.joint_rand_param.as_ref().unwrap().seed_hint.as_slice()[j]
-                    ^ joint_rand_seed_share.as_slice()[j];
-            }
+            let mut joint_rand_seed = Seed::uninitialized();
+            joint_rand_seed.xor(
+                &msg.joint_rand_param.as_ref().unwrap().seed_hint,
+                &joint_rand_seed_share,
+            );
 
-            let prng: Prng<T::Field> = Prng::from_key_stream(KeyStream::from_key(&joint_rand_seed));
+            let prng: Prng<T::Field, _> =
+                Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, b"joint rand"));
             (
                 Some(joint_rand_seed),
                 Some(joint_rand_seed_share),
@@ -619,7 +629,8 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
         };
 
         // Compute the query randomness.
-        let prng: Prng<T::Field> = Prng::from_key_stream(KeyStream::from_key(&query_rand_seed));
+        let prng: Prng<T::Field, _> =
+            Prng::from_seed_stream(P::seed_stream(&query_rand_seed, b"query rand"));
         let query_rand: Vec<T::Field> = prng.take(self.typ.query_rand_len()).collect();
 
         // Run the query-generation algorithm.
@@ -641,12 +652,12 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
         })
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareMessage<T::Field>>>(
+    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareMessage<T::Field, L>>>(
         &self,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError> {
         let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
-        let mut joint_rand_seed = Key::uninitialized(self.suite);
+        let mut joint_rand_seed = Seed::uninitialized();
         let mut count = 0;
         for share in inputs.into_iter() {
             count += 1;
@@ -661,21 +672,7 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
 
             if self.typ.joint_rand_len() > 0 {
                 let joint_rand_seed_share = share.joint_rand_seed.unwrap();
-                if joint_rand_seed_share.suite() != self.suite {
-                    return Err(VdafError::Uncategorized(format!(
-                        "unexpected suite for joint randomness seed share: got {:?}; want {:?}",
-                        joint_rand_seed_share.suite(),
-                        self.suite,
-                    )));
-                }
-
-                for (x, y) in joint_rand_seed
-                    .as_mut_slice()
-                    .iter_mut()
-                    .zip(joint_rand_seed_share.as_slice())
-                {
-                    *x ^= y;
-                }
+                joint_rand_seed.xor_accumulate(&joint_rand_seed_share);
             }
 
             for (x, y) in verifier.iter_mut().zip(share.verifier) {
@@ -706,11 +703,11 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
     #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
-        state: Prio3PrepareStep<T::Field>,
-        input: Option<Prio3PrepareMessage<T::Field>>,
+        state: Prio3PrepareStep<T::Field, L>,
+        input: Option<Prio3PrepareMessage<T::Field, L>>,
     ) -> PrepareTransition<
-        Prio3PrepareStep<T::Field>,
-        Prio3PrepareMessage<T::Field>,
+        Prio3PrepareStep<T::Field, L>,
+        Prio3PrepareMessage<T::Field, L>,
         OutputShare<T::Field>,
     > {
         match (state, input) {
@@ -765,7 +762,7 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
                 let input_share = match input_share {
                     Share::Leader(data) => data,
                     Share::Helper(seed) => {
-                        let prng = Prng::from_key_stream(KeyStream::from_key(&seed));
+                        let prng = Prng::from_seed_stream(P::seed_stream(&seed, b"input share"));
                         prng.take(self.typ.input_len()).collect()
                     }
                 };
@@ -800,10 +797,11 @@ impl<T: Type, A: Clone + Debug + Sync + Send> Aggregator for Prio3<T, A> {
     }
 }
 
-impl<T, A: Clone + Debug + Sync + Send> Collector for Prio3<T, A>
+impl<T, A, P, const L: usize> Collector for Prio3<T, A, P, L>
 where
     T: Type,
-    A: TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq + Debug,
+    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq,
+    P: Prg<L>,
 {
     /// Combines aggregate shares into the aggregate result.
     fn unshard<It: IntoIterator<Item = AggregateShare<T::Field>>>(
@@ -821,29 +819,29 @@ where
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-struct JointRandParam {
+struct JointRandParam<const L: usize> {
     /// The sum of the joint randomness seed shares sent to the other Aggregators.
-    seed_hint: Key,
+    seed_hint: Seed<L>,
 
     /// The blinding factor, used to derive the aggregator's joint randomness seed share.
-    blind: Key,
+    blind: Seed<L>,
 }
 
 #[derive(Clone)]
-struct HelperShare {
-    input_share: Key,
-    proof_share: Key,
-    joint_rand_param: JointRandParam,
+struct HelperShare<const L: usize> {
+    input_share: Seed<L>,
+    proof_share: Seed<L>,
+    joint_rand_param: JointRandParam<L>,
 }
 
-impl HelperShare {
-    fn new(suite: Suite) -> Result<Self, VdafError> {
+impl<const L: usize> HelperShare<L> {
+    fn new() -> Result<Self, VdafError> {
         Ok(HelperShare {
-            input_share: Key::generate(suite)?,
-            proof_share: Key::generate(suite)?,
+            input_share: Seed::generate()?,
+            proof_share: Seed::generate()?,
             joint_rand_param: JointRandParam {
-                seed_hint: Key::uninitialized(suite),
-                blind: Key::generate(suite)?,
+                seed_hint: Seed::uninitialized(),
+                blind: Seed::generate()?,
             },
         })
     }
@@ -856,8 +854,8 @@ mod tests {
     use assert_matches::assert_matches;
 
     #[test]
-    fn test_prio3_count64() {
-        let prio3 = Prio3Count64::new(Suite::Blake3, 2).unwrap();
+    fn test_prio3_count() {
+        let prio3 = Prio3Aes128Count::new(2).unwrap();
 
         assert_eq!(
             run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(),
@@ -875,8 +873,8 @@ mod tests {
     }
 
     #[test]
-    fn test_prio3_sum64() {
-        let prio3 = Prio3Sum64::new(Suite::Blake3, 3, 16).unwrap();
+    fn test_prio3_sum() {
+        let prio3 = Prio3Aes128Sum::new(3, 16).unwrap();
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, (1 << 16) - 1, 0, 1, 1]).unwrap(),
@@ -887,12 +885,7 @@ mod tests {
         let nonce = b"This is a good nonce.";
 
         let mut input_shares = prio3.shard(&(), &1).unwrap();
-        input_shares[0]
-            .joint_rand_param
-            .as_mut()
-            .unwrap()
-            .blind
-            .as_mut_slice()[0] ^= 255;
+        input_shares[0].joint_rand_param.as_mut().unwrap().blind.0[0] ^= 255;
         let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
@@ -902,7 +895,7 @@ mod tests {
             .as_mut()
             .unwrap()
             .seed_hint
-            .as_mut_slice()[0] ^= 255;
+            .0[0] ^= 255;
         let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
@@ -922,8 +915,8 @@ mod tests {
     }
 
     #[test]
-    fn test_prio3_histogram64() {
-        let prio3 = Prio3Histogram64::new(Suite::Blake3, 2, &[0, 10, 20]).unwrap();
+    fn test_prio3_histogram() {
+        let prio3 = Prio3Aes128Histogram::new(2, &[0, 10, 20]).unwrap();
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, 10, 20, 9999]).unwrap(),
@@ -963,7 +956,7 @@ mod tests {
 
     #[test]
     fn test_prio3_input_share() {
-        let prio3 = Prio3Sum64::new(Suite::Blake3, 5, 16).unwrap();
+        let prio3 = Prio3Aes128Sum::new(5, 16).unwrap();
         let input_shares = prio3.shard(&(), &1).unwrap();
 
         // Check that seed shares are distinct.

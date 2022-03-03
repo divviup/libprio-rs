@@ -5,8 +5,10 @@
 //!
 //! NOTE: The public API for this module is a work in progress.
 
-use super::field::{FieldElement, FieldError};
-use crate::vdaf::suite::{Key, KeyStream, Suite, SuiteError};
+use crate::field::{FieldElement, FieldError};
+use crate::vdaf::prg::{SeedStream, SeedStreamAes128};
+
+use getrandom::getrandom;
 
 use std::marker::PhantomData;
 
@@ -15,38 +17,51 @@ const BUFFER_SIZE_IN_ELEMENTS: usize = 128;
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
 pub enum PrngError {
-    /// Suite error.
-    #[error("suite error: {0}")]
-    Suite(#[from] SuiteError),
+    /// Failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
 /// sequence is derived from the key stream of AES-128 in CTR mode with a random IV.
 #[derive(Debug)]
-pub(crate) struct Prng<F> {
+pub(crate) struct Prng<F, S> {
     phantom: PhantomData<F>,
-    key_stream: KeyStream,
+    seed_stream: S,
     buffer: Vec<u8>,
     buffer_index: usize,
     output_written: usize,
 }
 
-impl<F: FieldElement> Prng<F> {
-    /// Generates a seed and constructs an iterator over an infinite sequence of pseudorandom field
-    /// elements.
-    pub(crate) fn generate(suite: Suite) -> Result<Self, PrngError> {
-        let key = Key::generate(suite)?;
-        let key_stream = KeyStream::from_key(&key);
-        Ok(Self::from_key_stream(key_stream))
+impl<F: FieldElement> Prng<F, SeedStreamAes128> {
+    /// Create a [`Prng`] from a seed for Prio 2. The first 16 bytes of the seed and the last 16
+    /// bytes of the seed are used, respectively, for the key and initialization vector for AES128
+    /// in CTR mode.
+    pub(crate) fn from_prio2_seed(seed: &[u8; 32]) -> Self {
+        let seed_stream = SeedStreamAes128::new(&seed[..16], &seed[16..]);
+        Self::from_seed_stream(seed_stream)
     }
 
-    pub(crate) fn from_key_stream(mut key_stream: KeyStream) -> Self {
+    /// Create a [`Prng`] from a randomly generated seed.
+    pub(crate) fn new() -> Result<Self, PrngError> {
+        let mut seed = [0; 32];
+        getrandom(&mut seed)?;
+        Ok(Self::from_prio2_seed(&seed))
+    }
+}
+
+impl<F, S> Prng<F, S>
+where
+    F: FieldElement,
+    S: SeedStream,
+{
+    pub(crate) fn from_seed_stream(mut seed_stream: S) -> Self {
         let mut buffer = vec![0; BUFFER_SIZE_IN_ELEMENTS * F::ENCODED_SIZE];
-        key_stream.fill(&mut buffer);
+        seed_stream.fill(&mut buffer);
 
         Self {
             phantom: PhantomData::<F>,
-            key_stream,
+            seed_stream,
             buffer,
             buffer_index: 0,
             output_written: 0,
@@ -71,16 +86,17 @@ impl<F: FieldElement> Prng<F> {
             }
 
             // Refresh buffer with the next chunk of PRG output.
-            for b in &mut self.buffer {
-                *b = 0;
-            }
-            self.key_stream.fill(&mut self.buffer);
+            self.seed_stream.fill(&mut self.buffer);
             self.buffer_index = 0;
         }
     }
 }
 
-impl<F: FieldElement> Iterator for Prng<F> {
+impl<F, S> Iterator for Prng<F, S>
+where
+    F: FieldElement,
+    S: SeedStream,
+{
     type Item = F;
 
     fn next(&mut self) -> Option<F> {
@@ -92,6 +108,7 @@ impl<F: FieldElement> Iterator for Prng<F> {
 mod tests {
     use super::*;
     use crate::field::FieldPriov2;
+    use std::convert::TryInto;
 
     #[test]
     fn secret_sharing_interop() {
@@ -160,10 +177,9 @@ mod tests {
     }
 
     fn extract_share_from_seed<F: FieldElement>(length: usize, seed: &[u8]) -> Vec<F> {
-        assert_eq!(seed.len(), aes::BLOCK_SIZE * 2);
-        let mut key = [0; aes::BLOCK_SIZE * 2];
-        key.copy_from_slice(seed);
-        let key_stream = KeyStream::from_key(&Key::Aes128CtrHmacSha256(key));
-        Prng::from_key_stream(key_stream).take(length).collect()
+        assert_eq!(seed.len(), 32);
+        Prng::from_prio2_seed(seed.try_into().unwrap())
+            .take(length)
+            .collect()
     }
 }
