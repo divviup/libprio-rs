@@ -27,7 +27,7 @@ use std::marker::PhantomData;
 
 use crate::codec::{
     decode_u16_items, decode_u24_items, encode_u16_items, encode_u24_items, CodecError, Decode,
-    Encode, UnparameterizedDecodeExt, UnparameterizedEncodeExt,
+    Encode, ParameterizedDecode,
 };
 use crate::field::{split_vector, FieldElement};
 use crate::fp::log2;
@@ -101,18 +101,15 @@ impl PartialOrd for IdpfInput {
     }
 }
 
-impl Encode<()> for IdpfInput {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for IdpfInput {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         (self.index as u64).encode(bytes);
         (self.level as u64).encode(bytes);
     }
 }
 
-impl Decode<()> for IdpfInput {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for IdpfInput {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let index = u64::decode(bytes)? as usize;
         let level = u64::decode(bytes)? as usize;
 
@@ -126,7 +123,7 @@ impl Decode<()> for IdpfInput {
 //
 // NOTE(cjpatton) The real IDPF API probably needs to be stateful.
 pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
-    Sized + Clone + Debug + Encode<()> + Decode<()>
+    Sized + Clone + Debug + Encode + Decode
 {
     /// The finite field over which the IDPF is defined.
     //
@@ -217,19 +214,16 @@ impl<F: FieldElement> Idpf<2, 2> for ToyIdpf<F> {
     }
 }
 
-impl<F: FieldElement> Encode<()> for ToyIdpf<F> {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl<F: FieldElement> Encode for ToyIdpf<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         encode_u24_items(bytes, &(), &self.data0);
         encode_u24_items(bytes, &(), &self.data1);
         (self.level as u64).encode(bytes);
     }
 }
 
-impl<F: FieldElement> Decode<()> for ToyIdpf<F> {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl<F: FieldElement> Decode for ToyIdpf<F> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let data0 = decode_u24_items(&(), bytes)?;
         let data1 = decode_u24_items(&(), bytes)?;
         let level = u64::decode(bytes)? as usize;
@@ -242,8 +236,8 @@ impl<F: FieldElement> Decode<()> for ToyIdpf<F> {
     }
 }
 
-impl Encode<()> for BTreeSet<IdpfInput> {
-    fn encode_with_param(&self, _encoding_paramater: &(), bytes: &mut Vec<u8>) {
+impl Encode for BTreeSet<IdpfInput> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         // Encodes the aggregation parameter as a variable length vector of
         // [`IdpfInput`], because the size of the aggregation parameter is not
         // determined by the VDAF.
@@ -252,11 +246,8 @@ impl Encode<()> for BTreeSet<IdpfInput> {
     }
 }
 
-impl Decode<()> for BTreeSet<IdpfInput> {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for BTreeSet<IdpfInput> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let inputs = decode_u24_items(&(), bytes)?;
         Ok(Self::from_iter(inputs.into_iter()))
     }
@@ -276,15 +267,15 @@ pub struct Poplar1InputShare<I: Idpf<2, 2>> {
     pub sketch_next: Share<I::Field>,
 }
 
-impl<I: Idpf<2, 2>> Encode<()> for Poplar1InputShare<I> {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl<I: Idpf<2, 2>> Encode for Poplar1InputShare<I> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         self.idpf.encode(bytes);
         self.sketch_start_seed.encode(bytes);
         self.sketch_next.encode(bytes);
     }
 }
 
-impl<I: Idpf<2, 2>> Decode<Poplar1VerifyParam> for Poplar1InputShare<I> {
+impl<I: Idpf<2, 2>> ParameterizedDecode<Poplar1VerifyParam> for Poplar1InputShare<I> {
     fn decode_with_param(
         decoding_parameter: &Poplar1VerifyParam,
         bytes: &mut Cursor<&[u8]>,
@@ -668,8 +659,8 @@ impl<F> AsRef<[F]> for Poplar1PrepareMessage<F> {
     }
 }
 
-impl<F: FieldElement> Encode<()> for Poplar1PrepareMessage<F> {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl<F: FieldElement> Encode for Poplar1PrepareMessage<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         // TODO: This is encoded as a variable length vector of F, but we may
         // be able to make this a fixed-length vector for specific Poplar1
         // instantations
@@ -677,7 +668,7 @@ impl<F: FieldElement> Encode<()> for Poplar1PrepareMessage<F> {
     }
 }
 
-impl<F: FieldElement> Decode<Poplar1PrepareStep<F>> for Poplar1PrepareMessage<F> {
+impl<F: FieldElement> ParameterizedDecode<Poplar1PrepareStep<F>> for Poplar1PrepareMessage<F> {
     fn decode_with_param(
         _decoding_parameter: &Poplar1PrepareStep<F>,
         bytes: &mut Cursor<&[u8]>,

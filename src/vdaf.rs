@@ -8,9 +8,7 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
-use crate::codec::{
-    CodecError, Decode, Encode, UnparameterizedDecodeExt, UnparameterizedEncodeExt,
-};
+use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{FieldElement, FieldError};
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
@@ -63,7 +61,7 @@ pub(crate) enum ShareDecodingParameter {
     Helper(Suite),
 }
 
-impl<F: FieldElement> Decode<ShareDecodingParameter> for Share<F> {
+impl<F: FieldElement> ParameterizedDecode<ShareDecodingParameter> for Share<F> {
     fn decode_with_param(
         decoding_parameter: &ShareDecodingParameter,
         bytes: &mut Cursor<&[u8]>,
@@ -84,8 +82,8 @@ impl<F: FieldElement> Decode<ShareDecodingParameter> for Share<F> {
     }
 }
 
-impl<F: FieldElement> Encode<()> for Share<F> {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl<F: FieldElement> Encode for Share<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Share::Leader(share_data) => {
                 for x in share_data {
@@ -111,7 +109,7 @@ pub trait Vdaf: Clone + Debug {
 
     /// The aggregation parameter, used by the Aggregators to map their input shares to output
     /// shares.
-    type AggregationParam: Clone + Debug + Decode<()> + Encode<()>;
+    type AggregationParam: Clone + Debug + Decode + Encode;
 
     /// The public parameter used by Clients to shard their measurement into input shares.
     type PublicParam: Clone + Debug;
@@ -121,13 +119,15 @@ pub trait Vdaf: Clone + Debug {
     type VerifyParam: Clone + Debug;
 
     /// An input share sent by a Client.
-    type InputShare: Clone + Debug + Decode<Self::VerifyParam> + Encode<()>;
+    type InputShare: Clone + Debug + ParameterizedDecode<Self::VerifyParam> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
     type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + Decode<usize> + Encode<()>;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
+        + ParameterizedDecode<usize>
+        + Encode;
 
     /// Generates the long-lived parameters used by the Clients and Aggregators.
     fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
@@ -153,7 +153,7 @@ pub trait Aggregator: Vdaf {
     type PrepareStep: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage: Clone + Debug + Decode<Self::PrepareStep> + Encode<()>;
+    type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareStep> + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareStep`] returned
     /// is passed to [`Aggregator::prepare_step`] to get this aggregator's first-round prepare
@@ -294,15 +294,15 @@ impl<F: FieldElement> AggregateShare<F> {
     }
 }
 
-impl<F: FieldElement> Encode<()> for AggregateShare<F> {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl<F: FieldElement> Encode for AggregateShare<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         for field in &self.0 {
             field.encode(bytes);
         }
     }
 }
 
-impl<F: FieldElement> Decode<usize> for AggregateShare<F> {
+impl<F: FieldElement> ParameterizedDecode<usize> for AggregateShare<F> {
     fn decode_with_param(
         vector_length: &usize,
         bytes: &mut Cursor<&[u8]>,

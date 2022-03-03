@@ -7,7 +7,7 @@
 //! subgroup of order `2^n` for some `n`.
 
 use crate::{
-    codec::{CodecError, Decode, Encode, UnparameterizedDecodeExt},
+    codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64, FP96},
     prng::{Prng, PrngError},
     vdaf::suite::Suite,
@@ -82,8 +82,8 @@ pub trait FieldElement:
     + Into<Vec<u8>>
     + Serialize
     + DeserializeOwned
-    + Encode<()>
-    + Decode<()>
+    + Encode
+    + Decode
     + 'static // NOTE This bound is needed for downcasting a `dyn Gadget<F>>` to a concrete type.
 {
     /// Size in bytes of the encoding of a value.
@@ -467,15 +467,15 @@ macro_rules! make_field {
             }
         }
 
-        impl Encode<()> for $elem {
-            fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+        impl Encode for $elem {
+            fn encode(&self, bytes: &mut Vec<u8>) {
                 let slice = <[u8; $elem::ENCODED_SIZE]>::from(*self);
                 bytes.extend_from_slice(&slice);
             }
         }
 
-        impl Decode<()> for $elem {
-            fn decode_with_param(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        impl Decode for $elem {
+            fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
                 let mut value = [0u8; $elem::ENCODED_SIZE];
                 bytes.read_exact(&mut value)?;
                 $elem::try_from_bytes(&value, u128::MAX).map_err(|e| {
@@ -630,7 +630,6 @@ pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::codec::UnparameterizedEncodeExt;
     use crate::fp::MAX_ROOTS;
     use crate::prng::Prng;
     use assert_matches::assert_matches;

@@ -28,7 +28,22 @@ pub enum CodecError {
 }
 
 /// Describes how to decode an object from a byte sequence.
-pub trait Decode<P>: Sized {
+pub trait Decode: Sized {
+    /// Read and decode an encoded object from `bytes`. On success, the decoded value is returned
+    /// and `bytes` is advanced by the encoded size of the value. On failure, an error is returned
+    /// and no further attempt to read from `bytes` should be made.
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError>;
+
+    /// Convenience method to get decoded value. Returns an error if [`Self::decode`] fails, or if
+    /// there are any bytes left in `bytes` after decoding a value.
+    fn get_decoded(bytes: &[u8]) -> Result<Self, CodecError> {
+        Self::get_decoded_with_param(&(), bytes)
+    }
+}
+
+/// Describes how to decode an object from a byte sequence, with a decoding parameter provided to
+/// provide additional data used in decoding.
+pub trait ParameterizedDecode<P>: Sized {
     /// Read and decode an encoded object from `bytes`. `decoding_parameter` provides details of the
     /// wire encoding such as lengths of different portions of the message. On success, the decoded
     /// value is returned and `bytes` is advanced by the encoded size of the value. On failure, an
@@ -53,36 +68,29 @@ pub trait Decode<P>: Sized {
     }
 }
 
-/// An extension trait on parameterless Decode implementations that allows the unnecessary decoding
-/// parameter to be dropped.
-pub trait UnparameterizedDecodeExt: Decode<()> {
-    /// Read and decode an encoded object from `bytes`. On success, the decoded value is returned
-    /// and `bytes` is advanced by the encoded size of the value. On failure, an error is returned
-    /// and no further attempt to read from `bytes` should be made.
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError>;
-
-    /// Convenience method to get decoded value. Returns an error if [`Self::decode`] fails, or if
-    /// there are any bytes left in `bytes` after decoding a value.
-    fn get_decoded(bytes: &[u8]) -> Result<Self, CodecError>;
-}
-
-impl<D: Decode<()>> UnparameterizedDecodeExt for D {
-    /// Read and decode an encoded object from `bytes`. On success, the decoded value is returned
-    /// and `bytes` is advanced by the encoded size of the value. On failure, an error is returned
-    /// and no further attempt to read from `bytes` should be made.
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Self::decode_with_param(&(), bytes)
-    }
-
-    /// Convenience method to get decoded value. Returns an error if [`Self::decode`] fails, or if
-    /// there are any bytes left in `bytes` after decoding a value.
-    fn get_decoded(bytes: &[u8]) -> Result<Self, CodecError> {
-        Self::get_decoded_with_param(&(), bytes)
+// Provide a blanket implementation so that any Decode can be used as a ParameterizedDecode<()>.
+impl<D: Decode> ParameterizedDecode<()> for D {
+    fn decode_with_param(
+        _decoding_parameter: &(),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        Self::decode(bytes)
     }
 }
 
 /// Describes how to encode objects into a byte sequence.
-pub trait Encode<P> {
+pub trait Encode: Sized {
+    /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
+    fn encode(&self, bytes: &mut Vec<u8>);
+
+    /// Convenience method to get encoded value.
+    fn get_encoded(&self) -> Vec<u8> {
+        self.get_encoded_with_param(&())
+    }
+}
+
+/// Describes how to encode objects into a byte sequence.
+pub trait ParameterizedEncode<P> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     /// `encoding_parameter` provides details of the wire encoding, used to control how the value
     /// is encoded.
@@ -96,69 +104,45 @@ pub trait Encode<P> {
     }
 }
 
-/// An extension trait on parameterless Encode implementations that allows the unnecessary encoding
-/// parameter to be dropped.
-pub trait UnparameterizedEncodeExt: Encode<()> {
-    /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
-    fn encode(&self, bytes: &mut Vec<u8>);
-
-    /// Convenience method to get encoded value.
-    fn get_encoded(&self) -> Vec<u8>;
-}
-
-impl<E: Encode<()>> UnparameterizedEncodeExt for E {
-    /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.encode_with_param(&(), bytes)
-    }
-
-    /// Convenience method to get encoded value.
-    fn get_encoded(&self) -> Vec<u8> {
-        self.get_encoded_with_param(&())
+// Provide a blanket implementation so that any Encode can be used as a ParameterizedEncode<()>.
+impl<E: Encode> ParameterizedEncode<()> for E {
+    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+        self.encode(bytes)
     }
 }
 
-impl Decode<()> for () {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        _bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for () {
+    fn decode(_bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(())
     }
 }
 
-impl Encode<()> for () {
-    fn encode_with_param(&self, _encoding_paramater: &(), _bytes: &mut Vec<u8>) {}
+impl Encode for () {
+    fn encode(&self, _bytes: &mut Vec<u8>) {}
 }
 
-impl Decode<()> for u8 {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for u8 {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let mut value = [0u8; size_of::<u8>()];
         bytes.read_exact(&mut value)?;
         Ok(value[0])
     }
 }
 
-impl Encode<()> for u8 {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for u8 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.push(*self);
     }
 }
 
-impl Decode<()> for u16 {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for u16 {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(bytes.read_u16::<BigEndian>()?)
     }
 }
 
-impl Encode<()> for u16 {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for u16 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&u16::to_be_bytes(*self));
     }
 }
@@ -168,48 +152,39 @@ impl Encode<()> for u16 {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct U24(pub u32);
 
-impl Decode<()> for U24 {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for U24 {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(U24(bytes.read_u24::<BigEndian>()?))
     }
 }
 
-impl Encode<()> for U24 {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for U24 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         // Encode lower three bytes of the u32 as u24
         bytes.extend_from_slice(&u32::to_be_bytes(self.0)[1..]);
     }
 }
 
-impl Decode<()> for u32 {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for u32 {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(bytes.read_u32::<BigEndian>()?)
     }
 }
 
-impl Encode<()> for u32 {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for u32 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&u32::to_be_bytes(*self));
     }
 }
 
-impl Decode<()> for u64 {
-    fn decode_with_param(
-        _decoding_parameter: &(),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl Decode for u64 {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(bytes.read_u64::<BigEndian>()?)
     }
 }
 
-impl Encode<()> for u64 {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for u64 {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&u64::to_be_bytes(*self));
     }
 }
@@ -217,7 +192,11 @@ impl Encode<()> for u64 {
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u8_items<P, E: Encode<P>>(bytes: &mut Vec<u8>, encoding_parameter: &P, items: &[E]) {
+pub fn encode_u8_items<P, E: ParameterizedEncode<P>>(
+    bytes: &mut Vec<u8>,
+    encoding_parameter: &P,
+    items: &[E],
+) {
     // Reserve space to later write length
     let len_offset = bytes.len();
     bytes.push(0);
@@ -235,7 +214,7 @@ pub fn encode_u8_items<P, E: Encode<P>>(bytes: &mut Vec<u8>, encoding_parameter:
 /// maximum length `0xff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u8_items<P, D: Decode<P>>(
+pub fn decode_u8_items<P, D: ParameterizedDecode<P>>(
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
 ) -> Result<Vec<D>, CodecError> {
@@ -248,7 +227,11 @@ pub fn decode_u8_items<P, D: Decode<P>>(
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xffff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u16_items<P, E: Encode<P>>(bytes: &mut Vec<u8>, encoding_parameter: &P, items: &[E]) {
+pub fn encode_u16_items<P, E: ParameterizedEncode<P>>(
+    bytes: &mut Vec<u8>,
+    encoding_parameter: &P,
+    items: &[E],
+) {
     // Reserve space to later write length
     let len_offset = bytes.len();
     0u16.encode(bytes);
@@ -268,7 +251,7 @@ pub fn encode_u16_items<P, E: Encode<P>>(bytes: &mut Vec<u8>, encoding_parameter
 /// maximum length `0xffff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u16_items<P, D: Decode<P>>(
+pub fn decode_u16_items<P, D: ParameterizedDecode<P>>(
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
 ) -> Result<Vec<D>, CodecError> {
@@ -282,7 +265,11 @@ pub fn decode_u16_items<P, D: Decode<P>>(
 /// `0xffffff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4.
-pub fn encode_u24_items<P, E: Encode<P>>(bytes: &mut Vec<u8>, encoding_parameter: &P, items: &[E]) {
+pub fn encode_u24_items<P, E: ParameterizedEncode<P>>(
+    bytes: &mut Vec<u8>,
+    encoding_parameter: &P,
+    items: &[E],
+) {
     // Reserve space to later write length
     let len_offset = bytes.len();
     U24(0).encode(bytes);
@@ -302,7 +289,7 @@ pub fn encode_u24_items<P, E: Encode<P>>(bytes: &mut Vec<u8>, encoding_parameter
 /// maximum length `0xffffff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u24_items<P, D: Decode<P>>(
+pub fn decode_u24_items<P, D: ParameterizedDecode<P>>(
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
 ) -> Result<Vec<D>, CodecError> {
@@ -313,7 +300,7 @@ pub fn decode_u24_items<P, D: Decode<P>>(
 }
 
 /// Decode the next `length` bytes from `bytes` into as many instances of `D` as possible.
-fn decode_items<P, D: Decode<P>>(
+fn decode_items<P, D: ParameterizedDecode<P>>(
     length: usize,
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
@@ -432,8 +419,8 @@ mod tests {
         field_u64: u64,
     }
 
-    impl Encode<()> for TestMessage {
-        fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+    impl Encode for TestMessage {
+        fn encode(&self, bytes: &mut Vec<u8>) {
             self.field_u8.encode(bytes);
             self.field_u16.encode(bytes);
             self.field_u24.encode(bytes);
@@ -442,11 +429,8 @@ mod tests {
         }
     }
 
-    impl Decode<()> for TestMessage {
-        fn decode_with_param(
-            _decoding_parameter: &(),
-            bytes: &mut Cursor<&[u8]>,
-        ) -> Result<Self, CodecError> {
+    impl Decode for TestMessage {
+        fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
             let field_u8 = u8::decode(bytes)?;
             let field_u16 = u16::decode(bytes)?;
             let field_u24 = U24::decode(bytes)?;

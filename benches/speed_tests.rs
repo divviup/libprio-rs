@@ -4,7 +4,7 @@ use criterion::{criterion_group, criterion_main, Criterion};
 
 use prio::benchmarked::*;
 use prio::client::Client as Prio2Client;
-use prio::codec::UnparameterizedEncodeExt;
+use prio::codec::Encode;
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field128 as F, FieldElement};
 use prio::pcp::gadgets::Mul;

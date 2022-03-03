@@ -6,7 +6,7 @@
 //
 // TODO(cjpatton) Add unit test with test vectors.
 
-use crate::codec::{CodecError, Decode, Encode};
+use crate::codec::{CodecError, Encode, ParameterizedDecode};
 use aes::cipher::generic_array::GenericArray;
 use aes::cipher::{FromBlockCipher, NewBlockCipher, StreamCipher as AesStreamCipher};
 use aes::{Aes128, Aes128Ctr};
@@ -125,8 +125,8 @@ impl Key {
     }
 }
 
-impl Encode<()> for Key {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+impl Encode for Key {
+    fn encode(&self, bytes: &mut Vec<u8>) {
         let seed = match self {
             Self::Aes128CtrHmacSha256(entropy) => entropy,
             Self::Blake3(entropy) => entropy,
@@ -136,7 +136,7 @@ impl Encode<()> for Key {
     }
 }
 
-impl Decode<Suite> for Key {
+impl ParameterizedDecode<Suite> for Key {
     fn decode_with_param(
         decoding_parameter: &Suite,
         bytes: &mut Cursor<&[u8]>,
