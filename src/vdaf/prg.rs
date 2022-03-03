@@ -23,8 +23,14 @@ pub struct Seed<const L: usize>(pub(crate) [u8; L]);
 impl<const L: usize> Seed<L> {
     /// Generate a uniform random seed.
     pub fn generate() -> Result<Self, getrandom::Error> {
+        Self::from_rand_source(getrandom::getrandom)
+    }
+
+    pub(crate) fn from_rand_source<R: Fn(&mut [u8]) -> Result<(), getrandom::Error>>(
+        rand_source: R,
+    ) -> Result<Self, getrandom::Error> {
         let mut seed = [0; L];
-        getrandom::getrandom(&mut seed)?;
+        rand_source(&mut seed)?;
         Ok(Self(seed))
     }
 

@@ -46,7 +46,7 @@ impl<F: FieldElement> Type for Count<F> {
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(Mul::new(2))]
+        vec![Box::new(Mul::new(1))]
     }
 
     fn valid(
@@ -57,15 +57,7 @@ impl<F: FieldElement> Type for Count<F> {
         _num_shares: usize,
     ) -> Result<F, PcpError> {
         valid_call_check(self, input, joint_rand)?;
-
-        let mut inp = [input[0], input[0]];
-        let mut v = self.range_checker[0];
-        for c in &self.range_checker[1..] {
-            v += *c * inp[0];
-            inp[0] = g[0].call(&inp)?;
-        }
-
-        Ok(v)
+        Ok(g[0].call(&[input[0], input[0]])? - input[0])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
@@ -78,7 +70,7 @@ impl<F: FieldElement> Type for Count<F> {
     }
 
     fn proof_len(&self) -> usize {
-        9
+        5
     }
 
     fn verifier_len(&self) -> usize {
