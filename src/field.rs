@@ -82,7 +82,7 @@ pub trait FieldElement:
     + Serialize
     + DeserializeOwned
     + Encode
-    + Decode<()>
+    + Decode
     + 'static // NOTE This bound is needed for downcasting a `dyn Gadget<F>>` to a concrete type.
 {
     /// Size in bytes of the encoding of a value.
@@ -185,7 +185,7 @@ pub trait FieldElement:
         }
         let mut vec = Vec::with_capacity(bytes.len() / Self::ENCODED_SIZE);
         for chunk in bytes.chunks_exact(Self::ENCODED_SIZE) {
-            vec.push(Self::get_decoded(&(), chunk)?);
+            vec.push(Self::get_decoded(chunk)?);
         }
         Ok(vec)
     }
@@ -473,8 +473,8 @@ macro_rules! make_field {
             }
         }
 
-        impl Decode<()> for $elem {
-            fn decode(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        impl Decode for $elem {
+            fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
                 let mut value = [0u8; $elem::ENCODED_SIZE];
                 bytes.read_exact(&mut value)?;
                 $elem::try_from_bytes(&value, u128::MAX).map_err(|e| {
@@ -742,7 +742,7 @@ mod tests {
 
             assert_eq!(bytes.len(), F::ENCODED_SIZE);
 
-            let got = F::get_decoded(&(), &bytes).unwrap();
+            let got = F::get_decoded(&bytes).unwrap();
             assert_eq!(got, *want);
         }
 

@@ -9,7 +9,7 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
-use crate::codec::{CodecError, Decode, Encode};
+use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};
 #[cfg(feature = "multithreaded")]
 use crate::pcp::gadgets::ParallelSumMultithreaded;
@@ -308,8 +308,10 @@ impl<F: FieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
     }
 }
 
-impl<F: FieldElement, const L: usize> Decode<Prio3VerifyParam<L>> for Prio3InputShare<F, L> {
-    fn decode(
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
+    for Prio3InputShare<F, L>
+{
+    fn decode_with_param(
         decoding_parameter: &Prio3VerifyParam<L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
@@ -326,12 +328,12 @@ impl<F: FieldElement, const L: usize> Decode<Prio3VerifyParam<L>> for Prio3Input
                 )
             };
 
-        let input_share = Share::decode(&input_decoding_parameter, bytes)?;
-        let proof_share = Share::decode(&proof_decoding_parameter, bytes)?;
+        let input_share = Share::decode_with_param(&input_decoding_parameter, bytes)?;
+        let proof_share = Share::decode_with_param(&proof_decoding_parameter, bytes)?;
         let joint_rand_param = if decoding_parameter.joint_rand_len > 0 {
             Some(JointRandParam {
-                seed_hint: Seed::decode(&(), bytes)?,
-                blind: Seed::decode(&(), bytes)?,
+                seed_hint: Seed::decode(bytes)?,
+                blind: Seed::decode(bytes)?,
             })
         } else {
             None
@@ -366,19 +368,21 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareMessage<F, L> {
     }
 }
 
-impl<F: FieldElement, const L: usize> Decode<Prio3PrepareStep<F, L>> for Prio3PrepareMessage<F, L> {
-    fn decode(
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareStep<F, L>>
+    for Prio3PrepareMessage<F, L>
+{
+    fn decode_with_param(
         decoding_parameter: &Prio3PrepareStep<F, L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let verifier_len = decoding_parameter.verifier_len();
         let mut verifier = Vec::with_capacity(verifier_len);
         for _ in 0..verifier_len {
-            verifier.push(F::decode(&(), bytes)?);
+            verifier.push(F::decode(bytes)?);
         }
 
         let joint_rand_seed = if decoding_parameter.check_joint_rand() {
-            Some(Seed::decode(&(), bytes)?)
+            Some(Seed::decode(bytes)?)
         } else {
             None
         };

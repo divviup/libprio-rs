@@ -62,8 +62,8 @@ impl<const L: usize> Encode for Seed<L> {
     }
 }
 
-impl<const L: usize> Decode<()> for Seed<L> {
-    fn decode(_decoding_parameter: &(), bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+impl<const L: usize> Decode for Seed<L> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let mut seed = [0; L];
         bytes.read_exact(&mut seed)?;
         Ok(Seed(seed))
@@ -218,7 +218,7 @@ mod tests {
         let mut bytes = std::io::Cursor::new(t.expanded_vec.as_slice());
         let mut want = Vec::with_capacity(t.length);
         while (bytes.position() as usize) < t.expanded_vec.len() {
-            want.push(Field128::decode(&(), &mut bytes).unwrap())
+            want.push(Field128::decode(&mut bytes).unwrap())
         }
         let got: Vec<Field128> = Prng::from_seed_stream(prg.clone().into_seed_stream())
             .take(t.length)
