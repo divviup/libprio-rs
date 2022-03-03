@@ -9,7 +9,9 @@
 //! [BBCG+21]: https://ia.cr/2021/017
 //! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
 
-use crate::codec::{CodecError, Decode, Encode};
+use crate::codec::{
+    CodecError, Decode, Encode, UnparameterizedDecodeExt, UnparameterizedEncodeExt,
+};
 use crate::field::{Field128, Field64, FieldElement};
 #[cfg(feature = "multithreaded")]
 use crate::pcp::gadgets::ParallelSumMultithreaded;
@@ -274,8 +276,8 @@ pub struct Prio3InputShare<F> {
     joint_rand_param: Option<JointRandParam>,
 }
 
-impl<F: FieldElement> Encode for Prio3InputShare<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+impl<F: FieldElement> Encode<()> for Prio3InputShare<F> {
+    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
         if matches!(
             (&self.input_share, &self.proof_share),
             (Share::Leader(_), Share::Helper(_)) | (Share::Helper(_), Share::Leader(_))
@@ -293,7 +295,7 @@ impl<F: FieldElement> Encode for Prio3InputShare<F> {
 }
 
 impl<F: FieldElement> Decode<Prio3VerifyParam> for Prio3InputShare<F> {
-    fn decode(
+    fn decode_with_param(
         decoding_parameter: &Prio3VerifyParam,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
@@ -311,12 +313,12 @@ impl<F: FieldElement> Decode<Prio3VerifyParam> for Prio3InputShare<F> {
                 )
             };
 
-        let input_share = Share::decode(&input_decoding_parameter, bytes)?;
-        let proof_share = Share::decode(&proof_decoding_parameter, bytes)?;
+        let input_share = Share::decode_with_param(&input_decoding_parameter, bytes)?;
+        let proof_share = Share::decode_with_param(&proof_decoding_parameter, bytes)?;
         let joint_rand_param = if decoding_parameter.joint_rand_len > 0 {
             Some(JointRandParam {
-                seed_hint: Key::decode(&suite, bytes)?,
-                blind: Key::decode(&suite, bytes)?,
+                seed_hint: Key::decode_with_param(&suite, bytes)?,
+                blind: Key::decode_with_param(&suite, bytes)?,
             })
         } else {
             None
@@ -340,8 +342,8 @@ pub struct Prio3PrepareMessage<F> {
     pub joint_rand_seed: Option<Key>,
 }
 
-impl<F: FieldElement> Encode for Prio3PrepareMessage<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+impl<F: FieldElement> Encode<()> for Prio3PrepareMessage<F> {
+    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
         for x in &self.verifier {
             x.encode(bytes);
         }
@@ -352,18 +354,18 @@ impl<F: FieldElement> Encode for Prio3PrepareMessage<F> {
 }
 
 impl<F: FieldElement> Decode<Prio3PrepareStep<F>> for Prio3PrepareMessage<F> {
-    fn decode(
+    fn decode_with_param(
         decoding_parameter: &Prio3PrepareStep<F>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let verifier_len = decoding_parameter.verifier_len();
         let mut verifier = Vec::with_capacity(verifier_len);
         for _ in 0..verifier_len {
-            verifier.push(F::decode(&(), bytes)?);
+            verifier.push(F::decode(bytes)?);
         }
 
         let joint_rand_seed = if let Some(suite) = decoding_parameter.suite() {
-            Some(Key::decode(&suite, bytes)?)
+            Some(Key::decode_with_param(&suite, bytes)?)
         } else {
             None
         };

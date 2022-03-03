@@ -125,8 +125,8 @@ impl Key {
     }
 }
 
-impl Encode for Key {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+impl Encode<()> for Key {
+    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
         let seed = match self {
             Self::Aes128CtrHmacSha256(entropy) => entropy,
             Self::Blake3(entropy) => entropy,
@@ -137,7 +137,10 @@ impl Encode for Key {
 }
 
 impl Decode<Suite> for Key {
-    fn decode(decoding_parameter: &Suite, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode_with_param(
+        decoding_parameter: &Suite,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
         let mut seed = [0u8; 32];
         bytes.read_exact(&mut seed)?;
 
