@@ -69,7 +69,7 @@ pub trait ParameterizedDecode<P>: Sized {
 }
 
 // Provide a blanket implementation so that any Decode can be used as a ParameterizedDecode<()>.
-impl<D: Decode> ParameterizedDecode<()> for D {
+impl<D: Decode + ?Sized> ParameterizedDecode<()> for D {
     fn decode_with_param(
         _decoding_parameter: &(),
         bytes: &mut Cursor<&[u8]>,
@@ -79,7 +79,7 @@ impl<D: Decode> ParameterizedDecode<()> for D {
 }
 
 /// Describes how to encode objects into a byte sequence.
-pub trait Encode: Sized {
+pub trait Encode {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>);
 
@@ -105,7 +105,7 @@ pub trait ParameterizedEncode<P> {
 }
 
 // Provide a blanket implementation so that any Encode can be used as a ParameterizedEncode<()>.
-impl<E: Encode> ParameterizedEncode<()> for E {
+impl<E: Encode + ?Sized> ParameterizedEncode<()> for E {
     fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
         self.encode(bytes)
     }
