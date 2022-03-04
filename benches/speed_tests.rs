@@ -135,7 +135,7 @@ pub fn prio3_client(c: &mut Criterion) {
         "prio3 count size = {}",
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
-    c.bench_function("prio3 count64", |b| {
+    c.bench_function("prio3 count", |b| {
         b.iter(|| {
             prio3.shard(&(), &1).unwrap();
         })
@@ -162,11 +162,11 @@ pub fn prio3_client(c: &mut Criterion) {
     let prio3 = Prio3Aes128Sum::new(num_shares, bits).unwrap();
     let measurement = 1337;
     println!(
-        "prio3 sum64 ({} bits) size = {}",
+        "prio3 sum ({} bits) size = {}",
         bits,
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
-    c.bench_function(&format!("prio3 sum64 ({} bits)", bits), |b| {
+    c.bench_function(&format!("prio3 sum ({} bits)", bits), |b| {
         b.iter(|| {
             prio3.shard(&(), &measurement).unwrap();
         })
@@ -180,7 +180,7 @@ pub fn prio3_client(c: &mut Criterion) {
         len,
         prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
     );
-    c.bench_function(&format!("prio3 countvec64 ({} len)", len), |b| {
+    c.bench_function(&format!("prio3 countvec ({} len)", len), |b| {
         b.iter(|| {
             prio3.shard(&(), &measurement).unwrap();
         })
@@ -195,7 +195,7 @@ pub fn prio3_client(c: &mut Criterion) {
             len,
             prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
         );
-        c.bench_function(&format!("prio3 parallel countvec64 ({} len)", len), |b| {
+        c.bench_function(&format!("prio3 parallel countvec ({} len)", len), |b| {
             b.iter(|| {
                 prio3.shard(&(), &measurement).unwrap();
             })
