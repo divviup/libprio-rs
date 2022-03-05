@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This modulde
-//! implements the prio3 [VDAF]. The construction is based on a transform of a Fully Linear Proof
+//! implements the Prio3 [VDAF]. The construction is based on a transform of a Fully Linear Proof
 //! (FLP) system (i.e., a concrete [`Type`](crate::pcp::Type) into a zero-knowledge proof system on
 //! distributed data as described in [[BBCG+19], Section 6].
 //!
@@ -27,8 +27,6 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
-
-// TODO Add test vectors and make sure they pass.
 
 // Domain-separation tag used to bind the VDAF operations to the document version. This will be
 // reved with each new draft.
