@@ -17,7 +17,7 @@ use crate::pcp::gadgets::{BlindPolyEval, ParallelSum, ParallelSumGadget};
 use crate::pcp::types::{Count, CountVec, Histogram, Sum};
 use crate::pcp::Type;
 use crate::prng::Prng;
-use crate::vdaf::prg::{Prg, PrgAes128, Seed};
+use crate::vdaf::prg::{Prg, PrgAes128, RandSource, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -27,8 +27,6 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
-
-use super::prg::RandSource;
 
 // TODO Add test vectors and make sure they pass.
 
