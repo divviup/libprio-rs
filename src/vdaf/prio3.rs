@@ -17,7 +17,7 @@ use crate::pcp::gadgets::{BlindPolyEval, ParallelSum, ParallelSumGadget};
 use crate::pcp::types::{Count, CountVec, Histogram, Sum};
 use crate::pcp::Type;
 use crate::prng::Prng;
-use crate::vdaf::prg::{Prg, PrgAes128, Seed};
+use crate::vdaf::prg::{Prg, PrgAes128, RandSource, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -224,9 +224,9 @@ where
         self.typ.verifier_len()
     }
 
-    fn setup_with_rand_source<R: Fn(&mut [u8]) -> Result<(), getrandom::Error>>(
+    fn setup_with_rand_source(
         &self,
-        rand_source: R,
+        rand_source: RandSource,
     ) -> Result<((), Vec<Prio3VerifyParam<L>>), VdafError> {
         let query_rand_init = Seed::from_rand_source(rand_source)?;
         Ok((
@@ -243,15 +243,12 @@ where
         ))
     }
 
-    fn shard_with_rand_source<R>(
+    fn shard_with_rand_source(
         &self,
         _public_param: &(),
         measurement: &T::Measurement,
-        rand_source: R,
-    ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError>
-    where
-        R: Fn(&mut [u8]) -> Result<(), getrandom::Error> + Copy,
-    {
+        rand_source: RandSource,
+    ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
         let mut info = [0; VERS_PRIO3.len() + 1];
         info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
 
@@ -901,10 +898,7 @@ struct HelperShare<const L: usize> {
 }
 
 impl<const L: usize> HelperShare<L> {
-    fn from_rand_source<R>(rand_source: R) -> Result<Self, VdafError>
-    where
-        R: Fn(&mut [u8]) -> Result<(), getrandom::Error> + Copy,
-    {
+    fn from_rand_source(rand_source: RandSource) -> Result<Self, VdafError> {
         Ok(HelperShare {
             input_share: Seed::from_rand_source(rand_source)?,
             proof_share: Seed::from_rand_source(rand_source)?,

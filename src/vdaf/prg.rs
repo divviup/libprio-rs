@@ -16,6 +16,11 @@ use std::{
     io::{Cursor, Read},
 };
 
+/// Function pointer to fill a buffer with random bytes. Under normal operation,
+/// `getrandom::getrandom()` will be used, but other implementations can be used to control
+/// randomness when generating or verifying test vectors.
+pub(crate) type RandSource = fn(&mut [u8]) -> Result<(), getrandom::Error>;
+
 /// Input of [`Prg`].
 #[derive(Clone, Debug, Eq)]
 pub struct Seed<const L: usize>(pub(crate) [u8; L]);
@@ -26,9 +31,7 @@ impl<const L: usize> Seed<L> {
         Self::from_rand_source(getrandom::getrandom)
     }
 
-    pub(crate) fn from_rand_source<R: Fn(&mut [u8]) -> Result<(), getrandom::Error>>(
-        rand_source: R,
-    ) -> Result<Self, getrandom::Error> {
+    pub(crate) fn from_rand_source(rand_source: RandSource) -> Result<Self, getrandom::Error> {
         let mut seed = [0; L];
         rand_source(&mut seed)?;
         Ok(Self(seed))
