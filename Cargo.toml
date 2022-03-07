@@ -8,8 +8,9 @@ license = "MPL-2.0"
 repository = "https://github.com/abetterinternet/libprio-rs"
 
 [dependencies]
-aes = { version = "0.7.5", features = ["ctr"] }
-cmac = "0.6.0"
+aes = "0.8.1"
+ctr = "0.9.1"
+cmac = "0.7.1"
 aes-gcm = "^0.9"
 base64 = "0.13.0"
 byteorder = "1.4.3"
