@@ -13,6 +13,7 @@ use crate::field::{FieldElement, FieldError};
 use crate::pcp::PcpError;
 use crate::prng::PrngError;
 use crate::vdaf::prg::Seed;
+use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 use std::io::Cursor;
 
@@ -243,7 +244,7 @@ impl<F> AsRef<[F]> for OutputShare<F> {
 /// An aggregate share suitable for VDAFs whose output shares and aggregate
 /// shares are vectors of `F` elements, and an output share needs no special
 /// transformation to be merged into an aggregate share.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AggregateShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for AggregateShare<F> {
