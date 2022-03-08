@@ -521,13 +521,12 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareStep<F, L>
         decoding_parameter: &Prio3PrepareStep<F, L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let verifier_len = decoding_parameter.verifier_len();
-        let mut verifier = Vec::with_capacity(verifier_len);
-        for _ in 0..verifier_len {
+        let mut verifier = Vec::with_capacity(decoding_parameter.verifier_len);
+        for _ in 0..decoding_parameter.verifier_len {
             verifier.push(F::decode(bytes)?);
         }
 
-        let joint_rand_seed = if decoding_parameter.check_joint_rand() {
+        let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
             Some(Seed::decode(bytes)?)
         } else {
             None
@@ -563,16 +562,6 @@ pub struct Prio3PrepareStep<F, const L: usize> {
     aggregator_id: u8,
     verifier_len: usize,
     state: PrepareStep<F, L>,
-}
-
-impl<F, const L: usize> Prio3PrepareStep<F, L> {
-    fn verifier_len(&self) -> usize {
-        self.verifier_len
-    }
-
-    fn check_joint_rand(&self) -> bool {
-        self.joint_rand_seed.is_some()
-    }
 }
 
 impl<T, A, P, const L: usize> Aggregator for Prio3<T, A, P, L>
