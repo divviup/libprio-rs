@@ -407,7 +407,7 @@ where
 }
 
 /// The verification parameter used by each aggregator to evaluate the VDAF.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3VerifyParam<const L: usize> {
     /// Key used to derive the query randomness from the nonce.
     pub query_rand_init: Seed<L>,
@@ -426,6 +426,34 @@ pub struct Prio3VerifyParam<const L: usize> {
 
     /// Length of the joint randomness.
     joint_rand_len: usize,
+}
+
+impl<const L: usize> Encode for Prio3VerifyParam<L> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.query_rand_init.encode(bytes);
+        self.aggregator_id.encode(bytes);
+    }
+}
+
+impl<T, A, P, const L: usize> ParameterizedDecode<Prio3<T, A, P, L>> for Prio3VerifyParam<L>
+where
+    T: Type,
+    A: Clone + Debug,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        vdaf: &Prio3<T, A, P, L>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        Ok(Self {
+            query_rand_init: Seed::decode(bytes)?,
+            aggregator_id: u8::decode(bytes)?,
+            input_len: vdaf.typ.input_len(),
+            proof_len: vdaf.typ.proof_len(),
+            verifier_len: vdaf.typ.verifier_len(),
+            joint_rand_len: vdaf.typ.joint_rand_len(),
+        })
+    }
 }
 
 /// The message sent by the client to each aggregator. This includes the client's input share and
@@ -1049,6 +1077,17 @@ mod tests {
                     assert_ne!(x.joint_rand_param, y.joint_rand_param);
                 }
             }
+        }
+    }
+
+    #[test]
+    fn test_verify_param_serialization() {
+        let prio3 = Prio3Aes128Count::new(2).unwrap();
+        let (_, verify_param) = prio3.setup().unwrap();
+        for want in verify_param.iter() {
+            let got =
+                Prio3VerifyParam::get_decoded_with_param(&prio3, &want.get_encoded()).unwrap();
+            assert_eq!(&got, want);
         }
     }
 
