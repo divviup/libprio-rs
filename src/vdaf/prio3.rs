@@ -556,49 +556,22 @@ where
 }
 
 /// State of each aggregator during the Prepare process.
-//
-// TODO Replace this enum with a struct whose fields are all module-private.
-#[allow(missing_docs)]
 #[derive(Clone, Debug)]
-pub enum Prio3PrepareStep<F, const L: usize> {
-    /// Ready to send the verifier message.
-    Ready {
-        input_share: Share<F, L>,
-        joint_rand_seed: Option<Seed<L>>,
-        verifier_msg: Prio3PrepareMessage<F, L>,
-        aggregator_id: u8,
-    },
-    /// Waiting for the set of verifier messages.
-    Waiting {
-        input_share: Share<F, L>,
-        joint_rand_seed: Option<Seed<L>>,
-        verifier_len: usize,
-        aggregator_id: u8,
-    },
+pub struct Prio3PrepareStep<F, const L: usize> {
+    input_share: Share<F, L>,
+    joint_rand_seed: Option<Seed<L>>,
+    aggregator_id: u8,
+    verifier_len: usize,
+    state: PrepareStep<F, L>,
 }
 
 impl<F, const L: usize> Prio3PrepareStep<F, L> {
     fn verifier_len(&self) -> usize {
-        match self {
-            Self::Ready { verifier_msg, .. } => verifier_msg.verifier.len(),
-            Self::Waiting { verifier_len, .. } => *verifier_len,
-        }
+        self.verifier_len
     }
 
     fn check_joint_rand(&self) -> bool {
-        let joint_rand_seed = match self {
-            Self::Ready {
-                joint_rand_seed, ..
-            } => joint_rand_seed,
-            Self::Waiting {
-                joint_rand_seed, ..
-            } => joint_rand_seed,
-        };
-
-        if joint_rand_seed.is_some() {
-            return true;
-        }
-        false
+        self.joint_rand_seed.is_some()
     }
 }
 
@@ -696,14 +669,15 @@ where
             self.num_aggregators as usize,
         )?;
 
-        Ok(Prio3PrepareStep::Ready {
+        Ok(Prio3PrepareStep {
             input_share: msg.input_share.clone(),
             joint_rand_seed,
-            verifier_msg: Prio3PrepareMessage {
+            aggregator_id: verify_param.aggregator_id,
+            verifier_len: verifier_share.len(),
+            state: PrepareStep::Ready(Prio3PrepareMessage {
                 verifier: verifier_share,
                 joint_rand_seed: joint_rand_seed_share,
-            },
-            aggregator_id: verify_param.aggregator_id,
+            }),
         })
     }
 
@@ -758,44 +732,25 @@ where
     #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
-        state: Prio3PrepareStep<T::Field, L>,
+        mut step: Prio3PrepareStep<T::Field, L>,
         input: Option<Prio3PrepareMessage<T::Field, L>>,
     ) -> PrepareTransition<
         Prio3PrepareStep<T::Field, L>,
         Prio3PrepareMessage<T::Field, L>,
         OutputShare<T::Field>,
     > {
-        match (state, input) {
-            (
-                Prio3PrepareStep::Ready {
-                    input_share,
-                    joint_rand_seed,
-                    verifier_msg,
-                    aggregator_id,
-                },
-                None,
-            ) => PrepareTransition::Continue(
-                Prio3PrepareStep::Waiting {
-                    input_share,
-                    joint_rand_seed,
-                    verifier_len: verifier_msg.verifier.len(),
-                    aggregator_id,
-                },
-                verifier_msg,
-            ),
+        match (step.state, input) {
+            (PrepareStep::Ready(verifier_msg), None) => {
+                step.state = PrepareStep::Waiting;
+                PrepareTransition::Continue(step, verifier_msg)
+            }
 
-            (
-                Prio3PrepareStep::Waiting {
-                    input_share,
-                    joint_rand_seed,
-                    verifier_len: _,
-                    aggregator_id,
-                },
-                Some(msg),
-            ) => {
+            (PrepareStep::Waiting, Some(msg)) => {
                 if self.typ.joint_rand_len() > 0 {
                     // Check that the joint randomness was correct.
-                    if joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
+                    if step.joint_rand_seed.as_ref().unwrap()
+                        != msg.joint_rand_seed.as_ref().unwrap()
+                    {
                         return PrepareTransition::Fail(VdafError::Uncategorized(
                             "joint randomness mismatch".to_string(),
                         ));
@@ -817,12 +772,12 @@ where
                 }
 
                 // Compute the output share.
-                let input_share = match input_share {
+                let input_share = match step.input_share {
                     Share::Leader(data) => data,
                     Share::Helper(seed) => {
                         let mut info = [0; VERS_PRIO3.len() + 1];
                         info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
-                        info[VERS_PRIO3.len()] = aggregator_id;
+                        info[VERS_PRIO3.len()] = step.aggregator_id;
                         let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
                         prng.take(self.typ.input_len()).collect()
                     }
@@ -906,6 +861,12 @@ impl<const L: usize> HelperShare<L> {
             },
         })
     }
+}
+
+#[derive(Clone, Debug)]
+enum PrepareStep<F, const L: usize> {
+    Ready(Prio3PrepareMessage<F, L>),
+    Waiting,
 }
 
 #[cfg(test)]
