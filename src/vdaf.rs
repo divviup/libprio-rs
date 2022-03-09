@@ -10,7 +10,7 @@
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{FieldElement, FieldError};
-use crate::pcp::PcpError;
+use crate::flp::FlpError;
 use crate::prng::PrngError;
 use crate::vdaf::prg::Seed;
 use serde::{Deserialize, Serialize};
@@ -32,9 +32,9 @@ pub enum VdafError {
     #[error("io error: {0}")]
     IoError(#[from] std::io::Error),
 
-    /// PCP error.
-    #[error("pcp error: {0}")]
-    Pcp(#[from] PcpError),
+    /// FLP error.
+    #[error("flp error: {0}")]
+    Flp(#[from] FlpError),
 
     /// PRNG error.
     #[error("prng error: {0}")]

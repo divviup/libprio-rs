@@ -19,8 +19,8 @@
 //! then the verification step will fail with high probability. For example:
 //!
 //! ```
-//! use prio::pcp::types::Count;
-//! use prio::pcp::Type;
+//! use prio::flp::types::Count;
+//! use prio::flp::Type;
 //! use prio::field::{random_vector, FieldElement, Field64};
 //!
 //! // The prover chooses a measurement.
@@ -75,7 +75,7 @@ pub mod types;
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
-pub enum PcpError {
+pub enum FlpError {
     /// Calling [`Type::prove`] returned an error.
     #[error("prove error: {0}")]
     Prove(String),
@@ -129,7 +129,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     type Field: FieldElement;
 
     /// Encodes a measurement as a vector of [`Self::input_len`] field elements.
-    fn encode(&self, measurement: &Self::Measurement) -> Result<Vec<Self::Field>, PcpError>;
+    fn encode(&self, measurement: &Self::Measurement) -> Result<Vec<Self::Field>, FlpError>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
@@ -158,8 +158,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// [`Self::prove`] and [`Self::query`] to generate and verify the proof respectively.
     ///
     /// ```
-    /// use prio::pcp::types::Count;
-    /// use prio::pcp::Type;
+    /// use prio::flp::types::Count;
+    /// use prio::flp::Type;
     /// use prio::field::{random_vector, FieldElement, Field64};
     ///
     /// let count = Count::new();
@@ -174,11 +174,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
         input: &[Self::Field],
         joint_rand: &[Self::Field],
         num_shares: usize,
-    ) -> Result<Self::Field, PcpError>;
+    ) -> Result<Self::Field, FlpError>;
 
     /// Constructs an aggregatable output from an encoded input. Calling this method is only safe
     /// once `input` has been validated.
-    fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, PcpError>;
+    fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, FlpError>;
 
     /// The length in field elements of the encoded input returned by [`Self::encode`].
     fn input_len(&self) -> usize;
@@ -218,9 +218,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
         input: &[Self::Field],
         prove_rand: &[Self::Field],
         joint_rand: &[Self::Field],
-    ) -> Result<Vec<Self::Field>, PcpError> {
+    ) -> Result<Vec<Self::Field>, FlpError> {
         if input.len() != self.input_len() {
-            return Err(PcpError::Prove(format!(
+            return Err(FlpError::Prove(format!(
                 "unexpected input length: got {}; want {}",
                 input.len(),
                 self.input_len()
@@ -228,7 +228,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         }
 
         if prove_rand.len() != self.prove_rand_len() {
-            return Err(PcpError::Prove(format!(
+            return Err(FlpError::Prove(format!(
                 "unexpected prove randomness length: got {}; want {}",
                 prove_rand.len(),
                 self.prove_rand_len()
@@ -236,7 +236,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         }
 
         if joint_rand.len() != self.joint_rand_len() {
-            return Err(PcpError::Prove(format!(
+            return Err(FlpError::Prove(format!(
                 "unexpected joint randomness length: got {}; want {}",
                 joint_rand.len(),
                 self.joint_rand_len()
@@ -250,7 +250,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
             .map(|inner| {
                 let inner_arity = inner.arity();
                 if prove_rand_len + inner_arity > prove_rand.len() {
-                    return Err(PcpError::Prove(format!(
+                    return Err(FlpError::Prove(format!(
                         "short prove randomness: got {}; want {}",
                         prove_rand.len(),
                         self.prove_rand_len()
@@ -265,7 +265,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
                 Ok(gadget)
             })
-            .collect::<Result<Vec<_>, PcpError>>()?;
+            .collect::<Result<Vec<_>, FlpError>>()?;
         assert_eq!(prove_rand_len, self.prove_rand_len());
 
         // Create a buffer for storing the proof. The buffer is longer than the proof itself; the extra
@@ -336,9 +336,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
         query_rand: &[Self::Field],
         joint_rand: &[Self::Field],
         num_shares: usize,
-    ) -> Result<Vec<Self::Field>, PcpError> {
+    ) -> Result<Vec<Self::Field>, FlpError> {
         if input.len() != self.input_len() {
-            return Err(PcpError::Query(format!(
+            return Err(FlpError::Query(format!(
                 "unexpected input length: got {}; want {}",
                 input.len(),
                 self.input_len()
@@ -346,7 +346,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         }
 
         if proof.len() != self.proof_len() {
-            return Err(PcpError::Query(format!(
+            return Err(FlpError::Query(format!(
                 "unexpected proof length: got {}; want {}",
                 proof.len(),
                 self.proof_len()
@@ -354,7 +354,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         }
 
         if query_rand.len() != self.query_rand_len() {
-            return Err(PcpError::Query(format!(
+            return Err(FlpError::Query(format!(
                 "unexpected query randomness length: got {}; want {}",
                 query_rand.len(),
                 self.query_rand_len()
@@ -362,7 +362,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         }
 
         if joint_rand.len() != self.joint_rand_len() {
-            return Err(PcpError::Query(format!(
+            return Err(FlpError::Query(format!(
                 "unexpected joint randomness length: got {}; want {}",
                 joint_rand.len(),
                 self.joint_rand_len()
@@ -386,7 +386,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 if r.pow(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
                     == Self::Field::one()
                 {
-                    return Err(PcpError::Query(format!(
+                    return Err(FlpError::Query(format!(
                         "invalid query randomness: encountered 2^{}-th root of unity",
                         m
                     )));
@@ -453,9 +453,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
     /// Returns true if the verifier message indicates that the input from which it was generated is valid.
     #[allow(clippy::needless_range_loop)]
-    fn decide(&self, verifier: &[Self::Field]) -> Result<bool, PcpError> {
+    fn decide(&self, verifier: &[Self::Field]) -> Result<bool, FlpError> {
         if verifier.len() != self.verifier_len() {
-            return Err(PcpError::Decide(format!(
+            return Err(FlpError::Decide(format!(
                 "unexpected verifier length: got {}; want {}",
                 verifier.len(),
                 self.verifier_len()
@@ -488,10 +488,10 @@ pub trait Type: Sized + Eq + Clone + Debug {
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
 pub trait Gadget<F: FieldElement>: Debug {
     /// Evaluates the gadget on input `inp` and returns the output.
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError>;
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError>;
 
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError>;
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
 
     /// Returns the arity of the gadget. This is the length of `inp` passed to `call` or
     /// `call_poly`.
@@ -522,7 +522,7 @@ struct ProveShimGadget<F: FieldElement> {
 }
 
 impl<F: FieldElement> ProveShimGadget<F> {
-    fn new(inner: Box<dyn Gadget<F>>, prove_rand: &[F]) -> Result<Self, PcpError> {
+    fn new(inner: Box<dyn Gadget<F>>, prove_rand: &[F]) -> Result<Self, FlpError> {
         let mut f_vals = vec![vec![F::zero(); 1 + inner.calls()]; inner.arity()];
 
         #[allow(clippy::needless_range_loop)]
@@ -540,7 +540,7 @@ impl<F: FieldElement> ProveShimGadget<F> {
 }
 
 impl<F: FieldElement> Gadget<F> for ProveShimGadget<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         #[allow(clippy::needless_range_loop)]
         for wire in 0..inp.len() {
             self.f_vals[wire][self.ct] = inp[wire];
@@ -549,7 +549,7 @@ impl<F: FieldElement> Gadget<F> for ProveShimGadget<F> {
         self.inner.call(inp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         self.inner.call_poly(outp, inp)
     }
 
@@ -593,7 +593,7 @@ struct QueryShimGadget<F: FieldElement> {
 }
 
 impl<F: FieldElement> QueryShimGadget<F> {
-    fn new(inner: Box<dyn Gadget<F>>, r: F, proof_data: &[F]) -> Result<Self, PcpError> {
+    fn new(inner: Box<dyn Gadget<F>>, r: F, proof_data: &[F]) -> Result<Self, FlpError> {
         let gadget_degree = inner.degree();
         let gadget_arity = inner.arity();
         let m = (1 + inner.calls()).next_power_of_two();
@@ -631,7 +631,7 @@ impl<F: FieldElement> QueryShimGadget<F> {
 }
 
 impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         #[allow(clippy::needless_range_loop)]
         for wire in 0..inp.len() {
             self.f_vals[wire][self.ct] = inp[wire];
@@ -641,7 +641,7 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
         Ok(outp)
     }
 
-    fn call_poly(&mut self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), FlpError> {
         panic!("no-op");
     }
 
@@ -666,15 +666,15 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
 mod tests {
     use super::*;
     use crate::field::{random_vector, split_vector, Field128};
-    use crate::pcp::gadgets::{Mul, PolyEval};
+    use crate::flp::gadgets::{Mul, PolyEval};
     use crate::polynomial::poly_range_check;
 
     use std::marker::PhantomData;
 
-    // Simple integration test for the core PCP logic. You'll find more extensive unit tests for
+    // Simple integration test for the core FLP logic. You'll find more extensive unit tests for
     // each implemented data type in src/types.rs.
     #[test]
-    fn test_pcp() {
+    fn test_flp() {
         const NUM_SHARES: usize = 2;
 
         let typ: TestType<Field128> = TestType::new();
@@ -742,7 +742,7 @@ mod tests {
             input: &[F],
             joint_rand: &[F],
             _num_shares: usize,
-        ) -> Result<F, PcpError> {
+        ) -> Result<F, FlpError> {
             let r = joint_rand[0];
             let mut res = F::zero();
 
@@ -809,14 +809,14 @@ mod tests {
             ]
         }
 
-        fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, PcpError> {
+        fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
             Ok(vec![
                 F::from(*measurement),
                 F::from(*measurement).pow(F::Integer::try_from(3).unwrap()),
             ])
         }
 
-        fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+        fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
             Ok(input)
         }
     }

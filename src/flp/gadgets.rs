@@ -4,7 +4,7 @@
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
 use crate::field::FieldElement;
-use crate::pcp::{Gadget, PcpError};
+use crate::flp::{FlpError, Gadget};
 use crate::polynomial::{poly_deg, poly_eval, poly_mul};
 
 #[cfg(feature = "multithreaded")]
@@ -51,14 +51,14 @@ impl<F: FieldElement> Mul<F> {
         &mut self,
         outp: &mut [F],
         inp: &[Vec<F>],
-    ) -> Result<(), PcpError> {
+    ) -> Result<(), FlpError> {
         let v = poly_mul(&inp[0], &inp[1]);
         outp[..v.len()].clone_from_slice(&v);
         Ok(())
     }
 
     // Multiply input polynomials using FFT.
-    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
@@ -76,12 +76,12 @@ impl<F: FieldElement> Mul<F> {
 }
 
 impl<F: FieldElement> Gadget<F> for Mul<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(inp[0] * inp[1])
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
         if inp[0].len() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
@@ -138,7 +138,7 @@ impl<F: FieldElement> PolyEval<F> {
 
 impl<F: FieldElement> PolyEval<F> {
     // Multiply input polynomials directly.
-    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         outp[0] = self.poly[0];
         let mut x = inp[0].to_vec();
         for i in 1..self.poly.len() {
@@ -154,7 +154,7 @@ impl<F: FieldElement> PolyEval<F> {
     }
 
     // Multiply input polynomials using FFT.
-    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let inp = &inp[0];
 
@@ -185,12 +185,12 @@ impl<F: FieldElement> PolyEval<F> {
 }
 
 impl<F: FieldElement> Gadget<F> for PolyEval<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         for item in outp.iter_mut() {
@@ -246,7 +246,7 @@ impl<F: FieldElement> BlindPolyEval<F> {
         }
     }
 
-    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let x = &inp[0];
         let y = &inp[1];
 
@@ -263,7 +263,7 @@ impl<F: FieldElement> BlindPolyEval<F> {
         Ok(())
     }
 
-    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let x = &inp[0];
         let y = &inp[1];
@@ -298,12 +298,12 @@ impl<F: FieldElement> BlindPolyEval<F> {
 }
 
 impl<F: FieldElement> Gadget<F> for BlindPolyEval<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(inp[1] * poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         for x in outp.iter_mut() {
@@ -360,7 +360,7 @@ impl<F: FieldElement, G: 'static + Gadget<F>> ParallelSumGadget<F, G> for Parall
 }
 
 impl<F: FieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelSum<F, G> {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         let mut outp = F::zero();
         for chunk in inp.chunks(self.inner.arity()) {
@@ -369,7 +369,7 @@ impl<F: FieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelSum<F, G> {
         Ok(outp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         for x in outp.iter_mut() {
@@ -434,11 +434,11 @@ where
     F: FieldElement + Sync + Send,
     G: 'static + Gadget<F> + Clone + Sync,
 {
-    fn call(&mut self, inp: &[F]) -> Result<F, PcpError> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         self.serial_sum.call(inp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), PcpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         let res = inp
@@ -484,9 +484,9 @@ where
 fn gadget_call_check<F: FieldElement, G: Gadget<F>>(
     gadget: &G,
     in_len: usize,
-) -> Result<(), PcpError> {
+) -> Result<(), FlpError> {
     if in_len != gadget.arity() {
-        return Err(PcpError::Gadget(format!(
+        return Err(FlpError::Gadget(format!(
             "unexpected number of inputs: got {}; want {}",
             in_len,
             gadget.arity()
@@ -494,7 +494,7 @@ fn gadget_call_check<F: FieldElement, G: Gadget<F>>(
     }
 
     if in_len == 0 {
-        return Err(PcpError::Gadget("can't call an arity-0 gadget".to_string()));
+        return Err(FlpError::Gadget("can't call an arity-0 gadget".to_string()));
     }
 
     Ok(())
@@ -505,7 +505,7 @@ fn gadget_call_poly_check<F: FieldElement, G: Gadget<F>>(
     gadget: &G,
     outp: &[F],
     inp: &[Vec<F>],
-) -> Result<(), PcpError>
+) -> Result<(), FlpError>
 where
     G: Gadget<F>,
 {
@@ -513,14 +513,14 @@ where
 
     for i in 1..inp.len() {
         if inp[i].len() != inp[0].len() {
-            return Err(PcpError::Gadget(
+            return Err(FlpError::Gadget(
                 "gadget called on polynomials with different lengths".to_string(),
             ));
         }
     }
 
     if outp.len() < gadget.degree() * inp[0].len() {
-        return Err(PcpError::Gadget(
+        return Err(FlpError::Gadget(
             "slice allocated for gadget output polynomial is too small".to_string(),
         ));
     }

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! A collection of [`Type`](crate::pcp::Type) implementations.
+//! A collection of [`Type`](crate::flp::Type) implementations.
 
 use crate::field::FieldElement;
-use crate::pcp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
-use crate::pcp::{Gadget, PcpError, Type};
+use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
+use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
 
 use std::convert::TryFrom;
@@ -36,10 +36,10 @@ impl<F: FieldElement> Type for Count<F> {
     type Measurement = F::Integer;
     type Field = F;
 
-    fn encode(&self, value: &F::Integer) -> Result<Vec<F>, PcpError> {
+    fn encode(&self, value: &F::Integer) -> Result<Vec<F>, FlpError> {
         let max = F::Integer::try_from(1).unwrap();
         if *value > max {
-            return Err(PcpError::Encode("Count value must be 0 or 1".to_string()));
+            return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
         }
 
         Ok(vec![F::from(*value)])
@@ -55,12 +55,12 @@ impl<F: FieldElement> Type for Count<F> {
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, PcpError> {
+    ) -> Result<F, FlpError> {
         valid_call_check(self, input, joint_rand)?;
         Ok(g[0].call(&[input[0], input[0]])? - input[0])
     }
 
-    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         truncate_call_check(self, &input)?;
         Ok(input)
     }
@@ -110,16 +110,16 @@ pub struct Sum<F: FieldElement> {
 impl<F: FieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
-    pub fn new(bits: usize) -> Result<Self, PcpError> {
+    pub fn new(bits: usize) -> Result<Self, FlpError> {
         let bits_int = F::Integer::try_from(bits).map_err(|err| {
-            PcpError::Encode(format!(
+            FlpError::Encode(format!(
                 "bit length ({}) cannot be represented as a field element: {:?}",
                 bits, err,
             ))
         })?;
 
         if F::modulus() >> bits_int == F::Integer::from(F::zero()) {
-            return Err(PcpError::Encode(format!(
+            return Err(FlpError::Encode(format!(
                 "bit length ({}) exceeds field modulus",
                 bits,
             )));
@@ -141,9 +141,9 @@ impl<F: FieldElement> Type for Sum<F> {
     type Measurement = F::Integer;
     type Field = F;
 
-    fn encode(&self, summand: &F::Integer) -> Result<Vec<F>, PcpError> {
+    fn encode(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
         if *summand > self.max_summand {
-            return Err(PcpError::Encode(
+            return Err(FlpError::Encode(
                 "value of summand exceeds bit length".to_string(),
             ));
         }
@@ -171,7 +171,7 @@ impl<F: FieldElement> Type for Sum<F> {
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, PcpError> {
+    ) -> Result<F, FlpError> {
         valid_call_check(self, input, joint_rand)?;
 
         // Check that each element of `data` is a 0 or 1.
@@ -185,7 +185,7 @@ impl<F: FieldElement> Type for Sum<F> {
         Ok(range_check)
     }
 
-    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         truncate_call_check(self, &input)?;
 
         let mut decoded = F::zero();
@@ -235,9 +235,9 @@ pub struct Histogram<F: FieldElement> {
 
 impl<F: FieldElement> Histogram<F> {
     /// Return a new [`Histogram`] type with the given buckets.
-    pub fn new(buckets: Vec<F::Integer>) -> Result<Self, PcpError> {
+    pub fn new(buckets: Vec<F::Integer>) -> Result<Self, FlpError> {
         if buckets.len() >= u32::MAX as usize {
-            return Err(PcpError::Encode(
+            return Err(FlpError::Encode(
                 "invalid buckets: number of buckets exceeds maximum permitted".to_string(),
             ));
         }
@@ -245,7 +245,7 @@ impl<F: FieldElement> Histogram<F> {
         if !buckets.is_empty() {
             for i in 0..buckets.len() - 1 {
                 if buckets[i + 1] <= buckets[i] {
-                    return Err(PcpError::Encode(
+                    return Err(FlpError::Encode(
                         "invalid buckets: out-of-order boundary".to_string(),
                     ));
                 }
@@ -263,7 +263,7 @@ impl<F: FieldElement> Type for Histogram<F> {
     type Measurement = F::Integer;
     type Field = F;
 
-    fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, PcpError> {
+    fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
         let mut data = vec![F::zero(); self.buckets.len() + 1];
 
         let bucket = match self.buckets.binary_search(measurement) {
@@ -288,7 +288,7 @@ impl<F: FieldElement> Type for Histogram<F> {
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, PcpError> {
+    ) -> Result<F, FlpError> {
         valid_call_check(self, input, joint_rand)?;
 
         // Check that each element of `data` is a 0 or 1.
@@ -310,7 +310,7 @@ impl<F: FieldElement> Type for Histogram<F> {
         Ok(out)
     }
 
-    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         truncate_call_check(self, &input)?;
         Ok(input)
     }
@@ -348,9 +348,9 @@ fn valid_call_check<T: Type>(
     typ: &T,
     input: &[T::Field],
     joint_rand: &[T::Field],
-) -> Result<(), PcpError> {
+) -> Result<(), FlpError> {
     if input.len() != typ.input_len() {
-        return Err(PcpError::Valid(format!(
+        return Err(FlpError::Valid(format!(
             "unexpected input length: got {}; want {}",
             input.len(),
             typ.input_len(),
@@ -358,7 +358,7 @@ fn valid_call_check<T: Type>(
     }
 
     if joint_rand.len() != typ.joint_rand_len() {
-        return Err(PcpError::Valid(format!(
+        return Err(FlpError::Valid(format!(
             "unexpected joint randomness length: got {}; want {}",
             joint_rand.len(),
             typ.joint_rand_len()
@@ -424,9 +424,9 @@ where
     type Measurement = Vec<F::Integer>;
     type Field = F;
 
-    fn encode(&self, measurement: &Vec<F::Integer>) -> Result<Vec<F>, PcpError> {
+    fn encode(&self, measurement: &Vec<F::Integer>) -> Result<Vec<F>, FlpError> {
         if measurement.len() != self.len {
-            return Err(PcpError::Encode(format!(
+            return Err(FlpError::Encode(format!(
                 "unexpected measurement length: got {}; want {}",
                 measurement.len(),
                 self.len
@@ -436,7 +436,7 @@ where
         let max = F::Integer::from(F::one());
         for value in measurement {
             if *value > max {
-                return Err(PcpError::Encode("Count value must be 0 or 1".to_string()));
+                return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
             }
         }
 
@@ -456,7 +456,7 @@ where
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, PcpError> {
+    ) -> Result<F, FlpError> {
         valid_call_check(self, input, joint_rand)?;
 
         let s = F::from(F::Integer::try_from(num_shares).unwrap()).inv();
@@ -483,7 +483,7 @@ where
         Ok(outp)
     }
 
-    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, PcpError> {
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         truncate_call_check(self, &input)?;
         Ok(input)
     }
@@ -517,9 +517,9 @@ where
     }
 }
 
-fn truncate_call_check<T: Type>(typ: &T, input: &[T::Field]) -> Result<(), PcpError> {
+fn truncate_call_check<T: Type>(typ: &T, input: &[T::Field]) -> Result<(), FlpError> {
     if input.len() != typ.input_len() {
-        return Err(PcpError::Truncate(format!(
+        return Err(FlpError::Truncate(format!(
             "Unexpected input length: got {}; want {}",
             input.len(),
             typ.input_len()
@@ -533,11 +533,11 @@ fn truncate_call_check<T: Type>(typ: &T, input: &[T::Field]) -> Result<(), PcpEr
 mod tests {
     use super::*;
     use crate::field::{random_vector, split_vector, Field64 as TestField};
-    use crate::pcp::gadgets::ParallelSum;
+    use crate::flp::gadgets::ParallelSum;
     #[cfg(feature = "multithreaded")]
-    use crate::pcp::gadgets::ParallelSumMultithreaded;
+    use crate::flp::gadgets::ParallelSumMultithreaded;
 
-    // Number of shares to split input and proofs into in `pcp_test`.
+    // Number of shares to split input and proofs into in `flp_test`.
     const NUM_SHARES: usize = 3;
 
     struct ValidityTestCase<F> {
@@ -551,8 +551,8 @@ mod tests {
         let zero = TestField::zero();
         let one = TestField::one();
 
-        // Test PCP on valid input.
-        pcp_validity_test(
+        // Test FLP on valid input.
+        flp_validity_test(
             &count,
             &count.encode(&1).unwrap(),
             &ValidityTestCase::<TestField> {
@@ -562,7 +562,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &count,
             &count.encode(&0).unwrap(),
             &ValidityTestCase::<TestField> {
@@ -572,8 +572,8 @@ mod tests {
         )
         .unwrap();
 
-        // Test PCP on invalid input.
-        pcp_validity_test(
+        // Test FLP on invalid input.
+        flp_validity_test(
             &count,
             &[TestField::from(1337)],
             &ValidityTestCase::<TestField> {
@@ -598,9 +598,9 @@ mod tests {
 
         // TODO(cjpatton) Try encoding invalid measurements.
 
-        // Test PCP on valid input.
+        // Test FLP on valid input.
         let sum = Sum::new(11).unwrap();
-        pcp_validity_test(
+        flp_validity_test(
             &sum,
             &sum.encode(&1337).unwrap(),
             &ValidityTestCase {
@@ -610,7 +610,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &Sum::new(0).unwrap(),
             &[],
             &ValidityTestCase::<TestField> {
@@ -620,7 +620,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &Sum::new(2).unwrap(),
             &[one, zero],
             &ValidityTestCase {
@@ -630,7 +630,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &Sum::new(9).unwrap(),
             &[one, zero, one, one, zero, one, one, one, zero],
             &ValidityTestCase::<TestField> {
@@ -640,8 +640,8 @@ mod tests {
         )
         .unwrap();
 
-        // Test PCP on invalid input.
-        pcp_validity_test(
+        // Test FLP on invalid input.
+        flp_validity_test(
             &Sum::new(3).unwrap(),
             &[one, nine, zero],
             &ValidityTestCase::<TestField> {
@@ -651,7 +651,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &Sum::new(5).unwrap(),
             &[zero, zero, zero, zero, nine],
             &ValidityTestCase::<TestField> {
@@ -680,7 +680,7 @@ mod tests {
         Histogram::<TestField>::new(vec![10, 10]).unwrap_err();
 
         // Test valid inputs.
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &hist.encode(&0).unwrap(),
             &ValidityTestCase::<TestField> {
@@ -690,7 +690,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &hist.encode(&17).unwrap(),
             &ValidityTestCase::<TestField> {
@@ -700,7 +700,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &hist.encode(&1337).unwrap(),
             &ValidityTestCase::<TestField> {
@@ -711,7 +711,7 @@ mod tests {
         .unwrap();
 
         // Test invalid inputs.
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &[zero, zero, nine],
             &ValidityTestCase::<TestField> {
@@ -721,7 +721,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &[zero, one, one],
             &ValidityTestCase::<TestField> {
@@ -731,7 +731,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &[one, one, one],
             &ValidityTestCase::<TestField> {
@@ -741,7 +741,7 @@ mod tests {
         )
         .unwrap();
 
-        pcp_validity_test(
+        flp_validity_test(
             &hist,
             &[zero, zero, zero],
             &ValidityTestCase::<TestField> {
@@ -763,7 +763,7 @@ mod tests {
         // Test on valid inputs.
         for len in 0..10 {
             let count_vec = f(len);
-            pcp_validity_test(
+            flp_validity_test(
                 &count_vec,
                 &count_vec.encode(&vec![1; len]).unwrap(),
                 &ValidityTestCase::<TestField> {
@@ -776,7 +776,7 @@ mod tests {
 
         let len = 100;
         let count_vec = f(len);
-        pcp_validity_test(
+        flp_validity_test(
             &count_vec,
             &count_vec.encode(&vec![1; len]).unwrap(),
             &ValidityTestCase::<TestField> {
@@ -789,7 +789,7 @@ mod tests {
         // Test on invalid inputs.
         for len in 1..10 {
             let count_vec = f(len);
-            pcp_validity_test(
+            flp_validity_test(
                 &count_vec,
                 &vec![nine; len],
                 &ValidityTestCase::<TestField> {
@@ -812,15 +812,15 @@ mod tests {
         test_count_vec(CountVec::<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>>::new)
     }
 
-    fn pcp_validity_test<T: Type>(
+    fn flp_validity_test<T: Type>(
         typ: &T,
         input: &[T::Field],
         t: &ValidityTestCase<T::Field>,
-    ) -> Result<(), PcpError> {
+    ) -> Result<(), FlpError> {
         let mut gadgets = typ.gadget();
 
         if input.len() != typ.input_len() {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "unexpected input length: got {}; want {}",
                 input.len(),
                 typ.input_len()
@@ -828,7 +828,7 @@ mod tests {
         }
 
         if typ.query_rand_len() != gadgets.len() {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "query rand length: got {}; want {}",
                 typ.query_rand_len(),
                 gadgets.len()
@@ -842,13 +842,13 @@ mod tests {
         // Run the validity circuit.
         let v = typ.valid(&mut gadgets, input, &joint_rand, 1)?;
         if v != T::Field::zero() && t.expect_valid {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "expected valid input: valid() returned {}",
                 v
             )));
         }
         if v == T::Field::zero() && !t.expect_valid {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "expected invalid input: valid() returned {}",
                 v
             )));
@@ -857,7 +857,7 @@ mod tests {
         // Generate the proof.
         let proof = typ.prove(input, &prove_rand, &joint_rand)?;
         if proof.len() != typ.proof_len() {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "unexpected proof length: got {}; want {}",
                 proof.len(),
                 typ.proof_len()
@@ -867,7 +867,7 @@ mod tests {
         // Query the proof.
         let verifier = typ.query(input, &proof, &query_rand, &joint_rand, 1)?;
         if verifier.len() != typ.verifier_len() {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "unexpected verifier length: got {}; want {}",
                 verifier.len(),
                 typ.verifier_len()
@@ -877,13 +877,13 @@ mod tests {
         // Decide if the input is valid.
         let res = typ.decide(&verifier)?;
         if res != t.expect_valid {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "decision is {}; want {}",
                 res, t.expect_valid,
             )));
         }
 
-        // Run distributed PCP.
+        // Run distributed FLP.
         let input_shares: Vec<Vec<T::Field>> = split_vector(input, NUM_SHARES)
             .unwrap()
             .into_iter()
@@ -915,7 +915,7 @@ mod tests {
 
         let res = typ.decide(&verifier)?;
         if res != t.expect_valid {
-            return Err(PcpError::Test(format!(
+            return Err(FlpError::Test(format!(
                 "distributed decision is {}; want {}",
                 res, t.expect_valid,
             )));
@@ -927,7 +927,7 @@ mod tests {
             mutated_proof[i] += T::Field::one();
             let verifier = typ.query(input, &mutated_proof, &query_rand, &joint_rand, 1)?;
             if typ.decide(&verifier)? {
-                return Err(PcpError::Test(format!(
+                return Err(FlpError::Test(format!(
                     "decision for proof mutant {} is {}; want {}",
                     i, true, false,
                 )));
@@ -941,7 +941,7 @@ mod tests {
             .query(input, &mutated_proof, &query_rand, &joint_rand, 1)
             .is_ok()
         {
-            return Err(PcpError::Test(
+            return Err(FlpError::Test(
                 "query on short proof succeeded; want failure".to_string(),
             ));
         }
@@ -953,7 +953,7 @@ mod tests {
             .query(input, &mutated_proof, &query_rand, &joint_rand, 1)
             .is_ok()
         {
-            return Err(PcpError::Test(
+            return Err(FlpError::Test(
                 "query on long proof succeeded; want failure".to_string(),
             ));
         }
@@ -962,7 +962,7 @@ mod tests {
             let got = typ.truncate(input.to_vec())?;
 
             if got.len() != typ.output_len() {
-                return Err(PcpError::Test(format!(
+                return Err(FlpError::Test(format!(
                     "unexpected output length: got {}; want {}",
                     got.len(),
                     typ.output_len()
@@ -970,7 +970,7 @@ mod tests {
             }
 
             if &got != want {
-                return Err(PcpError::Test(format!(
+                return Err(FlpError::Test(format!(
                     "unexpected output: got {:?}; want {:?}",
                     got, want
                 )));
