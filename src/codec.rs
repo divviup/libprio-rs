@@ -25,6 +25,8 @@ pub enum CodecError {
     LengthPrefixTooBig(usize),
     #[error("other error: {0}")]
     Other(#[source] Box<dyn Error + 'static + Send + Sync>),
+    #[error("unexpected value")]
+    UnexpectedValue,
 }
 
 /// Describes how to decode an object from a byte sequence.
