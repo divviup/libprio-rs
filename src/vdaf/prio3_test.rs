@@ -2,7 +2,7 @@
 
 use crate::{
     codec::{Encode, ParameterizedDecode},
-    pcp::Type,
+    flp::Type,
     vdaf::{
         prg::Prg,
         prio3::{

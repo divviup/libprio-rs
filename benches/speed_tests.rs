@@ -7,7 +7,7 @@ use prio::client::Client as Prio2Client;
 use prio::codec::Encode;
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field128 as F, FieldElement};
-use prio::pcp::gadgets::Mul;
+use prio::flp::gadgets::Mul;
 use prio::server::{generate_verification_message, ValidationMemory};
 #[cfg(feature = "multithreaded")]
 use prio::vdaf::prio3::Prio3Aes128CountVecMultithreaded;
@@ -53,7 +53,7 @@ pub fn prng(c: &mut Criterion) {
 /// The asymptotic cost of polynomial multiplication is `O(n log n)` using FFT and `O(n^2)` using
 /// the naive method. This benchmark demonstrates that the latter has better concrete performance
 /// for small polynomials. The result is used to pick the `FFT_THRESHOLD` constant in
-/// `src/pcp/gadgets.rs`.
+/// `src/flp/gadgets.rs`.
 pub fn poly_mul(c: &mut Criterion) {
     let test_sizes = [1_usize, 30, 60, 90, 120, 150];
     for size in test_sizes.iter() {
@@ -121,7 +121,7 @@ pub fn bool_vec(c: &mut Criterion) {
             })
         });
 
-        // TODO(cjpatton) Add benchmark for comparable pcp functionality.
+        // TODO(cjpatton) Add benchmark for comparable FLP functionality.
     }
 }
 

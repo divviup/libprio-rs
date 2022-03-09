@@ -2,7 +2,7 @@
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This modulde
 //! implements the Prio3 [VDAF]. The construction is based on a transform of a Fully Linear Proof
-//! (FLP) system (i.e., a concrete [`Type`](crate::pcp::Type) into a zero-knowledge proof system on
+//! (FLP) system (i.e., a concrete [`Type`](crate::flp::Type) into a zero-knowledge proof system on
 //! distributed data as described in [[BBCG+19], Section 6].
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
@@ -12,10 +12,10 @@
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};
 #[cfg(feature = "multithreaded")]
-use crate::pcp::gadgets::ParallelSumMultithreaded;
-use crate::pcp::gadgets::{BlindPolyEval, ParallelSum, ParallelSumGadget};
-use crate::pcp::types::{Count, CountVec, Histogram, Sum};
-use crate::pcp::Type;
+use crate::flp::gadgets::ParallelSumMultithreaded;
+use crate::flp::gadgets::{BlindPolyEval, ParallelSum, ParallelSumGadget};
+use crate::flp::types::{Count, CountVec, Histogram, Sum};
+use crate::flp::Type;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, PrgAes128, RandSource, Seed};
 use crate::vdaf::{
@@ -432,7 +432,7 @@ pub struct Prio3InputShare<F, const L: usize> {
     proof_share: Share<F, L>,
 
     /// Parameters used by the Aggregator to compute the joint randomness. This field is optional
-    /// because not every [`pcp::Type`] requires joint randomness.
+    /// because not every [`flp::Type`] requires joint randomness.
     joint_rand_param: Option<JointRandParam<L>>,
 }
 
@@ -496,7 +496,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// The verification message emitted by each aggregator during the Prepare process.
 pub struct Prio3PrepareMessage<F, const L: usize> {
-    /// (A share of) the FLP verifier message. (See [`Type`](crate::pcp::Type).)
+    /// (A share of) the FLP verifier message. (See [`Type`](crate::flp::Type).)
     pub verifier: Vec<F>,
 
     /// (A share of) the joint randomness seed.

@@ -6,8 +6,8 @@
 use crate::client::Client;
 use crate::fft::discrete_fourier_transform;
 use crate::field::FieldElement;
-use crate::pcp::gadgets::Mul;
-use crate::pcp::PcpError;
+use crate::flp::gadgets::Mul;
+use crate::flp::FlpError;
 use crate::polynomial::{poly_fft, PolyAuxMemory};
 
 /// Sets `outp` to the Discrete Fourier Transform (DFT) using an iterative FFT algorithm.
@@ -34,7 +34,7 @@ pub fn benchmarked_gadget_mul_call_poly_fft<F: FieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
     inp: &[Vec<F>],
-) -> Result<(), PcpError> {
+) -> Result<(), FlpError> {
     g.call_poly_fft(outp, inp)
 }
 
@@ -44,7 +44,7 @@ pub fn benchmarked_gadget_mul_call_poly_direct<F: FieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
     inp: &[Vec<F>],
-) -> Result<(), PcpError> {
+) -> Result<(), FlpError> {
     g.call_poly_direct(outp, inp)
 }
 
