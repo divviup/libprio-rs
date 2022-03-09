@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
-//! implemets the poplar1 [VDAF]. This is the core component of the Poplar protocol for
-//! privacy-preserving heavy hitters [[BBCG+21]].
+//! partially implements the core component of the Poplar protocol [[BBCG+21]]. Named for the
+//! Poplar1 [[draft-patton-cfrg-vdaf-01]], the specification of this VDAF is under active
+//! development. Thus this code should be regarded as experimental and not compliant with any
+//! existing speciication.
 //!
 //! TODO Make the input shares stateful so that applications can efficiently evaluate the IDPF over
 //! multiple rounds. Question: Will this require API changes to [`crate::vdaf::Vdaf`]?
@@ -13,8 +15,8 @@
 //! TODO Implement the efficient IDPF of [[BBCG+21]]. [`ToyIdpf`] is not space efficient and is
 //! merely intended as a proof-of-concept.
 //!
-//! [VDAF]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
+//! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
 use std::array::IntoIter;
 use std::cmp::Ordering;

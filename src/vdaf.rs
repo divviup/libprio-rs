@@ -2,11 +2,9 @@
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module defines an
 //! API for Verifiable Distributed Aggregation Functions (VDAFs) and implements two constructions
-//! described in [[VDAF]].
+//! described in [[draft-patton-cfrg-vdaf-01]].
 //!
-//! [BBCG+19]: https://ia.cr/2019/188
-//! [BBCG+21]: https://ia.cr/2021/017
-//! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
+//! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{FieldElement, FieldError};
