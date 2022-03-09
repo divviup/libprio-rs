@@ -129,7 +129,7 @@ pub trait FieldElement:
     /// # Warnings
     ///
     /// This function should only be used within [`prng::Prng`] to convert a random byte string into
-    /// a field element. Use [`Self::try_from_reader`] to deserialize field elements. Use
+    /// a field element. Use [`Self::decode`] to deserialize field elements. Use
     /// [`field::rand`] or [`prng::Prng`] to randomly generate field elements.
     #[doc(hidden)]
     fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError>;
@@ -172,7 +172,7 @@ pub trait FieldElement:
     ///
     /// Returns an error if the length of the provided byte slice is not a multiple of the size of a
     /// field element, or if any of the values in the byte slice are invalid encodings of a field
-    /// element as documented in [`Self::try_from_reader`].
+    /// element, because the encoded integer is larger than the field modulus.
     ///
     /// # Notes
     ///
