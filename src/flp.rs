@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
-//! defines the [`Type`] trait, the main building block of the [`prio3`](crate::vdaf::prio3) VDAF.
-//! Implementations of this trait for various measurement types can be found in [`types`].
+//! This module implements the generic Fully Linear Proof (FLP) system specified in
+//! [[draft-patton-cfrg-vdaf-01], Section 6.3]. This is the main building block of
+//! [`prio3`](crate::vdaf::prio3).
 //!
-//! This module also implements a fully linear PCP ("Probabilistically Checkable Proof") system
-//! based on [[BBCG+19], Theorem 4.3] suitable for implementations of [`Type`]. Implementations of
-//! [`Type`] provide the FLP functionality described in [[VDAF], Section 6.1] and used in `prio3`
-//! to ensure validity of the recovered output shares. Most applications will not need to use this
-//! module directly.
+//! The proof system is derived for any implementation of the [`Type`] trait. Such an
+//! implementation specifies the validity circuit that defines the set of valid inputs, as well as
+//! the finite field in which the validity circuit is evaluated. It also determines how
+//! raw measurements are encoded as inputs to the validity circuit.
 //!
 //! # Overview
 //!
@@ -45,22 +44,9 @@
 //! assert!(count.decide(&verifier).unwrap());
 //! ```
 //!
-//! The proof system implemented here lifts [[BBCG+19], Theorem 4.3] to a 1.5-round, public-coin,
-//! interactive oracle proof system (see [[BBCG+19], Definition 3.11]). The main difference is that
-//! the arithmetic circuit may include an additional, random input (called the "joint randomness"
-//! above). This allows us to express proof systems like the SIMD circuit of [[BBCG+19]] that
-//! trade a modest amount of soundness error for a significantly smaller proof.
-//!
-//! Another improvement made here is to allow for validity circuits with multiple repeating
-//! sub-components (called "gadgets" here, see [`gadgets`]) instead of just one. This idea comes
-//! from [[BBCG+19], Remark 4.5].
-//!
-//! WARNING: This proof system has not yet undergone significant security analysis. As such, this
-//! proof system should not be considered suitable for production use.
-//!
 //! [BBCG+19]: https://ia.cr/2019/188
-//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-00
 //! [CGB17]: https://crypto.stanford.edu/prio
+//! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};

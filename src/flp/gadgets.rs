@@ -334,7 +334,7 @@ impl<F: FieldElement> Gadget<F> for BlindPolyEval<F> {
     }
 }
 
-/// Marker trait for abstracting over [`ParallelSum`] and [`ParallelSumMultithreaded`]
+/// Marker trait for abstracting over [`ParallelSum`].
 pub trait ParallelSumGadget<F: FieldElement, G>: Gadget<F> + Debug {
     /// Wraps `inner` into a sum gadget with `chunks` chunks
     fn new(inner: G, chunks: usize) -> Self;

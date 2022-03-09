@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! **(NOTE: This module is experimental. Applications should not use it yet.)** This modulde
-//! implements the Prio3 [VDAF]. The construction is based on a transform of a Fully Linear Proof
-//! (FLP) system (i.e., a concrete [`Type`](crate::flp::Type) into a zero-knowledge proof system on
-//! distributed data as described in [[BBCG+19], Section 6].
+//! This modulde implements the Prio3 VDAF as specified in [[draft-patton-cfrg-vdaf-01]]. The
+//! construction is based on a transform of a Fully Linear Proof (FLP) system (i.e., a concrete
+//! [`Type`](crate::flp::Type) into a zero-knowledge proof system on distributed data as described
+//! in [[BBCG+19], Section 6].
+//!
+//! Implementations of `Prio3Aes128Count`, `Prio3Aes128Sum`, and `Prio3Aes128Histogram` as
+//! specified in [[draft-patton-cfrg-vdaf-01], Section 6.4] are provided. This module also provides
+//! additional instantiations of Prio3 that are not in the draft.
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
-//! [BBCG+21]: https://ia.cr/2021/017
-//! [VDAF]: https://datatracker.ietf.org/doc/draft-patton-cfrg-vdaf/
+//! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};
@@ -432,7 +435,7 @@ pub struct Prio3InputShare<F, const L: usize> {
     proof_share: Share<F, L>,
 
     /// Parameters used by the Aggregator to compute the joint randomness. This field is optional
-    /// because not every [`flp::Type`] requires joint randomness.
+    /// because not every [`Type`](`crate::flp::Type`) requires joint randomness.
     joint_rand_param: Option<JointRandParam<L>>,
 }
 
