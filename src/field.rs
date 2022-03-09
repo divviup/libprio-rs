@@ -124,7 +124,7 @@ pub trait FieldElement:
     /// # Errors
     ///
     /// An error is returned if the provided slice is too small to encode a field element or if the
-    /// result encodes an integer larger than the field modulus.
+    /// result encodes an integer larger than or equal to the field modulus.
     ///
     /// # Warnings
     ///
@@ -172,7 +172,7 @@ pub trait FieldElement:
     ///
     /// Returns an error if the length of the provided byte slice is not a multiple of the size of a
     /// field element, or if any of the values in the byte slice are invalid encodings of a field
-    /// element, because the encoded integer is larger than the field modulus.
+    /// element, because the encoded integer is larger than or equal to the field modulus.
     ///
     /// # Notes
     ///
