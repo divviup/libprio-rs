@@ -427,12 +427,12 @@ where
 }
 
 /// The verification parameter used by the aggregators to evaluate the VDAF on a distributed input.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Poplar1VerifyParam<const L: usize> {
     /// Key used to derive the verification randomness from the nonce.
     rand_init: Seed<L>,
 
-    /// Length of
+    /// Length of the IDPF input.
     input_length: usize,
 
     /// Indicates whether this Aggregator is the leader.
@@ -447,6 +447,43 @@ impl<const L: usize> Poplar1VerifyParam<L> {
             input_length,
             is_leader,
         }
+    }
+}
+
+impl<const L: usize> Encode for Poplar1VerifyParam<L> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.rand_init.encode(bytes);
+        if self.is_leader {
+            1_u8.encode(bytes);
+        } else {
+            0_u8.encode(bytes);
+        }
+    }
+}
+
+impl<I, P, const L: usize> ParameterizedDecode<Poplar1<I, P, L>> for Poplar1VerifyParam<L>
+where
+    I: Idpf<2, 2>,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        vdaf: &Poplar1<I, P, L>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let rand_init = Seed::decode(bytes)?;
+        let is_leader = match u8::decode(bytes)? {
+            1 => true,
+            0 => false,
+            _ => {
+                return Err(CodecError::UnexpectedValue);
+            }
+        };
+
+        Ok(Self {
+            rand_init,
+            is_leader,
+            input_length: vdaf.input_length,
+        })
     }
 }
 
@@ -922,6 +959,17 @@ mod tests {
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
         run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
+    }
+
+    #[test]
+    fn test_verify_param_serialization() {
+        let vdaf: Poplar1<ToyIdpf<Field128>, PrgAes128, 16> = Poplar1::new(8);
+        let (_, verify_param) = vdaf.setup().unwrap();
+        for want in verify_param.iter() {
+            let got =
+                Poplar1VerifyParam::get_decoded_with_param(&vdaf, &want.get_encoded()).unwrap();
+            assert_eq!(&got, want);
+        }
     }
 
     fn check_btree(btree: &BTreeMap<IdpfInput, u64>, counts: &[u64]) {
