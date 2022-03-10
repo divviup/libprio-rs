@@ -42,9 +42,10 @@ struct TPrio3<M> {
 macro_rules! err {
     (
         $test_num:ident,
+        $error:expr,
         $msg:expr
     ) => {
-        &format!("test #{} failed: {}", $test_num, $msg)
+        panic!("test #{} failed: {} err: {}", $test_num, $msg, $error)
     };
 }
 
@@ -70,7 +71,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
         assert_eq!(
             input_shares[i],
             Prio3InputShare::get_decoded_with_param(&verify_params[i], want.as_ref())
-                .expect(err!(test_num, "decode test vector (input share)")),
+                .unwrap_or_else(|e| err!(test_num, e, "decode test vector (input share)")),
             "#{}",
             test_num
         );
@@ -86,7 +87,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     for (verify_param, input_share) in verify_params.iter().zip(input_shares) {
         let state = prio3
             .prepare_init(verify_param, &(), &t.nonce, &input_share)
-            .expect(err!(test_num, "prep state init"));
+            .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
     }
 
@@ -106,7 +107,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
         assert_eq!(
             prep_shares[i],
             Prio3PrepareMessage::get_decoded_with_param(&states[i], want.as_ref())
-                .expect(err!(test_num, "decode test vector (prep share)")),
+                .unwrap_or_else(|e| err!(test_num, e, "decode test vector (prep share)")),
             "#{}",
             test_num
         );
@@ -116,7 +117,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     let inbound = Some(
         prio3
             .prepare_preprocess(prep_shares)
-            .expect(err!(test_num, "prep preprocess")),
+            .unwrap_or_else(|e| err!(test_num, e, "prep preprocess")),
     );
 
     let mut out_shares = Vec::new();

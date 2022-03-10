@@ -78,11 +78,6 @@ impl FieldParameters {
         let y = [lo64(y), hi64(y)];
         let p = [lo64(self.p), hi64(self.p)];
         let mut zz = [0; 4];
-        let mut result: u128;
-        let mut carry: u128;
-        let mut hi: u128;
-        let mut lo: u128;
-        let mut cc: u128;
 
         // Integer multiplication
         // z = x * y
@@ -91,15 +86,15 @@ impl FieldParameters {
         // *     y1,y0
         // ===========
         // z3,z2,z1,z0
-        result = x[0] * y[0];
-        carry = hi64(result);
+        let mut result = x[0] * y[0];
+        let mut carry = hi64(result);
         zz[0] = lo64(result);
         result = x[0] * y[1];
-        hi = hi64(result);
-        lo = lo64(result);
+        let mut hi = hi64(result);
+        let mut lo = lo64(result);
         result = lo + carry;
         zz[1] = lo64(result);
-        cc = hi64(result);
+        let mut cc = hi64(result);
         result = hi + cc;
         zz[2] = lo64(result);
 

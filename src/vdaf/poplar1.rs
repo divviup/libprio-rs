@@ -18,7 +18,6 @@
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
 //! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
-use std::array::IntoIter;
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::convert::{TryFrom, TryInto};
@@ -409,16 +408,16 @@ where
         }
 
         // Generate IDPF shares of the data and authentication vectors.
-        let mut idpf_shares = IntoIter::new(I::gen(input, idpf_values)?);
+        let idpf_shares = I::gen(input, idpf_values)?;
 
         Ok(vec![
             Poplar1InputShare {
-                idpf: idpf_shares.next().unwrap(),
+                idpf: idpf_shares[0].clone(),
                 sketch_start_seed: leader_sketch_start_seed,
                 sketch_next: Share::Leader(leader_sketch_next),
             },
             Poplar1InputShare {
-                idpf: idpf_shares.next().unwrap(),
+                idpf: idpf_shares[1].clone(),
                 sketch_start_seed: helper_sketch_start_seed,
                 sketch_next: Share::Helper(helper_sketch_next_seed),
             },
