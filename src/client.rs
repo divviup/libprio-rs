@@ -118,17 +118,17 @@ impl<F: FieldElement> Client<F> {
     {
         let mut proof = vec![F::zero(); proof_length(self.dimension)];
         // unpack one long vector to different subparts
-        let mut unpacked = unpack_proof_mut(&mut proof, self.dimension).unwrap();
+        let unpacked = unpack_proof_mut(&mut proof, self.dimension).unwrap();
         // initialize the data part
-        init_function(&mut unpacked.data);
+        init_function(unpacked.data);
         // fill in the rest
         construct_proof(
             unpacked.data,
             self.dimension,
-            &mut unpacked.f0,
-            &mut unpacked.g0,
-            &mut unpacked.h0,
-            &mut unpacked.points_h_packed,
+            unpacked.f0,
+            unpacked.g0,
+            unpacked.h0,
+            unpacked.points_h_packed,
             self,
         );
 

@@ -65,9 +65,9 @@ fn fft_recurse<F: FieldElement>(
 
     let half_n = n / 2;
 
-    let (mut tmp_first, mut tmp_second) = tmp.split_at_mut(half_n);
-    let (y_sub_first, mut y_sub_second) = y_sub.split_at_mut(half_n);
-    let (roots_sub_first, mut roots_sub_second) = roots_sub.split_at_mut(half_n);
+    let (tmp_first, tmp_second) = tmp.split_at_mut(half_n);
+    let (y_sub_first, y_sub_second) = y_sub.split_at_mut(half_n);
+    let (roots_sub_first, roots_sub_second) = roots_sub.split_at_mut(half_n);
 
     // Recurse on the first half
     for i in 0..half_n {
@@ -75,13 +75,13 @@ fn fft_recurse<F: FieldElement>(
         roots_sub_first[i] = roots[2 * i];
     }
     fft_recurse(
-        &mut tmp_first,
+        tmp_first,
         half_n,
         roots_sub_first,
         y_sub_first,
-        &mut tmp_second,
-        &mut y_sub_second,
-        &mut roots_sub_second,
+        tmp_second,
+        y_sub_second,
+        roots_sub_second,
     );
     for i in 0..half_n {
         out[2 * i] = tmp_first[i];
@@ -93,13 +93,13 @@ fn fft_recurse<F: FieldElement>(
         y_sub_first[i] *= roots[i];
     }
     fft_recurse(
-        &mut tmp_first,
+        tmp_first,
         half_n,
         roots_sub_first,
         y_sub_first,
-        &mut tmp_second,
-        &mut y_sub_second,
-        &mut roots_sub_second,
+        tmp_second,
+        y_sub_second,
+        roots_sub_second,
     );
     for i in 0..half_n {
         out[2 * i + 1] = tmp[i];
