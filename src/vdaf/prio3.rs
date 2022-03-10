@@ -605,6 +605,11 @@ pub struct Prio3PrepareStep<F, const L: usize> {
 }
 
 impl<F: FieldElement, const L: usize> Encode for Prio3PrepareStep<F, L> {
+    /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the step is not in the "waiting" state. See [`Prio3PrepareStep`] for details.
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let PrepareStep::Ready(..) = self.state {
             panic!("encooding of ready state is not permitted (see documentation for details)");

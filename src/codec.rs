@@ -55,8 +55,8 @@ pub trait ParameterizedDecode<P>: Sized {
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError>;
 
-    /// Convenience method to get decoded value. Returns an error if [`Self::decode`] fails, or if
-    /// there are any bytes left in `bytes` after decoding a value.
+    /// Convenience method to get decoded value. Returns an error if [`Self::decode_with_param`]
+    /// fails, or if there are any bytes left in `bytes` after decoding a value.
     fn get_decoded_with_param(decoding_parameter: &P, bytes: &[u8]) -> Result<Self, CodecError> {
         let mut cursor = Cursor::new(bytes);
         let decoded = Self::decode_with_param(decoding_parameter, &mut cursor)?;

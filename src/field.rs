@@ -124,12 +124,12 @@ pub trait FieldElement:
     /// # Errors
     ///
     /// An error is returned if the provided slice is too small to encode a field element or if the
-    /// result encodes an integer larger than the field modulus.
+    /// result encodes an integer larger than or equal to the field modulus.
     ///
     /// # Warnings
     ///
     /// This function should only be used within [`prng::Prng`] to convert a random byte string into
-    /// a field element. Use [`Self::try_from_reader`] to deserialize field elements. Use
+    /// a field element. Use [`Self::decode`] to deserialize field elements. Use
     /// [`field::rand`] or [`prng::Prng`] to randomly generate field elements.
     #[doc(hidden)]
     fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError>;
@@ -172,7 +172,7 @@ pub trait FieldElement:
     ///
     /// Returns an error if the length of the provided byte slice is not a multiple of the size of a
     /// field element, or if any of the values in the byte slice are invalid encodings of a field
-    /// element as documented in [`Self::try_from_reader`].
+    /// element, because the encoded integer is larger than or equal to the field modulus.
     ///
     /// # Notes
     ///
