@@ -259,14 +259,14 @@ impl Decode for BTreeSet<IdpfInput> {
 #[derive(Debug, Clone)]
 pub struct Poplar1InputShare<I: Idpf<2, 2>, const L: usize> {
     /// IDPF share of input
-    pub idpf: I,
+    idpf: I,
 
     /// PRNG seed used to generate the aggregator's share of the randomness used in the first part
     /// of the sketching protocol.
-    pub sketch_start_seed: Seed<L>,
+    sketch_start_seed: Seed<L>,
 
     /// Aggregator's share of the randomness used in the second part of the sketching protocol.
-    pub sketch_next: Share<I::Field, L>,
+    sketch_next: Share<I::Field, L>,
 }
 
 impl<I: Idpf<2, 2>, const L: usize> Encode for Poplar1InputShare<I, L> {
