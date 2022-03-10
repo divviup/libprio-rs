@@ -410,10 +410,10 @@ where
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3VerifyParam<const L: usize> {
     /// Key used to derive the query randomness from the nonce.
-    pub query_rand_init: Seed<L>,
+    query_rand_init: Seed<L>,
 
     /// The identity of the aggregator.
-    pub aggregator_id: u8,
+    aggregator_id: u8,
 
     /// Length in field elements of an uncompressed input share.
     input_len: usize,
@@ -532,10 +532,10 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
 /// The verification message emitted by each aggregator during the Prepare process.
 pub struct Prio3PrepareMessage<F, const L: usize> {
     /// (A share of) the FLP verifier message. (See [`Type`](crate::flp::Type).)
-    pub verifier: Vec<F>,
+    verifier: Vec<F>,
 
     /// (A share of) the joint randomness seed.
-    pub joint_rand_seed: Option<Seed<L>>,
+    joint_rand_seed: Option<Seed<L>>,
 }
 
 impl<F: FieldElement, const L: usize> Encode for Prio3PrepareMessage<F, L> {
