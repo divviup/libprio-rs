@@ -6,7 +6,9 @@
 //!
 //! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
-use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
+use crate::codec::{
+    decode_u16_items, encode_u16_items, CodecError, Decode, Encode, ParameterizedDecode,
+};
 use crate::field::{FieldElement, FieldError};
 use crate::flp::FlpError;
 use crate::prng::PrngError;
@@ -123,7 +125,7 @@ pub trait Vdaf: Clone + Debug {
     type InputShare: Clone + Debug + ParameterizedDecode<Self::VerifyParam> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare: Clone + Debug;
+    type OutputShare: Clone + Debug + Decode + Encode;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
@@ -237,6 +239,18 @@ pub struct OutputShare<F>(Vec<F>);
 impl<F> AsRef<[F]> for OutputShare<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
+    }
+}
+
+impl<F: Encode> Encode for OutputShare<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_u16_items(bytes, &(), &self.0)
+    }
+}
+
+impl<F: Decode> Decode for OutputShare<F> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        Ok(OutputShare(decode_u16_items(&(), bytes)?))
     }
 }
 
