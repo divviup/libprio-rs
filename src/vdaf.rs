@@ -233,7 +233,7 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 }
 
 /// An output share comprised of a vector of `F` elements.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutputShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for OutputShare<F> {
