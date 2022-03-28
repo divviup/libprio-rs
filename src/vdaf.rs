@@ -125,7 +125,7 @@ pub trait Vdaf: Clone + Debug {
     type InputShare: Clone + Debug + ParameterizedDecode<Self::VerifyParam> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare: Clone + Debug + Decode + Encode;
+    type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
