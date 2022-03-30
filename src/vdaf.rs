@@ -6,14 +6,13 @@
 //!
 //! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
 
-use crate::codec::{
-    decode_u16_items, encode_u16_items, CodecError, Decode, Encode, ParameterizedDecode,
-};
+use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{FieldElement, FieldError};
 use crate::flp::FlpError;
 use crate::prng::PrngError;
 use crate::vdaf::prg::Seed;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
 
@@ -103,7 +102,10 @@ impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
-pub trait Vdaf: Clone + Debug {
+pub trait Vdaf: Clone + Debug
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// The type of Client measurement to be aggregated.
     type Measurement: Clone + Debug;
 
@@ -128,9 +130,7 @@ pub trait Vdaf: Clone + Debug {
     type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
-        + ParameterizedDecode<usize>
-        + Encode;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + for<'a> TryFrom<&'a [u8]>;
 
     /// Generates the long-lived parameters used by the Clients and Aggregators.
     fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
@@ -141,7 +141,10 @@ pub trait Vdaf: Clone + Debug {
 }
 
 /// The Client's role in the execution of a VDAF.
-pub trait Client: Vdaf {
+pub trait Client: Vdaf
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// Shards a measurement into a sequence of input shares, one for each Aggregator.
     fn shard(
         &self,
@@ -151,7 +154,10 @@ pub trait Client: Vdaf {
 }
 
 /// The Aggregator's role in the execution of a VDAF.
-pub trait Aggregator: Vdaf {
+pub trait Aggregator: Vdaf
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// State of the Aggregator during the Prepare process.
     type PrepareStep: Clone + Debug;
 
@@ -197,7 +203,10 @@ pub trait Aggregator: Vdaf {
 }
 
 /// The Collector's role in the execution of a VDAF.
-pub trait Collector: Vdaf {
+pub trait Collector: Vdaf
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// Combines aggregate shares into the aggregate result.
     fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
         &self,
@@ -242,15 +251,17 @@ impl<F> AsRef<[F]> for OutputShare<F> {
     }
 }
 
-impl<F: Encode> Encode for OutputShare<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u16_items(bytes, &(), &self.0)
+impl<F: FieldElement> TryFrom<&[u8]> for OutputShare<F> {
+    type Error = FieldError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self(F::byte_slice_into_vec(bytes)?))
     }
 }
 
-impl<F: Decode> Decode for OutputShare<F> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(OutputShare(decode_u16_items(&(), bytes)?))
+impl<F: FieldElement> From<&OutputShare<F>> for Vec<u8> {
+    fn from(output_share: &OutputShare<F>) -> Self {
+        F::slice_into_byte_vec(&output_share.0)
     }
 }
 
@@ -310,25 +321,17 @@ impl<F: FieldElement> AggregateShare<F> {
     }
 }
 
-impl<F: FieldElement> Encode for AggregateShare<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        for field in &self.0 {
-            field.encode(bytes);
-        }
+impl<F: FieldElement> TryFrom<&[u8]> for AggregateShare<F> {
+    type Error = FieldError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        Ok(Self(F::byte_slice_into_vec(bytes)?))
     }
 }
 
-impl<F: FieldElement> ParameterizedDecode<usize> for AggregateShare<F> {
-    fn decode_with_param(
-        vector_length: &usize,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        let mut items = Vec::with_capacity(*vector_length);
-        for _ in 0..*vector_length {
-            items.push(F::decode(bytes)?);
-        }
-
-        Ok(Self(items))
+impl<F: FieldElement> From<&AggregateShare<F>> for Vec<u8> {
+    fn from(aggregate_share: &AggregateShare<F>) -> Self {
+        F::slice_into_byte_vec(&aggregate_share.0)
     }
 }
 
@@ -340,6 +343,7 @@ pub(crate) fn run_vdaf<V, M>(
 ) -> Result<V::AggregateResult, VdafError>
 where
     V: Client + Aggregator + Collector,
+    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::Measurement>,
 {
     // NOTE Here we use the same nonce for each measurement for testing purposes. However, this is
@@ -378,6 +382,7 @@ pub(crate) fn run_vdaf_prepare<V, M>(
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
     V: Client + Aggregator + Collector,
+    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::InputShare>,
 {
     let input_shares = input_shares
