@@ -356,7 +356,7 @@ fn fieldvec_try_from_bytes<F: FieldElement, T: From<Vec<F>>>(
 /// fieldvec_to_vec converts a type that is equivalent to a vector of field elements into a vector
 /// of bytes.
 #[inline(always)]
-fn fieldvec_to_vec<'a, F: FieldElement, T: AsRef<[F]>>(val: T) -> Vec<u8> {
+fn fieldvec_to_vec<F: FieldElement, T: AsRef<[F]>>(val: T) -> Vec<u8> {
     F::slice_into_byte_vec(val.as_ref())
 }
 
