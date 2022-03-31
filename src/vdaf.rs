@@ -102,6 +102,9 @@ impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
+// TODO(brandon): once GATs are stabilized [https://github.com/rust-lang/rust/issues/44265],
+// state the "&AggregateShare must implement Into<Vec<u8>>" constraint in terms of a where clause
+// on the associated type instead of a where clause on the trait.
 pub trait Vdaf: Clone + Debug
 where
     for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
@@ -251,24 +254,30 @@ impl<F> AsRef<[F]> for OutputShare<F> {
     }
 }
 
+impl<F> From<Vec<F>> for OutputShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
 impl<F: FieldElement> TryFrom<&[u8]> for OutputShare<F> {
     type Error = FieldError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self(F::byte_slice_into_vec(bytes)?))
+        fieldvec_try_from_bytes(bytes)
     }
 }
 
 impl<F: FieldElement> From<&OutputShare<F>> for Vec<u8> {
     fn from(output_share: &OutputShare<F>) -> Self {
-        F::slice_into_byte_vec(&output_share.0)
+        fieldvec_to_vec(&output_share.0)
     }
 }
 
 /// An aggregate share suitable for VDAFs whose output shares and aggregate
 /// shares are vectors of `F` elements, and an output share needs no special
 /// transformation to be merged into an aggregate share.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AggregateShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for AggregateShare<F> {
@@ -325,14 +334,30 @@ impl<F: FieldElement> TryFrom<&[u8]> for AggregateShare<F> {
     type Error = FieldError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        Ok(Self(F::byte_slice_into_vec(bytes)?))
+        fieldvec_try_from_bytes(bytes)
     }
 }
 
 impl<F: FieldElement> From<&AggregateShare<F>> for Vec<u8> {
     fn from(aggregate_share: &AggregateShare<F>) -> Self {
-        F::slice_into_byte_vec(&aggregate_share.0)
+        fieldvec_to_vec(&aggregate_share.0)
     }
+}
+
+/// fieldvec_try_from_bytes converts a slice of bytes to a type that is equivalent to a vector of
+/// field elements.
+#[inline(always)]
+fn fieldvec_try_from_bytes<F: FieldElement, T: From<Vec<F>>>(
+    bytes: &[u8],
+) -> Result<T, FieldError> {
+    F::byte_slice_into_vec(bytes).map(T::from)
+}
+
+/// fieldvec_to_vec converts a type that is equivalent to a vector of field elements into a vector
+/// of bytes.
+#[inline(always)]
+fn fieldvec_to_vec<'a, F: FieldElement, T: AsRef<[F]>>(val: T) -> Vec<u8> {
+    F::slice_into_byte_vec(val.as_ref())
 }
 
 #[cfg(test)]
@@ -435,6 +460,45 @@ where
     }
 
     Ok(out_shares)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AggregateShare, OutputShare};
+    use crate::field::{Field128, Field64, FieldElement};
+    use itertools::iterate;
+    use std::convert::TryFrom;
+    use std::fmt::Debug;
+
+    fn fieldvec_roundtrip_test<F, T>()
+    where
+        F: FieldElement,
+        for<'a> T: Debug + PartialEq + From<Vec<F>> + TryFrom<&'a [u8]>,
+        for<'a> <T as TryFrom<&'a [u8]>>::Error: Debug,
+        for<'a> Vec<u8>: From<&'a T>,
+    {
+        // Generate a value based on an arbitrary vector of field elements.
+        let g = F::generator();
+        let want_value = T::from(iterate(F::one(), |&v| g * v).take(10).collect());
+
+        // Round-trip the value through a byte-vector.
+        let buf: Vec<u8> = (&want_value).into();
+        let got_value = T::try_from(&buf).unwrap();
+
+        assert_eq!(want_value, got_value);
+    }
+
+    #[test]
+    fn roundtrip_output_share() {
+        fieldvec_roundtrip_test::<Field64, OutputShare<Field64>>();
+        fieldvec_roundtrip_test::<Field128, OutputShare<Field128>>();
+    }
+
+    #[test]
+    fn roundtrip_aggregate_share() {
+        fieldvec_roundtrip_test::<Field64, AggregateShare<Field64>>();
+        fieldvec_roundtrip_test::<Field128, AggregateShare<Field128>>();
+    }
 }
 
 pub mod poplar1;
