@@ -12,6 +12,7 @@ use crate::flp::FlpError;
 use crate::prng::PrngError;
 use crate::vdaf::prg::Seed;
 use serde::{Deserialize, Serialize};
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
 
@@ -101,7 +102,13 @@ impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
-pub trait Vdaf: Clone + Debug {
+// TODO(brandon): once GATs are stabilized [https://github.com/rust-lang/rust/issues/44265],
+// state the "&AggregateShare must implement Into<Vec<u8>>" constraint in terms of a where clause
+// on the associated type instead of a where clause on the trait.
+pub trait Vdaf: Clone + Debug
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// The type of Client measurement to be aggregated.
     type Measurement: Clone + Debug;
 
@@ -126,9 +133,7 @@ pub trait Vdaf: Clone + Debug {
     type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
-        + ParameterizedDecode<usize>
-        + Encode;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + for<'a> TryFrom<&'a [u8]>;
 
     /// Generates the long-lived parameters used by the Clients and Aggregators.
     fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
@@ -139,7 +144,10 @@ pub trait Vdaf: Clone + Debug {
 }
 
 /// The Client's role in the execution of a VDAF.
-pub trait Client: Vdaf {
+pub trait Client: Vdaf
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// Shards a measurement into a sequence of input shares, one for each Aggregator.
     fn shard(
         &self,
@@ -149,7 +157,10 @@ pub trait Client: Vdaf {
 }
 
 /// The Aggregator's role in the execution of a VDAF.
-pub trait Aggregator: Vdaf {
+pub trait Aggregator: Vdaf
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// State of the Aggregator during the Prepare process.
     type PrepareStep: Clone + Debug;
 
@@ -195,7 +206,10 @@ pub trait Aggregator: Vdaf {
 }
 
 /// The Collector's role in the execution of a VDAF.
-pub trait Collector: Vdaf {
+pub trait Collector: Vdaf
+where
+    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
+{
     /// Combines aggregate shares into the aggregate result.
     fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
         &self,
@@ -231,7 +245,7 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 }
 
 /// An output share comprised of a vector of `F` elements.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutputShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for OutputShare<F> {
@@ -240,10 +254,30 @@ impl<F> AsRef<[F]> for OutputShare<F> {
     }
 }
 
+impl<F> From<Vec<F>> for OutputShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
+impl<F: FieldElement> TryFrom<&[u8]> for OutputShare<F> {
+    type Error = FieldError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        fieldvec_try_from_bytes(bytes)
+    }
+}
+
+impl<F: FieldElement> From<&OutputShare<F>> for Vec<u8> {
+    fn from(output_share: &OutputShare<F>) -> Self {
+        fieldvec_to_vec(&output_share.0)
+    }
+}
+
 /// An aggregate share suitable for VDAFs whose output shares and aggregate
 /// shares are vectors of `F` elements, and an output share needs no special
 /// transformation to be merged into an aggregate share.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AggregateShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for AggregateShare<F> {
@@ -296,26 +330,34 @@ impl<F: FieldElement> AggregateShare<F> {
     }
 }
 
-impl<F: FieldElement> Encode for AggregateShare<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        for field in &self.0 {
-            field.encode(bytes);
-        }
+impl<F: FieldElement> TryFrom<&[u8]> for AggregateShare<F> {
+    type Error = FieldError;
+
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        fieldvec_try_from_bytes(bytes)
     }
 }
 
-impl<F: FieldElement> ParameterizedDecode<usize> for AggregateShare<F> {
-    fn decode_with_param(
-        vector_length: &usize,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        let mut items = Vec::with_capacity(*vector_length);
-        for _ in 0..*vector_length {
-            items.push(F::decode(bytes)?);
-        }
-
-        Ok(Self(items))
+impl<F: FieldElement> From<&AggregateShare<F>> for Vec<u8> {
+    fn from(aggregate_share: &AggregateShare<F>) -> Self {
+        fieldvec_to_vec(&aggregate_share.0)
     }
+}
+
+/// fieldvec_try_from_bytes converts a slice of bytes to a type that is equivalent to a vector of
+/// field elements.
+#[inline(always)]
+fn fieldvec_try_from_bytes<F: FieldElement, T: From<Vec<F>>>(
+    bytes: &[u8],
+) -> Result<T, FieldError> {
+    F::byte_slice_into_vec(bytes).map(T::from)
+}
+
+/// fieldvec_to_vec converts a type that is equivalent to a vector of field elements into a vector
+/// of bytes.
+#[inline(always)]
+fn fieldvec_to_vec<F: FieldElement, T: AsRef<[F]>>(val: T) -> Vec<u8> {
+    F::slice_into_byte_vec(val.as_ref())
 }
 
 #[cfg(test)]
@@ -326,6 +368,7 @@ pub(crate) fn run_vdaf<V, M>(
 ) -> Result<V::AggregateResult, VdafError>
 where
     V: Client + Aggregator + Collector,
+    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::Measurement>,
 {
     // NOTE Here we use the same nonce for each measurement for testing purposes. However, this is
@@ -364,6 +407,7 @@ pub(crate) fn run_vdaf_prepare<V, M>(
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
     V: Client + Aggregator + Collector,
+    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::InputShare>,
 {
     let input_shares = input_shares
@@ -416,6 +460,45 @@ where
     }
 
     Ok(out_shares)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AggregateShare, OutputShare};
+    use crate::field::{Field128, Field64, FieldElement};
+    use itertools::iterate;
+    use std::convert::TryFrom;
+    use std::fmt::Debug;
+
+    fn fieldvec_roundtrip_test<F, T>()
+    where
+        F: FieldElement,
+        for<'a> T: Debug + PartialEq + From<Vec<F>> + TryFrom<&'a [u8]>,
+        for<'a> <T as TryFrom<&'a [u8]>>::Error: Debug,
+        for<'a> Vec<u8>: From<&'a T>,
+    {
+        // Generate a value based on an arbitrary vector of field elements.
+        let g = F::generator();
+        let want_value = T::from(iterate(F::one(), |&v| g * v).take(10).collect());
+
+        // Round-trip the value through a byte-vector.
+        let buf: Vec<u8> = (&want_value).into();
+        let got_value = T::try_from(&buf).unwrap();
+
+        assert_eq!(want_value, got_value);
+    }
+
+    #[test]
+    fn roundtrip_output_share() {
+        fieldvec_roundtrip_test::<Field64, OutputShare<Field64>>();
+        fieldvec_roundtrip_test::<Field128, OutputShare<Field128>>();
+    }
+
+    #[test]
+    fn roundtrip_aggregate_share() {
+        fieldvec_roundtrip_test::<Field64, AggregateShare<Field64>>();
+        fieldvec_roundtrip_test::<Field128, AggregateShare<Field128>>();
+    }
 }
 
 pub mod poplar1;
