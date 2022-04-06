@@ -70,10 +70,11 @@ pub trait ParameterizedDecode<P>: Sized {
     }
 }
 
-// Provide a blanket implementation so that any Decode can be used as a ParameterizedDecode<()>.
-impl<D: Decode + ?Sized> ParameterizedDecode<()> for D {
+// Provide a blanket implementation so that any Decode can be used as a ParameterizedDecode<T> for
+// any T.
+impl<D: Decode + ?Sized, T> ParameterizedDecode<T> for D {
     fn decode_with_param(
-        _decoding_parameter: &(),
+        _decoding_parameter: &T,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         Self::decode(bytes)
@@ -106,9 +107,10 @@ pub trait ParameterizedEncode<P> {
     }
 }
 
-// Provide a blanket implementation so that any Encode can be used as a ParameterizedEncode<()>.
-impl<E: Encode + ?Sized> ParameterizedEncode<()> for E {
-    fn encode_with_param(&self, _encoding_parameter: &(), bytes: &mut Vec<u8>) {
+// Provide a blanket implementation so that any Encode can be used as a ParameterizedEncode<T> for
+// any T.
+impl<E: Encode + ?Sized, T> ParameterizedEncode<T> for E {
+    fn encode_with_param(&self, _encoding_parameter: &T, bytes: &mut Vec<u8>) {
         self.encode(bytes)
     }
 }
