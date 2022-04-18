@@ -270,7 +270,7 @@ macro_rules! make_field {
                 if int >= $fp.p {
                     return Err(FieldError::ModulusOverflow);
                 }
-                Ok(Self($fp.elem(int)))
+                Ok(Self($fp.map(int)))
             }
         }
 
@@ -279,7 +279,7 @@ macro_rules! make_field {
                 // The fields included in this comparison MUST match the fields
                 // used in Hash::hash
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
-                $fp.from_elem(self.0) == $fp.from_elem(rhs.0)
+                $fp.inverse_map(self.0) == $fp.inverse_map(rhs.0)
             }
         }
 
@@ -288,7 +288,7 @@ macro_rules! make_field {
                 // The fields included in this hash MUST match the fields used
                 // in PartialEq::eq
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
-                $fp.from_elem(self.0).hash(state);
+                $fp.inverse_map(self.0).hash(state);
             }
         }
 
@@ -391,19 +391,19 @@ macro_rules! make_field {
 
         impl From<$int> for $elem {
             fn from(x: $int) -> Self {
-                Self($fp.elem(u128::try_from(x).unwrap()))
+                Self($fp.map(u128::try_from(x).unwrap()))
             }
         }
 
         impl From<$elem> for $int {
             fn from(x: $elem) -> Self {
-                $int::try_from($fp.from_elem(x.0)).unwrap()
+                $int::try_from($fp.inverse_map(x.0)).unwrap()
             }
         }
 
         impl PartialEq<$int> for $elem {
             fn eq(&self, rhs: &$int) -> bool {
-                $fp.from_elem(self.0) == u128::try_from(*rhs).unwrap()
+                $fp.inverse_map(self.0) == u128::try_from(*rhs).unwrap()
             }
         }
 
@@ -417,7 +417,7 @@ macro_rules! make_field {
 
         impl From<$elem> for [u8; $elem::ENCODED_SIZE] {
             fn from(elem: $elem) -> Self {
-                let int = $fp.from_elem(elem.0);
+                let int = $fp.inverse_map(elem.0);
                 let mut slice = [0; $elem::ENCODED_SIZE];
                 for i in 0..$elem::ENCODED_SIZE {
                     let j = match $encoding_order {
@@ -439,13 +439,13 @@ macro_rules! make_field {
 
         impl Display for $elem {
             fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-                write!(f, "{}", $fp.from_elem(self.0))
+                write!(f, "{}", $fp.inverse_map(self.0))
             }
         }
 
         impl Debug for $elem {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", $fp.from_elem(self.0))
+                write!(f, "{}", $fp.inverse_map(self.0))
             }
         }
 
