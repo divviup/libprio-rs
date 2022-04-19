@@ -27,7 +27,7 @@ pub(crate) struct FieldParameters {
     /// Equal to `2^b - 1`, where `b` is the length of `p` in bits.
     pub bit_mask: u128,
     /// `roots[l]` is the `2^l`-th principal root of unity, i.e., `roots[l]` has order `2^l` in the
-    /// multiplicative group. `root[l]` is equal to one by definition.
+    /// multiplicative group. `roots[0]` is equal to one by definition.
     pub roots: [u128; MAX_ROOTS + 1],
 }
 
