@@ -270,7 +270,7 @@ macro_rules! make_field {
                 if int >= $fp.p {
                     return Err(FieldError::ModulusOverflow);
                 }
-                Ok(Self($fp.map_to_montgomery(int)))
+                Ok(Self($fp.montgomery(int)))
             }
         }
 
@@ -279,7 +279,7 @@ macro_rules! make_field {
                 // The fields included in this comparison MUST match the fields
                 // used in Hash::hash
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
-                $fp.map_to_residue(self.0) == $fp.map_to_residue(rhs.0)
+                $fp.residue(self.0) == $fp.residue(rhs.0)
             }
         }
 
@@ -288,7 +288,7 @@ macro_rules! make_field {
                 // The fields included in this hash MUST match the fields used
                 // in PartialEq::eq
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
-                $fp.map_to_residue(self.0).hash(state);
+                $fp.residue(self.0).hash(state);
             }
         }
 
@@ -391,19 +391,19 @@ macro_rules! make_field {
 
         impl From<$int> for $elem {
             fn from(x: $int) -> Self {
-                Self($fp.map_to_montgomery(u128::try_from(x).unwrap()))
+                Self($fp.montgomery(u128::try_from(x).unwrap()))
             }
         }
 
         impl From<$elem> for $int {
             fn from(x: $elem) -> Self {
-                $int::try_from($fp.map_to_residue(x.0)).unwrap()
+                $int::try_from($fp.residue(x.0)).unwrap()
             }
         }
 
         impl PartialEq<$int> for $elem {
             fn eq(&self, rhs: &$int) -> bool {
-                $fp.map_to_residue(self.0) == u128::try_from(*rhs).unwrap()
+                $fp.residue(self.0) == u128::try_from(*rhs).unwrap()
             }
         }
 
@@ -417,7 +417,7 @@ macro_rules! make_field {
 
         impl From<$elem> for [u8; $elem::ENCODED_SIZE] {
             fn from(elem: $elem) -> Self {
-                let int = $fp.map_to_residue(elem.0);
+                let int = $fp.residue(elem.0);
                 let mut slice = [0; $elem::ENCODED_SIZE];
                 for i in 0..$elem::ENCODED_SIZE {
                     let j = match $encoding_order {
@@ -439,13 +439,13 @@ macro_rules! make_field {
 
         impl Display for $elem {
             fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-                write!(f, "{}", $fp.map_to_residue(self.0))
+                write!(f, "{}", $fp.residue(self.0))
             }
         }
 
         impl Debug for $elem {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", $fp.map_to_residue(self.0))
+                write!(f, "{}", $fp.residue(self.0))
             }
         }
 

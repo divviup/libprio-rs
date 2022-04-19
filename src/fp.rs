@@ -73,7 +73,7 @@ impl FieldParameters {
     ///
     /// # Example usage
     /// ```text
-    /// assert_eq!(fp.map_to_residue(fp.mul(fp.map_to_montgomery(23), fp.map_to_montgomery(2))), 46);
+    /// assert_eq!(fp.residue(fp.mul(fp.montgomery(23), fp.montgomery(2))), 46);
     /// ```
     pub fn mul(&self, x: u128, y: u128) -> u128 {
         let x = [lo64(x), hi64(x)];
@@ -209,7 +209,7 @@ impl FieldParameters {
     /// Modular exponentiation, i.e., `x^exp (mod p)` where `p` is the modulus. Note that the
     /// runtime of this algorithm is linear in the bit length of `exp`.
     pub fn pow(&self, x: u128, exp: u128) -> u128 {
-        let mut t = self.map_to_montgomery(1);
+        let mut t = self.montgomery(1);
         for i in (0..128 - exp.leading_zeros()).rev() {
             t = self.mul(t, t);
             if (exp >> i) & 1 != 0 {
@@ -236,10 +236,10 @@ impl FieldParameters {
     /// # Example usage
     /// ```text
     /// let integer = 1; // Standard integer representation
-    /// let elem = fp.map_to_montgomery(integer); // Internal representation in the Montgomery domain
+    /// let elem = fp.montgomery(integer); // Internal representation in the Montgomery domain
     /// assert_eq!(elem, 2564090464);
     /// ```
-    pub fn map_to_montgomery(&self, x: u128) -> u128 {
+    pub fn montgomery(&self, x: u128) -> u128 {
         modp(self.mul(x, self.r2), self.p)
     }
 
@@ -247,7 +247,7 @@ impl FieldParameters {
     #[cfg(test)]
     pub fn rand_elem<R: Rng + ?Sized>(&self, rng: &mut R) -> u128 {
         let uniform = rand::distributions::Uniform::from(0..self.p);
-        self.map_to_montgomery(uniform.sample(rng))
+        self.montgomery(uniform.sample(rng))
     }
 
     /// Maps a field element to its representation as an integer.
@@ -255,10 +255,10 @@ impl FieldParameters {
     /// #Example usage
     /// ```text
     /// let elem = 2564090464; // Internal representation in the Montgomery domain
-    /// let integer = fp.map_to_residue(elem); // Standard integer representation
+    /// let integer = fp.residue(elem); // Standard integer representation
     /// assert_eq!(integer, 1);
     /// ```
-    pub fn map_to_residue(&self, x: u128) -> u128 {
+    pub fn residue(&self, x: u128) -> u128 {
         modp(self.mul(x, 1), self.p)
     }
 
@@ -287,9 +287,9 @@ impl FieldParameters {
         }
         assert_eq!(self.r2, r2, "r2 mismatch");
 
-        assert_eq!(self.g, self.map_to_montgomery(g), "g mismatch");
+        assert_eq!(self.g, self.montgomery(g), "g mismatch");
         assert_eq!(
-            self.map_to_residue(self.pow(self.g, order)),
+            self.residue(self.pow(self.g, order)),
             1,
             "g order incorrect"
         );
@@ -299,16 +299,12 @@ impl FieldParameters {
         assert_eq!(self.num_roots, num_roots, "num_roots mismatch");
 
         let mut roots = vec![0; max(num_roots, MAX_ROOTS) + 1];
-        roots[num_roots] = self.map_to_montgomery(g);
+        roots[num_roots] = self.montgomery(g);
         for i in (0..num_roots).rev() {
             roots[i] = self.mul(roots[i + 1], roots[i + 1]);
         }
         assert_eq!(&self.roots, &roots[..MAX_ROOTS + 1], "roots mismatch");
-        assert_eq!(
-            self.map_to_residue(self.roots[0]),
-            1,
-            "first root is not one"
-        );
+        assert_eq!(self.residue(self.roots[0]), 1, "first root is not one");
 
         let bit_mask = (BigInt::from(1) << big_p.bits()) - BigInt::from(1);
         assert_eq!(
@@ -471,8 +467,8 @@ mod tests {
     struct TestFieldParametersData {
         fp: FieldParameters,  // The paramters being tested
         expected_p: u128,     // Expected fp.p
-        expected_g: u128,     // Expected fp.map_to_residue(fp.g)
-        expected_order: u128, // Expect fp.map_to_residue(fp.pow(fp.g, expected_order)) == 1
+        expected_g: u128,     // Expected fp.residue(fp.g)
+        expected_order: u128, // Expect fp.residue(fp.pow(fp.g, expected_order)) == 1
     }
 
     #[test]
@@ -509,7 +505,7 @@ mod tests {
             t.fp.check(t.expected_p, t.expected_g, t.expected_order);
 
             // Check that the generator has the correct order.
-            assert_eq!(t.fp.map_to_residue(t.fp.pow(t.fp.g, t.expected_order)), 1);
+            assert_eq!(t.fp.residue(t.fp.pow(t.fp.g, t.expected_order)), 1);
 
             // Test arithmetic using the field parameters.
             arithmetic_test(&t.fp);
@@ -523,13 +519,13 @@ mod tests {
         for _ in 0..100 {
             let x = fp.rand_elem(&mut rng);
             let y = fp.rand_elem(&mut rng);
-            let big_x = &fp.map_to_residue(x).to_bigint().unwrap();
-            let big_y = &fp.map_to_residue(y).to_bigint().unwrap();
+            let big_x = &fp.residue(x).to_bigint().unwrap();
+            let big_y = &fp.residue(y).to_bigint().unwrap();
 
             // Test addition.
             let got = fp.add(x, y);
             let want = (big_x + big_y) % big_p;
-            assert_eq!(fp.map_to_residue(got).to_bigint().unwrap(), want);
+            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
 
             // Test subtraction.
             let got = fp.sub(x, y);
@@ -538,24 +534,24 @@ mod tests {
             } else {
                 big_p - big_y + big_x
             };
-            assert_eq!(fp.map_to_residue(got).to_bigint().unwrap(), want);
+            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
 
             // Test multiplication.
             let got = fp.mul(x, y);
             let want = (big_x * big_y) % big_p;
-            assert_eq!(fp.map_to_residue(got).to_bigint().unwrap(), want);
+            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
 
             // Test inversion.
             let got = fp.inv(x);
             let want = big_x.modpow(&(big_p - 2u128), big_p);
-            assert_eq!(fp.map_to_residue(got).to_bigint().unwrap(), want);
-            assert_eq!(fp.map_to_residue(fp.mul(got, x)), 1);
+            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
+            assert_eq!(fp.residue(fp.mul(got, x)), 1);
 
             // Test negation.
             let got = fp.neg(x);
             let want = (big_p - big_x) % big_p;
-            assert_eq!(fp.map_to_residue(got).to_bigint().unwrap(), want);
-            assert_eq!(fp.map_to_residue(fp.add(got, x)), 0);
+            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
+            assert_eq!(fp.residue(fp.add(got, x)), 0);
         }
     }
 }
