@@ -188,7 +188,7 @@ impl<F: FieldElement> Server<F> {
 }
 
 /// Verification message for proof validation
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationMessage<F> {
     /// f evaluated at random point
     pub f_r: F,

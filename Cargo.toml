@@ -44,6 +44,7 @@ prio = { path = ".", features = ["test-vector"] }
 [features]
 test-vector = ["rand", "serde_json"]
 multithreaded = ["rayon"]
+prio2 = []
 
 [workspace]
 members = ["binaries"]

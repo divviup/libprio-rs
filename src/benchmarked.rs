@@ -50,8 +50,5 @@ pub fn benchmarked_gadget_mul_call_poly_direct<F: FieldElement>(
 
 /// Returns a Prio v2 proof that `data` is a valid boolean vector.
 pub fn benchmarked_v2_prove<F: FieldElement>(data: &[F], client: &mut Client<F>) -> Vec<F> {
-    let copy_data = |share_data: &mut [F]| {
-        share_data[..].clone_from_slice(data);
-    };
-    client.prove_with(copy_data)
+    client.gen_proof(data)
 }
