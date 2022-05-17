@@ -520,7 +520,13 @@ where
         agg_param: &BTreeSet<IdpfInput>,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<Poplar1PrepareState<I::Field>, VdafError> {
+    ) -> Result<
+        (
+            Poplar1PrepareState<I::Field>,
+            Poplar1PrepareMessage<I::Field>,
+        ),
+        VdafError,
+    > {
         let level = get_level(agg_param)?;
 
         // Derive the verification randomness.
@@ -576,14 +582,16 @@ where
             I::Field::zero()
         };
 
-        Ok(Poplar1PrepareState {
-            sketch: SketchState::Ready,
-            output_share: OutputShare(output_share),
-            z,
-            d,
-            e,
-            x,
-        })
+        Ok((
+            Poplar1PrepareState {
+                sketch: SketchState::RoundOne,
+                output_share: OutputShare(output_share),
+                d,
+                e,
+                x,
+            },
+            Poplar1PrepareMessage(z.to_vec()),
+        ))
     }
 
     fn prepare_preprocess<M: IntoIterator<Item = Poplar1PrepareMessage<I::Field>>>(
@@ -624,16 +632,10 @@ where
     fn prepare_step(
         &self,
         mut state: Poplar1PrepareState<I::Field>,
-        input: Option<Poplar1PrepareMessage<I::Field>>,
+        msg: Poplar1PrepareMessage<I::Field>,
     ) -> PrepareTransition<Self> {
-        match (&state.sketch, input) {
-            (SketchState::Ready, None) => {
-                let z_share = state.z.to_vec();
-                state.sketch = SketchState::RoundOne;
-                PrepareTransition::Continue(state, Poplar1PrepareMessage(z_share))
-            }
-
-            (SketchState::RoundOne, Some(msg)) => {
+        match &state.sketch {
+            SketchState::RoundOne => {
                 if msg.0.len() != 3 {
                     return PrepareTransition::Fail(VdafError::Uncategorized(format!(
                         "unexpected message length ({:?}): got {}; want 3",
@@ -651,7 +653,7 @@ where
                 PrepareTransition::Continue(state, Poplar1PrepareMessage(y_share))
             }
 
-            (SketchState::RoundTwo, Some(msg)) => {
+            SketchState::RoundTwo => {
                 if msg.0.len() != 1 {
                     return PrepareTransition::Fail(VdafError::Uncategorized(format!(
                         "unexpected message length ({:?}): got {}; want 1",
@@ -671,9 +673,6 @@ where
 
                 PrepareTransition::Finish(state.output_share)
             }
-            _ => PrepareTransition::Fail(VdafError::Uncategorized(
-                "invalid state transition".to_string(),
-            )),
         }
     }
 
@@ -733,9 +732,6 @@ pub struct Poplar1PrepareState<F> {
     /// The output share.
     output_share: OutputShare<F>,
 
-    /// Shares of the blinded polynomial coefficients. See [BBCG+21, Appendix C.4] for details.
-    z: [F; 3],
-
     /// Aggregator's share of $A = -2a + k$.
     d: F,
 
@@ -748,7 +744,6 @@ pub struct Poplar1PrepareState<F> {
 
 #[derive(Clone, Debug)]
 enum SketchState {
-    Ready,
     RoundOne,
     RoundTwo,
 }

@@ -175,7 +175,7 @@ where
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<Self::PrepareState, VdafError>;
+    ) -> Result<(Self::PrepareState, Self::PrepareMessage), VdafError>;
 
     /// Preprocess a round of prepare messages into a single input to [`Aggregator::prepare_step`].
     fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareMessage>>(
@@ -193,7 +193,7 @@ where
     fn prepare_step(
         &self,
         state: Self::PrepareState,
-        input: Option<Self::PrepareMessage>,
+        input: Self::PrepareMessage,
     ) -> PrepareTransition<Self>;
 
     /// Aggregates a sequence of output shares into an aggregate share.
@@ -417,8 +417,9 @@ where
         .map(|input_share| input_share.get_encoded());
 
     let mut states = Vec::new();
+    let mut outbound = Vec::new();
     for (verify_param, input_share) in verify_params.iter().zip(input_shares) {
-        let state = vdaf.prepare_init(
+        let (state, msg) = vdaf.prepare_init(
             verify_param,
             agg_param,
             nonce,
@@ -426,9 +427,14 @@ where
                 .expect("failed to decode input share"),
         )?;
         states.push(state);
+        outbound.push(msg.get_encoded());
     }
 
-    let mut inbound = None;
+    let mut inbound = vdaf.prepare_preprocess(outbound.iter().map(|encoded| {
+        V::PrepareMessage::get_decoded_with_param(&states[0], encoded)
+            .expect("failed to decode prapare message")
+    }))?;
+
     let mut out_shares = Vec::new();
     loop {
         let mut outbound = Vec::new();
@@ -449,10 +455,10 @@ where
 
         if outbound.len() == vdaf.num_aggregators() {
             // Another round is required before output shares are computed.
-            inbound = Some(vdaf.prepare_preprocess(outbound.iter().map(|encoded| {
+            inbound = vdaf.prepare_preprocess(outbound.iter().map(|encoded| {
                 V::PrepareMessage::get_decoded_with_param(&states[0], encoded)
-                    .expect("failed to decode papare message")
-            }))?);
+                    .expect("failed to decode prepare message")
+            }))?;
         } else if outbound.is_empty() {
             // Each Aggregator recovered an output share.
             break;

@@ -84,22 +84,13 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     }
 
     let mut states = Vec::new();
+    let mut prep_shares = Vec::new();
     for (verify_param, input_share) in verify_params.iter().zip(input_shares) {
-        let state = prio3
+        let (state, prep_share) = prio3
             .prepare_init(verify_param, &(), &t.nonce, &input_share)
             .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
-    }
-
-    let mut prep_shares = Vec::new();
-    for state in states.iter_mut() {
-        match prio3.prepare_step(state.clone(), None) {
-            PrepareTransition::Continue(new_state, prep_share) => {
-                prep_shares.push(prep_share);
-                *state = new_state
-            }
-            _ => panic!("unexpected prep transition"),
-        }
+        prep_shares.push(prep_share);
     }
 
     assert_eq!(1, t.prep_shares.len(), "#{}", test_num);
@@ -114,11 +105,9 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
         assert_eq!(prep_shares[i].get_encoded(), want.as_ref(), "#{}", test_num);
     }
 
-    let inbound = Some(
-        prio3
-            .prepare_preprocess(prep_shares)
-            .unwrap_or_else(|e| err!(test_num, e, "prep preprocess")),
-    );
+    let inbound = prio3
+        .prepare_preprocess(prep_shares)
+        .unwrap_or_else(|e| err!(test_num, e, "prep preprocess"));
 
     let mut out_shares = Vec::new();
     for state in states.iter_mut() {
