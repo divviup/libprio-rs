@@ -590,30 +590,17 @@ where
 }
 
 /// State of each aggregator during the preparation phase.
-///
-/// Serialization traits [`Encode` and `ParameterizedDecoded`] are implemented for this type.
-/// However, the prepare state may only be encoded in the "waiting" state (i.e., after completing
-/// the first call to [`Prio3::prepare_step`]). In particular, the [`Prio3PrepareState::encode`]
-/// panics if called in the "ready" state (i.e., on the output of [`Prio3::prepare_init`]).
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3PrepareState<F, const L: usize> {
     input_share: Share<F, L>,
     joint_rand_seed: Option<Seed<L>>,
     aggregator_id: u8,
     verifier_len: usize,
-    state: PrepareState<F, L>,
 }
 
 impl<F: FieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
-    ///
-    /// # Panics
-    ///
-    /// Panics if the state is not in the "waiting" state. See [`Prio3PrepareState`] for details.
     fn encode(&self, bytes: &mut Vec<u8>) {
-        if let PrepareState::Ready(..) = self.state {
-            panic!("encooding of ready state is not permitted (see documentation for details)");
-        }
         self.input_share.encode(bytes);
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes);
@@ -646,7 +633,6 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
             joint_rand_seed,
             aggregator_id: verify_param.aggregator_id,
             verifier_len: verify_param.verifier_len,
-            state: PrepareState::Waiting,
         })
     }
 }
@@ -668,7 +654,13 @@ where
         _agg_param: &(),
         nonce: &[u8],
         msg: &Prio3InputShare<T::Field, L>,
-    ) -> Result<Prio3PrepareState<T::Field, L>, VdafError> {
+    ) -> Result<
+        (
+            Prio3PrepareState<T::Field, L>,
+            Prio3PrepareMessage<T::Field, L>,
+        ),
+        VdafError,
+    > {
         let mut info = [0; VERS_PRIO3.len() + 1];
         info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
         info[VERS_PRIO3.len()] = verify_param.aggregator_id;
@@ -745,16 +737,18 @@ where
             self.num_aggregators as usize,
         )?;
 
-        Ok(Prio3PrepareState {
-            input_share: msg.input_share.clone(),
-            joint_rand_seed,
-            aggregator_id: verify_param.aggregator_id,
-            verifier_len: verifier_share.len(),
-            state: PrepareState::Ready(Prio3PrepareMessage {
+        Ok((
+            Prio3PrepareState {
+                input_share: msg.input_share.clone(),
+                joint_rand_seed,
+                aggregator_id: verify_param.aggregator_id,
+                verifier_len: verifier_share.len(),
+            },
+            Prio3PrepareMessage {
                 verifier: verifier_share,
                 joint_rand_seed: joint_rand_seed_share,
-            }),
-        })
+            },
+        ))
     }
 
     fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareMessage<T::Field, L>>>(
@@ -806,66 +800,52 @@ where
 
     fn prepare_step(
         &self,
-        mut state: Prio3PrepareState<T::Field, L>,
-        input: Option<Prio3PrepareMessage<T::Field, L>>,
+        step: Prio3PrepareState<T::Field, L>,
+        msg: Prio3PrepareMessage<T::Field, L>,
     ) -> PrepareTransition<Self> {
-        match (state.state, input) {
-            (PrepareState::Ready(verifier_msg), None) => {
-                state.state = PrepareState::Waiting;
-                PrepareTransition::Continue(state, verifier_msg)
+        if self.typ.joint_rand_len() > 0 {
+            // Check that the joint randomness was correct.
+            if step.joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
+                return PrepareTransition::Fail(VdafError::Uncategorized(
+                    "joint randomness mismatch".to_string(),
+                ));
             }
-
-            (PrepareState::Waiting, Some(msg)) => {
-                if self.typ.joint_rand_len() > 0 {
-                    // Check that the joint randomness was correct.
-                    if state.joint_rand_seed.as_ref().unwrap()
-                        != msg.joint_rand_seed.as_ref().unwrap()
-                    {
-                        return PrepareTransition::Fail(VdafError::Uncategorized(
-                            "joint randomness mismatch".to_string(),
-                        ));
-                    }
-                }
-
-                // Check the proof.
-                let res = match self.typ.decide(&msg.verifier) {
-                    Ok(res) => res,
-                    Err(err) => {
-                        return PrepareTransition::Fail(VdafError::from(err));
-                    }
-                };
-
-                if !res {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(
-                        "proof check failed".to_string(),
-                    ));
-                }
-
-                // Compute the output share.
-                let input_share = match state.input_share {
-                    Share::Leader(data) => data,
-                    Share::Helper(seed) => {
-                        let mut info = [0; VERS_PRIO3.len() + 1];
-                        info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
-                        info[VERS_PRIO3.len()] = state.aggregator_id;
-                        let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
-                        prng.take(self.typ.input_len()).collect()
-                    }
-                };
-
-                let output_share = match self.typ.truncate(input_share) {
-                    Ok(data) => OutputShare(data),
-                    Err(err) => {
-                        return PrepareTransition::Fail(VdafError::from(err));
-                    }
-                };
-
-                PrepareTransition::Finish(output_share)
-            }
-            _ => PrepareTransition::Fail(VdafError::Uncategorized(
-                "invalid state transition".to_string(),
-            )),
         }
+
+        // Check the proof.
+        let res = match self.typ.decide(&msg.verifier) {
+            Ok(res) => res,
+            Err(err) => {
+                return PrepareTransition::Fail(VdafError::from(err));
+            }
+        };
+
+        if !res {
+            return PrepareTransition::Fail(VdafError::Uncategorized(
+                "proof check failed".to_string(),
+            ));
+        }
+
+        // Compute the output share.
+        let input_share = match step.input_share {
+            Share::Leader(data) => data,
+            Share::Helper(seed) => {
+                let mut info = [0; VERS_PRIO3.len() + 1];
+                info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
+                info[VERS_PRIO3.len()] = step.aggregator_id;
+                let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
+                prng.take(self.typ.input_len()).collect()
+            }
+        };
+
+        let output_share = match self.typ.truncate(input_share) {
+            Ok(data) => OutputShare(data),
+            Err(err) => {
+                return PrepareTransition::Fail(VdafError::from(err));
+            }
+        };
+
+        PrepareTransition::Finish(output_share)
     }
 
     /// Aggregates a sequence of output shares into an aggregate share.
@@ -931,12 +911,6 @@ impl<const L: usize> HelperShare<L> {
             },
         })
     }
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-enum PrepareState<F, const L: usize> {
-    Ready(Prio3PrepareMessage<F, L>),
-    Waiting,
 }
 
 #[cfg(test)]
@@ -1102,10 +1076,9 @@ mod tests {
         let (_, verify_param) = prio3.setup()?;
         let input_shares = prio3.shard(&(), measurement)?;
         for (verify_param, input_share) in verify_param.iter().zip(input_shares.iter()) {
-            let state = prio3.prepare_init(verify_param, &(), &[], input_share)?;
-            let want = assert_matches!(prio3.prepare_step(state, None), PrepareTransition::Continue(state, _) => state);
+            let (want, _msg) = prio3.prepare_init(verify_param, &(), &[], input_share)?;
             let got = Prio3PrepareState::get_decoded_with_param(verify_param, &want.get_encoded())
-                .expect("failed to decode prepare state");
+                .expect("failed to decode prepare step");
             assert_eq!(got, want);
         }
         Ok(())
