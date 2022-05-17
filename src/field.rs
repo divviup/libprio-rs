@@ -292,8 +292,8 @@ macro_rules! make_field {
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
 
                 // Check the invariant that the integer representation is fully reduced.
-                assert!(self.0 < $fp.p);
-                assert!(rhs.0 < $fp.p);
+                debug_assert!(self.0 < $fp.p);
+                debug_assert!(rhs.0 < $fp.p);
 
                 self.0 == rhs.0
             }
@@ -306,7 +306,7 @@ macro_rules! make_field {
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
 
                 // Check the invariant that the integer representation is fully reduced.
-                assert!(self.0 < $fp.p);
+                debug_assert!(self.0 < $fp.p);
 
                 self.0.hash(state);
             }
