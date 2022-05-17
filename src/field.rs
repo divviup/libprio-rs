@@ -103,6 +103,7 @@ pub trait FieldElement:
         + Div<Output = <Self as FieldElement>::Integer>
         + Shl<Output = <Self as FieldElement>::Integer>
         + Shr<Output = <Self as FieldElement>::Integer>
+        + Add<Output = <Self as FieldElement>::Integer>
         + Sub<Output = <Self as FieldElement>::Integer>
         + From<Self>
         + TryFrom<usize, Error = Self::IntegerTryFromError>
@@ -830,6 +831,15 @@ mod tests {
             assert_eq!(product, expected_product);
             assert_eq!(hash_helper(product), expected_hash);
         }
+
+        // Construct an element from a number that needs to be reduced, and test comparisons on it,
+        // confirming that FieldParameters::montgomery() reduced it correctly.
+        let p = F::from(int_modulus);
+        assert_eq!(p, zero);
+        assert_eq!(hash_helper(p), hash_helper(zero));
+        let p_plus_one = F::from(int_modulus + F::Integer::try_from(1).unwrap());
+        assert_eq!(p_plus_one, one);
+        assert_eq!(hash_helper(p_plus_one), hash_helper(one));
     }
 
     #[test]
