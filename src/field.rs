@@ -235,9 +235,10 @@ macro_rules! make_field {
         /// This structure represents a field element in a prime order field. The concrete
         /// representation of the element is via the Montgomery domain. For an element n in GF(p),
         /// we store n * R^-1 mod p (where R is a given power of two). This representation enables
-        /// using a more efficient multiplication algorithm, at the expense of having to convert
-        /// elements between their Montgomery domain representation and natural representation.
-        /// For calculations with many multiplications or exponentiations, this is worthwhile.
+        /// using a more efficient (and branchless) multiplication algorithm, at the expense of
+        /// having to convert elements between their Montgomery domain representation and natural
+        /// representation. For calculations with many multiplications or exponentiations, this is
+        /// worthwhile.
         ///
         /// As an invariant, this integer representing the field element in the Montgomery domain
         /// must be less than the prime p.
