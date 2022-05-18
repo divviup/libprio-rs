@@ -103,6 +103,7 @@ pub trait FieldElement:
         + Div<Output = <Self as FieldElement>::Integer>
         + Shl<Output = <Self as FieldElement>::Integer>
         + Shr<Output = <Self as FieldElement>::Integer>
+        + Add<Output = <Self as FieldElement>::Integer>
         + Sub<Output = <Self as FieldElement>::Integer>
         + From<Self>
         + TryFrom<usize, Error = Self::IntegerTryFromError>
@@ -230,6 +231,17 @@ macro_rules! make_field {
         $elem:ident, $int:ident, $fp:ident, $encoding_size:literal, $encoding_order:expr,
     ) => {
         $(#[$meta])*
+        ///
+        /// This structure represents a field element in a prime order field. The concrete
+        /// representation of the element is via the Montgomery domain. For an element n in GF(p),
+        /// we store n * R^-1 mod p (where R is a given power of two). This representation enables
+        /// using a more efficient (and branchless) multiplication algorithm, at the expense of
+        /// having to convert elements between their Montgomery domain representation and natural
+        /// representation. For calculations with many multiplications or exponentiations, this is
+        /// worthwhile.
+        ///
+        /// As an invariant, this integer representing the field element in the Montgomery domain
+        /// must be less than the prime p.
         #[derive(Clone, Copy, PartialOrd, Ord, Default)]
         pub struct $elem(u128);
 
@@ -270,6 +282,8 @@ macro_rules! make_field {
                 if int >= $fp.p {
                     return Err(FieldError::ModulusOverflow);
                 }
+                // FieldParameters::montgomery() will return a value that has been fully reduced
+                // mod p, satisfying the invariant on Self.
                 Ok(Self($fp.montgomery(int)))
             }
         }
@@ -279,7 +293,12 @@ macro_rules! make_field {
                 // The fields included in this comparison MUST match the fields
                 // used in Hash::hash
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
-                $fp.residue(self.0) == $fp.residue(rhs.0)
+
+                // Check the invariant that the integer representation is fully reduced.
+                debug_assert!(self.0 < $fp.p);
+                debug_assert!(rhs.0 < $fp.p);
+
+                self.0 == rhs.0
             }
         }
 
@@ -288,7 +307,11 @@ macro_rules! make_field {
                 // The fields included in this hash MUST match the fields used
                 // in PartialEq::eq
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
-                $fp.residue(self.0).hash(state);
+
+                // Check the invariant that the integer representation is fully reduced.
+                debug_assert!(self.0 < $fp.p);
+
+                self.0.hash(state);
             }
         }
 
@@ -297,6 +320,8 @@ macro_rules! make_field {
         impl Add for $elem {
             type Output = $elem;
             fn add(self, rhs: Self) -> Self {
+                // FieldParameters::add() returns a value that has been fully reduced
+                // mod p, satisfying the invariant on Self.
                 Self($fp.add(self.0, rhs.0))
             }
         }
@@ -317,6 +342,8 @@ macro_rules! make_field {
         impl Sub for $elem {
             type Output = $elem;
             fn sub(self, rhs: Self) -> Self {
+                // We know that self.0 and rhs.0 are both less than p, thus FieldParameters::sub()
+                // returns a value less than p, satisfying the invariant on Self.
                 Self($fp.sub(self.0, rhs.0))
             }
         }
@@ -337,6 +364,8 @@ macro_rules! make_field {
         impl Mul for $elem {
             type Output = $elem;
             fn mul(self, rhs: Self) -> Self {
+                // FieldParameters::mul() always returns a value less than p, so the invariant on
+                // Self is satisfied.
                 Self($fp.mul(self.0, rhs.0))
             }
         }
@@ -378,6 +407,8 @@ macro_rules! make_field {
         impl Neg for $elem {
             type Output = $elem;
             fn neg(self) -> Self {
+                // FieldParameters::neg() will return a value less than p because self.0 is less
+                // than p, and neg() dispatches to sub().
                 Self($fp.neg(self.0))
             }
         }
@@ -391,6 +422,8 @@ macro_rules! make_field {
 
         impl From<$int> for $elem {
             fn from(x: $int) -> Self {
+                // FieldParameters::montgomery() will return a value that has been fully reduced
+                // mod p, satisfying the invariant on Self.
                 Self($fp.montgomery(u128::try_from(x).unwrap()))
             }
         }
@@ -490,10 +523,14 @@ macro_rules! make_field {
             type TryIntoU64Error = <Self::Integer as TryInto<u64>>::Error;
 
             fn pow(&self, exp: Self::Integer) -> Self {
+                // FieldParameters::pow() relies on mul(), and will always return a value less
+                // than p.
                 Self($fp.pow(self.0, u128::try_from(exp).unwrap()))
             }
 
             fn inv(&self) -> Self {
+                // FieldParameters::inv() ultimately relies on mul(), and will always return a
+                // value less than p.
                 Self($fp.inv(self.0))
             }
 
@@ -630,6 +667,7 @@ mod tests {
     use crate::fp::MAX_ROOTS;
     use crate::prng::Prng;
     use assert_matches::assert_matches;
+    use std::collections::hash_map::DefaultHasher;
 
     #[test]
     fn test_endianness() {
@@ -657,13 +695,19 @@ mod tests {
         assert_matches!(result, Err(FieldError::InputSizeMismatch));
     }
 
+    fn hash_helper<H: Hash>(input: H) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        input.hash(&mut hasher);
+        hasher.finish()
+    }
+
     // Some of the checks in this function, like `assert_eq!(one - one, zero)`
     // or `assert_eq!(two / two, one)` trip this clippy lint for tautological
     // comparisons, but we have a legitimate need to verify these basics. We put
     // the #[allow] on the whole function since "attributes on expressions are
     // experimental" https://github.com/rust-lang/rust/issues/15701
     #[allow(clippy::eq_op)]
-    fn field_element_test<F: FieldElement>() {
+    fn field_element_test<F: FieldElement + Hash>() {
         let mut prng: Prng<F, _> = Prng::new().unwrap();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
@@ -749,6 +793,55 @@ mod tests {
         let serialized_vec = F::slice_into_byte_vec(&test_inputs);
         let deserialized = F::byte_slice_into_vec(&serialized_vec).unwrap();
         assert_eq!(deserialized, test_inputs);
+
+        // equality and hash: Generate many elements, confirm they are not equal, and confirm
+        // various products that should be equal have the same hash. Three is chosen as a generator
+        // here because it happens to generate fairly large subgroups of (Z/pZ)* for all four
+        // primes.
+        let three = F::from(F::Integer::try_from(3).unwrap());
+        let mut powers_of_three = Vec::with_capacity(500);
+        let mut power = one;
+        for _ in 0..500 {
+            powers_of_three.push(power);
+            power *= three;
+        }
+        // Check all these elements are mutually not equal.
+        for i in 0..powers_of_three.len() {
+            let first = &powers_of_three[i];
+            for second in &powers_of_three[0..i] {
+                assert_ne!(first, second);
+            }
+        }
+
+        // Check that 3^i is the same whether it's calculated with pow() or repeated
+        // multiplication, with both equality and hash equality.
+        for (i, power) in powers_of_three.iter().enumerate() {
+            let result = three.pow(F::Integer::try_from(i).unwrap());
+            assert_eq!(result, *power);
+            let hash1 = hash_helper(power);
+            let hash2 = hash_helper(result);
+            assert_eq!(hash1, hash2);
+        }
+
+        // Check that 3^n = (3^i)*(3^(n-i)), via both equality and hash equality.
+        let expected_product = powers_of_three[powers_of_three.len() - 1];
+        let expected_hash = hash_helper(expected_product);
+        for i in 0..powers_of_three.len() {
+            let a = powers_of_three[i];
+            let b = powers_of_three[powers_of_three.len() - 1 - i];
+            let product = a * b;
+            assert_eq!(product, expected_product);
+            assert_eq!(hash_helper(product), expected_hash);
+        }
+
+        // Construct an element from a number that needs to be reduced, and test comparisons on it,
+        // confirming that FieldParameters::montgomery() reduced it correctly.
+        let p = F::from(int_modulus);
+        assert_eq!(p, zero);
+        assert_eq!(hash_helper(p), hash_helper(zero));
+        let p_plus_one = F::from(int_modulus + F::Integer::try_from(1).unwrap());
+        assert_eq!(p_plus_one, one);
+        assert_eq!(hash_helper(p_plus_one), hash_helper(one));
     }
 
     #[test]

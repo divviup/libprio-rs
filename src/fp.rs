@@ -32,7 +32,7 @@ pub(crate) struct FieldParameters {
 }
 
 impl FieldParameters {
-    /// Addition.
+    /// Addition. The result will be in [0, p), so long as both x and y are as well.
     pub fn add(&self, x: u128, y: u128) -> u128 {
         //   0,x
         // + 0,y
@@ -51,7 +51,7 @@ impl FieldParameters {
         (z & m) | (s0 & !m)
     }
 
-    /// Subtraction.
+    /// Subtraction. The result will be in [0, p), so long as both x and y are as well.
     pub fn sub(&self, x: u128, y: u128) -> u128 {
         //     0, x
         // -   0, y
@@ -65,11 +65,14 @@ impl FieldParameters {
         // ========
         //   s1,s0
         z0.wrapping_add(m & self.p)
+        // if b1 == 1: return s0
+        // else:       return z0
     }
 
     /// Multiplication of field elements in the Montgomery domain. This uses the REDC algorithm
     /// described
     /// [here](https://www.ams.org/journals/mcom/1985-44-170/S0025-5718-1985-0777282-X/S0025-5718-1985-0777282-X.pdf).
+    /// The result will be in [0, p).
     ///
     /// # Example usage
     /// ```text
@@ -231,7 +234,7 @@ impl FieldParameters {
     }
 
     /// Maps an integer to its internal representation. Field elements are mapped to the Montgomery
-    /// domain in order to carry out field arithmetic.
+    /// domain in order to carry out field arithmetic. The result will be in [0, p).
     ///
     /// # Example usage
     /// ```text
@@ -250,7 +253,7 @@ impl FieldParameters {
         self.montgomery(uniform.sample(rng))
     }
 
-    /// Maps a field element to its representation as an integer.
+    /// Maps a field element to its representation as an integer. The result will be in [0, p).
     ///
     /// #Example usage
     /// ```text
@@ -506,6 +509,7 @@ mod tests {
 
             // Check that the generator has the correct order.
             assert_eq!(t.fp.residue(t.fp.pow(t.fp.g, t.expected_order)), 1);
+            assert_ne!(t.fp.residue(t.fp.pow(t.fp.g, t.expected_order / 2)), 1);
 
             // Test arithmetic using the field parameters.
             arithmetic_test(&t.fp);
