@@ -111,7 +111,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
 
     let mut out_shares = Vec::new();
     for state in states.iter_mut() {
-        match prio3.prepare_step(state.clone(), inbound.clone()) {
+        match prio3.prepare_step(state.clone(), inbound.clone()).unwrap() {
             PrepareTransition::Finish(out_share) => {
                 out_shares.push(out_share);
             }

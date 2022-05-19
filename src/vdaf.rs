@@ -185,16 +185,16 @@ where
 
     /// Compute the next state transition from the current state and the previous round of input
     /// messages. If this returns [`PrepareTransition::Continue`], then the returned
-    /// [`Self::PrepareMessage`] should be combined with the other aggregator's `PrepareMessage`s from
-    /// this round and passed into another call to this method. This continues until this method
-    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
-    /// aggregated. If the method returns [`PrepareTransition::Fail`], the aggregator should
-    /// consider its input share invalid and not attempt to process it any further.
+    /// [`Self::PrepareMessage`] should be combined with the other aggregator's `PrepareMessage`s
+    /// from this round and passed into another call to this method. This continues until this
+    /// method returns [`PrepareTransition::Finish`], at which point the returned output share may
+    /// be aggregated. If the method returns an error, the aggregator should consider its input
+    /// share invalid and not attempt to process it any further.
     fn prepare_step(
         &self,
         state: Self::PrepareState,
         input: Self::PrepareMessage,
-    ) -> PrepareTransition<Self>;
+    ) -> Result<PrepareTransition<Self>, VdafError>;
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -228,9 +228,6 @@ where
 
     /// Finish processing and return the output share.
     Finish(V::OutputShare),
-
-    /// Fail and return an error.
-    Fail(VdafError),
 }
 
 /// An aggregate share resulting from aggregating output shares together that
@@ -439,16 +436,13 @@ where
     loop {
         let mut outbound = Vec::new();
         for state in states.iter_mut() {
-            match vdaf.prepare_step(state.clone(), inbound.clone()) {
+            match vdaf.prepare_step(state.clone(), inbound.clone())? {
                 PrepareTransition::Continue(new_state, msg) => {
                     outbound.push(msg.get_encoded());
                     *state = new_state
                 }
                 PrepareTransition::Finish(out_share) => {
                     out_shares.push(out_share);
-                }
-                PrepareTransition::Fail(err) => {
-                    return Err(err);
                 }
             }
         }

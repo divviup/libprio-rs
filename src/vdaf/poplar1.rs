@@ -633,11 +633,11 @@ where
         &self,
         mut state: Poplar1PrepareState<I::Field>,
         msg: Poplar1PrepareMessage<I::Field>,
-    ) -> PrepareTransition<Self> {
+    ) -> Result<PrepareTransition<Self>, VdafError> {
         match &state.sketch {
             SketchState::RoundOne => {
                 if msg.0.len() != 3 {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                    return Err(VdafError::Uncategorized(format!(
                         "unexpected message length ({:?}): got {}; want 3",
                         state.sketch,
                         msg.0.len(),
@@ -650,12 +650,15 @@ where
                     vec![(state.d * z[0]) + state.e + state.x * ((z[0] * z[0]) - z[1] - z[2])];
 
                 state.sketch = SketchState::RoundTwo;
-                PrepareTransition::Continue(state, Poplar1PrepareMessage(y_share))
+                Ok(PrepareTransition::Continue(
+                    state,
+                    Poplar1PrepareMessage(y_share),
+                ))
             }
 
             SketchState::RoundTwo => {
                 if msg.0.len() != 1 {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                    return Err(VdafError::Uncategorized(format!(
                         "unexpected message length ({:?}): got {}; want 1",
                         state.sketch,
                         msg.0.len(),
@@ -664,14 +667,14 @@ where
 
                 let y = msg.0[0];
                 if y != I::Field::zero() {
-                    return PrepareTransition::Fail(VdafError::Uncategorized(format!(
+                    return Err(VdafError::Uncategorized(format!(
                         "output is invalid: polynomial evaluated to {}; want {}",
                         y,
                         I::Field::zero(),
                     )));
                 }
 
-                PrepareTransition::Finish(state.output_share)
+                Ok(PrepareTransition::Finish(state.output_share))
             }
         }
     }

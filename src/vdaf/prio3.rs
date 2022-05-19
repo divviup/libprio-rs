@@ -802,11 +802,11 @@ where
         &self,
         step: Prio3PrepareState<T::Field, L>,
         msg: Prio3PrepareMessage<T::Field, L>,
-    ) -> PrepareTransition<Self> {
+    ) -> Result<PrepareTransition<Self>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
             if step.joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
-                return PrepareTransition::Fail(VdafError::Uncategorized(
+                return Err(VdafError::Uncategorized(
                     "joint randomness mismatch".to_string(),
                 ));
             }
@@ -816,14 +816,12 @@ where
         let res = match self.typ.decide(&msg.verifier) {
             Ok(res) => res,
             Err(err) => {
-                return PrepareTransition::Fail(VdafError::from(err));
+                return Err(VdafError::from(err));
             }
         };
 
         if !res {
-            return PrepareTransition::Fail(VdafError::Uncategorized(
-                "proof check failed".to_string(),
-            ));
+            return Err(VdafError::Uncategorized("proof check failed".to_string()));
         }
 
         // Compute the output share.
@@ -841,11 +839,11 @@ where
         let output_share = match self.typ.truncate(input_share) {
             Ok(data) => OutputShare(data),
             Err(err) => {
-                return PrepareTransition::Fail(VdafError::from(err));
+                return Err(VdafError::from(err));
             }
         };
 
-        PrepareTransition::Finish(output_share)
+        Ok(PrepareTransition::Finish(output_share))
     }
 
     /// Aggregates a sequence of output shares into an aggregate share.
