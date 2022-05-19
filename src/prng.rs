@@ -107,7 +107,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::FieldPriov2;
+    use crate::{
+        codec::Decode,
+        field::{Field96, FieldPriov2},
+        vdaf::prg::{Prg, PrgAes128, Seed},
+    };
     use std::convert::TryInto;
 
     #[test]
@@ -181,5 +185,19 @@ mod tests {
         Prng::from_prio2_seed(seed.try_into().unwrap())
             .take(length)
             .collect()
+    }
+
+    #[test]
+    fn rejection_sampling_test_vector() {
+        // These constants were found in a brute-force search, and they test that the PRG performs
+        // rejection sampling correctly when raw AES-CTR output exceeds the prime modulus.
+        let seed_stream = PrgAes128::seed_stream(
+            &Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0x5f]).unwrap(),
+            b"",
+        );
+        let prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
+        let expected = Field96::from(39729620190871453347343769187);
+        let actual = prng.skip(145).next().unwrap();
+        assert_eq!(actual, expected);
     }
 }
