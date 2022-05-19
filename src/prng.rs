@@ -192,7 +192,7 @@ mod tests {
         // These constants were found in a brute-force search, and they test that the PRG performs
         // rejection sampling correctly when raw AES-CTR output exceeds the prime modulus.
         let seed_stream = PrgAes128::seed_stream(
-            &Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0x5f]).unwrap(),
+            &Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 95]).unwrap(),
             b"",
         );
         let prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
