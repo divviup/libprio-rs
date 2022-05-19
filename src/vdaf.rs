@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! **(NOTE: This module is experimental. Applications should not use it yet.)** This module defines an
-//! API for Verifiable Distributed Aggregation Functions (VDAFs) and implements two constructions
-//! described in [[draft-patton-cfrg-vdaf-01]].
+//! This module defines an API for Verifiable Distributed Aggregation Functions (VDAFs) and
+//! implements two constructions described in [[draft-irtf-cfrg-vdaf-00]].
 //!
-//! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
+//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{FieldElement, FieldError};

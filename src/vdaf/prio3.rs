@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This modulde implements the Prio3 VDAF as specified in [[draft-patton-cfrg-vdaf-01]]. The
+//! This modulde implements the Prio3 VDAF as specified in [[draft-irtf-cfrg-vdaf-00]]. The
 //! construction is based on a transform of a Fully Linear Proof (FLP) system (i.e., a concrete
 //! [`Type`](crate::flp::Type) into a zero-knowledge proof system on distributed data as described
 //! in [[BBCG+19], Section 6].
 //!
 //! Implementations of `Prio3Aes128Count`, `Prio3Aes128Sum`, and `Prio3Aes128Histogram` as
-//! specified in [[draft-patton-cfrg-vdaf-01], Section 6.4] are provided. This module also provides
+//! specified in [[draft-irtf-cfrg-vdaf-00], Section 6.4] are provided. This module also provides
 //! additional instantiations of Prio3 that are not in the draft.
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
-//! [draft-patton-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/html/draft-patton-cfrg-vdaf-01
+//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};

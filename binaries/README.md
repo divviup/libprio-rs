@@ -6,7 +6,7 @@ This sub-crate contains binary targets that use crate `prio`.
 
 Crate `prio` supports Prio v2, used in [Exposure Notification Private Analytics][enpa-whitepaper],
 as implemented in [`prio-server`][prio-server], as well as the Prio v3 Verifiable Distributed
-Aggregation Function used in [Privacy Preserving Measurements][ppm-spec].
+Aggregation Function used in [Distributed Aggregation Protocol][dap].
 
 To ensure backward compatibility with older versions of crate `prio` and [other implementations of
 Prio v2][libprio-cc], we continuously test `prio`'s Prio v2 implementation against a test vector
@@ -46,6 +46,6 @@ Where the contents of `/path/to/base64/server-1/private/key` and
     server 2: BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LER6hPEHg/ObBnRPV1rwS3nj9Bj0tbjVPPyL9p8QW8B+w==
 
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
-[ppm-spec]: https://github.com/abetterinternet/ppm-specification
+[dap]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/
 [prio-server]: https://github.com/abetterinternet/prio-server
 [libprio-cc]: https://github.com/google/libprio-cc
