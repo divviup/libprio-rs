@@ -529,16 +529,16 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// The verification message emitted by each aggregator during the Prepare process.
-pub struct Prio3PrepareMessage<F, const L: usize> {
-    /// (A share of) the FLP verifier message. (See [`Type`](crate::flp::Type).)
+/// Prepare broadcast message for Prio3.
+pub struct Prio3PrepareShare<F, const L: usize> {
+    /// A share of the FLP verifier message. (See [`Type`](crate::flp::Type).)
     verifier: Vec<F>,
 
-    /// (A share of) the joint randomness seed.
+    /// A share of the joint randomness seed.
     joint_rand_seed: Option<Seed<L>>,
 }
 
-impl<F: FieldElement, const L: usize> Encode for Prio3PrepareMessage<F, L> {
+impl<F: FieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         for x in &self.verifier {
             x.encode(bytes);
@@ -550,7 +550,7 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareMessage<F, L> {
 }
 
 impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
-    for Prio3PrepareMessage<F, L>
+    for Prio3PrepareShare<F, L>
 {
     fn decode_with_param(
         decoding_parameter: &Prio3PrepareState<F, L>,
@@ -567,10 +567,42 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L
             None
         };
 
-        Ok(Prio3PrepareMessage {
+        Ok(Prio3PrepareShare {
             verifier,
             joint_rand_seed,
         })
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+/// Prepare message for Prio3.
+pub struct Prio3PrepareMessage<const L: usize> {
+    /// The joint randomness seed computed by the Aggregators.
+    joint_rand_seed: Option<Seed<L>>,
+}
+
+impl<const L: usize> Encode for Prio3PrepareMessage<L> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        if let Some(ref seed) = self.joint_rand_seed {
+            seed.encode(bytes);
+        }
+    }
+}
+
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
+    for Prio3PrepareMessage<L>
+{
+    fn decode_with_param(
+        decoding_parameter: &Prio3PrepareState<F, L>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
+            Some(Seed::decode(bytes)?)
+        } else {
+            None
+        };
+
+        Ok(Prio3PrepareMessage { joint_rand_seed })
     }
 }
 
@@ -644,8 +676,8 @@ where
     P: Prg<L>,
 {
     type PrepareState = Prio3PrepareState<T::Field, L>;
-    type PrepareShare = Prio3PrepareMessage<T::Field, L>;
-    type PrepareMessage = Prio3PrepareMessage<T::Field, L>;
+    type PrepareShare = Prio3PrepareShare<T::Field, L>;
+    type PrepareMessage = Prio3PrepareMessage<L>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is
     /// the aggregator's output share.
@@ -658,7 +690,7 @@ where
     ) -> Result<
         (
             Prio3PrepareState<T::Field, L>,
-            Prio3PrepareMessage<T::Field, L>,
+            Prio3PrepareShare<T::Field, L>,
         ),
         VdafError,
     > {
@@ -745,17 +777,17 @@ where
                 aggregator_id: verify_param.aggregator_id,
                 verifier_len: verifier_share.len(),
             },
-            Prio3PrepareMessage {
+            Prio3PrepareShare {
                 verifier: verifier_share,
                 joint_rand_seed: joint_rand_seed_share,
             },
         ))
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareMessage<T::Field, L>>>(
+    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareShare<T::Field, L>>>(
         &self,
         inputs: M,
-    ) -> Result<Self::PrepareMessage, VdafError> {
+    ) -> Result<Prio3PrepareMessage<L>, VdafError> {
         let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
         let mut joint_rand_seed = Seed::uninitialized();
         let mut count = 0;
@@ -787,22 +819,30 @@ where
             )));
         }
 
+        // Check the proof verifier.
+        match self.typ.decide(&verifier) {
+            Ok(true) => (),
+            Ok(false) => {
+                return Err(VdafError::Uncategorized(
+                    "proof verifier check failed".into(),
+                ))
+            }
+            Err(err) => return Err(VdafError::from(err)),
+        };
+
         let joint_rand_seed = if self.typ.joint_rand_len() > 0 {
             Some(joint_rand_seed)
         } else {
             None
         };
 
-        Ok(Prio3PrepareMessage {
-            verifier,
-            joint_rand_seed,
-        })
+        Ok(Prio3PrepareMessage { joint_rand_seed })
     }
 
     fn prepare_step(
         &self,
         step: Prio3PrepareState<T::Field, L>,
-        msg: Prio3PrepareMessage<T::Field, L>,
+        msg: Prio3PrepareMessage<L>,
     ) -> Result<PrepareTransition<Self>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
@@ -811,18 +851,6 @@ where
                     "joint randomness mismatch".to_string(),
                 ));
             }
-        }
-
-        // Check the proof.
-        let res = match self.typ.decide(&msg.verifier) {
-            Ok(res) => res,
-            Err(err) => {
-                return Err(VdafError::from(err));
-            }
-        };
-
-        if !res {
-            return Err(VdafError::Uncategorized("proof check failed".to_string()));
         }
 
         // Compute the output share.

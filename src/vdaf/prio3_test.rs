@@ -7,7 +7,7 @@ use crate::{
         prg::Prg,
         prio3::{
             Prio3, Prio3Aes128Count, Prio3Aes128Histogram, Prio3Aes128Sum, Prio3InputShare,
-            Prio3PrepareMessage, Prio3VerifyParam,
+            Prio3PrepareShare, Prio3VerifyParam,
         },
         Aggregator, PrepareTransition,
     },
@@ -97,7 +97,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     for (i, want) in t.prep_shares[0].iter().enumerate() {
         assert_eq!(
             prep_shares[i],
-            Prio3PrepareMessage::get_decoded_with_param(&states[i], want.as_ref())
+            Prio3PrepareShare::get_decoded_with_param(&states[i], want.as_ref())
                 .unwrap_or_else(|e| err!(test_num, e, "decode test vector (prep share)")),
             "#{}",
             test_num
