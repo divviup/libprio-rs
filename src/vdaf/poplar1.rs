@@ -276,20 +276,23 @@ impl<I: Idpf<2, 2>, const L: usize> Encode for Poplar1InputShare<I, L> {
     }
 }
 
-impl<I: Idpf<2, 2>, const L: usize> ParameterizedDecode<Poplar1VerifyParam<L>>
+impl<'a, I, P, const L: usize> ParameterizedDecode<(&'a Poplar1<I, P, L>, usize)>
     for Poplar1InputShare<I, L>
+where
+    I: Idpf<2, 2>,
 {
     fn decode_with_param(
-        decoding_parameter: &Poplar1VerifyParam<L>,
+        (poplar1, agg_id): &(&'a Poplar1<I, P, L>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let idpf = I::decode(bytes)?;
         let sketch_start_seed = Seed::decode(bytes)?;
+        let is_leader = role_try_from(*agg_id).map_err(|e| CodecError::Other(Box::new(e)))?;
 
-        let share_decoding_parameter = if decoding_parameter.is_leader {
+        let share_decoding_parameter = if is_leader {
             // The sketch is two field elements for every bit of input, plus two more, corresponding
             // to construction of shares in `Poplar1::shard`.
-            ShareDecodingParameter::Leader((decoding_parameter.input_length + 1) * 2)
+            ShareDecodingParameter::Leader((poplar1.input_length + 1) * 2)
         } else {
             ShareDecodingParameter::Helper
         };
@@ -339,22 +342,9 @@ where
     type Measurement = IdpfInput;
     type AggregateResult = BTreeMap<IdpfInput, u64>;
     type AggregationParam = BTreeSet<IdpfInput>;
-    type PublicParam = ();
-    type VerifyParam = Poplar1VerifyParam<L>;
     type InputShare = Poplar1InputShare<I, L>;
     type OutputShare = OutputShare<I::Field>;
     type AggregateShare = AggregateShare<I::Field>;
-
-    fn setup(&self) -> Result<((), Vec<Poplar1VerifyParam<L>>), VdafError> {
-        let verify_rand_init = Seed::generate()?;
-        Ok((
-            (),
-            vec![
-                Poplar1VerifyParam::new(&verify_rand_init, true, self.input_length),
-                Poplar1VerifyParam::new(&verify_rand_init, false, self.input_length),
-            ],
-        ))
-    }
 
     fn num_aggregators(&self) -> usize {
         2
@@ -367,11 +357,7 @@ where
     P: Prg<L>,
 {
     #[allow(clippy::many_single_char_names)]
-    fn shard(
-        &self,
-        _public_param: &(),
-        input: &IdpfInput,
-    ) -> Result<Vec<Poplar1InputShare<I, L>>, VdafError> {
+    fn shard(&self, input: &IdpfInput) -> Result<Vec<Poplar1InputShare<I, L>>, VdafError> {
         let idpf_values: Vec<[I::Field; 2]> = Prng::new()?
             .take(input.level + 1)
             .map(|k| [I::Field::one(), k])
@@ -425,67 +411,6 @@ where
     }
 }
 
-/// The verification parameter used by the aggregators to evaluate the VDAF on a distributed input.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Poplar1VerifyParam<const L: usize> {
-    /// Key used to derive the verification randomness from the nonce.
-    rand_init: Seed<L>,
-
-    /// Length of the IDPF input.
-    input_length: usize,
-
-    /// Indicates whether this Aggregator is the leader.
-    is_leader: bool,
-}
-
-impl<const L: usize> Poplar1VerifyParam<L> {
-    /// Construct a new verification parameter.
-    pub fn new(seed: &Seed<L>, is_leader: bool, input_length: usize) -> Self {
-        Self {
-            rand_init: seed.clone(),
-            input_length,
-            is_leader,
-        }
-    }
-}
-
-impl<const L: usize> Encode for Poplar1VerifyParam<L> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.rand_init.encode(bytes);
-        if self.is_leader {
-            1_u8.encode(bytes);
-        } else {
-            0_u8.encode(bytes);
-        }
-    }
-}
-
-impl<I, P, const L: usize> ParameterizedDecode<Poplar1<I, P, L>> for Poplar1VerifyParam<L>
-where
-    I: Idpf<2, 2>,
-    P: Prg<L>,
-{
-    fn decode_with_param(
-        vdaf: &Poplar1<I, P, L>,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        let rand_init = Seed::decode(bytes)?;
-        let is_leader = match u8::decode(bytes)? {
-            1 => true,
-            0 => false,
-            _ => {
-                return Err(CodecError::UnexpectedValue);
-            }
-        };
-
-        Ok(Self {
-            rand_init,
-            is_leader,
-            input_length: vdaf.input_length,
-        })
-    }
-}
-
 fn get_level(agg_param: &BTreeSet<IdpfInput>) -> Result<usize, VdafError> {
     let mut level = None;
     for prefix in agg_param {
@@ -506,7 +431,7 @@ fn get_level(agg_param: &BTreeSet<IdpfInput>) -> Result<usize, VdafError> {
     }
 }
 
-impl<I, P, const L: usize> Aggregator for Poplar1<I, P, L>
+impl<I, P, const L: usize> Aggregator<L> for Poplar1<I, P, L>
 where
     I: Idpf<2, 2>,
     P: Prg<L>,
@@ -517,7 +442,8 @@ where
 
     fn prepare_init(
         &self,
-        verify_param: &Poplar1VerifyParam<L>,
+        verify_key: &[u8; L],
+        agg_id: usize,
         agg_param: &BTreeSet<IdpfInput>,
         nonce: &[u8],
         input_share: &Self::InputShare,
@@ -529,10 +455,12 @@ where
         VdafError,
     > {
         let level = get_level(agg_param)?;
+        let is_leader = role_try_from(agg_id)?;
 
         // Derive the verification randomness.
-        let mut verify_rand_prng: Prng<I::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&verify_param.rand_init, nonce));
+        let mut p = P::init(verify_key);
+        p.update(nonce);
+        let mut verify_rand_prng: Prng<I::Field, _> = Prng::from_seed_stream(p.into_seed_stream());
 
         // Evaluate the IDPF shares and compute the polynomial coefficients.
         let mut z = [I::Field::zero(); 3];
@@ -577,7 +505,7 @@ where
             }
         };
 
-        let x = if verify_param.is_leader {
+        let x = if is_leader {
             I::Field::one()
         } else {
             I::Field::zero()
@@ -634,7 +562,7 @@ where
         &self,
         mut state: Poplar1PrepareState<I::Field>,
         msg: Poplar1PrepareMessage<I::Field>,
-    ) -> Result<PrepareTransition<Self>, VdafError> {
+    ) -> Result<PrepareTransition<Self, L>, VdafError> {
         match &state.sketch {
             SketchState::RoundOne => {
                 if msg.0.len() != 3 {
@@ -779,6 +707,14 @@ where
     }
 }
 
+fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
+    match agg_id {
+        0 => Ok(true),
+        1 => Ok(false),
+        _ => Err(VdafError::Uncategorized("unexpected aggregator id".into())),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -786,6 +722,7 @@ mod tests {
     use crate::field::Field128;
     use crate::vdaf::prg::PrgAes128;
     use crate::vdaf::{run_vdaf, run_vdaf_prepare};
+    use rand::prelude::*;
 
     #[test]
     fn test_idpf() {
@@ -919,7 +856,8 @@ mod tests {
             &[0, 0, 0, 1],
         );
 
-        let (public_param, verify_params) = vdaf.setup().unwrap();
+        let mut verify_key = [0; 16];
+        thread_rng().fill(&mut verify_key[..]);
         let nonce = b"this is a nonce";
 
         // Try evaluating the VDAF with an invalid aggregation parameter. (It's an error to have a
@@ -927,13 +865,13 @@ mod tests {
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(&[0b0000_0111], 6).unwrap());
         agg_param.insert(IdpfInput::new(&[0b0000_1000], 7).unwrap());
-        let input_shares = vdaf.shard(&public_param, &input[0]).unwrap();
-        run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
+        let input_shares = vdaf.shard(&input[0]).unwrap();
+        run_vdaf_prepare(&vdaf, &verify_key, &agg_param, nonce, input_shares).unwrap_err();
 
         // Try evaluating the VDAF with malformed inputs.
         //
         // This IDPF key pair evaluates to 1 everywhere, which is illegal.
-        let mut input_shares = vdaf.shard(&public_param, &input[0]).unwrap();
+        let mut input_shares = vdaf.shard(&input[0]).unwrap();
         for (i, x) in input_shares[0].idpf.data0.iter_mut().enumerate() {
             if i != input[0].index {
                 *x += Field128::one();
@@ -941,27 +879,16 @@ mod tests {
         }
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
-        run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
+        run_vdaf_prepare(&vdaf, &verify_key, &agg_param, nonce, input_shares).unwrap_err();
 
         // This IDPF key pair has a garbled authentication vector.
-        let mut input_shares = vdaf.shard(&public_param, &input[0]).unwrap();
+        let mut input_shares = vdaf.shard(&input[0]).unwrap();
         for x in input_shares[0].idpf.data1.iter_mut() {
             *x = Field128::zero();
         }
         let mut agg_param = BTreeSet::new();
         agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
-        run_vdaf_prepare(&vdaf, &verify_params, &agg_param, nonce, input_shares).unwrap_err();
-    }
-
-    #[test]
-    fn test_verify_param_serialization() {
-        let vdaf: Poplar1<ToyIdpf<Field128>, PrgAes128, 16> = Poplar1::new(8);
-        let (_, verify_param) = vdaf.setup().unwrap();
-        for want in verify_param.iter() {
-            let got =
-                Poplar1VerifyParam::get_decoded_with_param(&vdaf, &want.get_encoded()).unwrap();
-            assert_eq!(&got, want);
-        }
+        run_vdaf_prepare(&vdaf, &verify_key, &agg_param, nonce, input_shares).unwrap_err();
     }
 
     fn check_btree(btree: &BTreeMap<IdpfInput, u64>, counts: &[u64]) {

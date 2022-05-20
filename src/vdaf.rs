@@ -118,24 +118,14 @@ where
     /// shares.
     type AggregationParam: Clone + Debug + Decode + Encode;
 
-    /// The public parameter used by Clients to shard their measurement into input shares.
-    type PublicParam: Clone + Debug;
-
-    /// A verification parameter, used by an Aggregator in the Prepare process to ensure that the
-    /// Aggregators have recovered valid output shares.
-    type VerifyParam: Clone + Debug;
-
     /// An input share sent by a Client.
-    type InputShare: Clone + Debug + ParameterizedDecode<Self::VerifyParam> + Encode;
+    type InputShare: Clone + Debug + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
     type OutputShare: Clone + Debug;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + for<'a> TryFrom<&'a [u8]>;
-
-    /// Generates the long-lived parameters used by the Clients and Aggregators.
-    fn setup(&self) -> Result<(Self::PublicParam, Vec<Self::VerifyParam>), VdafError>;
 
     /// The number of Aggregators. The Client generates as many input shares as there are
     /// Aggregators.
@@ -148,15 +138,11 @@ where
     for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
 {
     /// Shards a measurement into a sequence of input shares, one for each Aggregator.
-    fn shard(
-        &self,
-        public_param: &Self::PublicParam,
-        measurement: &Self::Measurement,
-    ) -> Result<Vec<Self::InputShare>, VdafError>;
+    fn shard(&self, measurement: &Self::Measurement) -> Result<Vec<Self::InputShare>, VdafError>;
 }
 
 /// The Aggregator's role in the execution of a VDAF.
-pub trait Aggregator: Vdaf
+pub trait Aggregator<const L: usize>: Vdaf
 where
     for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
 {
@@ -174,7 +160,8 @@ where
     /// message.
     fn prepare_init(
         &self,
-        verify_param: &Self::VerifyParam,
+        verify_key: &[u8; L],
+        agg_id: usize,
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
         input_share: &Self::InputShare,
@@ -197,7 +184,7 @@ where
         &self,
         state: Self::PrepareState,
         input: Self::PrepareMessage,
-    ) -> Result<PrepareTransition<Self>, VdafError>;
+    ) -> Result<PrepareTransition<Self, L>, VdafError>;
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -222,7 +209,7 @@ where
 
 /// A state transition of an Aggregator during the Prepare process.
 #[derive(Debug)]
-pub enum PrepareTransition<V: Aggregator>
+pub enum PrepareTransition<V: Aggregator<L>, const L: usize>
 where
     for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
 {
@@ -363,26 +350,28 @@ fn fieldvec_to_vec<F: FieldElement, T: AsRef<[F]>>(val: T) -> Vec<u8> {
 }
 
 #[cfg(test)]
-pub(crate) fn run_vdaf<V, M>(
+pub(crate) fn run_vdaf<V, M, const L: usize>(
     vdaf: &V,
     agg_param: &V::AggregationParam,
     measurements: M,
 ) -> Result<V::AggregateResult, VdafError>
 where
-    V: Client + Aggregator + Collector,
+    V: Client + Aggregator<L> + Collector,
     for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::Measurement>,
 {
+    use rand::prelude::*;
+    let mut verify_key = [0; L];
+    thread_rng().fill(&mut verify_key[..]);
+
     // NOTE Here we use the same nonce for each measurement for testing purposes. However, this is
     // not secure. In use, the Aggregators MUST ensure that nonces are unique for each measurement.
     let nonce = b"this is a nonce";
 
-    let (public_param, verify_params) = vdaf.setup()?;
-
     let mut agg_shares: Vec<Option<V::AggregateShare>> = vec![None; vdaf.num_aggregators()];
     for measurement in measurements.into_iter() {
-        let input_shares = vdaf.shard(&public_param, &measurement)?;
-        let out_shares = run_vdaf_prepare(vdaf, &verify_params, agg_param, nonce, input_shares)?;
+        let input_shares = vdaf.shard(&measurement)?;
+        let out_shares = run_vdaf_prepare(vdaf, &verify_key, agg_param, nonce, input_shares)?;
         for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
             if let Some(ref mut inner) = agg_share {
                 inner.merge(&out_share.into())?;
@@ -400,15 +389,15 @@ where
 }
 
 #[cfg(test)]
-pub(crate) fn run_vdaf_prepare<V, M>(
+pub(crate) fn run_vdaf_prepare<V, M, const L: usize>(
     vdaf: &V,
-    verify_params: &[V::VerifyParam],
+    verify_key: &[u8; L],
     agg_param: &V::AggregationParam,
     nonce: &[u8],
     input_shares: M,
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
-    V: Client + Aggregator + Collector,
+    V: Client + Aggregator<L> + Collector,
     for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::InputShare>,
 {
@@ -418,12 +407,13 @@ where
 
     let mut states = Vec::new();
     let mut outbound = Vec::new();
-    for (verify_param, input_share) in verify_params.iter().zip(input_shares) {
+    for (agg_id, input_share) in input_shares.enumerate() {
         let (state, msg) = vdaf.prepare_init(
-            verify_param,
+            verify_key,
+            agg_id,
             agg_param,
             nonce,
-            &V::InputShare::get_decoded_with_param(verify_param, &input_share)
+            &V::InputShare::get_decoded_with_param(&(vdaf, agg_id), &input_share)
                 .expect("failed to decode input share"),
         )?;
         states.push(state);

@@ -54,6 +54,12 @@ impl<const L: usize> Seed<L> {
     }
 }
 
+impl<const L: usize> AsRef<[u8; L]> for Seed<L> {
+    fn as_ref(&self) -> &[u8; L] {
+        &self.0
+    }
+}
+
 impl<const L: usize> PartialEq for Seed<L> {
     fn eq(&self, other: &Self) -> bool {
         // Do constant-time compare.
@@ -93,7 +99,7 @@ pub trait Prg<const L: usize>: Clone + Debug {
     type SeedStream: SeedStream;
 
     /// Construct an instance of [`Prg`] with the given seed.
-    fn init(seed: &Seed<L>) -> Self;
+    fn init(seed_bytes: &[u8; L]) -> Self;
 
     /// Update the PRG state by passing in the next fragment of the info string. The final info
     /// string is assembled from the concatenation of sequence of fragments passed to this method.
@@ -112,7 +118,7 @@ pub trait Prg<const L: usize>: Clone + Debug {
 
     /// Construct a seed stream from the given seed and info string.
     fn seed_stream(seed: &Seed<L>, info: &[u8]) -> Self::SeedStream {
-        let mut prg = Self::init(seed);
+        let mut prg = Self::init(seed.as_ref());
         prg.update(info);
         prg.into_seed_stream()
     }
@@ -127,8 +133,8 @@ pub struct PrgAes128(Cmac<Aes128>);
 impl Prg<16> for PrgAes128 {
     type SeedStream = SeedStreamAes128;
 
-    fn init(seed: &Seed<16>) -> Self {
-        Self(Cmac::new_from_slice(&seed.0).unwrap())
+    fn init(seed_bytes: &[u8; 16]) -> Self {
+        Self(Cmac::new_from_slice(seed_bytes).unwrap())
     }
 
     fn update(&mut self, data: &[u8]) {
@@ -207,7 +213,7 @@ mod tests {
         let seed = Seed::generate().unwrap();
         let info = b"info string";
 
-        let mut prg = P::init(&seed);
+        let mut prg = P::init(seed.as_ref());
         prg.update(info);
 
         let mut want: Seed<L> = Seed::uninitialized();
@@ -225,7 +231,7 @@ mod tests {
     #[test]
     fn prg_aes128() {
         let t: PrgTestVector = serde_json::from_str(TEST_PRG_AES128_FIELD128).unwrap();
-        let mut prg = PrgAes128::init(&Seed(t.seed.try_into().unwrap()));
+        let mut prg = PrgAes128::init(&t.seed.try_into().unwrap());
         prg.update(&t.info);
 
         assert_eq!(

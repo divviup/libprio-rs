@@ -7,7 +7,7 @@ use crate::{
         prg::Prg,
         prio3::{
             Prio3, Prio3Aes128Count, Prio3Aes128Histogram, Prio3Aes128Sum, Prio3InputShare,
-            Prio3PrepareShare, Prio3VerifyParam,
+            Prio3PrepareShare,
         },
         Aggregator, PrepareTransition,
     },
@@ -53,7 +53,6 @@ macro_rules! err {
 // `test_vec_setup()` and `test_vec_shard()` to traits. (There may be a less invasive alternative.)
 fn check_prep_test_vec<M, T, A, P, const L: usize>(
     prio3: &Prio3<T, A, P, L>,
-    verify_params: &[Prio3VerifyParam<L>],
     test_num: usize,
     t: &TPrio3Prep<M>,
 ) where
@@ -63,20 +62,22 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     M: From<<T as Type>::Field> + Debug + PartialEq,
 {
     let input_shares = prio3
-        .test_vec_shard(&(), &t.measurement)
+        .test_vec_shard(&t.measurement)
         .expect("failed to generate input shares");
 
+    let agg_key = [1; L];
+
     assert_eq!(2, t.input_shares.len(), "#{}", test_num);
-    for (i, want) in t.input_shares.iter().enumerate() {
+    for (agg_id, want) in t.input_shares.iter().enumerate() {
         assert_eq!(
-            input_shares[i],
-            Prio3InputShare::get_decoded_with_param(&verify_params[i], want.as_ref())
+            input_shares[agg_id],
+            Prio3InputShare::get_decoded_with_param(&(prio3, agg_id), want.as_ref())
                 .unwrap_or_else(|e| err!(test_num, e, "decode test vector (input share)")),
             "#{}",
             test_num
         );
         assert_eq!(
-            input_shares[i].get_encoded(),
+            input_shares[agg_id].get_encoded(),
             want.as_ref(),
             "#{}",
             test_num
@@ -85,9 +86,9 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
 
     let mut states = Vec::new();
     let mut prep_shares = Vec::new();
-    for (verify_param, input_share) in verify_params.iter().zip(input_shares) {
+    for (agg_id, input_share) in input_shares.iter().enumerate() {
         let (state, prep_share) = prio3
-            .prepare_init(verify_param, &(), &t.nonce, &input_share)
+            .prepare_init(&agg_key, agg_id, &(), &t.nonce, input_share)
             .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
         prep_shares.push(prep_share);
@@ -131,9 +132,8 @@ fn test_vec_prio3_count() {
         serde_json::from_str(include_str!("testdata/vdaf_00_prio3_count.json")).unwrap();
     let prio3 = Prio3Aes128Count::new(2).unwrap();
 
-    let (_, verify_params) = prio3.test_vec_setup().unwrap();
     for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_params, test_num, p);
+        check_prep_test_vec(&prio3, test_num, p);
     }
 }
 
@@ -143,9 +143,8 @@ fn test_vec_prio3_sum() {
         serde_json::from_str(include_str!("testdata/vdaf_00_prio3_sum.json")).unwrap();
     let prio3 = Prio3Aes128Sum::new(2, 8).unwrap();
 
-    let (_, verify_params) = prio3.test_vec_setup().unwrap();
     for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_params, test_num, p);
+        check_prep_test_vec(&prio3, test_num, p);
     }
 }
 
@@ -155,8 +154,7 @@ fn test_vec_prio3_histogram() {
         serde_json::from_str(include_str!("testdata/vdaf_00_prio3_histogram.json")).unwrap();
     let prio3 = Prio3Aes128Histogram::new(2, &[1, 10, 100]).unwrap();
 
-    let (_, verify_params) = prio3.test_vec_setup().unwrap();
     for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_params, test_num, p);
+        check_prep_test_vec(&prio3, test_num, p);
     }
 }
