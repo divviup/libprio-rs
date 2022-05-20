@@ -163,7 +163,10 @@ where
     /// State of the Aggregator during the Prepare process.
     type PrepareState: Clone + Debug;
 
-    /// The type of messages exchanged among the Aggregators during the Prepare process.
+    /// The type of messages broadcast by each aggregator at each round of the Prepare Process.
+    type PrepareShare: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
+
+    /// Result of preprocessing a round of preparation shares.
     type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
@@ -175,21 +178,21 @@ where
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, Self::PrepareMessage), VdafError>;
+    ) -> Result<(Self::PrepareState, Self::PrepareShare), VdafError>;
 
-    /// Preprocess a round of prepare messages into a single input to [`Aggregator::prepare_step`].
-    fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareMessage>>(
+    /// Preprocess a round of preparation shares into a single input to [`Aggregator::prepare_step`].
+    fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError>;
 
     /// Compute the next state transition from the current state and the previous round of input
     /// messages. If this returns [`PrepareTransition::Continue`], then the returned
-    /// [`Self::PrepareMessage`] should be combined with the other aggregator's `PrepareMessage`s
-    /// from this round and passed into another call to this method. This continues until this
-    /// method returns [`PrepareTransition::Finish`], at which point the returned output share may
-    /// be aggregated. If the method returns an error, the aggregator should consider its input
-    /// share invalid and not attempt to process it any further.
+    /// [`Self::PrepareShare`] should be combined with the other Aggregators' `PrepareShare`s from
+    /// this round and passed into another call to this method. This continues until this method
+    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
+    /// aggregated. If the method returns an error, the aggregator should consider its input share
+    /// invalid and not attempt to process it any further.
     fn prepare_step(
         &self,
         state: Self::PrepareState,
@@ -427,16 +430,22 @@ where
         outbound.push(msg.get_encoded());
     }
 
-    let mut inbound = vdaf.prepare_preprocess(outbound.iter().map(|encoded| {
-        V::PrepareMessage::get_decoded_with_param(&states[0], encoded)
-            .expect("failed to decode prapare message")
-    }))?;
+    let mut inbound = vdaf
+        .prepare_preprocess(outbound.iter().map(|encoded| {
+            V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                .expect("failed to decode prep share")
+        }))?
+        .get_encoded();
 
     let mut out_shares = Vec::new();
     loop {
         let mut outbound = Vec::new();
         for state in states.iter_mut() {
-            match vdaf.prepare_step(state.clone(), inbound.clone())? {
+            match vdaf.prepare_step(
+                state.clone(),
+                V::PrepareMessage::get_decoded_with_param(&state, &inbound)
+                    .expect("failed to decode prep message"),
+            )? {
                 PrepareTransition::Continue(new_state, msg) => {
                     outbound.push(msg.get_encoded());
                     *state = new_state
@@ -449,10 +458,12 @@ where
 
         if outbound.len() == vdaf.num_aggregators() {
             // Another round is required before output shares are computed.
-            inbound = vdaf.prepare_preprocess(outbound.iter().map(|encoded| {
-                V::PrepareMessage::get_decoded_with_param(&states[0], encoded)
-                    .expect("failed to decode prepare message")
-            }))?;
+            inbound = vdaf
+                .prepare_preprocess(outbound.iter().map(|encoded| {
+                    V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                        .expect("failed to decode prep share")
+                }))?
+                .get_encoded();
         } else if outbound.is_empty() {
             // Each Aggregator recovered an output share.
             break;

@@ -644,6 +644,7 @@ where
     P: Prg<L>,
 {
     type PrepareState = Prio3PrepareState<T::Field, L>;
+    type PrepareShare = Prio3PrepareMessage<T::Field, L>;
     type PrepareMessage = Prio3PrepareMessage<T::Field, L>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is

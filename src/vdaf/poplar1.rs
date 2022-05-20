@@ -512,6 +512,7 @@ where
     P: Prg<L>,
 {
     type PrepareState = Poplar1PrepareState<I::Field>;
+    type PrepareShare = Poplar1PrepareMessage<I::Field>;
     type PrepareMessage = Poplar1PrepareMessage<I::Field>;
 
     fn prepare_init(
