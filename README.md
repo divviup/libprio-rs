@@ -20,14 +20,15 @@ See [`prio-server`][prio-server] or the [ENPA whitepaper][enpa-whitepaper] for m
 
 ## Verifiable Distributed Aggregation Function (EXPERIMENTAL)
 
-Crate `prio` also implements a [Verifiable Distributed Aggregation Function (VDAF)][vdaf] called
-"prio3", implemented in the `vdaf` module, allowing Prio to be used in the
-[Privacy Preserving Measurements][ppm] protocol. This support is still experimental, and is evolving
-along with the PPM and VDAF specifications. Formal security analysis is also forthcoming. prio3
-should not yet be used in production applications.
+Crate `prio` also implements a [Verifiable Distributed Aggregation Function
+(VDAF)][vdaf] called "Prio3", implemented in the `vdaf` module, allowing Prio to
+be used in the [Distributed Aggregation Protocol][dap] protocol being developed
+in the PPM working group at the IETF. This support is still experimental, and is
+evolving along with the DAP and VDAF specifications. Formal security analysis is
+also forthcoming. Prio3 should not yet be used in production applications.
 
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [prio-server]: https://github.com/abetterinternet/prio-server
-[vdaf]: https://cjpatton.github.io/vdaf/draft-patton-cfrg-vdaf.html
-[ppm]: https://github.com/abetterinternet/ppm-specification
+[vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/
+[dap]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/
