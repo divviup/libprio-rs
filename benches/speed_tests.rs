@@ -133,11 +133,11 @@ pub fn prio3_client(c: &mut Criterion) {
     let measurement = 1;
     println!(
         "prio3 count size = {}",
-        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+        prio3_input_share_size(&prio3.shard(&measurement).unwrap())
     );
     c.bench_function("prio3 count", |b| {
         b.iter(|| {
-            prio3.shard(&(), &1).unwrap();
+            prio3.shard(&1).unwrap();
         })
     });
 
@@ -147,13 +147,13 @@ pub fn prio3_client(c: &mut Criterion) {
     println!(
         "prio3 histogram ({} buckets) size = {}",
         buckets.len() + 1,
-        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+        prio3_input_share_size(&prio3.shard(&measurement).unwrap())
     );
     c.bench_function(
         &format!("prio3 histogram ({} buckets)", buckets.len() + 1),
         |b| {
             b.iter(|| {
-                prio3.shard(&(), &measurement).unwrap();
+                prio3.shard(&measurement).unwrap();
             })
         },
     );
@@ -164,11 +164,11 @@ pub fn prio3_client(c: &mut Criterion) {
     println!(
         "prio3 sum ({} bits) size = {}",
         bits,
-        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+        prio3_input_share_size(&prio3.shard(&measurement).unwrap())
     );
     c.bench_function(&format!("prio3 sum ({} bits)", bits), |b| {
         b.iter(|| {
-            prio3.shard(&(), &measurement).unwrap();
+            prio3.shard(&measurement).unwrap();
         })
     });
 
@@ -178,11 +178,11 @@ pub fn prio3_client(c: &mut Criterion) {
     println!(
         "prio3 countvec ({} len) size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+        prio3_input_share_size(&prio3.shard(&measurement).unwrap())
     );
     c.bench_function(&format!("prio3 countvec ({} len)", len), |b| {
         b.iter(|| {
-            prio3.shard(&(), &measurement).unwrap();
+            prio3.shard(&measurement).unwrap();
         })
     });
 
@@ -193,11 +193,11 @@ pub fn prio3_client(c: &mut Criterion) {
         println!(
             "prio3 countvec multithreaded ({} len) size = {}",
             len,
-            prio3_input_share_size(&prio3.shard(&(), &measurement).unwrap())
+            prio3_input_share_size(&prio3.shard(&measurement).unwrap())
         );
         c.bench_function(&format!("prio3 parallel countvec ({} len)", len), |b| {
             b.iter(|| {
-                prio3.shard(&(), &measurement).unwrap();
+                prio3.shard(&measurement).unwrap();
             })
         });
     }
