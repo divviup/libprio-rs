@@ -511,7 +511,7 @@ where
     I: Idpf<2, 2>,
     P: Prg<L>,
 {
-    type PrepareStep = Poplar1PrepareStep<I::Field>;
+    type PrepareState = Poplar1PrepareState<I::Field>;
     type PrepareMessage = Poplar1PrepareMessage<I::Field>;
 
     fn prepare_init(
@@ -520,7 +520,7 @@ where
         agg_param: &BTreeSet<IdpfInput>,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<Poplar1PrepareStep<I::Field>, VdafError> {
+    ) -> Result<Poplar1PrepareState<I::Field>, VdafError> {
         let level = get_level(agg_param)?;
 
         // Derive the verification randomness.
@@ -576,7 +576,7 @@ where
             I::Field::zero()
         };
 
-        Ok(Poplar1PrepareStep {
+        Ok(Poplar1PrepareState {
             sketch: SketchState::Ready,
             output_share: OutputShare(output_share),
             z,
@@ -625,10 +625,10 @@ where
     #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
-        mut state: Poplar1PrepareStep<I::Field>,
+        mut state: Poplar1PrepareState<I::Field>,
         input: Option<Poplar1PrepareMessage<I::Field>>,
     ) -> PrepareTransition<
-        Poplar1PrepareStep<I::Field>,
+        Poplar1PrepareState<I::Field>,
         Poplar1PrepareMessage<I::Field>,
         OutputShare<I::Field>,
     > {
@@ -716,9 +716,9 @@ impl<F: FieldElement> Encode for Poplar1PrepareMessage<F> {
     }
 }
 
-impl<F: FieldElement> ParameterizedDecode<Poplar1PrepareStep<F>> for Poplar1PrepareMessage<F> {
+impl<F: FieldElement> ParameterizedDecode<Poplar1PrepareState<F>> for Poplar1PrepareMessage<F> {
     fn decode_with_param(
-        _decoding_parameter: &Poplar1PrepareStep<F>,
+        _decoding_parameter: &Poplar1PrepareState<F>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         // TODO: This is decoded as a variable length vector of F, but we may be
@@ -732,7 +732,7 @@ impl<F: FieldElement> ParameterizedDecode<Poplar1PrepareStep<F>> for Poplar1Prep
 
 /// The state of each Aggregator during the Prepare process.
 #[derive(Clone, Debug)]
-pub struct Poplar1PrepareStep<F> {
+pub struct Poplar1PrepareState<F> {
     /// State of the secure sketching protocol.
     sketch: SketchState,
 

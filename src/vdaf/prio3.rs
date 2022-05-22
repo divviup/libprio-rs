@@ -549,11 +549,11 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareMessage<F, L> {
     }
 }
 
-impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareStep<F, L>>
+impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
     for Prio3PrepareMessage<F, L>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareStep<F, L>,
+        decoding_parameter: &Prio3PrepareState<F, L>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let mut verifier = Vec::with_capacity(decoding_parameter.verifier_len);
@@ -592,26 +592,26 @@ where
 /// State of each aggregator during the preparation phase.
 ///
 /// Serialization traits [`Encode` and `ParameterizedDecoded`] are implemented for this type.
-/// However, the prepare step may only be encoded in the "waiting" state (i.e., after completing
-/// the first call to [`Prio3::prepare_step`]). In particular, the [`Prio3PrepareStep::encode`]
+/// However, the prepare state may only be encoded in the "waiting" state (i.e., after completing
+/// the first call to [`Prio3::prepare_step`]). In particular, the [`Prio3PrepareState::encode`]
 /// panics if called in the "ready" state (i.e., on the output of [`Prio3::prepare_init`]).
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Prio3PrepareStep<F, const L: usize> {
+pub struct Prio3PrepareState<F, const L: usize> {
     input_share: Share<F, L>,
     joint_rand_seed: Option<Seed<L>>,
     aggregator_id: u8,
     verifier_len: usize,
-    state: PrepareStep<F, L>,
+    state: PrepareState<F, L>,
 }
 
-impl<F: FieldElement, const L: usize> Encode for Prio3PrepareStep<F, L> {
+impl<F: FieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     ///
     /// # Panics
     ///
-    /// Panics if the step is not in the "waiting" state. See [`Prio3PrepareStep`] for details.
+    /// Panics if the state is not in the "waiting" state. See [`Prio3PrepareState`] for details.
     fn encode(&self, bytes: &mut Vec<u8>) {
-        if let PrepareStep::Ready(..) = self.state {
+        if let PrepareState::Ready(..) = self.state {
             panic!("encooding of ready state is not permitted (see documentation for details)");
         }
         self.input_share.encode(bytes);
@@ -622,7 +622,7 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareStep<F, L> {
 }
 
 impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
-    for Prio3PrepareStep<F, L>
+    for Prio3PrepareState<F, L>
 {
     fn decode_with_param(
         verify_param: &Prio3VerifyParam<L>,
@@ -646,7 +646,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3VerifyParam<L>>
             joint_rand_seed,
             aggregator_id: verify_param.aggregator_id,
             verifier_len: verify_param.verifier_len,
-            state: PrepareStep::Waiting,
+            state: PrepareState::Waiting,
         })
     }
 }
@@ -657,7 +657,7 @@ where
     A: Clone + Debug + Sync + Send,
     P: Prg<L>,
 {
-    type PrepareStep = Prio3PrepareStep<T::Field, L>;
+    type PrepareState = Prio3PrepareState<T::Field, L>;
     type PrepareMessage = Prio3PrepareMessage<T::Field, L>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is
@@ -668,7 +668,7 @@ where
         _agg_param: &(),
         nonce: &[u8],
         msg: &Prio3InputShare<T::Field, L>,
-    ) -> Result<Prio3PrepareStep<T::Field, L>, VdafError> {
+    ) -> Result<Prio3PrepareState<T::Field, L>, VdafError> {
         let mut info = [0; VERS_PRIO3.len() + 1];
         info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
         info[VERS_PRIO3.len()] = verify_param.aggregator_id;
@@ -745,12 +745,12 @@ where
             self.num_aggregators as usize,
         )?;
 
-        Ok(Prio3PrepareStep {
+        Ok(Prio3PrepareState {
             input_share: msg.input_share.clone(),
             joint_rand_seed,
             aggregator_id: verify_param.aggregator_id,
             verifier_len: verifier_share.len(),
-            state: PrepareStep::Ready(Prio3PrepareMessage {
+            state: PrepareState::Ready(Prio3PrepareMessage {
                 verifier: verifier_share,
                 joint_rand_seed: joint_rand_seed_share,
             }),
@@ -808,23 +808,23 @@ where
     #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
-        mut step: Prio3PrepareStep<T::Field, L>,
+        mut state: Prio3PrepareState<T::Field, L>,
         input: Option<Prio3PrepareMessage<T::Field, L>>,
     ) -> PrepareTransition<
-        Prio3PrepareStep<T::Field, L>,
+        Prio3PrepareState<T::Field, L>,
         Prio3PrepareMessage<T::Field, L>,
         OutputShare<T::Field>,
     > {
-        match (step.state, input) {
-            (PrepareStep::Ready(verifier_msg), None) => {
-                step.state = PrepareStep::Waiting;
-                PrepareTransition::Continue(step, verifier_msg)
+        match (state.state, input) {
+            (PrepareState::Ready(verifier_msg), None) => {
+                state.state = PrepareState::Waiting;
+                PrepareTransition::Continue(state, verifier_msg)
             }
 
-            (PrepareStep::Waiting, Some(msg)) => {
+            (PrepareState::Waiting, Some(msg)) => {
                 if self.typ.joint_rand_len() > 0 {
                     // Check that the joint randomness was correct.
-                    if step.joint_rand_seed.as_ref().unwrap()
+                    if state.joint_rand_seed.as_ref().unwrap()
                         != msg.joint_rand_seed.as_ref().unwrap()
                     {
                         return PrepareTransition::Fail(VdafError::Uncategorized(
@@ -848,12 +848,12 @@ where
                 }
 
                 // Compute the output share.
-                let input_share = match step.input_share {
+                let input_share = match state.input_share {
                     Share::Leader(data) => data,
                     Share::Helper(seed) => {
                         let mut info = [0; VERS_PRIO3.len() + 1];
                         info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
-                        info[VERS_PRIO3.len()] = step.aggregator_id;
+                        info[VERS_PRIO3.len()] = state.aggregator_id;
                         let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
                         prng.take(self.typ.input_len()).collect()
                     }
@@ -940,7 +940,7 @@ impl<const L: usize> HelperShare<L> {
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-enum PrepareStep<F, const L: usize> {
+enum PrepareState<F, const L: usize> {
     Ready(Prio3PrepareMessage<F, L>),
     Waiting,
 }
@@ -969,7 +969,7 @@ mod tests {
         let input_shares = prio3.shard(&(), &1).unwrap();
         run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares).unwrap();
 
-        test_prepare_step_serialization(&prio3, &1).unwrap();
+        test_prepare_state_serialization(&prio3, &1).unwrap();
     }
 
     #[test]
@@ -1013,7 +1013,7 @@ mod tests {
         let result = run_vdaf_prepare(&prio3, &verify_params, &(), nonce, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        test_prepare_step_serialization(&prio3, &1).unwrap();
+        test_prepare_state_serialization(&prio3, &1).unwrap();
     }
 
     #[test]
@@ -1055,7 +1055,7 @@ mod tests {
             Prio3ResultVec(vec![0, 0, 0, 1])
         );
 
-        test_prepare_step_serialization(&prio3, &23).unwrap();
+        test_prepare_state_serialization(&prio3, &23).unwrap();
     }
 
     #[test]
@@ -1096,7 +1096,7 @@ mod tests {
         }
     }
 
-    fn test_prepare_step_serialization<T, A, P, const L: usize>(
+    fn test_prepare_state_serialization<T, A, P, const L: usize>(
         prio3: &Prio3<T, A, P, L>,
         measurement: &T::Measurement,
     ) -> Result<(), VdafError>
@@ -1108,10 +1108,10 @@ mod tests {
         let (_, verify_param) = prio3.setup()?;
         let input_shares = prio3.shard(&(), measurement)?;
         for (verify_param, input_share) in verify_param.iter().zip(input_shares.iter()) {
-            let step = prio3.prepare_init(verify_param, &(), &[], input_share)?;
-            let want = assert_matches!(prio3.prepare_step(step, None), PrepareTransition::Continue(step, _) => step);
-            let got = Prio3PrepareStep::get_decoded_with_param(verify_param, &want.get_encoded())
-                .expect("failed to decode prepare step");
+            let state = prio3.prepare_init(verify_param, &(), &[], input_share)?;
+            let want = assert_matches!(prio3.prepare_step(state, None), PrepareTransition::Continue(state, _) => state);
+            let got = Prio3PrepareState::get_decoded_with_param(verify_param, &want.get_encoded())
+                .expect("failed to decode prepare state");
             assert_eq!(got, want);
         }
         Ok(())
