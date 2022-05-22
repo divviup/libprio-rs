@@ -804,8 +804,6 @@ where
         })
     }
 
-    // TODO Fix this clippy warning instead of bypassing it.
-    #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
         mut step: Prio3PrepareStep<T::Field, L>,

@@ -621,8 +621,6 @@ where
         Ok(Poplar1PrepareMessage(output.unwrap()))
     }
 
-    // TODO Fix this clippy warning instead of bypassing it.
-    #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
         mut state: Poplar1PrepareStep<I::Field>,
