@@ -627,11 +627,7 @@ where
         &self,
         mut state: Poplar1PrepareStep<I::Field>,
         input: Option<Poplar1PrepareMessage<I::Field>>,
-    ) -> PrepareTransition<
-        Poplar1PrepareStep<I::Field>,
-        Poplar1PrepareMessage<I::Field>,
-        OutputShare<I::Field>,
-    > {
+    ) -> PrepareTransition<Self> {
         match (&state.sketch, input) {
             (SketchState::Ready, None) => {
                 let z_share = state.z.to_vec();
