@@ -804,17 +804,11 @@ where
         })
     }
 
-    // TODO Fix this clippy warning instead of bypassing it.
-    #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
         mut step: Prio3PrepareStep<T::Field, L>,
         input: Option<Prio3PrepareMessage<T::Field, L>>,
-    ) -> PrepareTransition<
-        Prio3PrepareStep<T::Field, L>,
-        Prio3PrepareMessage<T::Field, L>,
-        OutputShare<T::Field>,
-    > {
+    ) -> PrepareTransition<Self> {
         match (step.state, input) {
             (PrepareStep::Ready(verifier_msg), None) => {
                 step.state = PrepareStep::Waiting;
