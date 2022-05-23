@@ -195,9 +195,9 @@ mod tests {
             &Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 95]).unwrap(),
             b"",
         );
-        let prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
+        let mut prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
         let expected = Field96::from(39729620190871453347343769187);
-        let actual = prng.skip(145).next().unwrap();
+        let actual = prng.nth(145).unwrap();
         assert_eq!(actual, expected);
     }
 }

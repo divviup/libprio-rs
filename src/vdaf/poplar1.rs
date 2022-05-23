@@ -621,17 +621,11 @@ where
         Ok(Poplar1PrepareMessage(output.unwrap()))
     }
 
-    // TODO Fix this clippy warning instead of bypassing it.
-    #[allow(clippy::type_complexity)]
     fn prepare_step(
         &self,
         mut state: Poplar1PrepareState<I::Field>,
         input: Option<Poplar1PrepareMessage<I::Field>>,
-    ) -> PrepareTransition<
-        Poplar1PrepareState<I::Field>,
-        Poplar1PrepareMessage<I::Field>,
-        OutputShare<I::Field>,
-    > {
+    ) -> PrepareTransition<Self> {
         match (&state.sketch, input) {
             (SketchState::Ready, None) => {
                 let z_share = state.z.to_vec();

@@ -194,7 +194,7 @@ where
         &self,
         state: Self::PrepareState,
         input: Option<Self::PrepareMessage>,
-    ) -> PrepareTransition<Self::PrepareState, Self::PrepareMessage, Self::OutputShare>;
+    ) -> PrepareTransition<Self>;
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -219,12 +219,15 @@ where
 
 /// A state transition of an Aggregator during the Prepare process.
 #[derive(Debug)]
-pub enum PrepareTransition<S, M, O> {
+pub enum PrepareTransition<V: Aggregator>
+where
+    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
+{
     /// Continue processing.
-    Continue(S, M),
+    Continue(V::PrepareState, V::PrepareMessage),
 
     /// Finish processing and return the output share.
-    Finish(O),
+    Finish(V::OutputShare),
 
     /// Fail and return an error.
     Fail(VdafError),
