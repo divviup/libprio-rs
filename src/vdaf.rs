@@ -161,12 +161,12 @@ where
     for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
 {
     /// State of the Aggregator during the Prepare process.
-    type PrepareStep: Clone + Debug;
+    type PrepareState: Clone + Debug;
 
     /// The type of messages exchanged among the Aggregators during the Prepare process.
-    type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareStep> + Encode;
+    type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
 
-    /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareStep`] returned
+    /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
     /// is passed to [`Aggregator::prepare_step`] to get this aggregator's first-round prepare
     /// message.
     fn prepare_init(
@@ -175,7 +175,7 @@ where
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
         input_share: &Self::InputShare,
-    ) -> Result<Self::PrepareStep, VdafError>;
+    ) -> Result<Self::PrepareState, VdafError>;
 
     /// Preprocess a round of prepare messages into a single input to [`Aggregator::prepare_step`].
     fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareMessage>>(
@@ -192,7 +192,7 @@ where
     /// consider its input share invalid and not attempt to process it any further.
     fn prepare_step(
         &self,
-        state: Self::PrepareStep,
+        state: Self::PrepareState,
         input: Option<Self::PrepareMessage>,
     ) -> PrepareTransition<Self>;
 
@@ -224,7 +224,7 @@ where
     for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
 {
     /// Continue processing.
-    Continue(V::PrepareStep, V::PrepareMessage),
+    Continue(V::PrepareState, V::PrepareMessage),
 
     /// Finish processing and return the output share.
     Finish(V::OutputShare),
