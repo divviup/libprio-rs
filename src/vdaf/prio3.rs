@@ -36,7 +36,7 @@ use std::marker::PhantomData;
 //
 // NOTE The CFRG has not yet adopted this spec. Version "vdaf-00" will match
 // draft-irtf-cfrg-vdaf-00.
-const VERS_PRIO3: &[u8] = b"vdaf-00 prio3";
+const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
 pub type Prio3Aes128Count = Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>;
