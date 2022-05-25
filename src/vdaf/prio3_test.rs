@@ -13,7 +13,7 @@ use crate::{
     },
 };
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::{convert::TryInto, fmt::Debug};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct TEncoded(#[serde(with = "hex")] Vec<u8>);
@@ -31,11 +31,13 @@ struct TPrio3Prep<M> {
     nonce: Vec<u8>,
     input_shares: Vec<TEncoded>,
     prep_shares: Vec<Vec<TEncoded>>,
+    prep_messages: Vec<TEncoded>,
     out_shares: Vec<Vec<M>>,
 }
 
 #[derive(Deserialize, Serialize)]
 struct TPrio3<M> {
+    verify_key: TEncoded,
     prep: Vec<TPrio3Prep<M>>,
 }
 
@@ -53,6 +55,7 @@ macro_rules! err {
 // `test_vec_setup()` and `test_vec_shard()` to traits. (There may be a less invasive alternative.)
 fn check_prep_test_vec<M, T, A, P, const L: usize>(
     prio3: &Prio3<T, A, P, L>,
+    verify_key: &[u8; L],
     test_num: usize,
     t: &TPrio3Prep<M>,
 ) where
@@ -64,8 +67,6 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     let input_shares = prio3
         .test_vec_shard(&t.measurement)
         .expect("failed to generate input shares");
-
-    let agg_key = [1; L];
 
     assert_eq!(2, t.input_shares.len(), "#{}", test_num);
     for (agg_id, want) in t.input_shares.iter().enumerate() {
@@ -88,7 +89,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     let mut prep_shares = Vec::new();
     for (agg_id, input_share) in input_shares.iter().enumerate() {
         let (state, prep_share) = prio3
-            .prepare_init(&agg_key, agg_id, &(), &t.nonce, input_share)
+            .prepare_init(verify_key, agg_id, &(), &t.nonce, input_share)
             .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
         prep_shares.push(prep_share);
@@ -109,6 +110,8 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     let inbound = prio3
         .prepare_preprocess(prep_shares)
         .unwrap_or_else(|e| err!(test_num, e, "prep preprocess"));
+    assert_eq!(t.prep_messages.len(), 1);
+    assert_eq!(inbound.get_encoded(), t.prep_messages[0].as_ref());
 
     let mut out_shares = Vec::new();
     for state in states.iter_mut() {
@@ -129,32 +132,35 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
 #[test]
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("testdata/vdaf_00_prio3_count.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Count.json")).unwrap();
     let prio3 = Prio3Aes128Count::new(2).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, test_num, p);
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
     }
 }
 
 #[test]
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("testdata/vdaf_00_prio3_sum.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Sum.json")).unwrap();
     let prio3 = Prio3Aes128Sum::new(2, 8).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, test_num, p);
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
     }
 }
 
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("testdata/vdaf_00_prio3_histogram.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Histogram.json")).unwrap();
     let prio3 = Prio3Aes128Histogram::new(2, &[1, 10, 100]).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, test_num, p);
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
     }
 }
