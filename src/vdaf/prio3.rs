@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This modulde implements the Prio3 VDAF as specified in [[draft-irtf-cfrg-vdaf-00]]. The
+//! This modulde implements the Prio3 VDAF as specified in [[draft-irtf-cfrg-vdaf-01]]. The
 //! construction is based on a transform of a Fully Linear Proof (FLP) system (i.e., a concrete
 //! [`Type`](crate::flp::Type) into a zero-knowledge proof system on distributed data as described
 //! in [[BBCG+19], Section 6].
 //!
 //! Implementations of `Prio3Aes128Count`, `Prio3Aes128Sum`, and `Prio3Aes128Histogram` as
-//! specified in [[draft-irtf-cfrg-vdaf-00], Section 6.4] are provided. This module also provides
+//! specified in [[draft-irtf-cfrg-vdaf-01], Section 6.4] are provided. This module also provides
 //! additional instantiations of Prio3 that are not in the draft.
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
-//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};
@@ -34,8 +34,8 @@ use std::marker::PhantomData;
 // Domain-separation tag used to bind the VDAF operations to the document version. This will be
 // reved with each new draft.
 //
-// NOTE The CFRG has not yet adopted this spec. Version "vdaf-00" will match
-// draft-irtf-cfrg-vdaf-00.
+// NOTE The CFRG has not yet adopted this spec. Version "vdaf-01" will match
+// draft-irtf-cfrg-vdaf-01.
 const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
@@ -65,7 +65,7 @@ pub type Prio3Aes128CountVec = Prio3<
 
 /// Like [`Prio3CountVec`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
-/// e.g., 200 and up. (Your system's mileage may vary.)
+/// e.g., 201 and up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3Aes128CountVecMultithreaded = Prio3<

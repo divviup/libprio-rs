@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! This module implements the generic Fully Linear Proof (FLP) system specified in
-//! [[draft-irtf-cfrg-vdaf-00], Section 6.3]. This is the main building block of
+//! [[draft-irtf-cfrg-vdaf-01], Section 6.3]. This is the main building block of
 //! [`Prio3`](crate::vdaf::prio3).
 //!
 //! The proof system is derived for any implementation of the [`Type`] trait. Such an
@@ -46,7 +46,7 @@
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
 //! [CGB17]: https://crypto.stanford.edu/prio
-//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};

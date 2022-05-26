@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module implements PRGs as specified in [[draft-irtf-cfrg-vdaf-00]].
+//! This module implements PRGs as specified in [[draft-irtf-cfrg-vdaf-01]].
 //!
-//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
 use crate::vdaf::{CodecError, Decode, Encode};
 use aes::{
@@ -91,9 +91,9 @@ pub trait SeedStream {
     fn fill(&mut self, buf: &mut [u8]);
 }
 
-/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-00]].
+/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-01]].
 ///
-/// [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+/// [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 pub trait Prg<const L: usize>: Clone + Debug {
     /// The type of stream produced by this PRG.
     type SeedStream: SeedStream;
@@ -124,9 +124,9 @@ pub trait Prg<const L: usize>: Clone + Debug {
     }
 }
 
-/// The PRG based on AES128 as specified in [[draft-irtf-cfrg-vdaf-00]].
+/// The PRG based on AES128 as specified in [[draft-irtf-cfrg-vdaf-01]].
 ///
-/// [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+/// [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 #[derive(Clone, Debug)]
 pub struct PrgAes128(Cmac<Aes128>);
 
