@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module implements PRGs as specified in [[draft-irtf-cfrg-vdaf-01]].
+//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-01]].
 //!
 //! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 

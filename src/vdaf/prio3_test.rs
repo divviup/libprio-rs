@@ -9,11 +9,14 @@ use crate::{
             Prio3, Prio3Aes128Count, Prio3Aes128Histogram, Prio3Aes128Sum, Prio3InputShare,
             Prio3PrepareShare,
         },
-        Aggregator, PrepareTransition,
+        AggregateShare, Aggregator, PrepareTransition, VdafError,
     },
 };
 use serde::{Deserialize, Serialize};
-use std::{convert::TryInto, fmt::Debug};
+use std::{
+    convert::{TryFrom, TryInto},
+    fmt::Debug,
+};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct TEncoded(#[serde(with = "hex")] Vec<u8>);
@@ -60,7 +63,7 @@ fn check_prep_test_vec<M, T, A, P, const L: usize>(
     t: &TPrio3Prep<M>,
 ) where
     T: Type<Measurement = M>,
-    A: Clone + Debug + Sync + Send,
+    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
     M: From<<T as Type>::Field> + Debug + PartialEq,
 {

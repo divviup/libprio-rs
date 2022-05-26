@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module defines an API for Verifiable Distributed Aggregation Functions (VDAFs) and
-//! implements two constructions described in [[draft-irtf-cfrg-vdaf-01]].
+//! Verifiable Distributed Aggregation Functions (VDAFs) as described in
+//! [[draft-irtf-cfrg-vdaf-01]].
 //!
 //! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
