@@ -192,22 +192,6 @@ impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3ResultVec<u64> {
     }
 }
 
-fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
-    if num_aggregators == 0 {
-        return Err(VdafError::Uncategorized(format!(
-            "at least one aggregator is required; got {}",
-            num_aggregators
-        )));
-    } else if num_aggregators > 254 {
-        return Err(VdafError::Uncategorized(format!(
-            "number of aggregators must not exceed 254; got {}",
-            num_aggregators
-        )));
-    }
-
-    Ok(())
-}
-
 /// The base type for Prio3.
 ///
 /// An instance of Prio3 is determined by:
@@ -951,6 +935,22 @@ impl<const L: usize> HelperShare<L> {
             },
         })
     }
+}
+
+fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
+    if num_aggregators == 0 {
+        return Err(VdafError::Uncategorized(format!(
+            "at least one aggregator is required; got {}",
+            num_aggregators
+        )));
+    } else if num_aggregators > 254 {
+        return Err(VdafError::Uncategorized(format!(
+            "number of aggregators must not exceed 254; got {}",
+            num_aggregators
+        )));
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]
