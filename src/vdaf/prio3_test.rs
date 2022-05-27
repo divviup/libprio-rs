@@ -9,14 +9,11 @@ use crate::{
             Prio3, Prio3Aes128Count, Prio3Aes128Histogram, Prio3Aes128Sum, Prio3InputShare,
             Prio3PrepareShare,
         },
-        AggregateShare, Aggregator, PrepareTransition, VdafError,
+        Aggregator, PrepareTransition,
     },
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt::Debug,
-};
+use std::{convert::TryInto, fmt::Debug};
 
 #[derive(Debug, Deserialize, Serialize)]
 struct TEncoded(#[serde(with = "hex")] Vec<u8>);
@@ -56,14 +53,13 @@ macro_rules! err {
 
 // TODO Generalize this method to work with any VDAF. To do so we would need to add
 // `test_vec_setup()` and `test_vec_shard()` to traits. (There may be a less invasive alternative.)
-fn check_prep_test_vec<M, T, A, P, const L: usize>(
-    prio3: &Prio3<T, A, P, L>,
+fn check_prep_test_vec<M, T, P, const L: usize>(
+    prio3: &Prio3<T, P, L>,
     verify_key: &[u8; L],
     test_num: usize,
     t: &TPrio3Prep<M>,
 ) where
     T: Type<Measurement = M>,
-    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
     M: From<<T as Type>::Field> + Debug + PartialEq,
 {

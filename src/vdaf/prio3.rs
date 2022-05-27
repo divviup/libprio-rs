@@ -40,7 +40,7 @@ use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
 };
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::IntoIterator;
@@ -51,7 +51,7 @@ use std::marker::PhantomData;
 const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
-pub type Prio3Aes128Count = Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>;
+pub type Prio3Aes128Count = Prio3<Count<Field64>, PrgAes128, 16>;
 
 impl Prio3Aes128Count {
     /// Construct an instance of this VDAF with the given suite and the given number of aggregators.
@@ -68,12 +68,8 @@ impl Prio3Aes128Count {
 
 /// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
 /// the element-wise sum.
-pub type Prio3Aes128CountVec = Prio3<
-    CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>,
-    Prio3ResultVec<u64>,
-    PrgAes128,
-    16,
->;
+pub type Prio3Aes128CountVec =
+    Prio3<CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgAes128, 16>;
 
 /// Like [`Prio3CountVec`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
@@ -82,12 +78,11 @@ pub type Prio3Aes128CountVec = Prio3<
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3Aes128CountVecMultithreaded = Prio3<
     CountVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
-    Prio3ResultVec<u64>,
     PrgAes128,
     16,
 >;
 
-impl<S, P, const L: usize> Prio3<CountVec<Field128, S>, Prio3ResultVec<u64>, P, L>
+impl<S, P, const L: usize> Prio3<CountVec<Field128, S>, P, L>
 where
     S: 'static + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Eq,
     P: Prg<L>,
@@ -107,7 +102,7 @@ where
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Aes128Sum = Prio3<Sum<Field128>, Prio3Result<u64>, PrgAes128, 16>;
+pub type Prio3Aes128Sum = Prio3<Sum<Field128>, PrgAes128, 16>;
 
 impl Prio3Aes128Sum {
     /// Construct an instance of this VDAF with the given suite, number of aggregators and required
@@ -132,7 +127,7 @@ impl Prio3Aes128Sum {
 
 /// the histogram type. Each measurement is an unsigned integer and the result is a histogram
 /// representation of the distribution. The bucket boundaries are fixed in advance.
-pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, Prio3ResultVec<u64>, PrgAes128, 16>;
+pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, PrgAes128, 16>;
 
 impl Prio3Aes128Histogram {
     /// Constructs an instance of this VDAF with the given suite, number of aggregators, and
@@ -150,79 +145,20 @@ impl Prio3Aes128Histogram {
     }
 }
 
-/// Aggregate result, a non-negative integer.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Prio3Result<T: Eq>(pub T);
-
-impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3Result<u64> {
-    type Error = VdafError;
-
-    fn try_from(data: AggregateShare<F>) -> Result<Self, VdafError> {
-        if data.0.len() != 1 {
-            return Err(VdafError::Uncategorized(format!(
-                "unexpected aggregate length for count type: got {}; want 1",
-                data.0.len()
-            )));
-        }
-
-        let out: u64 = F::Integer::from(data.0[0]).try_into().map_err(|err| {
-            VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
-        })?;
-
-        Ok(Prio3Result(out))
-    }
-}
-
-/// Aggregate result, a vector of non-negative integers.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Prio3ResultVec<T: Eq>(pub Vec<T>);
-
-impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3ResultVec<u64> {
-    type Error = VdafError;
-
-    fn try_from(data: AggregateShare<F>) -> Result<Self, VdafError> {
-        let mut out = Vec::with_capacity(data.0.len());
-        for elem in data.0.into_iter() {
-            out.push(F::Integer::from(elem).try_into().map_err(|err| {
-                VdafError::Uncategorized(format!("result too large for output type: {:?}", err))
-            })?);
-        }
-
-        Ok(Prio3ResultVec(out))
-    }
-}
-
-fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
-    if num_aggregators == 0 {
-        return Err(VdafError::Uncategorized(format!(
-            "at least one aggregator is required; got {}",
-            num_aggregators
-        )));
-    } else if num_aggregators > 254 {
-        return Err(VdafError::Uncategorized(format!(
-            "number of aggregators must not exceed 254; got {}",
-            num_aggregators
-        )));
-    }
-
-    Ok(())
-}
-
 /// The base type for Prio3.
 ///
 /// An instance of Prio3 is determined by:
 ///
-/// - a [`Type`](crate::flp::Type) that defines the set of valid input measurements;
-/// - a [`Prg`](crate::vdaf::prg::Prg) for deriving vectors of field elements from seeds; and
-/// - a method for decoding the aggregate result from a vector of field elements.
+/// - a [`Type`](crate::flp::Type) that defines the set of valid input measurements; and
+/// - a [`Prg`](crate::vdaf::prg::Prg) for deriving vectors of field elements from seeds.
 ///
 /// New instances can be defined by aliasing the base type. For example, [`Prio3Aes128Count`] is an
-/// alias for `Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>`.
+/// alias for `Prio3<Count<Field64>, PrgAes128, 16>`.
 ///
 /// ```
 /// use prio::vdaf::{
 ///     Aggregator, Client, Collector, PrepareTransition,
-///     prio3::{Prio3Aes128Count, Prio3Result}
+///     prio3::Prio3Aes128Count,
 /// };
 /// use rand::prelude::*;
 ///
@@ -269,26 +205,24 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
 ///
 /// // Unshard
 /// let agg_res = vdaf.unshard(&(), agg_shares).unwrap();
-/// assert_eq!(agg_res, Prio3Result(3));
+/// assert_eq!(agg_res, 3);
 /// ```
 ///
 /// [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 #[derive(Clone, Debug)]
-pub struct Prio3<T, A, P, const L: usize>
+pub struct Prio3<T, P, const L: usize>
 where
     T: Type,
-    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     num_aggregators: u8,
     typ: T,
-    phantom: PhantomData<(A, P)>,
+    phantom: PhantomData<P>,
 }
 
-impl<T, A, P, const L: usize> Prio3<T, A, P, L>
+impl<T, P, const L: usize> Prio3<T, P, L>
 where
     T: Type,
-    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     /// The output length of the underlying FLP.
@@ -310,7 +244,7 @@ where
         info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
 
         let num_aggregators = self.num_aggregators;
-        let input = self.typ.encode(measurement)?;
+        let input = self.typ.encode_measurement(measurement)?;
 
         // Generate the input shares and compute the joint randomness.
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
@@ -435,14 +369,13 @@ where
     }
 }
 
-impl<T, A, P, const L: usize> Vdaf for Prio3<T, A, P, L>
+impl<T, P, const L: usize> Vdaf for Prio3<T, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     type Measurement = T::Measurement;
-    type AggregateResult = A;
+    type AggregateResult = T::AggregateResult;
     type AggregationParam = ();
     type InputShare = Prio3InputShare<T::Field, L>;
     type OutputShare = OutputShare<T::Field>;
@@ -486,15 +419,14 @@ impl<F: FieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
     }
 }
 
-impl<'a, T, A, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, A, P, L>, usize)>
+impl<'a, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, usize)>
     for Prio3InputShare<T::Field, L>
 where
     T: Type,
-    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     fn decode_with_param(
-        (prio3, agg_id): &(&'a Prio3<T, A, P, L>, usize),
+        (prio3, agg_id): &(&'a Prio3<T, P, L>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let agg_id = prio3
@@ -610,10 +542,9 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L
     }
 }
 
-impl<T, A, P, const L: usize> Client for Prio3<T, A, P, L>
+impl<T, P, const L: usize> Client for Prio3<T, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     fn shard(
@@ -643,15 +574,14 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
     }
 }
 
-impl<'a, T, A, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, A, P, L>, usize)>
+impl<'a, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, usize)>
     for Prio3PrepareState<T::Field, L>
 where
     T: Type,
-    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     fn decode_with_param(
-        (prio3, agg_id): &(&'a Prio3<T, A, P, L>, usize),
+        (prio3, agg_id): &(&'a Prio3<T, P, L>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let agg_id = prio3
@@ -680,10 +610,9 @@ where
     }
 }
 
-impl<T, A, P, const L: usize> Aggregator<L> for Prio3<T, A, P, L>
+impl<T, P, const L: usize> Aggregator<L> for Prio3<T, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     type PrepareState = Prio3PrepareState<T::Field, L>;
@@ -903,10 +832,9 @@ where
     }
 }
 
-impl<T, A, P, const L: usize> Collector for Prio3<T, A, P, L>
+impl<T, P, const L: usize> Collector for Prio3<T, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq,
     P: Prg<L>,
 {
     /// Combines aggregate shares into the aggregate result.
@@ -914,13 +842,13 @@ where
         &self,
         _agg_param: &(),
         agg_shares: It,
-    ) -> Result<A, VdafError> {
+    ) -> Result<T::AggregateResult, VdafError> {
         let mut agg = AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
         for agg_share in agg_shares.into_iter() {
             agg.merge(&agg_share)?;
         }
 
-        A::try_from(agg)
+        Ok(self.typ.decode_result(&agg.0)?)
     }
 }
 
@@ -953,6 +881,22 @@ impl<const L: usize> HelperShare<L> {
     }
 }
 
+fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
+    if num_aggregators == 0 {
+        return Err(VdafError::Uncategorized(format!(
+            "at least one aggregator is required; got {}",
+            num_aggregators
+        )));
+    } else if num_aggregators > 254 {
+        return Err(VdafError::Uncategorized(format!(
+            "number of aggregators must not exceed 254; got {}",
+            num_aggregators
+        )));
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -964,10 +908,7 @@ mod tests {
     fn test_prio3_count() {
         let prio3 = Prio3Aes128Count::new(2).unwrap();
 
-        assert_eq!(
-            run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(),
-            Prio3Result(3)
-        );
+        assert_eq!(run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(), 3);
 
         let mut verify_key = [0; 16];
         thread_rng().fill(&mut verify_key[..]);
@@ -988,7 +929,7 @@ mod tests {
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, (1 << 16) - 1, 0, 1, 1]).unwrap(),
-            Prio3Result((1 << 16) + 1)
+            (1 << 16) + 1
         );
 
         let mut verify_key = [0; 16];
@@ -1033,39 +974,14 @@ mod tests {
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, 10, 20, 9999]).unwrap(),
-            Prio3ResultVec(vec![1, 1, 1, 1])
+            vec![1, 1, 1, 1]
         );
-
-        assert_eq!(
-            run_vdaf(&prio3, &(), [0]).unwrap(),
-            Prio3ResultVec(vec![1, 0, 0, 0])
-        );
-
-        assert_eq!(
-            run_vdaf(&prio3, &(), [5]).unwrap(),
-            Prio3ResultVec(vec![0, 1, 0, 0])
-        );
-
-        assert_eq!(
-            run_vdaf(&prio3, &(), [10]).unwrap(),
-            Prio3ResultVec(vec![0, 1, 0, 0])
-        );
-
-        assert_eq!(
-            run_vdaf(&prio3, &(), [15]).unwrap(),
-            Prio3ResultVec(vec![0, 0, 1, 0])
-        );
-
-        assert_eq!(
-            run_vdaf(&prio3, &(), [20]).unwrap(),
-            Prio3ResultVec(vec![0, 0, 1, 0])
-        );
-
-        assert_eq!(
-            run_vdaf(&prio3, &(), [25]).unwrap(),
-            Prio3ResultVec(vec![0, 0, 0, 1])
-        );
-
+        assert_eq!(run_vdaf(&prio3, &(), [0]).unwrap(), vec![1, 0, 0, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [5]).unwrap(), vec![0, 1, 0, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [10]).unwrap(), vec![0, 1, 0, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [15]).unwrap(), vec![0, 0, 1, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [20]).unwrap(), vec![0, 0, 1, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [25]).unwrap(), vec![0, 0, 0, 1]);
         test_prepare_state_serialization(&prio3, &23).unwrap();
     }
 
@@ -1096,13 +1012,12 @@ mod tests {
         }
     }
 
-    fn test_prepare_state_serialization<T, A, P, const L: usize>(
-        prio3: &Prio3<T, A, P, L>,
+    fn test_prepare_state_serialization<T, P, const L: usize>(
+        prio3: &Prio3<T, P, L>,
         measurement: &T::Measurement,
     ) -> Result<(), VdafError>
     where
         T: Type,
-        A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq,
         P: Prg<L>,
     {
         let mut verify_key = [0; L];

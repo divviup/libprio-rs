@@ -23,7 +23,7 @@
 //!
 //! // The prover chooses a measurement.
 //! let count = Count::new();
-//! let input: Vec<Field64> = count.encode(&0).unwrap();
+//! let input: Vec<Field64> = count.encode_measurement(&0).unwrap();
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
@@ -79,9 +79,13 @@ pub enum FlpError {
     #[error("validity circuit error: {0}")]
     Valid(String),
 
-    /// Calling [`Type::encode`] returned an error.
+    /// Calling [`Type::encode_measurement`] returned an error.
     #[error("value error: {0}")]
     Encode(String),
+
+    /// Calling [`Type::decode_result`] returned an error.
+    #[error("value error: {0}")]
+    Decode(String),
 
     /// Calling [`Type::truncate`] returned an error.
     #[error("truncate error: {0}")]
@@ -108,11 +112,20 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// The type of raw measurement to be encoded.
     type Measurement: Clone + Debug;
 
+    /// The type of aggregate result for this type.
+    type AggregateResult: Clone + Debug;
+
     /// The finite field used for this type.
     type Field: FieldElement;
 
     /// Encodes a measurement as a vector of [`Self::input_len`] field elements.
-    fn encode(&self, measurement: &Self::Measurement) -> Result<Vec<Self::Field>, FlpError>;
+    fn encode_measurement(
+        &self,
+        measurement: &Self::Measurement,
+    ) -> Result<Vec<Self::Field>, FlpError>;
+
+    /// Decode an aggregate result.
+    fn decode_result(&self, data: &[Self::Field]) -> Result<Self::AggregateResult, FlpError>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
@@ -146,7 +159,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// use prio::field::{random_vector, FieldElement, Field64};
     ///
     /// let count = Count::new();
-    /// let input: Vec<Field64> = count.encode(&1).unwrap();
+    /// let input: Vec<Field64> = count.encode_measurement(&1).unwrap();
     /// let joint_rand = random_vector(count.joint_rand_len()).unwrap();
     /// let v = count.valid(&mut count.gadget(), &input, &joint_rand, 1).unwrap();
     /// assert_eq!(v, Field64::zero());
@@ -661,7 +674,7 @@ mod tests {
         const NUM_SHARES: usize = 2;
 
         let typ: TestType<Field128> = TestType::new();
-        let input = typ.encode(&3).unwrap();
+        let input = typ.encode_measurement(&3).unwrap();
         assert_eq!(input.len(), typ.input_len());
 
         let input_shares: Vec<Vec<Field128>> = split_vector(input.as_slice(), NUM_SHARES)
@@ -717,6 +730,7 @@ mod tests {
 
     impl<F: FieldElement> Type for TestType<F> {
         type Measurement = F::Integer;
+        type AggregateResult = F::Integer;
         type Field = F;
 
         fn valid(
@@ -792,7 +806,7 @@ mod tests {
             ]
         }
 
-        fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
+        fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
             Ok(vec![
                 F::from(*measurement),
                 F::from(*measurement).pow(F::Integer::try_from(3).unwrap()),
@@ -801,6 +815,10 @@ mod tests {
 
         fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
             Ok(input)
+        }
+
+        fn decode_result(&self, _data: &[F]) -> Result<F::Integer, FlpError> {
+            panic!("not implemented");
         }
     }
 }
