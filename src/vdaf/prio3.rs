@@ -1,16 +1,31 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This modulde implements the Prio3 VDAF as specified in [[draft-irtf-cfrg-vdaf-00]]. The
-//! construction is based on a transform of a Fully Linear Proof (FLP) system (i.e., a concrete
-//! [`Type`](crate::flp::Type) into a zero-knowledge proof system on distributed data as described
-//! in [[BBCG+19], Section 6].
+//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-01]].
 //!
-//! Implementations of `Prio3Aes128Count`, `Prio3Aes128Sum`, and `Prio3Aes128Histogram` as
-//! specified in [[draft-irtf-cfrg-vdaf-00], Section 6.4] are provided. This module also provides
-//! additional instantiations of Prio3 that are not in the draft.
+//! **WARNING:** Neither this code nor the cryptographic construction it implements has undergone
+//! significant security analysis. Use at your own risk.
+//!
+//! Prio3 is based on the Prio system desigend by Dan Boneh and Henry Corrigan-Gibbs and presented
+//! at NSDI 2017 [[CGB17]]. However, it incorporates a few techniques from Boneh et al., CRYPTO
+//! 2019 [[BBCG+19]], that lead to substantial improvements in terms of run time and communication
+//! cost.
+//!
+//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-01]] into
+//! a VDAF. The base type, [`Prio3`], supports a wide variety of aggregation functions, some of
+//! which are instantiated here:
+//!
+//! - [`Prio3Aes128Count`] for aggregating a counter (*)
+//! - [`Prio3Aes128CountVec`] for aggregating a vector of counters
+//! - [`Prio3Aes128Sum`] for copmputing the sum of integers (*)
+//! - [`Prio3Aes128Histogram`] for estimating a distribution via a histogram (*)
+//!
+//! Additional types can be constructed from [`Prio3`] as needed.
+//!
+//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-01]].
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
-//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+//! [CGB17]: https://crypto.stanford.edu/prio/
+//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{Field128, Field64, FieldElement};
@@ -32,13 +47,10 @@ use std::iter::IntoIterator;
 use std::marker::PhantomData;
 
 // Domain-separation tag used to bind the VDAF operations to the document version. This will be
-// reved with each new draft.
-//
-// NOTE The CFRG has not yet adopted this spec. Version "vdaf-00" will match
-// draft-irtf-cfrg-vdaf-00.
+// reved with each draft with breaking changes.
 const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
 
-/// The count type. Each measurement is an integer in `[0,2)` and the aggregate is the sum.
+/// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
 pub type Prio3Aes128Count = Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>;
 
 impl Prio3Aes128Count {
@@ -65,7 +77,7 @@ pub type Prio3Aes128CountVec = Prio3<
 
 /// Like [`Prio3CountVec`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
-/// e.g., 200 and up. (Your system's mileage may vary.)
+/// e.g., 201 and up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3Aes128CountVecMultithreaded = Prio3<
@@ -118,8 +130,8 @@ impl Prio3Aes128Sum {
     }
 }
 
-/// the histogram type. Each measurement is an unsigned, 64-bit integer and the result is a
-/// histogram representation of the measurement.
+/// the histogram type. Each measurement is an unsigned integer and the result is a histogram
+/// representation of the distribution. The bucket boundaries are fixed in advance.
 pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, Prio3ResultVec<u64>, PrgAes128, 16>;
 
 impl Prio3Aes128Histogram {
@@ -138,7 +150,7 @@ impl Prio3Aes128Histogram {
     }
 }
 
-/// Aggregate result for singleton data types.
+/// Aggregate result, a non-negative integer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prio3Result<T: Eq>(pub T);
 
@@ -161,7 +173,7 @@ impl<F: FieldElement> TryFrom<AggregateShare<F>> for Prio3Result<u64> {
     }
 }
 
-/// Aggregate result for vector data types.
+/// Aggregate result, a vector of non-negative integers.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Prio3ResultVec<T: Eq>(pub Vec<T>);
 
@@ -196,12 +208,76 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
     Ok(())
 }
 
-/// The base type for prio3.
+/// The base type for Prio3.
+///
+/// An instance of Prio3 is determined by:
+///
+/// - a [`Type`](crate::flp::Type) that defines the set of valid input measurements;
+/// - a [`Prg`](crate::vdaf::prg::Prg) for deriving vectors of field elements from seeds; and
+/// - a method for decoding the aggregate result from a vector of field elements.
+///
+/// New instances can be defined by aliasing the base type. For example, [`Prio3Aes128Count`] is an
+/// alias for `Prio3<Count<Field64>, Prio3Result<u64>, PrgAes128, 16>`.
+///
+/// ```
+/// use prio::vdaf::{
+///     Aggregator, Client, Collector, PrepareTransition,
+///     prio3::{Prio3Aes128Count, Prio3Result}
+/// };
+/// use rand::prelude::*;
+///
+/// let num_shares = 2;
+/// let vdaf = Prio3Aes128Count::new(num_shares).unwrap();
+///
+/// let mut out_shares = vec![vec![]; num_shares.into()];
+/// let mut rng = thread_rng();
+/// let verify_key = rng.gen();
+/// for measurement in [0, 1, 1, 1, 0] {
+///     // Shard
+///     let input_shares = vdaf.shard(&measurement).unwrap();
+///     let mut nonce = [0; 16];
+///     rng.fill(&mut nonce);
+///
+///     // Prepare
+///     let mut prep_states = vec![];
+///     let mut prep_shares = vec![];
+///     for (agg_id, input_share) in input_shares.iter().enumerate() {
+///         let (state, share) = vdaf.prepare_init(
+///             &verify_key,
+///             agg_id,
+///             &(),
+///             &nonce,
+///             input_share
+///         ).unwrap();
+///         prep_states.push(state);
+///         prep_shares.push(share);
+///     }
+///     let prep_msg = vdaf.prepare_preprocess(prep_shares).unwrap();
+///
+///     for (agg_id, state) in prep_states.into_iter().enumerate() {
+///         let out_share = match vdaf.prepare_step(state, prep_msg.clone()).unwrap() {
+///             PrepareTransition::Finish(out_share) => out_share,
+///             _ => panic!("unexpected transition"),
+///         };
+///         out_shares[agg_id].push(out_share);
+///     }
+/// }
+///
+/// // Aggregate
+/// let agg_shares = out_shares.into_iter()
+///     .map(|o| vdaf.aggregate(&(), o).unwrap());
+///
+/// // Unshard
+/// let agg_res = vdaf.unshard(&(), agg_shares).unwrap();
+/// assert_eq!(agg_res, Prio3Result(3));
+/// ```
+///
+/// [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 #[derive(Clone, Debug)]
 pub struct Prio3<T, A, P, const L: usize>
 where
     T: Type,
-    A: Clone + Debug,
+    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     num_aggregators: u8,
@@ -212,7 +288,7 @@ where
 impl<T, A, P, const L: usize> Prio3<T, A, P, L>
 where
     T: Type,
-    A: Clone + Debug,
+    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     /// The output length of the underlying FLP.
@@ -362,7 +438,7 @@ where
 impl<T, A, P, const L: usize> Vdaf for Prio3<T, A, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send,
+    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     type Measurement = T::Measurement;
@@ -377,8 +453,8 @@ where
     }
 }
 
-/// The message sent by the client to each aggregator. This includes the client's input share and
-/// the initial message of the input-validation protocol.
+/// Message sent by the [`Client`](crate::vdaf::Client) to each
+/// [`Aggregator`](crate::vdaf::Aggregator) during the Sharding phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3InputShare<F, const L: usize> {
     /// The input share.
@@ -414,7 +490,7 @@ impl<'a, T, A, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, A, P, L>, us
     for Prio3InputShare<T::Field, L>
 where
     T: Type,
-    A: Clone + Debug,
+    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     fn decode_with_param(
@@ -456,7 +532,8 @@ where
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// Prepare broadcast message for Prio3.
+/// Message broadcast by each [`Aggregator`](crate::vdaf::Aggregator) in each round of the
+/// Preparation phase.
 pub struct Prio3PrepareShare<F, const L: usize> {
     /// A share of the FLP verifier message. (See [`Type`](crate::flp::Type).)
     verifier: Vec<F>,
@@ -502,7 +579,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// Prepare message for Prio3.
+/// Result of combining a round of [`Prio3PrepareShare`] messages.
 pub struct Prio3PrepareMessage<const L: usize> {
     /// The joint randomness seed computed by the Aggregators.
     joint_rand_seed: Option<Seed<L>>,
@@ -536,7 +613,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L
 impl<T, A, P, const L: usize> Client for Prio3<T, A, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send,
+    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     fn shard(
@@ -547,7 +624,7 @@ where
     }
 }
 
-/// State of each aggregator during the preparation phase.
+/// State of each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3PrepareState<F, const L: usize> {
     input_share: Share<F, L>,
@@ -570,7 +647,7 @@ impl<'a, T, A, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, A, P, L>, us
     for Prio3PrepareState<T::Field, L>
 where
     T: Type,
-    A: Clone + Debug,
+    A: Clone + Debug + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     fn decode_with_param(
@@ -606,7 +683,7 @@ where
 impl<T, A, P, const L: usize> Aggregator<L> for Prio3<T, A, P, L>
 where
     T: Type,
-    A: Clone + Debug + Sync + Send,
+    A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError>,
     P: Prg<L>,
 {
     type PrepareState = Prio3PrepareState<T::Field, L>;
@@ -1025,7 +1102,7 @@ mod tests {
     ) -> Result<(), VdafError>
     where
         T: Type,
-        A: Clone + Debug + Sync + Send,
+        A: Clone + Debug + Sync + Send + TryFrom<AggregateShare<T::Field>, Error = VdafError> + Eq,
         P: Prg<L>,
     {
         let mut verify_key = [0; L];

@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module implements the generic Fully Linear Proof (FLP) system specified in
-//! [[draft-irtf-cfrg-vdaf-00], Section 6.3]. This is the main building block of
-//! [`Prio3`](crate::vdaf::prio3).
+//! Implementation of the generic Fully Linear Proof (FLP) system specified in
+//! [[draft-irtf-cfrg-vdaf-01]]. This is the main building block of [`Prio3`](crate::vdaf::prio3).
 //!
-//! The proof system is derived for any implementation of the [`Type`] trait. Such an
-//! implementation specifies the validity circuit that defines the set of valid inputs, as well as
-//! the finite field in which the validity circuit is evaluated. It also determines how
-//! raw measurements are encoded as inputs to the validity circuit.
+//! The FLP is derived for any implementation of the [`Type`] trait. Such an implementation
+//! specifies a validity circuit that defines the set of valid measurements, as well as the finite
+//! field in which the validity circuit is evaluated. It also determines how raw measurements are
+//! encoded as inputs to the validity circuit.
 //!
 //! # Overview
 //!
 //! The proof system is comprised of three algorithms. The first, `prove`, is run by the prover in
 //! order to generate a proof of a statement's validity. The second and third, `query` and
 //! `decide`, are run by the verifier in order to check the proof. The proof asserts that the input
-//! is an element of a language recognized by an arithmetic circuit. If an input is _not_ valid,
-//! then the verification step will fail with high probability. For example:
+//! is an element of a language recognized by the arithmetic circuit. If an input is _not_ valid,
+//! then the verification step will fail with high probability:
 //!
 //! ```
 //! use prio::flp::types::Count;
@@ -28,7 +27,7 @@
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
-//! // "commits" to the input before this point. In the `prio3` VDAF, the joint
+//! // "commits" to the input before this point. In Prio3, the joint
 //! // randomness is derived from additive shares of the input.
 //! let joint_rand = random_vector(count.joint_rand_len()).unwrap();
 //!
@@ -44,9 +43,7 @@
 //! assert!(count.decide(&verifier).unwrap());
 //! ```
 //!
-//! [BBCG+19]: https://ia.cr/2019/188
-//! [CGB17]: https://crypto.stanford.edu/prio
-//! [draft-irtf-cfrg-vdaf-00]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/00/
+//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FieldElement, FieldError};
