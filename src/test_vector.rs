@@ -7,7 +7,7 @@
 use crate::{
     client::{Client, ClientError},
     encrypt::{PrivateKey, PublicKey},
-    field::{FieldElement, FieldPriov2},
+    field::{FieldElement, FieldPrio2},
     server::{Server, ServerError},
 };
 use rand::Rng;
@@ -58,7 +58,7 @@ fn server_2_public_key() -> PublicKey {
 }
 
 /// A test vector of Prio inputs, serialized and encrypted in the Priov2 format,
-/// along with a reference sum. The field is always [`FieldPriov2`].
+/// along with a reference sum. The field is always [`FieldPrio2`].
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct Priov2TestVector {
     /// Base64 encoded private key for the "first" a.k.a. "PHA" server, which
@@ -88,7 +88,7 @@ pub struct Priov2TestVector {
         serialize_with = "base64::serialize_field",
         deserialize_with = "base64::deserialize_field"
     )]
-    pub reference_sum: Vec<FieldPriov2>,
+    pub reference_sum: Vec<FieldPrio2>,
     /// The version of the crate that generated this test vector
     pub prio_crate_version: String,
 }
@@ -96,12 +96,12 @@ pub struct Priov2TestVector {
 impl Priov2TestVector {
     /// Construct a test vector of `number_of_clients` inputs, each of which is a
     /// `dimension`-dimension vector of random Boolean values encoded as
-    /// [`FieldPriov2`].
+    /// [`FieldPrio2`].
     pub fn new(dimension: usize, number_of_clients: usize) -> Result<Self, TestVectorError> {
-        let mut client: Client<FieldPriov2> =
+        let mut client: Client<FieldPrio2> =
             Client::new(dimension, server_1_public_key(), server_2_public_key())?;
 
-        let mut reference_sum = vec![FieldPriov2::zero(); dimension];
+        let mut reference_sum = vec![FieldPrio2::zero(); dimension];
         let mut server_1_shares = Vec::with_capacity(number_of_clients);
         let mut server_2_shares = Vec::with_capacity(number_of_clients);
 
@@ -109,8 +109,8 @@ impl Priov2TestVector {
 
         for _ in 0..number_of_clients {
             // Generate a random vector of booleans
-            let data: Vec<FieldPriov2> = (0..dimension)
-                .map(|_| FieldPriov2::from(rng.gen_range(0..2)))
+            let data: Vec<FieldPrio2> = (0..dimension)
+                .map(|_| FieldPrio2::from(rng.gen_range(0..2)))
                 .collect();
 
             // Update reference sum
@@ -137,7 +137,7 @@ impl Priov2TestVector {
 
     /// Construct a [`Client`] that can encrypt input shares to this test
     /// vector's servers.
-    pub fn client(&self) -> Result<Client<FieldPriov2>, TestVectorError> {
+    pub fn client(&self) -> Result<Client<FieldPrio2>, TestVectorError> {
         Ok(Client::new(
             self.dimension,
             PublicKey::from(&PrivateKey::from_base64(&self.server_1_private_key).unwrap()),
@@ -146,7 +146,7 @@ impl Priov2TestVector {
     }
 
     /// Construct a [`Server`] that can decrypt `server_1_shares`.
-    pub fn server_1(&self) -> Result<Server<FieldPriov2>, TestVectorError> {
+    pub fn server_1(&self) -> Result<Server<FieldPrio2>, TestVectorError> {
         Ok(Server::new(
             self.dimension,
             true,
@@ -155,7 +155,7 @@ impl Priov2TestVector {
     }
 
     /// Construct a [`Server`] that can decrypt `server_2_shares`.
-    pub fn server_2(&self) -> Result<Server<FieldPriov2>, TestVectorError> {
+    pub fn server_2(&self) -> Result<Server<FieldPrio2>, TestVectorError> {
         Ok(Server::new(
             self.dimension,
             false,
@@ -170,7 +170,7 @@ mod base64 {
     //! instead of an array of an array of integers when serializing to JSON.
     //
     // Thank you, Alice! https://users.rust-lang.org/t/serialize-a-vec-u8-to-json-as-base64/57781/2
-    use crate::field::{FieldElement, FieldPriov2};
+    use crate::field::{FieldElement, FieldPrio2};
     use serde::{de::Error, Deserialize, Deserializer, Serialize, Serializer};
 
     pub fn serialize_bytes<S: Serializer>(v: &[Vec<u8>], s: S) -> Result<S::Ok, S::Error> {
@@ -185,15 +185,13 @@ mod base64 {
             .collect()
     }
 
-    pub fn serialize_field<S: Serializer>(v: &[FieldPriov2], s: S) -> Result<S::Ok, S::Error> {
-        String::serialize(&base64::encode(FieldPriov2::slice_into_byte_vec(v)), s)
+    pub fn serialize_field<S: Serializer>(v: &[FieldPrio2], s: S) -> Result<S::Ok, S::Error> {
+        String::serialize(&base64::encode(FieldPrio2::slice_into_byte_vec(v)), s)
     }
 
-    pub fn deserialize_field<'de, D: Deserializer<'de>>(
-        d: D,
-    ) -> Result<Vec<FieldPriov2>, D::Error> {
+    pub fn deserialize_field<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<FieldPrio2>, D::Error> {
         let bytes = base64::decode(String::deserialize(d)?.as_bytes()).map_err(Error::custom)?;
-        FieldPriov2::byte_slice_into_vec(&bytes).map_err(Error::custom)
+        FieldPrio2::byte_slice_into_vec(&bytes).map_err(Error::custom)
     }
 }
 

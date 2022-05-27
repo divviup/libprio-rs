@@ -580,7 +580,7 @@ make_field!(
 
 make_field!(
     /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
-    FieldPriov2,
+    FieldPrio2,
     u32,
     FP32,
     4,
@@ -671,8 +671,8 @@ mod tests {
 
     #[test]
     fn test_endianness() {
-        let little_endian_encoded: [u8; FieldPriov2::ENCODED_SIZE] =
-            FieldPriov2(0x12_34_56_78).into();
+        let little_endian_encoded: [u8; FieldPrio2::ENCODED_SIZE] =
+            FieldPrio2(0x12_34_56_78).into();
 
         let mut big_endian_encoded: [u8; Field32::ENCODED_SIZE] = Field32(0x12_34_56_78).into();
         big_endian_encoded.reverse();
@@ -851,7 +851,7 @@ mod tests {
 
     #[test]
     fn test_field_priov2() {
-        field_element_test::<FieldPriov2>();
+        field_element_test::<FieldPrio2>();
     }
 
     #[test]

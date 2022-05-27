@@ -109,7 +109,7 @@ mod tests {
     use super::*;
     use crate::{
         codec::Decode,
-        field::{Field96, FieldPriov2},
+        field::{Field96, FieldPrio2},
         vdaf::prg::{Prg, PrgAes128, Seed},
     };
     use std::convert::TryInto;
@@ -130,7 +130,7 @@ mod tests {
             0xacb8b748, 0x6f5b9d49, 0x887d061b, 0x86db0c58,
         ];
 
-        let share2 = extract_share_from_seed::<FieldPriov2>(reference.len(), &seed);
+        let share2 = extract_share_from_seed::<FieldPrio2>(reference.len(), &seed);
 
         assert_eq!(share2, reference);
     }
@@ -138,9 +138,9 @@ mod tests {
     /// takes a seed and hash as base64 encoded strings
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = base64::decode(seed_base64).unwrap();
-        let random_data = extract_share_from_seed::<FieldPriov2>(len, &seed);
+        let random_data = extract_share_from_seed::<FieldPrio2>(len, &seed);
 
-        let random_bytes = FieldPriov2::slice_into_byte_vec(&random_data);
+        let random_bytes = FieldPrio2::slice_into_byte_vec(&random_data);
 
         let digest = ring::digest::digest(&ring::digest::SHA256, &random_bytes);
         assert_eq!(base64::encode(digest), hash_base64);
