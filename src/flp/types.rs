@@ -34,15 +34,20 @@ impl<F: FieldElement> Default for Count<F> {
 
 impl<F: FieldElement> Type for Count<F> {
     type Measurement = F::Integer;
+    type AggregateResult = F::Integer;
     type Field = F;
 
-    fn encode(&self, value: &F::Integer) -> Result<Vec<F>, FlpError> {
+    fn encode_measurement(&self, value: &F::Integer) -> Result<Vec<F>, FlpError> {
         let max = F::Integer::try_from(1).unwrap();
         if *value > max {
             return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
         }
 
         Ok(vec![F::from(*value)])
+    }
+
+    fn decode_result(&self, data: &[F]) -> Result<F::Integer, FlpError> {
+        decode_result(data)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
@@ -139,9 +144,10 @@ impl<F: FieldElement> Sum<F> {
 
 impl<F: FieldElement> Type for Sum<F> {
     type Measurement = F::Integer;
+    type AggregateResult = F::Integer;
     type Field = F;
 
-    fn encode(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
+    fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
         if *summand > self.max_summand {
             return Err(FlpError::Encode(
                 "value of summand exceeds bit length".to_string(),
@@ -156,6 +162,10 @@ impl<F: FieldElement> Type for Sum<F> {
         }
 
         Ok(encoded)
+    }
+
+    fn decode_result(&self, data: &[F]) -> Result<F::Integer, FlpError> {
+        decode_result(data)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
@@ -261,9 +271,10 @@ impl<F: FieldElement> Histogram<F> {
 
 impl<F: FieldElement> Type for Histogram<F> {
     type Measurement = F::Integer;
+    type AggregateResult = Vec<F::Integer>;
     type Field = F;
 
-    fn encode(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
+    fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
         let mut data = vec![F::zero(); self.buckets.len() + 1];
 
         let bucket = match self.buckets.binary_search(measurement) {
@@ -273,6 +284,10 @@ impl<F: FieldElement> Type for Histogram<F> {
 
         data[bucket] = F::one();
         Ok(data)
+    }
+
+    fn decode_result(&self, data: &[F]) -> Result<Vec<F::Integer>, FlpError> {
+        decode_result_vec(data, self.buckets.len() + 1)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
@@ -422,9 +437,10 @@ where
     S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static,
 {
     type Measurement = Vec<F::Integer>;
+    type AggregateResult = Vec<F::Integer>;
     type Field = F;
 
-    fn encode(&self, measurement: &Vec<F::Integer>) -> Result<Vec<F>, FlpError> {
+    fn encode_measurement(&self, measurement: &Vec<F::Integer>) -> Result<Vec<F>, FlpError> {
         if measurement.len() != self.len {
             return Err(FlpError::Encode(format!(
                 "unexpected measurement length: got {}; want {}",
@@ -441,6 +457,10 @@ where
         }
 
         Ok(measurement.iter().map(|value| F::from(*value)).collect())
+    }
+
+    fn decode_result(&self, data: &[F]) -> Result<Vec<F::Integer>, FlpError> {
+        decode_result_vec(data, self.len)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
@@ -529,6 +549,23 @@ fn truncate_call_check<T: Type>(typ: &T, input: &[T::Field]) -> Result<(), FlpEr
     Ok(())
 }
 
+fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, FlpError> {
+    if data.len() != 1 {
+        return Err(FlpError::Decode("unexpected input length".into()));
+    }
+    Ok(F::Integer::from(data[0]))
+}
+
+fn decode_result_vec<F: FieldElement>(
+    data: &[F],
+    expected_len: usize,
+) -> Result<Vec<F::Integer>, FlpError> {
+    if data.len() != expected_len {
+        return Err(FlpError::Decode("unexpected input length".into()));
+    }
+    Ok(data.iter().map(|elem| F::Integer::from(*elem)).collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -551,10 +588,22 @@ mod tests {
         let zero = TestField::zero();
         let one = TestField::one();
 
+        // Round trip
+        assert_eq!(
+            count
+                .decode_result(
+                    &count
+                        .truncate(count.encode_measurement(&1).unwrap())
+                        .unwrap()
+                )
+                .unwrap(),
+            1,
+        );
+
         // Test FLP on valid input.
         flp_validity_test(
             &count,
-            &count.encode(&1).unwrap(),
+            &count.encode_measurement(&1).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one]),
@@ -564,7 +613,7 @@ mod tests {
 
         flp_validity_test(
             &count,
-            &count.encode(&0).unwrap(),
+            &count.encode_measurement(&0).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero]),
@@ -592,17 +641,22 @@ mod tests {
 
     #[test]
     fn test_sum() {
+        let sum = Sum::new(11).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
 
-        // TODO(cjpatton) Try encoding invalid measurements.
+        // Round trip
+        assert_eq!(
+            sum.decode_result(&sum.truncate(sum.encode_measurement(&27).unwrap()).unwrap())
+                .unwrap(),
+            27,
+        );
 
         // Test FLP on valid input.
-        let sum = Sum::new(11).unwrap();
         flp_validity_test(
             &sum,
-            &sum.encode(&1337).unwrap(),
+            &sum.encode_measurement(&1337).unwrap(),
             &ValidityTestCase {
                 expect_valid: true,
                 expected_output: Some(vec![TestField::from(1337)]),
@@ -669,11 +723,22 @@ mod tests {
         let one = TestField::one();
         let nine = TestField::from(9);
 
-        assert_eq!(&hist.encode(&7).unwrap(), &[one, zero, zero]);
-        assert_eq!(&hist.encode(&10).unwrap(), &[one, zero, zero]);
-        assert_eq!(&hist.encode(&17).unwrap(), &[zero, one, zero]);
-        assert_eq!(&hist.encode(&20).unwrap(), &[zero, one, zero]);
-        assert_eq!(&hist.encode(&27).unwrap(), &[zero, zero, one]);
+        assert_eq!(&hist.encode_measurement(&7).unwrap(), &[one, zero, zero]);
+        assert_eq!(&hist.encode_measurement(&10).unwrap(), &[one, zero, zero]);
+        assert_eq!(&hist.encode_measurement(&17).unwrap(), &[zero, one, zero]);
+        assert_eq!(&hist.encode_measurement(&20).unwrap(), &[zero, one, zero]);
+        assert_eq!(&hist.encode_measurement(&27).unwrap(), &[zero, zero, one]);
+
+        // Round trip
+        assert_eq!(
+            hist.decode_result(
+                &hist
+                    .truncate(hist.encode_measurement(&27).unwrap())
+                    .unwrap()
+            )
+            .unwrap(),
+            [0, 0, 1]
+        );
 
         // Invalid bucket boundaries.
         Histogram::<TestField>::new(vec![10, 0]).unwrap_err();
@@ -682,7 +747,7 @@ mod tests {
         // Test valid inputs.
         flp_validity_test(
             &hist,
-            &hist.encode(&0).unwrap(),
+            &hist.encode_measurement(&0).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one, zero, zero]),
@@ -692,7 +757,7 @@ mod tests {
 
         flp_validity_test(
             &hist,
-            &hist.encode(&17).unwrap(),
+            &hist.encode_measurement(&17).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, one, zero]),
@@ -702,7 +767,7 @@ mod tests {
 
         flp_validity_test(
             &hist,
-            &hist.encode(&1337).unwrap(),
+            &hist.encode_measurement(&1337).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, zero, one]),
@@ -765,7 +830,7 @@ mod tests {
             let count_vec = f(len);
             flp_validity_test(
                 &count_vec,
-                &count_vec.encode(&vec![1; len]).unwrap(),
+                &count_vec.encode_measurement(&vec![1; len]).unwrap(),
                 &ValidityTestCase::<TestField> {
                     expect_valid: true,
                     expected_output: Some(vec![one; len]),
@@ -778,7 +843,7 @@ mod tests {
         let count_vec = f(len);
         flp_validity_test(
             &count_vec,
-            &count_vec.encode(&vec![1; len]).unwrap(),
+            &count_vec.encode_measurement(&vec![1; len]).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one; len]),
@@ -799,6 +864,19 @@ mod tests {
             )
             .unwrap();
         }
+
+        // Round trip
+        let want = vec![1; len];
+        assert_eq!(
+            count_vec
+                .decode_result(
+                    &count_vec
+                        .truncate(count_vec.encode_measurement(&want).unwrap())
+                        .unwrap()
+                )
+                .unwrap(),
+            want
+        );
     }
 
     #[test]
