@@ -214,7 +214,7 @@ where
     for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
 {
     /// Continue processing.
-    Continue(V::PrepareState, V::PrepareMessage),
+    Continue(V::PrepareState, V::PrepareShare),
 
     /// Finish processing and return the output share.
     Finish(V::OutputShare),
