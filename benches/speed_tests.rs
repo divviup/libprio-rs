@@ -16,8 +16,6 @@ use prio::flp::{
 };
 use prio::server::{generate_verification_message, ValidationMemory};
 use prio::vdaf::prio3::Prio3;
-#[cfg(feature = "multithreaded")]
-use prio::vdaf::prio3::Prio3Aes128CountVecMultithreaded;
 use prio::vdaf::{prio3::Prio3InputShare, Client as Prio3Client};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
@@ -240,7 +238,7 @@ pub fn prio3_client(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        let prio3 = Prio3Aes128CountVecMultithreaded::new(num_shares, len).unwrap();
+        let prio3 = Prio3::new_aes128_count_vec_multithreaded(num_shares, len).unwrap();
         let measurement = vec![0; len];
         println!(
             "prio3 countvec multithreaded ({} len) size = {}",

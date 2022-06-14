@@ -144,8 +144,8 @@ impl Prio3Aes128Sum {
 pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, PrgAes128, 16>;
 
 impl Prio3Aes128Histogram {
-    /// Constructs an instance of Prio3Aes128Histogram with the given suite, number of aggregators,
-    /// and desired histogram bucket boundaries.
+    /// Constructs an instance of Prio3Aes128Histogram with the given number of aggregators and
+    /// desired histogram bucket boundaries.
     pub fn new_aes128_histogram(num_aggregators: u8, buckets: &[u64]) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
