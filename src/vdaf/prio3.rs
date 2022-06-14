@@ -85,7 +85,7 @@ impl Prio3Aes128CountVec {
     }
 }
 
-/// Like [`Prio3CountVec`] except this type uses multithreading to improve sharding and
+/// Like [`Prio3Aes128CountVec`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
 /// e.g., 201 and up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
