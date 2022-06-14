@@ -433,7 +433,7 @@ where
         for state in states.iter_mut() {
             match vdaf.prepare_step(
                 state.clone(),
-                V::PrepareMessage::get_decoded_with_param(&state, &inbound)
+                V::PrepareMessage::get_decoded_with_param(state, &inbound)
                     .expect("failed to decode prep message"),
             )? {
                 PrepareTransition::Continue(new_state, msg) => {
