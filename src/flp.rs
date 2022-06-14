@@ -176,7 +176,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// once `input` has been validated.
     fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, FlpError>;
 
-    /// The length in field elements of the encoded input returned by [`Self::encode`].
+    /// The length in field elements of the encoded input returned by [`Self::encode_measurement`].
     fn input_len(&self) -> usize;
 
     /// The length in field elements of the proof generated for this type.
