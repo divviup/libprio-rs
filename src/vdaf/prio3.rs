@@ -14,10 +14,13 @@
 //! a VDAF. The base type, [`Prio3`], supports a wide variety of aggregation functions, some of
 //! which are instantiated here:
 //!
-//! - [`Prio3Aes128Count`] for aggregating a counter (*)
-//! - [`Prio3Aes128CountVec`] for aggregating a vector of counters
-//! - [`Prio3Aes128Sum`] for copmputing the sum of integers (*)
-//! - [`Prio3Aes128Histogram`] for estimating a distribution via a histogram (*)
+//! - [`Prio3Aes128Count`] for aggregating a counter, constructed via [`new_prio3_aes128_count`] (*)
+//! - [`Prio3Aes128CountVec`] for aggregating a vector of counters, constructed via
+//!   [`new_prio3_aes128_count_vec`]
+//! - [`Prio3Aes128Sum`] for copmputing the sum of integers, constructed via
+//!   [`new_prio3_aes128_sum`] (*)
+//! - [`Prio3Aes128Histogram`] for estimating a distribution via a histogram, constructed via
+//!   [`new_prio3_aes128_histogram`] (*)
 //!
 //! Additional types can be constructed from [`Prio3`] as needed.
 //!
@@ -53,17 +56,15 @@ const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
 pub type Prio3Aes128Count = Prio3<Count<Field64>, PrgAes128, 16>;
 
-impl Prio3Aes128Count {
-    /// Construct an instance of this VDAF with the given suite and the given number of aggregators.
-    pub fn new(num_aggregators: u8) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
+/// Construct an instance of the Prio3Aes128Count VDAF with the given number of aggregators.
+pub fn new_prio3_aes128_count(num_aggregators: u8) -> Result<Prio3Aes128Count, VdafError> {
+    check_num_aggregators(num_aggregators)?;
 
-        Ok(Prio3 {
-            num_aggregators,
-            typ: Count::new(),
-            phantom: PhantomData,
-        })
-    }
+    Ok(Prio3 {
+        num_aggregators,
+        typ: Count::new(),
+        phantom: PhantomData,
+    })
 }
 
 /// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
@@ -82,67 +83,67 @@ pub type Prio3Aes128CountVecMultithreaded = Prio3<
     16,
 >;
 
-impl<S, P, const L: usize> Prio3<CountVec<Field128, S>, P, L>
+/// Construct an instance of a CountVec VDAF with the given suite and the given number of
+/// aggregators. `len` defines the length of each measurement.
+pub fn new_prio3_aes128_count_vec<S, P, const L: usize>(
+    num_aggregators: u8,
+    len: usize,
+) -> Result<Prio3<CountVec<Field128, S>, P, L>, VdafError>
 where
     S: 'static + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Eq,
     P: Prg<L>,
 {
-    /// Construct an instance of this VDAF with the given suite and the given number of
-    /// aggregators. `len` defines the length of each measurement.
-    pub fn new(num_aggregators: u8, len: usize) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
+    check_num_aggregators(num_aggregators)?;
 
-        Ok(Prio3 {
-            num_aggregators,
-            typ: CountVec::new(len),
-            phantom: PhantomData,
-        })
-    }
+    Ok(Prio3 {
+        num_aggregators,
+        typ: CountVec::new(len),
+        phantom: PhantomData,
+    })
 }
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
 pub type Prio3Aes128Sum = Prio3<Sum<Field128>, PrgAes128, 16>;
 
-impl Prio3Aes128Sum {
-    /// Construct an instance of this VDAF with the given suite, number of aggregators and required
-    /// bit length. The bit length must not exceed 64.
-    pub fn new(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
+/// Construct an instance of the Prio3Aes128Sum VDAF with the given number of aggregators and
+/// required bit length. The bit length must not exceed 64.
+pub fn new_prio3_aes128_sum(num_aggregators: u8, bits: u32) -> Result<Prio3Aes128Sum, VdafError> {
+    check_num_aggregators(num_aggregators)?;
 
-        if bits > 64 {
-            return Err(VdafError::Uncategorized(format!(
-                "bit length ({}) exceeds limit for aggregate type (64)",
-                bits
-            )));
-        }
-
-        Ok(Prio3 {
-            num_aggregators,
-            typ: Sum::new(bits as usize)?,
-            phantom: PhantomData,
-        })
+    if bits > 64 {
+        return Err(VdafError::Uncategorized(format!(
+            "bit length ({}) exceeds limit for aggregate type (64)",
+            bits
+        )));
     }
+
+    Ok(Prio3 {
+        num_aggregators,
+        typ: Sum::new(bits as usize)?,
+        phantom: PhantomData,
+    })
 }
 
-/// the histogram type. Each measurement is an unsigned integer and the result is a histogram
+/// The histogram type. Each measurement is an unsigned integer and the result is a histogram
 /// representation of the distribution. The bucket boundaries are fixed in advance.
 pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, PrgAes128, 16>;
 
-impl Prio3Aes128Histogram {
-    /// Constructs an instance of this VDAF with the given suite, number of aggregators, and
-    /// desired histogram bucket boundaries.
-    pub fn new(num_aggregators: u8, buckets: &[u64]) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
+/// Constructs an instance of the Prio3Aes128Histogram VDAF with the given number of aggregators and
+/// desired histogram bucket boundaries.
+pub fn new_prio3_aes128_histogram(
+    num_aggregators: u8,
+    buckets: &[u64],
+) -> Result<Prio3Aes128Histogram, VdafError> {
+    check_num_aggregators(num_aggregators)?;
 
-        let buckets = buckets.iter().map(|bucket| *bucket as u128).collect();
+    let buckets = buckets.iter().map(|bucket| *bucket as u128).collect();
 
-        Ok(Prio3 {
-            num_aggregators,
-            typ: Histogram::<Field128>::new(buckets)?,
-            phantom: PhantomData,
-        })
-    }
+    Ok(Prio3 {
+        num_aggregators,
+        typ: Histogram::<Field128>::new(buckets)?,
+        phantom: PhantomData,
+    })
 }
 
 /// The base type for Prio3.
@@ -906,7 +907,7 @@ mod tests {
 
     #[test]
     fn test_prio3_count() {
-        let prio3 = Prio3Aes128Count::new(2).unwrap();
+        let prio3 = new_prio3_aes128_count(2).unwrap();
 
         assert_eq!(run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(), 3);
 
@@ -925,7 +926,7 @@ mod tests {
 
     #[test]
     fn test_prio3_sum() {
-        let prio3 = Prio3Aes128Sum::new(3, 16).unwrap();
+        let prio3 = new_prio3_aes128_sum(3, 16).unwrap();
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, (1 << 16) - 1, 0, 1, 1]).unwrap(),
@@ -970,7 +971,7 @@ mod tests {
 
     #[test]
     fn test_prio3_histogram() {
-        let prio3 = Prio3Aes128Histogram::new(2, &[0, 10, 20]).unwrap();
+        let prio3 = new_prio3_aes128_histogram(2, &[0, 10, 20]).unwrap();
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, 10, 20, 9999]).unwrap(),
@@ -987,7 +988,7 @@ mod tests {
 
     #[test]
     fn test_prio3_input_share() {
-        let prio3 = Prio3Aes128Sum::new(5, 16).unwrap();
+        let prio3 = new_prio3_aes128_sum(5, 16).unwrap();
         let input_shares = prio3.shard(&1).unwrap();
 
         // Check that seed shares are distinct.
