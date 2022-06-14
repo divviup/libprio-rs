@@ -5,10 +5,7 @@ use crate::{
     flp::Type,
     vdaf::{
         prg::Prg,
-        prio3::{
-            Prio3, Prio3Aes128Count, Prio3Aes128Histogram, Prio3Aes128Sum, Prio3InputShare,
-            Prio3PrepareShare,
-        },
+        prio3::{Prio3, Prio3InputShare, Prio3PrepareShare},
         Aggregator, PrepareTransition,
     },
 };
@@ -132,7 +129,7 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Count.json")).unwrap();
-    let prio3 = Prio3Aes128Count::new(2).unwrap();
+    let prio3 = Prio3::new_aes128_count(2).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -144,7 +141,7 @@ fn test_vec_prio3_count() {
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Sum.json")).unwrap();
-    let prio3 = Prio3Aes128Sum::new(2, 8).unwrap();
+    let prio3 = Prio3::new_aes128_sum(2, 8).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -156,7 +153,7 @@ fn test_vec_prio3_sum() {
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Histogram.json")).unwrap();
-    let prio3 = Prio3Aes128Histogram::new(2, &[1, 10, 100]).unwrap();
+    let prio3 = Prio3::new_aes128_histogram(2, &[1, 10, 100]).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
