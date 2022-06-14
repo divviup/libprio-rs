@@ -1024,7 +1024,7 @@ mod tests {
         thread_rng().fill(&mut verify_key[..]);
         let input_shares = prio3.shard(measurement)?;
         for (agg_id, input_share) in input_shares.iter().enumerate() {
-            let (want, _msg) = prio3.prepare_init(&verify_key, agg_id, &(), &[], &input_share)?;
+            let (want, _msg) = prio3.prepare_init(&verify_key, agg_id, &(), &[], input_share)?;
             let got =
                 Prio3PrepareState::get_decoded_with_param(&(prio3, agg_id), &want.get_encoded())
                     .expect("failed to decode prepare step");
