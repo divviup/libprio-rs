@@ -159,12 +159,12 @@ pub fn new_prio3_aes128_histogram(
 /// ```
 /// use prio::vdaf::{
 ///     Aggregator, Client, Collector, PrepareTransition,
-///     prio3::Prio3Aes128Count,
+///     prio3::new_prio3_aes128_count,
 /// };
 /// use rand::prelude::*;
 ///
 /// let num_shares = 2;
-/// let vdaf = Prio3Aes128Count::new(num_shares).unwrap();
+/// let vdaf = new_prio3_aes128_count(num_shares).unwrap();
 ///
 /// let mut out_shares = vec![vec![]; num_shares.into()];
 /// let mut rng = thread_rng();
