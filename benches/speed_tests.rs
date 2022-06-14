@@ -15,13 +15,9 @@ use prio::flp::{
     Type,
 };
 use prio::server::{generate_verification_message, ValidationMemory};
-use prio::vdaf::prg::PrgAes128;
+use prio::vdaf::prio3::Prio3;
 #[cfg(feature = "multithreaded")]
 use prio::vdaf::prio3::Prio3Aes128CountVecMultithreaded;
-use prio::vdaf::prio3::{
-    new_prio3_aes128_count, new_prio3_aes128_count_vec, new_prio3_aes128_histogram,
-    new_prio3_aes128_sum,
-};
 use prio::vdaf::{prio3::Prio3InputShare, Client as Prio3Client};
 
 /// This benchmark compares the performance of recursive and iterative FFT.
@@ -185,7 +181,7 @@ pub fn count_vec(c: &mut Criterion) {
 pub fn prio3_client(c: &mut Criterion) {
     let num_shares = 2;
 
-    let prio3 = new_prio3_aes128_count(num_shares).unwrap();
+    let prio3 = Prio3::new_aes128_count(num_shares).unwrap();
     let measurement = 1;
     println!(
         "prio3 count size = {}",
@@ -198,7 +194,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let buckets: Vec<u64> = (1..10).collect();
-    let prio3 = new_prio3_aes128_histogram(num_shares, &buckets).unwrap();
+    let prio3 = Prio3::new_aes128_histogram(num_shares, &buckets).unwrap();
     let measurement = 17;
     println!(
         "prio3 histogram ({} buckets) size = {}",
@@ -215,7 +211,7 @@ pub fn prio3_client(c: &mut Criterion) {
     );
 
     let bits = 32;
-    let prio3 = new_prio3_aes128_sum(num_shares, bits).unwrap();
+    let prio3 = Prio3::new_aes128_sum(num_shares, bits).unwrap();
     let measurement = 1337;
     println!(
         "prio3 sum ({} bits) size = {}",
@@ -229,10 +225,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let len = 1000;
-    let prio3 = new_prio3_aes128_count_vec::<ParallelSum<F, BlindPolyEval<F>>, PrgAes128, 16>(
-        num_shares, len,
-    )
-    .unwrap();
+    let prio3 = Prio3::new_aes128_count_vec(num_shares, len).unwrap();
     let measurement = vec![0; len];
     println!(
         "prio3 countvec ({} len) size = {}",

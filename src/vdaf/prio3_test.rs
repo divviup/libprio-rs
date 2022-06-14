@@ -12,8 +12,6 @@ use crate::{
 use serde::{Deserialize, Serialize};
 use std::{convert::TryInto, fmt::Debug};
 
-use super::prio3::{new_prio3_aes128_count, new_prio3_aes128_histogram, new_prio3_aes128_sum};
-
 #[derive(Debug, Deserialize, Serialize)]
 struct TEncoded(#[serde(with = "hex")] Vec<u8>);
 
@@ -131,7 +129,7 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Count.json")).unwrap();
-    let prio3 = new_prio3_aes128_count(2).unwrap();
+    let prio3 = Prio3::new_aes128_count(2).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -143,7 +141,7 @@ fn test_vec_prio3_count() {
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Sum.json")).unwrap();
-    let prio3 = new_prio3_aes128_sum(2, 8).unwrap();
+    let prio3 = Prio3::new_aes128_sum(2, 8).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -155,7 +153,7 @@ fn test_vec_prio3_sum() {
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Histogram.json")).unwrap();
-    let prio3 = new_prio3_aes128_histogram(2, &[1, 10, 100]).unwrap();
+    let prio3 = Prio3::new_aes128_histogram(2, &[1, 10, 100]).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
