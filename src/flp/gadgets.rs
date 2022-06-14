@@ -618,9 +618,9 @@ mod tests {
             vec![TestField::zero(); (degree * (1 + num_calls)).next_power_of_two()];
         let mut poly_inp = vec![vec![TestField::zero(); 1 + num_calls]; arity];
         let mut prng: Prng<TestField, _> = Prng::new().unwrap();
-        for i in 0..arity {
-            for j in 0..num_calls {
-                poly_inp[i][j] = prng.get();
+        for inp in poly_inp.iter_mut() {
+            for val in inp.iter_mut().take(num_calls) {
+                *val = prng.get();
             }
         }
         g.call_poly(&mut poly_outp, &poly_inp).unwrap();
