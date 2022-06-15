@@ -150,9 +150,15 @@ where
     type PrepareState: Clone + Debug;
 
     /// The type of messages broadcast by each aggregator at each round of the Prepare Process.
+    ///
+    /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
+    /// associated with any aggregator involved in the execution of the VDAF.
     type PrepareShare: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
 
     /// Result of preprocessing a round of preparation shares.
+    ///
+    /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
+    /// associated with any aggregator involved in the execution of the VDAF.
     type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
