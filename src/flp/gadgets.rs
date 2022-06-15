@@ -589,6 +589,8 @@ mod tests {
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_parallel_sum_multithreaded() {
+        use std::iter;
+
         let poly: Vec<TestField> = random_vector(10).unwrap();
         let num_calls = 10;
         let chunks = 23;
@@ -616,13 +618,15 @@ mod tests {
         let mut poly_outp = vec![TestField::zero(); (degree * (1 + num_calls)).next_power_of_two()];
         let mut poly_outp_serial =
             vec![TestField::zero(); (degree * (1 + num_calls)).next_power_of_two()];
-        let mut poly_inp = vec![vec![TestField::zero(); 1 + num_calls]; arity];
         let mut prng: Prng<TestField, _> = Prng::new().unwrap();
-        for i in 0..arity {
-            for j in 0..num_calls {
-                poly_inp[i][j] = prng.get();
-            }
-        }
+        let poly_inp: Vec<_> = iter::repeat_with(|| {
+            iter::repeat_with(|| prng.get())
+                .take(1 + num_calls)
+                .collect::<Vec<_>>()
+        })
+        .take(arity)
+        .collect();
+
         g.call_poly(&mut poly_outp, &poly_inp).unwrap();
         g_serial
             .call_poly(&mut poly_outp_serial, &poly_inp)
