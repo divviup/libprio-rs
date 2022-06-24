@@ -890,6 +890,23 @@ mod tests {
         test_count_vec(CountVec::<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>>::new)
     }
 
+    #[test]
+    fn count_vec_long() {
+        let typ: CountVec<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>> =
+            CountVec::new(1000);
+        let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
+        assert_eq!(input.len(), typ.input_len());
+        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
+        let query_rand = random_vector(typ.query_rand_len()).unwrap();
+        let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
+        let verifier = typ
+            .query(&input, &proof, &query_rand, &joint_rand, 1)
+            .unwrap();
+        assert_eq!(verifier.len(), typ.verifier_len());
+        assert!(typ.decide(&verifier).unwrap());
+    }
+
     fn flp_validity_test<T: Type>(
         typ: &T,
         input: &[T::Field],
