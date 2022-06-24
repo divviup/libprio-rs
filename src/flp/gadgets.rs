@@ -4,7 +4,7 @@
 
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
 use crate::field::FieldElement;
-use crate::flp::{FlpError, Gadget};
+use crate::flp::{gadget_poly_len, wire_poly_len, FlpError, Gadget};
 use crate::polynomial::{poly_deg, poly_eval, poly_mul};
 
 #[cfg(feature = "multithreaded")]
@@ -34,10 +34,7 @@ impl<F: FieldElement> Mul<F> {
     /// Return a new multiplier gadget. `num_calls` is the number of times this gadget will be
     /// called by the validity circuit.
     pub fn new(num_calls: usize) -> Self {
-        // Compute the amount of memory that will be needed for the output of `call_poly`. The
-        // degree of this gadget is `2`, so this is `2 * (1 + num_calls).next_power_of_two()`.
-        // (We round up to the next power of two in order to make room for FFT.)
-        let n = (2 * (1 + num_calls).next_power_of_two()).next_power_of_two();
+        let n = gadget_poly_fft_mem_len(2, num_calls);
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self {
             n,
@@ -125,7 +122,7 @@ impl<F: FieldElement> PolyEval<F> {
     /// Returns a gadget that evaluates its input on `poly`. `num_calls` is the number of times
     /// this gadget is called by the validity circuit.
     pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
-        let n = (poly_deg(&poly) * (1 + num_calls).next_power_of_two()).next_power_of_two();
+        let n = gadget_poly_fft_mem_len(poly_deg(&poly), num_calls);
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self {
             poly,
@@ -167,7 +164,7 @@ impl<F: FieldElement> PolyEval<F> {
 
         outp[0] = self.poly[0];
         for i in 1..self.poly.len() {
-            for j in 0..outp.len() {
+            for j in 0..n {
                 outp[j] += self.poly[i] * x[j];
             }
 
@@ -236,7 +233,7 @@ pub struct BlindPolyEval<F: FieldElement> {
 impl<F: FieldElement> BlindPolyEval<F> {
     /// Returns a `BlindPolyEval` gadget for polynomial `poly`.
     pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
-        let n = ((poly_deg(&poly) + 1) * (1 + num_calls).next_power_of_two()).next_power_of_two();
+        let n = gadget_poly_fft_mem_len(poly_deg(&poly) + 1, num_calls);
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self {
             poly,
@@ -514,18 +511,26 @@ where
     for i in 1..inp.len() {
         if inp[i].len() != inp[0].len() {
             return Err(FlpError::Gadget(
-                "gadget called on polynomials with different lengths".to_string(),
+                "gadget called on wire polynomials with different lengths".to_string(),
             ));
         }
     }
 
-    if outp.len() < gadget.degree() * inp[0].len() {
-        return Err(FlpError::Gadget(
-            "slice allocated for gadget output polynomial is too small".to_string(),
-        ));
+    let expected = gadget_poly_len(gadget.degree(), inp[0].len()).next_power_of_two();
+    if outp.len() != expected {
+        return Err(FlpError::Gadget(format!(
+            "incorrect output length: got {}; want {}",
+            outp.len(),
+            expected
+        )));
     }
 
     Ok(())
+}
+
+#[inline]
+fn gadget_poly_fft_mem_len(degree: usize, num_calls: usize) -> usize {
+    gadget_poly_len(degree, wire_poly_len(num_calls)).next_power_of_two()
 }
 
 #[cfg(test)]
@@ -637,27 +642,28 @@ mod tests {
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     // to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
+        let wire_poly_len = (1 + num_calls).next_power_of_two();
         let mut prng = Prng::new().unwrap();
         let mut inp = vec![F::zero(); g.arity()];
-        let mut poly_outp = vec![F::zero(); (g.degree() * (1 + num_calls)).next_power_of_two()];
-        let mut poly_inp = vec![vec![F::zero(); 1 + num_calls]; g.arity()];
+        let mut gadget_poly = vec![F::zero(); gadget_poly_fft_mem_len(g.degree(), num_calls)];
+        let mut wire_polys = vec![vec![F::zero(); wire_poly_len]; g.arity()];
 
         let r = prng.get();
         for i in 0..g.arity() {
-            for j in 0..num_calls {
-                poly_inp[i][j] = prng.get();
+            for j in 0..wire_poly_len {
+                wire_polys[i][j] = prng.get();
             }
-            inp[i] = poly_eval(&poly_inp[i], r);
+            inp[i] = poly_eval(&wire_polys[i], r);
         }
 
-        g.call_poly(&mut poly_outp, &poly_inp).unwrap();
-        let got = poly_eval(&poly_outp, r);
+        g.call_poly(&mut gadget_poly, &wire_polys).unwrap();
+        let got = poly_eval(&gadget_poly, r);
         let want = g.call(&inp).unwrap();
         assert_eq!(got, want);
 
         // Repeat the call to make sure that the gadget's memory is reset properly between calls.
-        g.call_poly(&mut poly_outp, &poly_inp).unwrap();
-        let got = poly_eval(&poly_outp, r);
+        g.call_poly(&mut gadget_poly, &wire_polys).unwrap();
+        let got = poly_eval(&gadget_poly, r);
         assert_eq!(got, want);
     }
 }

@@ -268,7 +268,16 @@ pub trait Type: Sized + Eq + Clone + Debug {
         // length is to accommodate the computation of each gadget polynomial.
         let data_len = (0..shim.len())
             .map(|idx| {
-                shim[idx].arity() + shim[idx].degree() * (1 + shim[idx].calls()).next_power_of_two()
+                let gadget_poly_len =
+                    gadget_poly_len(shim[idx].degree(), wire_poly_len(shim[idx].calls()));
+
+                // Computing the gadget polynomial using FFT requires an amount of memory that is a
+                // power of 2. Thus we choose the smallest power of 2 that is at least as large as
+                // the gadget polynomial. The wire seeds are encoded in the proof, too, so we
+                // include the arity of the gadget to ensure there is always enough room at the end
+                // of the buffer to compute the next gadget polynomial. It's likely that the
+                // memory footprint here can be reduced, with a bit of care.
+                shim[idx].arity() + gadget_poly_len.next_power_of_two()
             })
             .sum();
         let mut proof = vec![Self::Field::zero(); data_len];
@@ -278,8 +287,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         // polynomials for each gadget in the next step.
         let _ = self.valid(&mut shim, input, joint_rand, 1)?;
 
-        // Fill the buffer with the proof. `proof_len` keeps track of the amount of data written to the
-        // buffer so far.
+        // Construct the proof.
         let mut proof_len = 0;
         for idx in 0..shim.len() {
             let gadget = shim[idx]
@@ -289,7 +297,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
             // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
             // evaluation of the gadget.
-            let m = (1 + gadget.calls()).next_power_of_two();
+            let m = wire_poly_len(gadget.calls());
             let m_inv =
                 Self::Field::from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
                     .inv();
@@ -305,8 +313,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
             }
 
             // Construct the gadget polynomial `G(f[0], ..., f[g_arity-1])` and append it to `proof`.
-            gadget.call_poly(&mut proof[proof_len + gadget.arity()..], &f)?;
-            proof_len += gadget.arity() + gadget.degree() * (m - 1) + 1;
+            let gadget_poly_len = gadget_poly_len(gadget.degree(), m);
+            let start = proof_len + gadget.arity();
+            let end = start + gadget_poly_len.next_power_of_two();
+            gadget.call_poly(&mut proof[start..end], &f)?;
+            proof_len += gadget.arity() + gadget_poly_len;
         }
 
         // Truncate the buffer to the size of the proof.
@@ -658,6 +669,19 @@ impl<F: FieldElement> Gadget<F> for QueryShimGadget<F> {
     }
 }
 
+/// Compute the length of the wire polynomial constructed from the given number of gadget calls.
+#[inline]
+pub(crate) fn wire_poly_len(num_calls: usize) -> usize {
+    (1 + num_calls).next_power_of_two()
+}
+
+/// Compute the length of the gadget polynomial for a gadget with the given degree and from wire
+/// polynomials of the given length.
+#[inline]
+pub(crate) fn gadget_poly_len(gadget_degree: usize, wire_poly_len: usize) -> usize {
+    gadget_degree * (wire_poly_len - 1) + 1
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -822,10 +846,9 @@ mod tests {
         }
     }
 
-    // Check that the bug reported in https://github.com/divviup/libprio-rs/issues/254 has been
-    // fixed.
-    //
-    // TODO(cjpatton) Describe the root cuase.
+    // In https://github.com/divviup/libprio-rs/issues/254 an out-of-bounds bug was reported that
+    // gets triggered when the size of the buffer passed to `gadget.call_poly()` is larger than
+    // needed for computing the gadget polynomial.
     #[test]
     fn issue254() {
         let typ: Issue254Type<Field128> = Issue254Type::new();
