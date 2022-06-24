@@ -717,8 +717,8 @@ mod tests {
         assert!(typ.decide(&verifier).unwrap());
     }
 
-    /// A toy type used for testing the functionality in this module. Valid inputs of this type
-    /// consist of a pair of field elements `(x, y)` where `2 <= x < 5` and `x^3 == y`.
+    /// A toy type used for testing multiple gadgets. Valid inputs of this type consist of a pair
+    /// of field elements `(x, y)` where `2 <= x < 5` and `x^3 == y`.
     #[derive(Clone, Debug, PartialEq, Eq)]
     struct TestType<F>(PhantomData<F>);
 
@@ -811,6 +811,136 @@ mod tests {
                 F::from(*measurement),
                 F::from(*measurement).pow(F::Integer::try_from(3).unwrap()),
             ])
+        }
+
+        fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
+            Ok(input)
+        }
+
+        fn decode_result(&self, _data: &[F]) -> Result<F::Integer, FlpError> {
+            panic!("not implemented");
+        }
+    }
+
+    // Check that the bug reported in https://github.com/divviup/libprio-rs/issues/254 has been
+    // fixed.
+    //
+    // TODO(cjpatton) Describe the root cuase.
+    #[test]
+    fn issue254() {
+        let typ: Issue254Type<Field128> = Issue254Type::new();
+        let input = typ.encode_measurement(&0).unwrap();
+        assert_eq!(input.len(), typ.input_len());
+        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
+        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
+        let query_rand = random_vector(typ.query_rand_len()).unwrap();
+        let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
+        let verifier = typ
+            .query(&input, &proof, &query_rand, &joint_rand, 1)
+            .unwrap();
+        assert_eq!(verifier.len(), typ.verifier_len());
+        assert!(typ.decide(&verifier).unwrap());
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    struct Issue254Type<F> {
+        num_gadget_calls: [usize; 2],
+        phantom: PhantomData<F>,
+    }
+
+    impl<F> Issue254Type<F> {
+        fn new() -> Self {
+            Self {
+                // The bug is triggered when there are two gadgets, but it doesn't matter how many
+                // times the second gadget is called.
+                num_gadget_calls: [100, 0],
+                phantom: PhantomData,
+            }
+        }
+    }
+
+    impl<F: FieldElement> Type for Issue254Type<F> {
+        type Measurement = F::Integer;
+        type AggregateResult = F::Integer;
+        type Field = F;
+
+        fn valid(
+            &self,
+            g: &mut Vec<Box<dyn Gadget<F>>>,
+            input: &[F],
+            _joint_rand: &[F],
+            _num_shares: usize,
+        ) -> Result<F, FlpError> {
+            // This is a useless circuit, as it only accepts "0". Its purpose is to exercise the
+            // use of multiple gadgets, each of which is called an arbitrary number of times.
+            let mut res = F::zero();
+            for _ in 0..self.num_gadget_calls[0] {
+                res += g[0].call(&[input[0]])?;
+            }
+            for _ in 0..self.num_gadget_calls[1] {
+                res += g[1].call(&[input[0]])?;
+            }
+            Ok(res)
+        }
+
+        fn input_len(&self) -> usize {
+            1
+        }
+
+        fn proof_len(&self) -> usize {
+            // First chunk
+            let first = 1 /* gadget arity */ + 2 /* gadget degree */ * (
+                (1 + self.num_gadget_calls[0]).next_power_of_two() - 1) + 1;
+
+            // Second chunk
+            let second = 1 /* gadget arity */ + 2 /* gadget degree */ * (
+                (1 + self.num_gadget_calls[1]).next_power_of_two() - 1) + 1;
+
+            first + second
+        }
+
+        fn verifier_len(&self) -> usize {
+            // First chunk
+            let first = 1 + 1 /* gadget arity */;
+
+            // Second chunk
+            let second = 1 + 1 /* gadget arity */;
+
+            1 + first + second
+        }
+
+        fn output_len(&self) -> usize {
+            self.input_len()
+        }
+
+        fn joint_rand_len(&self) -> usize {
+            0
+        }
+
+        fn prove_rand_len(&self) -> usize {
+            // First chunk
+            let first = 1; // gadget arity
+
+            // Second chunk
+            let second = 1; // gadget arity
+
+            first + second
+        }
+
+        fn query_rand_len(&self) -> usize {
+            2 // number of gadgets
+        }
+
+        fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+            let poly = poly_range_check(0, 2); // A polynomial with degree 2
+            vec![
+                Box::new(PolyEval::new(poly.clone(), self.num_gadget_calls[0])),
+                Box::new(PolyEval::new(poly, self.num_gadget_calls[1])),
+            ]
+        }
+
+        fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
+            Ok(vec![F::from(*measurement)])
         }
 
         fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
