@@ -5,7 +5,7 @@ authors = ["Josh Aas <jaas@kflag.net>", "Tim Geoghegan <timg@letsencrypt.org>", 
 edition = "2018"
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0"
-repository = "https://github.com/abetterinternet/libprio-rs"
+repository = "https://github.com/divviup/libprio-rs"
 rust-version = "1.58"
 
 [dependencies]
