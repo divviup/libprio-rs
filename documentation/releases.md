@@ -9,5 +9,5 @@ release and publish:
 
 Publishing the release will automatically publish the updated [`prio` crate][crate].
 
-[releases]: https://github.com/abetterinternet/libprio-rs/releases/new
+[releases]: https://github.com/divviup/libprio-rs/releases/new
 [crate]: https://crates.io/crates/prio

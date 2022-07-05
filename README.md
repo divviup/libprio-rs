@@ -2,8 +2,8 @@
 [![Build Status]][actions] [![Latest Version]][crates.io] [![Docs badge]][docs.rs]
 
 
-[Build Status]: https://github.com/abetterinternet/libprio-rs/workflows/ci-build/badge.svg
-[actions]: https://github.com/abetterinternet/libprio-rs/actions?query=branch%3Amain
+[Build Status]: https://github.com/divviup/libprio-rs/workflows/ci-build/badge.svg
+[actions]: https://github.com/divviup/libprio-rs/actions?query=branch%3Amain
 [Latest Version]: https://img.shields.io/crates/v/prio.svg
 [crates.io]: https://crates.io/crates/prio
 [Docs badge]: https://img.shields.io/badge/docs.rs-rustdoc-green
@@ -29,6 +29,6 @@ also forthcoming. Prio3 should not yet be used in production applications.
 
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
-[prio-server]: https://github.com/abetterinternet/prio-server
+[prio-server]: https://github.com/divviup/prio-server
 [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/
 [dap]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/

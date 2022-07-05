@@ -47,5 +47,5 @@ Where the contents of `/path/to/base64/server-1/private/key` and
 
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [dap]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/
-[prio-server]: https://github.com/abetterinternet/prio-server
+[prio-server]: https://github.com/divviup/prio-server
 [libprio-cc]: https://github.com/google/libprio-cc

@@ -4,7 +4,7 @@ version = "0.5.0"
 edition = "2018"
 description = "Prio utilities"
 license = "MPL-2.0"
-repository = "https://github.com/abetterinternet/libprio-rs"
+repository = "https://github.com/divviup/libprio-rs"
 
 [dependencies]
 base64 = "0.13.0"
