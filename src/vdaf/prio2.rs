@@ -84,7 +84,7 @@ impl Prio2 {
         .map_err(|e| VdafError::Uncategorized(e.to_string()))?;
 
         Ok((
-            Prio2PrepareState(OutputShare::from(data[..self.input_len].to_vec())),
+            Prio2PrepareState(input_share.truncated(self.input_len)),
             Prio2PrepareShare(verifier_share),
         ))
     }
@@ -131,8 +131,29 @@ impl Client for Prio2 {
 }
 
 /// State of each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
-#[derive(Clone, Debug)]
-pub struct Prio2PrepareState(OutputShare<FieldPrio2>);
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Prio2PrepareState(Share<FieldPrio2, 32>);
+
+impl Encode for Prio2PrepareState {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.0.encode(bytes);
+    }
+}
+
+impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
+    fn decode_with_param(
+        (prio2, agg_id): &(&'a Prio2, usize),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let share_decoder = if *agg_id == 0 {
+            ShareDecodingParameter::Leader(prio2.input_len)
+        } else {
+            ShareDecodingParameter::Helper
+        };
+        let out_share = Share::decode_with_param(&share_decoder, bytes)?;
+        Ok(Self(out_share))
+    }
+}
 
 /// Message emitted by each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
 #[derive(Clone, Debug)]
@@ -213,7 +234,14 @@ impl Aggregator<32> for Prio2 {
         state: Prio2PrepareState,
         _input: (),
     ) -> Result<PrepareTransition<Self, 32>, VdafError> {
-        Ok(PrepareTransition::Finish(state.0))
+        let data = match state.0 {
+            Share::Leader(data) => data,
+            Share::Helper(seed) => {
+                let prng = Prng::from_prio2_seed(seed.as_ref());
+                prng.take(self.input_len).collect()
+            }
+        };
+        Ok(PrepareTransition::Finish(OutputShare::from(data)))
     }
 
     fn aggregate<M: IntoIterator<Item = OutputShare<FieldPrio2>>>(
@@ -368,5 +396,23 @@ mod tests {
         server2
             .aggregate(&encrypted_input_share2, &verifier1, &verifier2)
             .unwrap();
+    }
+
+    #[test]
+    fn prepare_state_serialization() {
+        let mut verify_key = [0; 32];
+        thread_rng().fill(&mut verify_key[..]);
+        let data = vec![0, 0, 1, 1, 0];
+        let prio2 = Prio2::new(data.len()).unwrap();
+        let input_shares = prio2.shard(&data).unwrap();
+        for (agg_id, input_share) in input_shares.iter().enumerate() {
+            let (want, _msg) = prio2
+                .prepare_init(&verify_key, agg_id, &(), &[], input_share)
+                .unwrap();
+            let got =
+                Prio2PrepareState::get_decoded_with_param(&(&prio2, agg_id), &want.get_encoded())
+                    .expect("failed to decode prepare step");
+            assert_eq!(got, want);
+        }
     }
 }
