@@ -116,7 +116,7 @@ fn bitrev(d: usize, x: usize) -> usize {
 mod tests {
     use super::*;
     use crate::field::{
-        random_vector, split_vector, Field128, Field32, Field64, Field96, FieldPriov2,
+        random_vector, split_vector, Field128, Field32, Field64, Field96, FieldPrio2,
     };
     use crate::polynomial::{poly_fft, PolyAuxMemory};
 
@@ -143,7 +143,7 @@ mod tests {
 
     #[test]
     fn test_priov2_field32() {
-        discrete_fourier_transform_then_inv_test::<FieldPriov2>().expect("unexpected error");
+        discrete_fourier_transform_then_inv_test::<FieldPrio2>().expect("unexpected error");
     }
 
     #[test]

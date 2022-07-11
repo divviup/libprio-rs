@@ -8,7 +8,7 @@ use crate::field::FieldElement;
 use std::convert::TryFrom;
 
 /// Temporary memory used for FFT
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PolyFFTTempMemory<F> {
     fft_tmp: Vec<F>,
     fft_y_sub: Vec<F>,
@@ -26,7 +26,7 @@ impl<F: FieldElement> PolyFFTTempMemory<F> {
 }
 
 /// Auxiliary memory for polynomial interpolation and evaluation
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PolyAuxMemory<F> {
     pub roots_2n: Vec<F>,
     pub roots_2n_inverted: Vec<F>,

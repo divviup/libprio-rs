@@ -4,7 +4,7 @@ use color_eyre::eyre::{eyre, Result, WrapErr};
 use prio::{
     client::Client,
     encrypt::{PrivateKey, PublicKey},
-    field::{FieldElement, FieldPriov2},
+    field::{FieldElement, FieldPrio2},
     server::Server,
     util::reconstruct_shares,
 };
@@ -155,12 +155,12 @@ struct Options {
 }
 
 fn encrypt(
-    mut client: Client<FieldPriov2>,
+    mut client: Client<FieldPrio2>,
     input: Input,
     server_1_encrypted_share: Output,
     server_2_encrypted_share: Output,
 ) -> Result<()> {
-    let input_fields = FieldPriov2::byte_slice_into_vec(&input.contents()?)
+    let input_fields = FieldPrio2::byte_slice_into_vec(&input.contents()?)
         .wrap_err("could not decode bytes into field elements")?;
 
     let (share_1, share_2) = client
@@ -179,8 +179,8 @@ fn encrypt(
 }
 
 fn decrypt(
-    mut server_1: Server<FieldPriov2>,
-    mut server_2: Server<FieldPriov2>,
+    mut server_1: Server<FieldPrio2>,
+    mut server_2: Server<FieldPrio2>,
     server_1_encrypted_share: Input,
     server_2_encrypted_share: Input,
     decrypted_input: Output,
@@ -219,7 +219,7 @@ fn decrypt(
     } else {
         decrypted_input
             .into_writer()?
-            .write_all(&FieldPriov2::slice_into_byte_vec(&reconstructed))
+            .write_all(&FieldPrio2::slice_into_byte_vec(&reconstructed))
             .wrap_err("failed to write reconstructed share to output")
     }
 }
@@ -248,7 +248,7 @@ fn main() -> Result<()> {
             server_1_encrypted_share,
             server_2_encrypted_share,
         } => {
-            let client: Client<FieldPriov2> = Client::new(
+            let client: Client<FieldPrio2> = Client::new(
                 options.dimension,
                 PublicKey::from(&server_1_private_key),
                 PublicKey::from(&server_2_private_key),
@@ -267,10 +267,10 @@ fn main() -> Result<()> {
             output,
             pretty_print,
         } => {
-            let server_1: Server<FieldPriov2> =
+            let server_1: Server<FieldPrio2> =
                 Server::new(options.dimension, true, server_1_private_key)
                     .wrap_err("could not create first server")?;
-            let server_2: Server<FieldPriov2> =
+            let server_2: Server<FieldPrio2> =
                 Server::new(options.dimension, false, server_2_private_key)
                     .wrap_err("could not create second server")?;
             decrypt(

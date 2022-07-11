@@ -188,7 +188,7 @@ impl<F: FieldElement> Server<F> {
 }
 
 /// Verification message for proof validation
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VerificationMessage<F> {
     /// f evaluated at random point
     pub f_r: F,
@@ -280,7 +280,7 @@ mod tests {
     use super::*;
     use crate::{
         encrypt::{encrypt_share, PublicKey},
-        field::{Field32, FieldPriov2},
+        field::{Field32, FieldPrio2},
         test_vector::Priov2TestVector,
         util::{self, unpack_proof_mut},
     };
@@ -360,19 +360,19 @@ mod tests {
         let mut client = test_vector.client().unwrap();
 
         // all zero data
-        let mut data = vec![FieldPriov2::zero(); dim];
+        let mut data = vec![FieldPrio2::zero(); dim];
 
         if let Tweak::WrongInput = tweak {
-            data[0] = FieldPriov2::from(2);
+            data[0] = FieldPrio2::from(2);
         }
 
         let (share1_original, share2) = client.encode_simple(&data).unwrap();
 
         let decrypted_share1 = decrypt_share(&share1_original, &server1.private_key).unwrap();
-        let mut share1_field = FieldPriov2::byte_slice_into_vec(&decrypted_share1).unwrap();
+        let mut share1_field = FieldPrio2::byte_slice_into_vec(&decrypted_share1).unwrap();
         let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
-        let one = FieldPriov2::from(1);
+        let one = FieldPrio2::from(1);
 
         match tweak {
             Tweak::DataPartOfShare => unpacked_share1.data[0] += one,
@@ -385,7 +385,7 @@ mod tests {
 
         // reserialize altered share1
         let share1_modified = encrypt_share(
-            &FieldPriov2::slice_into_byte_vec(&share1_field),
+            &FieldPrio2::slice_into_byte_vec(&share1_field),
             &PublicKey::from(&server1.private_key),
         )
         .unwrap();
