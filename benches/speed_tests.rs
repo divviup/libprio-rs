@@ -3,8 +3,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use prio::benchmarked::*;
+#[cfg(feature = "prio2")]
 use prio::client::Client as Prio2Client;
 use prio::codec::Encode;
+#[cfg(feature = "prio2")]
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field128 as F, FieldElement};
 #[cfg(feature = "multithreaded")]
@@ -14,6 +16,7 @@ use prio::flp::{
     types::CountVec,
     Type,
 };
+#[cfg(feature = "prio2")]
 use prio::server::{generate_verification_message, ValidationMemory};
 use prio::vdaf::prio3::Prio3;
 use prio::vdaf::{prio3::Prio3InputShare, Client as Prio3Client};
@@ -75,51 +78,52 @@ pub fn poly_mul(c: &mut Criterion) {
     }
 }
 
-// Public keys used to instantiate the v2 client.
-const PUBKEY1: &str =
-    "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=";
-const PUBKEY2: &str =
-    "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=";
-
 /// Benchmark generation and verification of boolean vectors.
 pub fn count_vec(c: &mut Criterion) {
     let test_sizes = [10, 100, 1_000];
     for size in test_sizes.iter() {
         let input = vec![F::zero(); *size];
 
-        // Prio2
-        let pk1 = PublicKey::from_base64(PUBKEY1).unwrap();
-        let pk2 = PublicKey::from_base64(PUBKEY2).unwrap();
-        let mut client: Prio2Client<F> =
-            Prio2Client::new(input.len(), pk1.clone(), pk2.clone()).unwrap();
+        #[cfg(feature = "prio2")]
+        {
+            // Public keys used to instantiate the v2 client.
+            const PUBKEY1: &str = "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=";
+            const PUBKEY2: &str = "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=";
 
-        println!(
-            "prio2 proof size={}\n",
-            benchmarked_v2_prove(&input, &mut client).len()
-        );
+            // Prio2
+            let pk1 = PublicKey::from_base64(PUBKEY1).unwrap();
+            let pk2 = PublicKey::from_base64(PUBKEY2).unwrap();
+            let mut client: Prio2Client<F> =
+                Prio2Client::new(input.len(), pk1.clone(), pk2.clone()).unwrap();
 
-        c.bench_function(&format!("prio2 prove, size={}", *size), |b| {
-            b.iter(|| {
-                benchmarked_v2_prove(&input, &mut client);
-            })
-        });
+            println!(
+                "prio2 proof size={}\n",
+                benchmarked_v2_prove(&input, &mut client).len()
+            );
 
-        let input_and_proof = benchmarked_v2_prove(&input, &mut client);
-        let mut validator: ValidationMemory<F> = ValidationMemory::new(input.len());
-        let eval_at = random_vector(1).unwrap()[0];
+            c.bench_function(&format!("prio2 prove, size={}", *size), |b| {
+                b.iter(|| {
+                    benchmarked_v2_prove(&input, &mut client);
+                })
+            });
 
-        c.bench_function(&format!("prio2 query, size={}", *size), |b| {
-            b.iter(|| {
-                generate_verification_message(
-                    input.len(),
-                    eval_at,
-                    &input_and_proof,
-                    true,
-                    &mut validator,
-                )
-                .unwrap();
-            })
-        });
+            let input_and_proof = benchmarked_v2_prove(&input, &mut client);
+            let mut validator: ValidationMemory<F> = ValidationMemory::new(input.len());
+            let eval_at = random_vector(1).unwrap()[0];
+
+            c.bench_function(&format!("prio2 query, size={}", *size), |b| {
+                b.iter(|| {
+                    generate_verification_message(
+                        input.len(),
+                        eval_at,
+                        &input_and_proof,
+                        true,
+                        &mut validator,
+                    )
+                    .unwrap();
+                })
+            });
+        }
 
         // Prio3
         let count_vec: CountVec<F, ParallelSum<F, BlindPolyEval<F>>> = CountVec::new(*size);
@@ -264,5 +268,9 @@ fn prio3_input_share_size<F: FieldElement, const L: usize>(
     size
 }
 
+#[cfg(feature = "prio2")]
 criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft);
+#[cfg(not(feature = "prio2"))]
+criterion_group!(benches, prio3_client, poly_mul, prng, fft);
+
 criterion_main!(benches);

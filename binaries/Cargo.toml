@@ -8,7 +8,7 @@ repository = "https://github.com/divviup/libprio-rs"
 
 [dependencies]
 base64 = "0.13.0"
-prio = { path = "..", features = ["test-vector"] }
+prio = { path = "..", features = ["test-vector", "prio2"] }
 color-eyre = { version = "^0.6" }
 serde_json = { version = "1.0" }
 structopt = { version = "0.3.26" }
@@ -16,3 +16,7 @@ structopt = { version = "0.3.26" }
 [[bin]]
 name = "generate-test-vector"
 path = "src/bin/generate_test_vector.rs"
+
+[[bin]]
+name = "crypt"
+path = "src/bin/crypt.rs"
