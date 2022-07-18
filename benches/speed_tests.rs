@@ -3,8 +3,10 @@
 use criterion::{criterion_group, criterion_main, Criterion};
 
 use prio::benchmarked::*;
+#[cfg(feature = "enpa")]
 use prio::client::Client as Prio2Client;
 use prio::codec::Encode;
+#[cfg(feature = "enpa")]
 use prio::encrypt::PublicKey;
 use prio::field::{random_vector, Field128 as F, FieldElement};
 #[cfg(feature = "multithreaded")]
@@ -14,6 +16,7 @@ use prio::flp::{
     types::CountVec,
     Type,
 };
+#[cfg(feature = "enpa")]
 use prio::server::{generate_verification_message, ValidationMemory};
 use prio::vdaf::prio3::Prio3;
 use prio::vdaf::{prio3::Prio3InputShare, Client as Prio3Client};
@@ -82,6 +85,7 @@ const PUBKEY2: &str =
     "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=";
 
 /// Benchmark generation and verification of boolean vectors.
+#[cfg(feature = "enpa")]
 pub fn count_vec(c: &mut Criterion) {
     let test_sizes = [10, 100, 1_000];
     for size in test_sizes.iter() {
@@ -264,5 +268,9 @@ fn prio3_input_share_size<F: FieldElement, const L: usize>(
     size
 }
 
+#[cfg(feature = "enpa")]
 criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft);
+#[cfg(not(feature = "enpa"))]
+criterion_group!(benches, prio3_client, poly_mul, prng, fft);
+
 criterion_main!(benches);

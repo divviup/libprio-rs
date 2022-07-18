@@ -10,19 +10,23 @@
 //! protocol. For now we only support 0 / 1 vectors.
 
 pub mod benchmarked;
+#[cfg(feature = "enpa")]
 pub mod client;
-pub mod codec;
+#[cfg(feature = "enpa")]
 pub mod encrypt;
+#[cfg(feature = "enpa")]
+pub mod server;
+
+pub mod codec;
 mod fft;
 pub mod field;
 pub mod flp;
 mod fp;
 mod polynomial;
 mod prng;
-pub mod server;
 // Module test_vector depends on crate `rand` so we make it an optional feature
 // to spare most clients the extra dependency.
-#[cfg(any(feature = "test-vector", test))]
+#[cfg(all(any(feature = "test-vector", test), feature = "enpa"))]
 pub mod test_vector;
 pub mod util;
 pub mod vdaf;

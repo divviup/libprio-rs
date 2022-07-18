@@ -16,3 +16,9 @@ structopt = { version = "0.3.26" }
 [[bin]]
 name = "generate-test-vector"
 path = "src/bin/generate_test_vector.rs"
+required-features = ["enpa"]
+
+[[bin]]
+name = "crypt"
+path = "src/bin/crypt.rs"
+required-features = ["enpa"]
