@@ -28,5 +28,6 @@ mod prng;
 // to spare most clients the extra dependency.
 #[cfg(all(any(feature = "test-vector", test), feature = "enpa"))]
 pub mod test_vector;
+#[cfg(feature = "enpa")]
 pub mod util;
 pub mod vdaf;
