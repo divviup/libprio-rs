@@ -56,7 +56,7 @@ pub enum Share<F, const L: usize> {
 impl<F: Clone, const L: usize> Share<F, L> {
     /// Truncate the Leader's share to the given length. If this is the Helper's share, then this
     /// method clones the input without modifying it.
-    #[cfg(feature = "enpa")]
+    #[cfg(feature = "prio2")]
     pub(crate) fn truncated(&self, len: usize) -> Self {
         match self {
             Self::Leader(ref data) => Self::Leader(data[..len].to_vec()),
@@ -524,7 +524,7 @@ mod tests {
 
 pub mod poplar1;
 pub mod prg;
-#[cfg(feature = "enpa")]
+#[cfg(feature = "prio2")]
 pub mod prio2;
 pub mod prio3;
 #[cfg(test)]
