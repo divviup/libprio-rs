@@ -26,7 +26,7 @@ mod polynomial;
 mod prng;
 // Module test_vector depends on crate `rand` so we make it an optional feature
 // to spare most clients the extra dependency.
-#[cfg(all(any(feature = "test-vector", test), feature = "prio2"))]
+#[cfg(all(any(feature = "test-util", test), feature = "prio2"))]
 pub mod test_vector;
 #[cfg(feature = "prio2")]
 pub mod util;

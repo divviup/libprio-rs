@@ -27,15 +27,21 @@
 //! [CGB17]: https://crypto.stanford.edu/prio/
 //! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 
+#[cfg(feature = "crypto-dependencies")]
+use super::prg::PrgAes128;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
-use crate::field::{Field128, Field64, FieldElement};
+use crate::field::FieldElement;
+#[cfg(feature = "crypto-dependencies")]
+use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
+#[cfg(feature = "crypto-dependencies")]
 use crate::flp::gadgets::{BlindPolyEval, ParallelSum};
+#[cfg(feature = "crypto-dependencies")]
 use crate::flp::types::{Count, CountVec, Histogram, Sum};
 use crate::flp::Type;
 use crate::prng::Prng;
-use crate::vdaf::prg::{Prg, PrgAes128, RandSource, Seed};
+use crate::vdaf::prg::{Prg, RandSource, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -51,37 +57,29 @@ use std::marker::PhantomData;
 const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
+#[cfg(feature = "crypto-dependencies")]
 pub type Prio3Aes128Count = Prio3<Count<Field64>, PrgAes128, 16>;
 
+#[cfg(feature = "crypto-dependencies")]
 impl Prio3Aes128Count {
     /// Construct an instance of Prio3Aes128Count with the given number of aggregators.
     pub fn new_aes128_count(num_aggregators: u8) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-
-        Ok(Prio3 {
-            num_aggregators,
-            typ: Count::new(),
-            phantom: PhantomData,
-        })
+        Prio3::new(num_aggregators, Count::new())
     }
 }
 
 /// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
 /// the element-wise sum.
+#[cfg(feature = "crypto-dependencies")]
 pub type Prio3Aes128CountVec =
     Prio3<CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgAes128, 16>;
 
+#[cfg(feature = "crypto-dependencies")]
 impl Prio3Aes128CountVec {
     /// Construct an instance of Prio3Aes1238CountVec with the given number of aggregators. `len`
     /// defines the length of each measurement.
     pub fn new_aes128_count_vec(num_aggregators: u8, len: usize) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-
-        Ok(Prio3 {
-            num_aggregators,
-            typ: CountVec::new(len),
-            phantom: PhantomData,
-        })
+        Prio3::new(num_aggregators, CountVec::new(len))
     }
 }
 
@@ -89,6 +87,7 @@ impl Prio3Aes128CountVec {
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
 /// e.g., 201 and up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
+#[cfg(feature = "crypto-dependencies")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3Aes128CountVecMultithreaded = Prio3<
     CountVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
@@ -97,6 +96,7 @@ pub type Prio3Aes128CountVecMultithreaded = Prio3<
 >;
 
 #[cfg(feature = "multithreaded")]
+#[cfg(feature = "crypto-dependencies")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 impl Prio3Aes128CountVecMultithreaded {
     /// Construct an instance of Prio3Aes1238CountVecMultithreaded with the given number of
@@ -105,26 +105,20 @@ impl Prio3Aes128CountVecMultithreaded {
         num_aggregators: u8,
         len: usize,
     ) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-
-        Ok(Prio3 {
-            num_aggregators,
-            typ: CountVec::new(len),
-            phantom: PhantomData,
-        })
+        Prio3::new(num_aggregators, CountVec::new(len))
     }
 }
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
+#[cfg(feature = "crypto-dependencies")]
 pub type Prio3Aes128Sum = Prio3<Sum<Field128>, PrgAes128, 16>;
 
+#[cfg(feature = "crypto-dependencies")]
 impl Prio3Aes128Sum {
     /// Construct an instance of Prio3Aes128Sum with the given number of aggregators and required
     /// bit length. The bit length must not exceed 64.
     pub fn new_aes128_sum(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-
         if bits > 64 {
             return Err(VdafError::Uncategorized(format!(
                 "bit length ({}) exceeds limit for aggregate type (64)",
@@ -132,30 +126,22 @@ impl Prio3Aes128Sum {
             )));
         }
 
-        Ok(Prio3 {
-            num_aggregators,
-            typ: Sum::new(bits as usize)?,
-            phantom: PhantomData,
-        })
+        Prio3::new(num_aggregators, Sum::new(bits as usize)?)
     }
 }
 /// The histogram type. Each measurement is an unsigned integer and the result is a histogram
 /// representation of the distribution. The bucket boundaries are fixed in advance.
+#[cfg(feature = "crypto-dependencies")]
 pub type Prio3Aes128Histogram = Prio3<Histogram<Field128>, PrgAes128, 16>;
 
+#[cfg(feature = "crypto-dependencies")]
 impl Prio3Aes128Histogram {
     /// Constructs an instance of Prio3Aes128Histogram with the given number of aggregators and
     /// desired histogram bucket boundaries.
     pub fn new_aes128_histogram(num_aggregators: u8, buckets: &[u64]) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-
         let buckets = buckets.iter().map(|bucket| *bucket as u128).collect();
 
-        Ok(Prio3 {
-            num_aggregators,
-            typ: Histogram::<Field128>::new(buckets)?,
-            phantom: PhantomData,
-        })
+        Prio3::new(num_aggregators, Histogram::new(buckets)?)
     }
 }
 
@@ -239,6 +225,17 @@ where
     T: Type,
     P: Prg<L>,
 {
+    /// Construct an instance of this Prio3 VDAF with the given number of aggregators and the
+    /// underlying type.
+    pub fn new(num_aggregators: u8, typ: T) -> Result<Self, VdafError> {
+        check_num_aggregators(num_aggregators)?;
+        Ok(Self {
+            num_aggregators,
+            typ,
+            phantom: PhantomData,
+        })
+    }
+
     /// The output length of the underlying FLP.
     pub fn output_len(&self) -> usize {
         self.typ.output_len()
@@ -364,8 +361,10 @@ where
         Ok(out)
     }
 
-    #[cfg(test)]
-    pub(crate) fn test_vec_shard(
+    /// Shard measurement with constant randomness of repeated bytes.
+    /// This method is not secure. It is used for running test vectors for Prio3.
+    #[cfg(feature = "test-util")]
+    pub fn test_vec_shard(
         &self,
         measurement: &T::Measurement,
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {

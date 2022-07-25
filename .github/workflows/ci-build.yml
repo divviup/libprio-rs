@@ -17,13 +17,13 @@ jobs:
         features: [
           "--all-features",
           "--features=default",
-          "--features=test-vector",
+          "--features=test-util",
           "--features=multithreaded",
-          "--features=test-vector,multithreaded",
+          "--features=test-util,multithreaded",
           "--features=prio2",
-          "--features=prio2,test-vector",
+          "--features=prio2,test-util",
           "--features=prio2,multithreaded",
-          "--features=prio2,test-vector,multithreaded",
+          "--features=prio2,test-util,multithreaded",
         ]
     runs-on: ubuntu-latest
     steps:

@@ -522,6 +522,7 @@ mod tests {
     }
 }
 
+#[cfg(feature = "crypto-dependencies")]
 pub mod poplar1;
 pub mod prg;
 #[cfg(feature = "prio2")]
