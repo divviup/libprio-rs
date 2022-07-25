@@ -203,6 +203,7 @@ pub fn poly_mul<F: FieldElement>(p: &[F], q: &[F]) -> Vec<F> {
     out
 }
 
+#[cfg(feature = "prio2")]
 pub fn poly_interpret_eval<F: FieldElement>(
     points: &[F],
     roots: &[F],

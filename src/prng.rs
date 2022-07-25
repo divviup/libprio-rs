@@ -136,6 +136,7 @@ mod tests {
     }
 
     /// takes a seed and hash as base64 encoded strings
+    #[cfg(feature = "prio2")]
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = base64::decode(seed_base64).unwrap();
         let random_data = extract_share_from_seed::<FieldPrio2>(len, &seed);
@@ -147,6 +148,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "prio2")]
     fn test_hash_interop() {
         random_data_interop(
             "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",

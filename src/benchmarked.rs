@@ -3,6 +3,7 @@
 //! This module provides wrappers around internal components of this crate that we want to
 //! benchmark, but which we don't want to expose in the public API.
 
+#[cfg(feature = "prio2")]
 use crate::client::Client;
 use crate::fft::discrete_fourier_transform;
 use crate::field::FieldElement;
@@ -49,6 +50,7 @@ pub fn benchmarked_gadget_mul_call_poly_direct<F: FieldElement>(
 }
 
 /// Returns a Prio v2 proof that `data` is a valid boolean vector.
+#[cfg(feature = "prio2")]
 pub fn benchmarked_v2_prove<F: FieldElement>(data: &[F], client: &mut Client<F>) -> Vec<F> {
     client.gen_proof(data)
 }

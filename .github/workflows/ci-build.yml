@@ -8,29 +8,37 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  RUSTFLAGS: "-D warnings"
 
 jobs:
   build:
+    strategy:
+      matrix:
+        features: [
+          "--all-features",
+          "--features=default",
+          "--features=test-vector",
+          "--features=multithreaded",
+          "--features=test-vector,multithreaded",
+          "--features=prio2",
+          "--features=prio2,test-vector",
+          "--features=prio2,multithreaded",
+          "--features=prio2,test-vector,multithreaded",
+        ]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
     - name: Lint
       run: cargo fmt --message-format human -- --check
     - name: Clippy
-      run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      run: cargo clippy --workspace --all-targets ${{ matrix.features }}
     - name: Docs
       run: cargo doc --all-features
       env:
         RUSTDOCFLAGS: -Dwarnings
-    - name: Build (default features)
-      run: cargo build --verbose --workspace
-    - name: Build (all features)
-      run: cargo build --verbose --workspace --all-features
-    - name: Run tests (default features)
-      run: cargo test --verbose
-    - name: Run tests (all features)
-      run: cargo test --verbose --all-features
-    - name: Build benchmarks (default features)
-      run: cargo bench --no-run
-    - name: Build benchmarks (all features)
-      run: cargo bench --no-run --all-features
+    - name: Build
+      run: cargo build --verbose --workspace ${{ matrix.features }}
+    - name: Run tests
+      run: cargo test --verbose ${{ matrix.features }}
+    - name: Build benchmarks
+      run: cargo bench --no-run ${{ matrix.features }}

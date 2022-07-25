@@ -619,6 +619,7 @@ make_field!(
 /// # Errors
 ///
 /// Fails if the two vectors do not have the same length.
+#[cfg(any(test, feature = "prio2"))]
 pub(crate) fn merge_vector<F: FieldElement>(
     accumulator: &mut [F],
     other_vector: &[F],

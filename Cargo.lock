@@ -733,7 +733,6 @@ dependencies = [
  "assert_matches",
  "base64",
  "byteorder",
- "cipher 0.4.3",
  "cmac",
  "criterion",
  "ctr 0.9.1",
