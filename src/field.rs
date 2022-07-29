@@ -45,6 +45,12 @@ pub enum FieldError {
     /// Error encoding or decoding a field.
     #[error("Codec error")]
     Codec(#[from] CodecError),
+    /// Error converting to `FieldElement::Integer`.
+    #[error("Integer TryFrom error")]
+    IntegerTryFrom,
+    /// Error converting `FieldElement::Integer` into something else.
+    #[error("Integer TryInto error")]
+    IntegerTryInto,
 }
 
 /// Byte order for encoding FieldElement values into byte sequences.
@@ -190,6 +196,71 @@ pub trait FieldElement:
             vec.push(Self::get_decoded(chunk)?);
         }
         Ok(vec)
+    }
+
+    /// Encode `input` as `bits`-bit vector of elements of `Self` if it's small enough
+    /// to be represented with that many bits.
+    ///
+    /// # Arguments
+    ///
+    /// * `input` - The field element to encode
+    /// * `bits` - The number of bits to use for the encoding
+    fn encode_into_bitvector_representation(
+        input: &Self::Integer,
+        bits: usize,
+    ) -> Result<Vec<Self>, FieldError> {
+        // Create a mutable copy of `input`. In each iteration of the following loop we take the
+        // least significant bit, and shift input to the right by one bit.
+        let mut i = *input;
+
+        let one = Self::Integer::from(Self::one());
+        let mut encoded = Vec::with_capacity(bits);
+        for _ in 0..bits {
+            let w = Self::from(i & one);
+            encoded.push(w);
+            i = i >> one;
+        }
+
+        // If `i` is still not zero, this means that it cannot be encoded by `bits` bits.
+        if i != Self::Integer::from(Self::zero()) {
+            return Err(FieldError::InputSizeMismatch);
+        }
+
+        Ok(encoded)
+    }
+
+    /// Decode the bitvector-represented value `input` into a simple representation as a single field element.
+    /// This function errors if `2^input.len() - 1` does not fit into the field `Self`.
+    fn decode_from_bitvector_representation(input: &[Self]) -> Result<Self, FieldError> {
+        if !Self::valid_integer_bitlength(input.len()) {
+            return Err(FieldError::ModulusOverflow);
+        }
+
+        let mut decoded = Self::zero();
+        for (l, bit) in input.iter().enumerate() {
+            let w = Self::Integer::try_from(1 << l).map_err(|_| {FieldError::IntegerTryFrom})?;
+            decoded += Self::from(w) * *bit;
+        }
+        Ok(decoded)
+    }
+
+    /// Interpret `i` as [`Self::Integer`] if it's representable in that type and smaller than the field modulus.
+    fn valid_integer_try_from<N>(i: N) -> Result<Self::Integer, FieldError> where Self::Integer: TryFrom<N>{
+        let i_int = Self::Integer::try_from(i).map_err(|_| {FieldError::IntegerTryFrom})?;
+        if Self::modulus() <= i_int {
+            return Err(FieldError::ModulusOverflow);
+        }
+        Ok(i_int)
+    }
+
+    /// Check if the largest number representable with `bits` bits (i.e. 2^bits - 1) is representable in this field.
+    fn valid_integer_bitlength(bits: usize) -> bool {
+        if let Ok(bits_int) = Self::Integer::try_from(bits){
+            if Self::modulus() >> bits_int != Self::Integer::from(Self::zero()) {
+                return true;
+            }
+        }
+        false
     }
 }
 

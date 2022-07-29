@@ -6,8 +6,7 @@ use crate::field::FieldElement;
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
-
-use std::convert::TryFrom;
+use std::convert::TryInto;
 use std::marker::PhantomData;
 
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of
@@ -38,7 +37,7 @@ impl<F: FieldElement> Type for Count<F> {
     type Field = F;
 
     fn encode_measurement(&self, value: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let max = F::Integer::try_from(1).unwrap();
+        let max = F::valid_integer_try_from(1)?;
         if *value > max {
             return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
         }
@@ -46,7 +45,7 @@ impl<F: FieldElement> Type for Count<F> {
         Ok(vec![F::from(*value)])
     }
 
-    fn decode_result(&self, data: &[F]) -> Result<F::Integer, FlpError> {
+    fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
         decode_result(data)
     }
 
@@ -61,12 +60,12 @@ impl<F: FieldElement> Type for Count<F> {
         joint_rand: &[F],
         _num_shares: usize,
     ) -> Result<F, FlpError> {
-        valid_call_check(self, input, joint_rand)?;
+        self.valid_call_check(input, joint_rand)?;
         Ok(g[0].call(&[input[0], input[0]])? - input[0])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        truncate_call_check(self, &input)?;
+        self.truncate_call_check(&input)?;
         Ok(input)
     }
 
@@ -107,8 +106,6 @@ impl<F: FieldElement> Type for Count<F> {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Sum<F: FieldElement> {
     bits: usize,
-    one: F::Integer,
-    max_summand: F::Integer,
     range_checker: Vec<F>,
 }
 
@@ -116,27 +113,14 @@ impl<F: FieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
     pub fn new(bits: usize) -> Result<Self, FlpError> {
-        let bits_int = F::Integer::try_from(bits).map_err(|err| {
-            FlpError::Encode(format!(
-                "bit length ({}) cannot be represented as a field element: {:?}",
-                bits, err,
-            ))
-        })?;
-
-        if F::modulus() >> bits_int == F::Integer::from(F::zero()) {
-            return Err(FlpError::Encode(format!(
-                "bit length ({}) exceeds field modulus",
-                bits,
-            )));
+        if !F::valid_integer_bitlength(bits) {
+            return Err(FlpError::Encode(
+                "invalid bits: number of bits exceeds maximum number of bits in this field"
+                    .to_string(),
+            ));
         }
-
-        let one = F::Integer::from(F::one());
-        let max_summand = (one << bits_int) - one;
-
         Ok(Self {
             bits,
-            one,
-            max_summand,
             range_checker: poly_range_check(0, 2),
         })
     }
@@ -148,23 +132,11 @@ impl<F: FieldElement> Type for Sum<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        if *summand > self.max_summand {
-            return Err(FlpError::Encode(
-                "value of summand exceeds bit length".to_string(),
-            ));
-        }
-
-        let mut encoded: Vec<F> = Vec::with_capacity(self.bits);
-        for l in 0..self.bits {
-            let l = F::Integer::try_from(l).unwrap();
-            let w = F::from((*summand >> l) & self.one);
-            encoded.push(w);
-        }
-
-        Ok(encoded)
+        let v = F::encode_into_bitvector_representation(summand, self.bits)?;
+        Ok(v)
     }
 
-    fn decode_result(&self, data: &[F]) -> Result<F::Integer, FlpError> {
+    fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
         decode_result(data)
     }
 
@@ -182,28 +154,112 @@ impl<F: FieldElement> Type for Sum<F> {
         joint_rand: &[F],
         _num_shares: usize,
     ) -> Result<F, FlpError> {
-        valid_call_check(self, input, joint_rand)?;
-
-        // Check that each element of `data` is a 0 or 1.
-        let mut range_check = F::zero();
-        let mut r = joint_rand[0];
-        for chunk in input.chunks(1) {
-            range_check += r * g[0].call(chunk)?;
-            r *= joint_rand[0];
-        }
-
-        Ok(range_check)
+        self.valid_call_check(input, joint_rand)?;
+        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        truncate_call_check(self, &input)?;
+        self.truncate_call_check(&input)?;
+        let res = F::decode_from_bitvector_representation(&input)?;
+        Ok(vec![res])
+    }
 
-        let mut decoded = F::zero();
-        for (l, bit) in input.iter().enumerate() {
-            let w = F::from(F::Integer::try_from(1 << l).unwrap());
-            decoded += w * *bit;
+    fn input_len(&self) -> usize {
+        self.bits
+    }
+
+    fn proof_len(&self) -> usize {
+        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
+    }
+
+    fn verifier_len(&self) -> usize {
+        3
+    }
+
+    fn output_len(&self) -> usize {
+        1
+    }
+
+    fn joint_rand_len(&self) -> usize {
+        1
+    }
+
+    fn prove_rand_len(&self) -> usize {
+        1
+    }
+
+    fn query_rand_len(&self) -> usize {
+        1
+    }
+}
+
+/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
+/// aggregate is the arithmetic average.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Average<F: FieldElement> {
+    bits: usize,
+    range_checker: Vec<F>,
+}
+
+impl<F: FieldElement> Average<F> {
+    /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
+    /// 2^bits)`.
+    pub fn new(bits: usize) -> Result<Self, FlpError> {
+        if !F::valid_integer_bitlength(bits) {
+            return Err(FlpError::Encode(
+                "invalid bits: number of bits exceeds maximum number of bits in this field"
+                    .to_string(),
+            ));
         }
-        Ok(vec![decoded])
+        Ok(Self {
+            bits,
+            range_checker: poly_range_check(0, 2),
+        })
+    }
+}
+
+impl<F: FieldElement> Type for Average<F> {
+    type Measurement = F::Integer;
+    type AggregateResult = f64;
+    type Field = F;
+
+    fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
+        let v = F::encode_into_bitvector_representation(summand, self.bits)?;
+        Ok(v)
+    }
+
+    fn decode_result(&self, data: &[F], num_measurements: usize) -> Result<f64, FlpError> {
+        // Compute the average from the aggregated sum.
+        let data = decode_result(data)?;
+        let data: u64 = data.try_into().map_err(|err| {
+            FlpError::Decode(format!("failed to convert {:?} to u64: {}", data, err,))
+        })?;
+        let result = (data as f64) / (num_measurements as f64);
+        Ok(result)
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(
+            self.range_checker.clone(),
+            self.bits,
+        ))]
+    }
+
+    fn valid(
+        &self,
+        g: &mut Vec<Box<dyn Gadget<F>>>,
+        input: &[F],
+        joint_rand: &[F],
+        _num_shares: usize,
+    ) -> Result<F, FlpError> {
+        self.valid_call_check(input, joint_rand)?;
+        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+    }
+
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
+        self.truncate_call_check(&input)?;
+        let res = F::decode_from_bitvector_representation(&input)?;
+        Ok(vec![res])
     }
 
     fn input_len(&self) -> usize {
@@ -286,7 +342,11 @@ impl<F: FieldElement> Type for Histogram<F> {
         Ok(data)
     }
 
-    fn decode_result(&self, data: &[F]) -> Result<Vec<F::Integer>, FlpError> {
+    fn decode_result(
+        &self,
+        data: &[F],
+        _num_measurements: usize,
+    ) -> Result<Vec<F::Integer>, FlpError> {
         decode_result_vec(data, self.buckets.len() + 1)
     }
 
@@ -304,18 +364,13 @@ impl<F: FieldElement> Type for Histogram<F> {
         joint_rand: &[F],
         num_shares: usize,
     ) -> Result<F, FlpError> {
-        valid_call_check(self, input, joint_rand)?;
+        self.valid_call_check(input, joint_rand)?;
 
-        // Check that each element of `data` is a 0 or 1.
-        let mut range_check = F::zero();
-        let mut r = joint_rand[0];
-        for chunk in input.chunks(1) {
-            range_check += r * g[0].call(chunk)?;
-            r *= joint_rand[0];
-        }
+        // Check that each element of `input` is a 0 or 1.
+        let range_check = call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])?;
 
-        // Check that the elements of `data` sum to 1.
-        let mut sum_check = -(F::one() / F::from(F::Integer::try_from(num_shares).unwrap()));
+        // Check that the elements of `input` sum to 1.
+        let mut sum_check = -(F::one() / F::from(F::valid_integer_try_from(num_shares)?));
         for val in input.iter() {
             sum_check += *val;
         }
@@ -326,7 +381,7 @@ impl<F: FieldElement> Type for Histogram<F> {
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        truncate_call_check(self, &input)?;
+        self.truncate_call_check(&input)?;
         Ok(input)
     }
 
@@ -357,30 +412,6 @@ impl<F: FieldElement> Type for Histogram<F> {
     fn query_rand_len(&self) -> usize {
         1
     }
-}
-
-fn valid_call_check<T: Type>(
-    typ: &T,
-    input: &[T::Field],
-    joint_rand: &[T::Field],
-) -> Result<(), FlpError> {
-    if input.len() != typ.input_len() {
-        return Err(FlpError::Valid(format!(
-            "unexpected input length: got {}; want {}",
-            input.len(),
-            typ.input_len(),
-        )));
-    }
-
-    if joint_rand.len() != typ.joint_rand_len() {
-        return Err(FlpError::Valid(format!(
-            "unexpected joint randomness length: got {}; want {}",
-            joint_rand.len(),
-            typ.joint_rand_len()
-        )));
-    }
-
-    Ok(())
 }
 
 /// A sequence of counters. This type uses a neat trick from [[BBCG+19], Corollary 4.9] to reduce
@@ -459,7 +490,11 @@ where
         Ok(measurement.iter().map(|value| F::from(*value)).collect())
     }
 
-    fn decode_result(&self, data: &[F]) -> Result<Vec<F::Integer>, FlpError> {
+    fn decode_result(
+        &self,
+        data: &[F],
+        _num_measurements: usize,
+    ) -> Result<Vec<F::Integer>, FlpError> {
         decode_result_vec(data, self.len)
     }
 
@@ -477,9 +512,9 @@ where
         joint_rand: &[F],
         num_shares: usize,
     ) -> Result<F, FlpError> {
-        valid_call_check(self, input, joint_rand)?;
+        self.valid_call_check(input, joint_rand)?;
 
-        let s = F::from(F::Integer::try_from(num_shares).unwrap()).inv();
+        let s = F::from(F::valid_integer_try_from(num_shares)?).inv();
         let mut r = joint_rand[0];
         let mut outp = F::zero();
         let mut padded_chunk = vec![F::zero(); 2 * self.chunk_len];
@@ -504,7 +539,7 @@ where
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        truncate_call_check(self, &input)?;
+        self.truncate_call_check(&input)?;
         Ok(input)
     }
 
@@ -537,26 +572,37 @@ where
     }
 }
 
-fn truncate_call_check<T: Type>(typ: &T, input: &[T::Field]) -> Result<(), FlpError> {
-    if input.len() != typ.input_len() {
-        return Err(FlpError::Truncate(format!(
-            "Unexpected input length: got {}; want {}",
-            input.len(),
-            typ.input_len()
-        )));
+/// Compute a random linear combination of the result of calls of `g` on each element of `input`.
+///
+/// # Arguments
+///
+/// * `g` - The gadget to be applied elementwise
+/// * `input` - The vector on whose elements to apply `g`
+/// * `rnd` - The randomness used for the linear combination
+pub(crate) fn call_gadget_on_vec_entries<F: FieldElement>(
+    g: &mut Box<dyn Gadget<F>>,
+    input: &[F],
+    rnd: F,
+) -> Result<F, FlpError> {
+    let mut range_check = F::zero();
+    let mut r = rnd;
+    for chunk in input.chunks(1) {
+        range_check += r * g.call(chunk)?;
+        r *= rnd;
     }
-
-    Ok(())
+    Ok(range_check)
 }
 
-fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, FlpError> {
+/// Given a vector `data` of field elements which should contain exactly one entry, return the integer representation of that entry.
+pub(crate) fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, FlpError> {
     if data.len() != 1 {
         return Err(FlpError::Decode("unexpected input length".into()));
     }
     Ok(F::Integer::from(data[0]))
 }
 
-fn decode_result_vec<F: FieldElement>(
+/// Given a vector `data` of field elements, return a vector containing the corresponding integer representations, if the number of entries matches `expected_len`.
+pub(crate) fn decode_result_vec<F: FieldElement>(
     data: &[F],
     expected_len: usize,
 ) -> Result<Vec<F::Integer>, FlpError> {
@@ -594,7 +640,8 @@ mod tests {
                 .decode_result(
                     &count
                         .truncate(count.encode_measurement(&1).unwrap())
-                        .unwrap()
+                        .unwrap(),
+                    1
                 )
                 .unwrap(),
             1,
@@ -648,8 +695,11 @@ mod tests {
 
         // Round trip
         assert_eq!(
-            sum.decode_result(&sum.truncate(sum.encode_measurement(&27).unwrap()).unwrap())
-                .unwrap(),
+            sum.decode_result(
+                &sum.truncate(sum.encode_measurement(&27).unwrap()).unwrap(),
+                1
+            )
+            .unwrap(),
             27,
         );
 
@@ -717,6 +767,48 @@ mod tests {
     }
 
     #[test]
+    fn test_average() {
+        let average = Average::new(11).unwrap();
+        let zero = TestField::zero();
+        let one = TestField::one();
+        let ten = TestField::from(10);
+
+        // Testing that average correctly quotients the sum of the measurements
+        // by the number of measurements.
+        assert_eq!(average.decode_result(&[zero], 1).unwrap(), 0.0);
+        assert_eq!(average.decode_result(&[one], 1).unwrap(), 1.0);
+        assert_eq!(average.decode_result(&[one], 2).unwrap(), 0.5);
+        assert_eq!(average.decode_result(&[one], 4).unwrap(), 0.25);
+        assert_eq!(average.decode_result(&[ten], 8).unwrap(), 1.25);
+
+        // round trip of 12 with `num_measurements`=1
+        assert_eq!(
+            average
+                .decode_result(
+                    &average
+                        .truncate(average.encode_measurement(&12).unwrap())
+                        .unwrap(),
+                    1
+                )
+                .unwrap(),
+            12.0
+        );
+
+        // round trip of 12 with `num_measurements`=24
+        assert_eq!(
+            average
+                .decode_result(
+                    &average
+                        .truncate(average.encode_measurement(&12).unwrap())
+                        .unwrap(),
+                    24
+                )
+                .unwrap(),
+            0.5
+        );
+    }
+
+    #[test]
     fn test_histogram() {
         let hist = Histogram::new(vec![10, 20]).unwrap();
         let zero = TestField::zero();
@@ -734,7 +826,8 @@ mod tests {
             hist.decode_result(
                 &hist
                     .truncate(hist.encode_measurement(&27).unwrap())
-                    .unwrap()
+                    .unwrap(),
+                1
             )
             .unwrap(),
             [0, 0, 1]
@@ -872,7 +965,8 @@ mod tests {
                 .decode_result(
                     &count_vec
                         .truncate(count_vec.encode_measurement(&want).unwrap())
-                        .unwrap()
+                        .unwrap(),
+                    1
                 )
                 .unwrap(),
             want

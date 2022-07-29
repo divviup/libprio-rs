@@ -689,6 +689,7 @@ where
         &self,
         agg_param: &BTreeSet<IdpfInput>,
         agg_shares: M,
+        _num_measurements: usize,
     ) -> Result<BTreeMap<IdpfInput, u64>, VdafError> {
         let mut agg_data = AggregateShare(vec![I::Field::zero(); agg_param.len()]);
         for agg_share in agg_shares.into_iter() {
