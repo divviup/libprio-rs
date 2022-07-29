@@ -6,10 +6,11 @@
 //! Each field has an associated parameter called the "generator" that generates a multiplicative
 //! subgroup of order `2^n` for some `n`.
 
+#[cfg(feature = "crypto-dependencies")]
+use crate::prng::{Prng, PrngError};
 use crate::{
     codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64, FP96},
-    prng::{Prng, PrngError},
 };
 use serde::{
     de::{DeserializeOwned, Visitor},
@@ -635,6 +636,7 @@ pub(crate) fn merge_vector<F: FieldElement>(
 }
 
 /// Outputs an additive secret sharing of the input.
+#[cfg(feature = "crypto-dependencies")]
 pub(crate) fn split_vector<F: FieldElement>(
     inp: &[F],
     num_shares: usize,
@@ -658,6 +660,7 @@ pub(crate) fn split_vector<F: FieldElement>(
 }
 
 /// Generate a vector of uniform random field elements.
+#[cfg(feature = "crypto-dependencies")]
 pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
     Ok(Prng::new()?.take(len).collect())
 }
