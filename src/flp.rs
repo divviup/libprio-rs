@@ -125,7 +125,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
     ) -> Result<Vec<Self::Field>, FlpError>;
 
     /// Decode an aggregate result.
-    fn decode_result(&self, data: &[Self::Field]) -> Result<Self::AggregateResult, FlpError>;
+    fn decode_result(
+        &self,
+        data: &[Self::Field],
+        num_measurements: usize,
+    ) -> Result<Self::AggregateResult, FlpError>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
@@ -490,6 +494,46 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
         Ok(true)
     }
+
+    /// Check whether `input` and `joint_rand` have the length expected by `self`,
+    /// return [`FlpError::Valid`] otherwise.
+    fn valid_call_check(
+        &self,
+        input: &[Self::Field],
+        joint_rand: &[Self::Field],
+    ) -> Result<(), FlpError> {
+        if input.len() != self.input_len() {
+            return Err(FlpError::Valid(format!(
+                "unexpected input length: got {}; want {}",
+                input.len(),
+                self.input_len(),
+            )));
+        }
+
+        if joint_rand.len() != self.joint_rand_len() {
+            return Err(FlpError::Valid(format!(
+                "unexpected joint randomness length: got {}; want {}",
+                joint_rand.len(),
+                self.joint_rand_len()
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Check if the length of `input` matches `self`'s `input_len()`,
+    /// return [`FlpError::Truncate`] otherwise.
+    fn truncate_call_check(&self, input: &[Self::Field]) -> Result<(), FlpError> {
+        if input.len() != self.input_len() {
+            return Err(FlpError::Truncate(format!(
+                "Unexpected input length: got {}; want {}",
+                input.len(),
+                self.input_len()
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
@@ -841,7 +885,11 @@ mod tests {
             Ok(input)
         }
 
-        fn decode_result(&self, _data: &[F]) -> Result<F::Integer, FlpError> {
+        fn decode_result(
+            &self,
+            _data: &[F],
+            _num_measurements: usize,
+        ) -> Result<F::Integer, FlpError> {
             panic!("not implemented");
         }
     }
@@ -970,7 +1018,11 @@ mod tests {
             Ok(input)
         }
 
-        fn decode_result(&self, _data: &[F]) -> Result<F::Integer, FlpError> {
+        fn decode_result(
+            &self,
+            _data: &[F],
+            _num_measurements: usize,
+        ) -> Result<F::Integer, FlpError> {
             panic!("not implemented");
         }
     }

@@ -38,7 +38,7 @@ use crate::flp::gadgets::ParallelSumMultithreaded;
 #[cfg(feature = "crypto-dependencies")]
 use crate::flp::gadgets::{BlindPolyEval, ParallelSum};
 #[cfg(feature = "crypto-dependencies")]
-use crate::flp::types::{Count, CountVec, Histogram, Sum};
+use crate::flp::types::{Average, Count, CountVec, Histogram, Sum};
 use crate::flp::Type;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, RandSource, Seed};
@@ -129,6 +129,7 @@ impl Prio3Aes128Sum {
         Prio3::new(num_aggregators, Sum::new(bits as usize)?)
     }
 }
+
 /// The histogram type. Each measurement is an unsigned integer and the result is a histogram
 /// representation of the distribution. The bucket boundaries are fixed in advance.
 #[cfg(feature = "crypto-dependencies")]
@@ -142,6 +143,31 @@ impl Prio3Aes128Histogram {
         let buckets = buckets.iter().map(|bucket| *bucket as u128).collect();
 
         Prio3::new(num_aggregators, Histogram::new(buckets)?)
+    }
+}
+
+/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
+/// aggregate is the arithmetic average.
+pub type Prio3Aes128Average = Prio3<Average<Field128>, PrgAes128, 16>;
+
+impl Prio3Aes128Average {
+    /// Construct an instance of Prio3Aes128Average with the given number of aggregators and required
+    /// bit length. The bit length must not exceed 64.
+    pub fn new_aes128_average(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
+        check_num_aggregators(num_aggregators)?;
+
+        if bits > 64 {
+            return Err(VdafError::Uncategorized(format!(
+                "bit length ({}) exceeds limit for aggregate type (64)",
+                bits
+            )));
+        }
+
+        Ok(Prio3 {
+            num_aggregators,
+            typ: Average::new(bits as usize)?,
+            phantom: PhantomData,
+        })
     }
 }
 
@@ -168,7 +194,8 @@ impl Prio3Aes128Histogram {
 /// let mut out_shares = vec![vec![]; num_shares.into()];
 /// let mut rng = thread_rng();
 /// let verify_key = rng.gen();
-/// for measurement in [0, 1, 1, 1, 0] {
+/// let measurements = [0, 1, 1, 1, 0];
+/// for measurement in measurements {
 ///     // Shard
 ///     let input_shares = vdaf.shard(&measurement).unwrap();
 ///     let mut nonce = [0; 16];
@@ -204,7 +231,7 @@ impl Prio3Aes128Histogram {
 ///     .map(|o| vdaf.aggregate(&(), o).unwrap());
 ///
 /// // Unshard
-/// let agg_res = vdaf.unshard(&(), agg_shares).unwrap();
+/// let agg_res = vdaf.unshard(&(), agg_shares, measurements.len()).unwrap();
 /// assert_eq!(agg_res, 3);
 /// ```
 ///
@@ -855,13 +882,14 @@ where
         &self,
         _agg_param: &(),
         agg_shares: It,
+        num_measurements: usize,
     ) -> Result<T::AggregateResult, VdafError> {
         let mut agg = AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
         for agg_share in agg_shares.into_iter() {
             agg.merge(&agg_share)?;
         }
 
-        Ok(self.typ.decode_result(&agg.0)?)
+        Ok(self.typ.decode_result(&agg.0, num_measurements)?)
     }
 }
 
@@ -996,6 +1024,19 @@ mod tests {
         assert_eq!(run_vdaf(&prio3, &(), [20]).unwrap(), vec![0, 0, 1, 0]);
         assert_eq!(run_vdaf(&prio3, &(), [25]).unwrap(), vec![0, 0, 0, 1]);
         test_prepare_state_serialization(&prio3, &23).unwrap();
+    }
+
+    #[test]
+    fn test_prio3_average() {
+        let prio3 = Prio3::new_aes128_average(2, 64).unwrap();
+
+        assert_eq!(run_vdaf(&prio3, &(), [17, 8]).unwrap(), 12.5f64);
+        assert_eq!(run_vdaf(&prio3, &(), [1, 1, 1, 1]).unwrap(), 1f64);
+        assert_eq!(run_vdaf(&prio3, &(), [0, 0, 0, 1]).unwrap(), 0.25f64);
+        assert_eq!(
+            run_vdaf(&prio3, &(), [1, 11, 111, 1111, 3, 8]).unwrap(),
+            207.5f64
+        );
     }
 
     #[test]
