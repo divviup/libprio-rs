@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`](crate::flp::Type) implementations.
 
-use crate::field::FieldElement;
+use crate::field::{FieldElement, FieldElementExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -98,7 +98,8 @@ impl<F: FieldElement> Type for Count<F> {
     }
 }
 
-/// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of the measurements.
+/// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of
+/// the measurements.
 ///
 /// The validity circuit is based on the SIMD circuit construction of [[BBCG+19], Theorem 5.3].
 ///
@@ -593,7 +594,8 @@ pub(crate) fn call_gadget_on_vec_entries<F: FieldElement>(
     Ok(range_check)
 }
 
-/// Given a vector `data` of field elements which should contain exactly one entry, return the integer representation of that entry.
+/// Given a vector `data` of field elements which should contain exactly one entry, return the
+/// integer representation of that entry.
 pub(crate) fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, FlpError> {
     if data.len() != 1 {
         return Err(FlpError::Decode("unexpected input length".into()));
@@ -601,7 +603,8 @@ pub(crate) fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, F
     Ok(F::Integer::from(data[0]))
 }
 
-/// Given a vector `data` of field elements, return a vector containing the corresponding integer representations, if the number of entries matches `expected_len`.
+/// Given a vector `data` of field elements, return a vector containing the corresponding integer
+/// representations, if the number of entries matches `expected_len`.
 pub(crate) fn decode_result_vec<F: FieldElement>(
     data: &[F],
     expected_len: usize,
