@@ -197,7 +197,10 @@ pub trait FieldElement:
         }
         Ok(vec)
     }
+}
 
+/// Methods common to all `FieldElement` implementations that are private to the crate.
+pub(crate) trait FieldElementExt: FieldElement {
     /// Encode `input` as `bits`-bit vector of elements of `Self` if it's small enough
     /// to be represented with that many bits.
     ///
@@ -229,7 +232,11 @@ pub trait FieldElement:
         Ok(encoded)
     }
 
-    /// Decode the bitvector-represented value `input` into a simple representation as a single field element.
+    /// Decode the bitvector-represented value `input` into a simple representation as a single
+    /// field element.
+    ///
+    /// # Errors
+    ///
     /// This function errors if `2^input.len() - 1` does not fit into the field `Self`.
     fn decode_from_bitvector_representation(input: &[Self]) -> Result<Self, FieldError> {
         if !Self::valid_integer_bitlength(input.len()) {
@@ -238,24 +245,29 @@ pub trait FieldElement:
 
         let mut decoded = Self::zero();
         for (l, bit) in input.iter().enumerate() {
-            let w = Self::Integer::try_from(1 << l).map_err(|_| {FieldError::IntegerTryFrom})?;
+            let w = Self::Integer::try_from(1 << l).map_err(|_| FieldError::IntegerTryFrom)?;
             decoded += Self::from(w) * *bit;
         }
         Ok(decoded)
     }
 
-    /// Interpret `i` as [`Self::Integer`] if it's representable in that type and smaller than the field modulus.
-    fn valid_integer_try_from<N>(i: N) -> Result<Self::Integer, FieldError> where Self::Integer: TryFrom<N>{
-        let i_int = Self::Integer::try_from(i).map_err(|_| {FieldError::IntegerTryFrom})?;
+    /// Interpret `i` as [`Self::Integer`] if it's representable in that type and smaller than the
+    /// field modulus.
+    fn valid_integer_try_from<N>(i: N) -> Result<Self::Integer, FieldError>
+    where
+        Self::Integer: TryFrom<N>,
+    {
+        let i_int = Self::Integer::try_from(i).map_err(|_| FieldError::IntegerTryFrom)?;
         if Self::modulus() <= i_int {
             return Err(FieldError::ModulusOverflow);
         }
         Ok(i_int)
     }
 
-    /// Check if the largest number representable with `bits` bits (i.e. 2^bits - 1) is representable in this field.
+    /// Check if the largest number representable with `bits` bits (i.e. 2^bits - 1) is
+    /// representable in this field.
     fn valid_integer_bitlength(bits: usize) -> bool {
-        if let Ok(bits_int) = Self::Integer::try_from(bits){
+        if let Ok(bits_int) = Self::Integer::try_from(bits) {
             if Self::modulus() >> bits_int != Self::Integer::from(Self::zero()) {
                 return true;
             }
@@ -263,6 +275,8 @@ pub trait FieldElement:
         false
     }
 }
+
+impl<F: FieldElement> FieldElementExt for F {}
 
 /// serde Visitor implementation used to generically deserialize `FieldElement`
 /// values from byte arrays.

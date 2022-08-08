@@ -146,13 +146,13 @@ impl Prio3Aes128Histogram {
     }
 }
 
-/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
-/// aggregate is the arithmetic average.
+/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and
+/// the aggregate is the arithmetic average.
 pub type Prio3Aes128Average = Prio3<Average<Field128>, PrgAes128, 16>;
 
 impl Prio3Aes128Average {
-    /// Construct an instance of Prio3Aes128Average with the given number of aggregators and required
-    /// bit length. The bit length must not exceed 64.
+    /// Construct an instance of Prio3Aes128Average with the given number of aggregators and
+    /// required bit length. The bit length must not exceed 64.
     pub fn new_aes128_average(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
