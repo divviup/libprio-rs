@@ -11,10 +11,36 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  build:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Lint
+      run: cargo fmt --message-format human -- --check
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Docs
+      run: cargo doc --all-features
+      env:
+        RUSTDOCFLAGS: -Dwarnings
+
+  build-binaries:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Build
+      run: cargo build --verbose --package prio-binaries
+    - name: Clippy
+      run: cargo clippy --package prio-binaries
+
+  build-crate:
     strategy:
       matrix:
         features: [
+          "--no-default-features",
           "--all-features",
           "--features=default",
           "--features=test-util",
@@ -28,16 +54,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
-    - name: Lint
-      run: cargo fmt --message-format human -- --check
     - name: Clippy
       run: cargo clippy --workspace --all-targets ${{ matrix.features }}
-    - name: Docs
-      run: cargo doc --all-features
-      env:
-        RUSTDOCFLAGS: -Dwarnings
-    - name: Build
-      run: cargo build --verbose --workspace ${{ matrix.features }}
+    - name: Build crate
+      run: cargo build --verbose --package prio ${{ matrix.features }}
     - name: Run tests
       run: cargo test --verbose ${{ matrix.features }}
     - name: Build benchmarks
