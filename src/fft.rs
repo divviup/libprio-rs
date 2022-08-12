@@ -9,7 +9,7 @@ use crate::fp::{log2, MAX_ROOTS};
 use std::convert::TryFrom;
 
 /// An error returned by an FFT operation.
-#[derive(Debug, PartialEq, thiserror::Error)]
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum FftError {
     /// The output is too small.
     #[error("output slice is smaller than specified size")]
