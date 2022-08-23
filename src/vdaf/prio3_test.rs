@@ -126,6 +126,7 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
 }
 
 #[test]
+#[ignore] // awaiting new test vectors
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Count.json")).unwrap();
@@ -138,6 +139,7 @@ fn test_vec_prio3_count() {
 }
 
 #[test]
+#[ignore] // awaiting new test vectors
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Sum.json")).unwrap();
@@ -150,6 +152,7 @@ fn test_vec_prio3_sum() {
 }
 
 #[test]
+#[ignore] // awaiting new test vectors
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
         serde_json::from_str(include_str!("test_vec/01/Prio3Aes128Histogram.json")).unwrap();

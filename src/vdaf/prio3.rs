@@ -54,7 +54,7 @@ use std::marker::PhantomData;
 
 // Domain-separation tag used to bind the VDAF operations to the document version. This will be
 // reved with each draft with breaking changes.
-const VERS_PRIO3: &[u8] = b"vdaf-01 prio3";
+const VERS_PRIO3: &[u8] = b"vdaf-03 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
 #[cfg(feature = "crypto-dependencies")]
