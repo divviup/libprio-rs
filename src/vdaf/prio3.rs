@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-01]].
+//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-03]].
 //!
 //! **WARNING:** Neither this code nor the cryptographic construction it implements has undergone
 //! significant security analysis. Use at your own risk.
@@ -10,7 +10,7 @@
 //! 2019 [[BBCG+19]], that lead to substantial improvements in terms of run time and communication
 //! cost.
 //!
-//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-01]] into
+//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-03]] into
 //! a VDAF. The base type, [`Prio3`], supports a wide variety of aggregation functions, some of
 //! which are instantiated here:
 //!
@@ -21,11 +21,11 @@
 //!
 //! Additional types can be constructed from [`Prio3`] as needed.
 //!
-//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-01]].
+//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-03]].
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
 //! [CGB17]: https://crypto.stanford.edu/prio/
-//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
+//! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
@@ -237,7 +237,7 @@ impl Prio3Aes128Average {
 /// assert_eq!(agg_res, 3);
 /// ```
 ///
-/// [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
+/// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 #[derive(Clone, Debug)]
 pub struct Prio3<T, P, const L: usize>
 where

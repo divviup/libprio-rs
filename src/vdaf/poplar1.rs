@@ -2,7 +2,7 @@
 
 //! **(NOTE: This module is experimental. Applications should not use it yet.)** This module
 //! partially implements the core component of the Poplar protocol [[BBCG+21]]. Named for the
-//! Poplar1 [[draft-irtf-cfrg-vdaf-01]], the specification of this VDAF is under active
+//! Poplar1 section of [[draft-irtf-cfrg-vdaf-03]], the specification of this VDAF is under active
 //! development. Thus this code should be regarded as experimental and not compliant with any
 //! existing speciication.
 //!
@@ -16,7 +16,7 @@
 //! merely intended as a proof-of-concept.
 //!
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
-//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
+//! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
@@ -320,7 +320,7 @@ impl<I, P, const L: usize> Poplar1<I, P, L> {
     /// deriving pseudorandom sequences of field elements, and a input length in bits, corresponding
     /// to `BITS` as defined in the [VDAF specification][1].
     ///
-    /// [1]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
+    /// [1]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
     pub fn new(bits: usize) -> Self {
         Self {
             input_length: bits,

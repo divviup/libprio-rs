@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Verifiable Distributed Aggregation Functions (VDAFs) as described in
-//! [[draft-irtf-cfrg-vdaf-01]].
+//! [[draft-irtf-cfrg-vdaf-03]].
 //!
-//! [draft-irtf-cfrg-vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
+//! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{FieldElement, FieldError};
