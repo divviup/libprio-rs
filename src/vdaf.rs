@@ -130,6 +130,9 @@ where
     /// shares.
     type AggregationParam: Clone + Debug + Decode + Encode;
 
+    /// A public share sent by a Client.
+    type PublicShare: Clone + Debug + for<'a> ParameterizedDecode<&'a Self> + Encode;
+
     /// An input share sent by a Client.
     type InputShare: Clone + Debug + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
 
@@ -149,8 +152,12 @@ pub trait Client: Vdaf
 where
     for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
 {
-    /// Shards a measurement into a sequence of input shares, one for each Aggregator.
-    fn shard(&self, measurement: &Self::Measurement) -> Result<Vec<Self::InputShare>, VdafError>;
+    /// Shards a measurement into a public share and a sequence of input shares, one for each
+    /// Aggregator.
+    fn shard(
+        &self,
+        measurement: &Self::Measurement,
+    ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError>;
 }
 
 /// The Aggregator's role in the execution of a VDAF.
@@ -182,6 +189,7 @@ where
         agg_id: usize,
         agg_param: &Self::AggregationParam,
         nonce: &[u8],
+        public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
     ) -> Result<(Self::PrepareState, Self::PrepareShare), VdafError>;
 
@@ -391,8 +399,15 @@ where
     let mut num_measurements: usize = 0;
     for measurement in measurements.into_iter() {
         num_measurements += 1;
-        let input_shares = vdaf.shard(&measurement)?;
-        let out_shares = run_vdaf_prepare(vdaf, &verify_key, agg_param, nonce, input_shares)?;
+        let (public_share, input_shares) = vdaf.shard(&measurement)?;
+        let out_shares = run_vdaf_prepare(
+            vdaf,
+            &verify_key,
+            agg_param,
+            nonce,
+            public_share,
+            input_shares,
+        )?;
         for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
             if let Some(ref mut inner) = agg_share {
                 inner.merge(&out_share.into())?;
@@ -416,6 +431,7 @@ pub(crate) fn run_vdaf_prepare<V, M, const L: usize>(
     verify_key: &[u8; L],
     agg_param: &V::AggregationParam,
     nonce: &[u8],
+    public_share: V::PublicShare,
     input_shares: M,
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
@@ -435,6 +451,7 @@ where
             agg_id,
             agg_param,
             nonce,
+            &public_share,
             &V::InputShare::get_decoded_with_param(&(vdaf, agg_id), &input_share)
                 .expect("failed to decode input share"),
         )?;
