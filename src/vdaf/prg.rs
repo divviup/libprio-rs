@@ -215,7 +215,7 @@ mod tests {
     #[test]
     fn prg_aes128() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/01/PrgAes128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/03/PrgAes128.json")).unwrap();
         let mut prg = PrgAes128::init(&t.seed.try_into().unwrap());
         prg.update(&t.info);
 
