@@ -273,6 +273,19 @@ where
         self.typ.verifier_len()
     }
 
+    fn derive_joint_randomness<'a>(parts: impl Iterator<Item = &'a Seed<L>>) -> Seed<L> {
+        let mut info = [0; VERSION.len() + 5];
+        info[..VERSION.len()].copy_from_slice(VERSION);
+        info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
+        info[VERSION.len() + 4] = 255;
+        let mut deriver = P::init(&[0; L]);
+        deriver.update(&info);
+        for part in parts {
+            deriver.update(part.as_ref());
+        }
+        deriver.into_seed()
+    }
+
     fn shard_with_rand_source(
         &self,
         measurement: &T::Measurement,
@@ -287,10 +300,10 @@ where
 
         // Generate the input shares and compute the joint randomness.
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
+        let mut helper_joint_rand_parts = Vec::with_capacity(num_aggregators as usize - 1);
         let mut leader_input_share = input.clone();
-        let mut joint_rand_seed = Seed::uninitialized();
         for agg_id in 1..num_aggregators {
-            let mut helper = HelperShare::from_rand_source(rand_source)?;
+            let helper = HelperShare::from_rand_source(rand_source)?;
 
             let mut deriver = P::init(helper.joint_rand_param.blind.as_ref());
             info[DST_LEN] = agg_id;
@@ -306,9 +319,7 @@ where
                 deriver.update(&y.into());
             }
 
-            helper.joint_rand_param.seed_hint = deriver.into_seed();
-            joint_rand_seed.xor_accumulate(&helper.joint_rand_param.seed_hint);
-
+            helper_joint_rand_parts.push(deriver.into_seed());
             helper_shares.push(helper);
         }
 
@@ -321,8 +332,12 @@ where
             deriver.update(&(*x).into());
         }
 
-        let mut leader_joint_rand_seed_hint = deriver.into_seed();
-        joint_rand_seed.xor_accumulate(&leader_joint_rand_seed_hint);
+        let leader_joint_rand_seed_part = deriver.into_seed();
+
+        // Compute the joint randomness seed.
+        let joint_rand_seed = Self::derive_joint_randomness(
+            std::iter::once(&leader_joint_rand_seed_part).chain(helper_joint_rand_parts.iter()),
+        );
 
         // Run the proof-generation algorithm.
         let domain_separation_tag = &info[..DST_LEN];
@@ -336,7 +351,7 @@ where
         let prove_rand: Vec<T::Field> = prng.take(self.typ.prove_rand_len()).collect();
         let mut leader_proof_share = self.typ.prove(&input, &prove_rand, &joint_rand)?;
 
-        // Generate the proof shares and finalize the joint randomness seed hints.
+        // Generate the proof shares and distribute the joint randomness seed hints.
         for (j, helper) in helper_shares.iter_mut().enumerate() {
             info[DST_LEN] = j as u8 + 1;
             let prng: Prng<T::Field, _> =
@@ -349,17 +364,16 @@ where
                 *x -= y;
             }
 
-            helper
-                .joint_rand_param
-                .seed_hint
-                .xor_accumulate(&joint_rand_seed);
+            helper.joint_rand_param.seed_hint = Vec::with_capacity(num_aggregators as usize - 1);
+            let hint = &mut helper.joint_rand_param.seed_hint;
+            hint.push(leader_joint_rand_seed_part.clone());
+            hint.extend(helper_joint_rand_parts[..j].iter().cloned());
+            hint.extend(helper_joint_rand_parts[j + 1..].iter().cloned());
         }
-
-        leader_joint_rand_seed_hint.xor_accumulate(&joint_rand_seed);
 
         let leader_joint_rand_param = if self.typ.joint_rand_len() > 0 {
             Some(JointRandParam {
-                seed_hint: leader_joint_rand_seed_hint,
+                seed_hint: helper_joint_rand_parts.clone(),
                 blind: leader_blind,
             })
         } else {
@@ -459,7 +473,9 @@ impl<F: FieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
         self.proof_share.encode(bytes);
         if let Some(ref param) = self.joint_rand_param {
             param.blind.encode(bytes);
-            param.seed_hint.encode(bytes);
+            for part in param.seed_hint.iter() {
+                part.encode(bytes);
+            }
         }
     }
 }
@@ -492,10 +508,12 @@ where
         let input_share = Share::decode_with_param(&input_decoder, bytes)?;
         let proof_share = Share::decode_with_param(&proof_decoder, bytes)?;
         let joint_rand_param = if prio3.typ.joint_rand_len() > 0 {
-            Some(JointRandParam {
-                blind: Seed::decode(bytes)?,
-                seed_hint: Seed::decode(bytes)?,
-            })
+            let num_aggregators = prio3.num_aggregators();
+            let blind = Seed::decode(bytes)?;
+            let seed_hint = std::iter::repeat_with(|| Seed::decode(bytes))
+                .take(num_aggregators - 1)
+                .collect::<Result<Vec<_>, _>>()?;
+            Some(JointRandParam { blind, seed_hint })
         } else {
             None
         };
@@ -515,8 +533,8 @@ pub struct Prio3PrepareShare<F, const L: usize> {
     /// A share of the FLP verifier message. (See [`Type`](crate::flp::Type).)
     verifier: Vec<F>,
 
-    /// A share of the joint randomness seed.
-    joint_rand_seed: Option<Seed<L>>,
+    /// A part of the joint randomness seed.
+    joint_rand_part: Option<Seed<L>>,
 }
 
 impl<F: FieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
@@ -524,7 +542,7 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
         for x in &self.verifier {
             x.encode(bytes);
         }
-        if let Some(ref seed) = self.joint_rand_seed {
+        if let Some(ref seed) = self.joint_rand_part {
             seed.encode(bytes);
         }
     }
@@ -542,7 +560,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L
             verifier.push(F::decode(bytes)?);
         }
 
-        let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
+        let joint_rand_part = if decoding_parameter.joint_rand_seed.is_some() {
             Some(Seed::decode(bytes)?)
         } else {
             None
@@ -550,7 +568,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L
 
         Ok(Prio3PrepareShare {
             verifier,
-            joint_rand_seed,
+            joint_rand_part,
         })
     }
 }
@@ -724,26 +742,27 @@ where
         };
 
         // Compute the joint randomness.
-        let (joint_rand_seed, joint_rand_seed_share, joint_rand) = if self.typ.joint_rand_len() > 0
-        {
+        let (joint_rand_seed, joint_rand_seed_part, joint_rand) = if self.typ.joint_rand_len() > 0 {
             let mut deriver = P::init(msg.joint_rand_param.as_ref().unwrap().blind.as_ref());
             deriver.update(&info);
             for x in input_share {
                 deriver.update(&(*x).into());
             }
-            let joint_rand_seed_share = deriver.into_seed();
+            let joint_rand_seed_part = deriver.into_seed();
 
-            let mut joint_rand_seed = Seed::uninitialized();
-            joint_rand_seed.xor(
-                &msg.joint_rand_param.as_ref().unwrap().seed_hint,
-                &joint_rand_seed_share,
+            let hints = &msg.joint_rand_param.as_ref().unwrap().seed_hint;
+            let joint_rand_seed = Self::derive_joint_randomness(
+                hints[..agg_id as usize]
+                    .iter()
+                    .chain(std::iter::once(&joint_rand_seed_part))
+                    .chain(hints[agg_id as usize..].iter()),
             );
 
             let prng: Prng<T::Field, _> =
                 Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
             (
                 Some(joint_rand_seed),
-                Some(joint_rand_seed_share),
+                Some(joint_rand_seed_part),
                 prng.take(self.typ.joint_rand_len()).collect(),
             )
         } else {
@@ -773,7 +792,7 @@ where
             },
             Prio3PrepareShare {
                 verifier: verifier_share,
-                joint_rand_seed: joint_rand_seed_share,
+                joint_rand_part: joint_rand_seed_part,
             },
         ))
     }
@@ -783,7 +802,7 @@ where
         inputs: M,
     ) -> Result<Prio3PrepareMessage<L>, VdafError> {
         let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
-        let mut joint_rand_seed = Seed::uninitialized();
+        let mut joint_rand_parts = Vec::with_capacity(self.num_aggregators());
         let mut count = 0;
         for share in inputs.into_iter() {
             count += 1;
@@ -797,8 +816,8 @@ where
             }
 
             if self.typ.joint_rand_len() > 0 {
-                let joint_rand_seed_share = share.joint_rand_seed.unwrap();
-                joint_rand_seed.xor_accumulate(&joint_rand_seed_share);
+                let joint_rand_seed_part = share.joint_rand_part.unwrap();
+                joint_rand_parts.push(joint_rand_seed_part);
             }
 
             for (x, y) in verifier.iter_mut().zip(share.verifier) {
@@ -825,7 +844,7 @@ where
         };
 
         let joint_rand_seed = if self.typ.joint_rand_len() > 0 {
-            Some(joint_rand_seed)
+            Some(Self::derive_joint_randomness(joint_rand_parts.iter()))
         } else {
             None
         };
@@ -908,10 +927,10 @@ where
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct JointRandParam<const L: usize> {
-    /// The sum of the joint randomness seed shares sent to the other Aggregators.
-    seed_hint: Seed<L>,
+    /// The joint randomness seed parts corresponding to the other Aggregators' shares.
+    seed_hint: Vec<Seed<L>>,
 
-    /// The blinding factor, used to derive the aggregator's joint randomness seed share.
+    /// The blinding factor, used to derive the aggregator's joint randomness seed part.
     blind: Seed<L>,
 }
 
@@ -928,7 +947,7 @@ impl<const L: usize> HelperShare<L> {
             input_share: Seed::from_rand_source(rand_source)?,
             proof_share: Seed::from_rand_source(rand_source)?,
             joint_rand_param: JointRandParam {
-                seed_hint: Seed::uninitialized(),
+                seed_hint: Vec::new(),
                 blind: Seed::from_rand_source(rand_source)?,
             },
         })
@@ -996,12 +1015,7 @@ mod tests {
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
         let (public_share, mut input_shares) = prio3.shard(&1).unwrap();
-        input_shares[0]
-            .joint_rand_param
-            .as_mut()
-            .unwrap()
-            .seed_hint
-            .0[0] ^= 255;
+        input_shares[0].joint_rand_param.as_mut().unwrap().seed_hint[0].0[0] ^= 255;
         let result = run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
