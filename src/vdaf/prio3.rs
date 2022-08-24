@@ -727,7 +727,7 @@ where
         deriver.update(domain_separation_tag);
         deriver.update(&[255]);
         deriver.update(nonce);
-        let query_rand_seed = deriver.into_seed();
+        let query_rand_prng = Prng::from_seed_stream(deriver.into_seed_stream());
 
         // Create a reference to the (expanded) input share.
         let expanded_input_share: Option<Vec<T::Field>> = match msg.input_share {
@@ -784,9 +784,7 @@ where
         };
 
         // Compute the query randomness.
-        let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&query_rand_seed, domain_separation_tag));
-        let query_rand: Vec<T::Field> = prng.take(self.typ.query_rand_len()).collect();
+        let query_rand: Vec<T::Field> = query_rand_prng.take(self.typ.query_rand_len()).collect();
 
         // Run the query-generation algorithm.
         let verifier_share = self.typ.query(
