@@ -112,7 +112,7 @@ impl Client for Prio2 {
         }
         let mut input: Vec<FieldPrio2> = Vec::with_capacity(measurement.len());
         for int in measurement {
-            input.push((*int).into());
+            input.push((*int).try_into()?);
         }
 
         let mut mem = v2_client::ClientMemory::new(self.input_len)?;
@@ -349,7 +349,7 @@ mod tests {
 
         let data: Vec<FieldPrio2> = [0, 0, 1, 1, 0]
             .iter()
-            .map(|x| FieldPrio2::from(*x))
+            .map(|x| FieldPrio2::try_from(*x).unwrap())
             .collect();
         let (encrypted_input_share1, encrypted_input_share2) =
             encode_simple(&data, pub_key1, pub_key2).unwrap();

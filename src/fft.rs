@@ -80,7 +80,9 @@ pub(crate) fn discrete_fourier_transform_inv<F: FieldElement>(
     inp: &[F],
     size: usize,
 ) -> Result<(), FftError> {
-    let size_inv = F::from(F::Integer::try_from(size).unwrap()).inv();
+    let size_inv = F::try_from(F::Integer::try_from(size).map_err(|_| FftError::SizeTooLarge)?)
+        .map_err(|_| FftError::SizeTooLarge)?
+        .inv();
     discrete_fourier_transform(outp, inp, size)?;
     discrete_fourier_transform_inv_finish(outp, size, size_inv);
     Ok(())

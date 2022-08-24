@@ -35,9 +35,9 @@ pub enum FieldError {
     /// Returned when decoding a `FieldElement` from a short byte string.
     #[error("short read from bytes")]
     ShortRead,
-    /// Returned when decoding a `FieldElement` from a byte string encoding an integer larger than
-    /// or equal to the field modulus.
-    #[error("read from byte slice exceeds modulus")]
+    /// Returned when decoding a `FieldElement` from an integer (or a byte string encoding an
+    /// integer) larger than or equal to the field modulus.
+    #[error("integer exceeds modulus")]
     ModulusOverflow,
     /// Error while performing I/O.
     #[error("I/O error")]
@@ -79,7 +79,7 @@ pub trait FieldElement:
     + DivAssign
     + Neg<Output = Self>
     + Display
-    + From<<Self as FieldElement>::Integer>
+    + TryFrom<<Self as FieldElement>::Integer, Error = FieldError>
     + for<'a> TryFrom<&'a [u8], Error = FieldError>
     // NOTE Ideally we would require `Into<[u8; Self::ENCODED_SIZE]>` instead of `Into<Vec<u8>>`,
     // since the former avoids a heap allocation and can easily be converted into Vec<u8>, but that
@@ -219,7 +219,7 @@ pub(crate) trait FieldElementExt: FieldElement {
         let one = Self::Integer::from(Self::one());
         let mut encoded = Vec::with_capacity(bits);
         for _ in 0..bits {
-            let w = Self::from(i & one);
+            let w = Self::try_from(i & one).unwrap();
             encoded.push(w);
             i = i >> one;
         }
@@ -246,7 +246,7 @@ pub(crate) trait FieldElementExt: FieldElement {
         let mut decoded = Self::zero();
         for (l, bit) in input.iter().enumerate() {
             let w = Self::Integer::try_from(1 << l).map_err(|_| FieldError::IntegerTryFrom)?;
-            decoded += Self::from(w) * *bit;
+            decoded += Self::try_from(w)? * *bit;
         }
         Ok(decoded)
     }
@@ -506,11 +506,22 @@ macro_rules! make_field {
             }
         }
 
-        impl From<$int> for $elem {
-            fn from(x: $int) -> Self {
-                // FieldParameters::montgomery() will return a value that has been fully reduced
-                // mod p, satisfying the invariant on Self.
-                Self($fp.montgomery(u128::try_from(x).unwrap()))
+        impl TryFrom<$int> for $elem {
+            type Error = FieldError;
+
+            // Ignore clippy::cmp_owned on u128::from(x), which may be a no-op copying conversion
+            // if $int is u128. This diagnostic was improved in
+            // https://github.com/rust-lang/rust-clippy/pull/8807, but the change is not present
+            // in a Rust 1.58 toolchain. This can be deleted when the MSRV is updated past 1.63.
+            #[allow(clippy::cmp_owned)]
+            fn try_from(x: $int) -> Result<Self, FieldError> {
+                if u128::from(x) >= $fp.p {
+                    Err(FieldError::ModulusOverflow)
+                } else {
+                    // FieldParameters::montgomery() will return a value that has been fully reduced
+                    // mod p, satisfying the invariant on Self.
+                    Ok(Self($fp.montgomery(u128::from(x))))
+                }
             }
         }
 
@@ -799,22 +810,25 @@ mod tests {
     fn field_element_test<F: FieldElement + Hash>() {
         let mut prng: Prng<F, _> = Prng::new().unwrap();
         let int_modulus = F::modulus();
-        let int_one = F::Integer::try_from(1).unwrap();
+        let int_one = F::Integer::from(F::one());
         let zero = F::zero();
         let one = F::one();
-        let two = F::from(F::Integer::try_from(2).unwrap());
-        let four = F::from(F::Integer::try_from(4).unwrap());
+        let two = F::try_from(F::Integer::try_from(2).unwrap()).unwrap();
+        let four = F::try_from(F::Integer::try_from(4).unwrap()).unwrap();
 
         // add
-        assert_eq!(F::from(int_modulus - int_one) + one, zero);
+        assert_eq!(F::try_from(int_modulus - int_one).unwrap() + one, zero);
         assert_eq!(one + one, two);
-        assert_eq!(two + F::from(int_modulus), two);
+        assert_eq!(two + F::try_from(int_modulus - int_one).unwrap(), one);
 
         // sub
-        assert_eq!(zero - one, F::from(int_modulus - int_one));
+        assert_eq!(zero - one, F::try_from(int_modulus - int_one).unwrap());
         assert_eq!(one - one, zero);
-        assert_eq!(two - F::from(int_modulus), two);
-        assert_eq!(one - F::from(int_modulus - int_one), two);
+        assert_eq!(
+            two - F::try_from(int_modulus - int_one - int_one).unwrap(),
+            four
+        );
+        assert_eq!(one - F::try_from(int_modulus - int_one).unwrap(), two);
 
         // add + sub
         for _ in 0..100 {
@@ -829,7 +843,7 @@ mod tests {
         assert_eq!(two * two, four);
         assert_eq!(two * one, two);
         assert_eq!(two * zero, zero);
-        assert_eq!(one * F::from(int_modulus), zero);
+        assert_eq!(one * zero, zero);
 
         // div
         assert_eq!(four / two, two);
@@ -849,7 +863,7 @@ mod tests {
         }
 
         // pow
-        assert_eq!(two.pow(F::Integer::try_from(0).unwrap()), one);
+        assert_eq!(two.pow(F::Integer::from(F::zero())), one);
         assert_eq!(two.pow(int_one), two);
         assert_eq!(two.pow(F::Integer::try_from(2).unwrap()), four);
         assert_eq!(two.pow(int_modulus - int_one), one);
@@ -868,7 +882,12 @@ mod tests {
         }
 
         // serialization
-        let test_inputs = vec![zero, one, prng.get(), F::from(int_modulus - int_one)];
+        let test_inputs = vec![
+            zero,
+            one,
+            prng.get(),
+            F::try_from(int_modulus - int_one).unwrap(),
+        ];
         for want in test_inputs.iter() {
             let mut bytes = vec![];
             want.encode(&mut bytes);
@@ -887,7 +906,7 @@ mod tests {
         // various products that should be equal have the same hash. Three is chosen as a generator
         // here because it happens to generate fairly large subgroups of (Z/pZ)* for all four
         // primes.
-        let three = F::from(F::Integer::try_from(3).unwrap());
+        let three = F::try_from(F::Integer::try_from(3).unwrap()).unwrap();
         let mut powers_of_three = Vec::with_capacity(500);
         let mut power = one;
         for _ in 0..500 {
@@ -922,15 +941,6 @@ mod tests {
             assert_eq!(product, expected_product);
             assert_eq!(hash_helper(product), expected_hash);
         }
-
-        // Construct an element from a number that needs to be reduced, and test comparisons on it,
-        // confirming that FieldParameters::montgomery() reduced it correctly.
-        let p = F::from(int_modulus);
-        assert_eq!(p, zero);
-        assert_eq!(hash_helper(p), hash_helper(zero));
-        let p_plus_one = F::from(int_modulus + F::Integer::try_from(1).unwrap());
-        assert_eq!(p_plus_one, one);
-        assert_eq!(hash_helper(p_plus_one), hash_helper(one));
     }
 
     #[test]

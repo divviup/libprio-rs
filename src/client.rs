@@ -257,7 +257,7 @@ fn test_encode() {
     let data_u32 = [0u32, 1, 0, 1, 1, 0, 0, 0, 1];
     let data = data_u32
         .iter()
-        .map(|x| Field32::from(*x))
+        .map(|x| Field32::try_from(*x).unwrap())
         .collect::<Vec<Field32>>();
     let encoded_shares = encode_simple(&data, pub_key1, pub_key2);
     assert!(encoded_shares.is_ok());

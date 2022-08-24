@@ -35,7 +35,7 @@ impl<F: FieldElement> Mul<F> {
     /// called by the validity circuit.
     pub fn new(num_calls: usize) -> Self {
         let n = gadget_poly_fft_mem_len(2, num_calls);
-        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
+        let n_inv = F::try_from(F::Integer::try_from(n).unwrap()).unwrap().inv();
         Self {
             n,
             n_inv,
@@ -123,7 +123,7 @@ impl<F: FieldElement> PolyEval<F> {
     /// this gadget is called by the validity circuit.
     pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
         let n = gadget_poly_fft_mem_len(poly_deg(&poly), num_calls);
-        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
+        let n_inv = F::try_from(F::Integer::try_from(n).unwrap()).unwrap().inv();
         Self {
             poly,
             n,
@@ -234,7 +234,7 @@ impl<F: FieldElement> BlindPolyEval<F> {
     /// Returns a `BlindPolyEval` gadget for polynomial `poly`.
     pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
         let n = gadget_poly_fft_mem_len(poly_deg(&poly) + 1, num_calls);
-        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
+        let n_inv = F::try_from(F::Integer::try_from(n).unwrap()).unwrap().inv();
         Self {
             poly,
             n,

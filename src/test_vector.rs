@@ -12,7 +12,7 @@ use crate::{
 };
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use std::fmt::Debug;
+use std::{convert::TryFrom, fmt::Debug};
 
 /// Errors propagated by functions in this module.
 #[derive(Debug, thiserror::Error)]
@@ -110,7 +110,7 @@ impl Priov2TestVector {
         for _ in 0..number_of_clients {
             // Generate a random vector of booleans
             let data: Vec<FieldPrio2> = (0..dimension)
-                .map(|_| FieldPrio2::from(rng.gen_range(0..2)))
+                .map(|_| FieldPrio2::try_from(rng.gen_range(0..2)).unwrap())
                 .collect();
 
             // Update reference sum

@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`](crate::flp::Type) implementations.
 
-use crate::field::{FieldElement, FieldElementExt};
+use crate::field::{FieldElement, FieldElementExt, FieldError};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -42,7 +42,7 @@ impl<F: FieldElement> Type for Count<F> {
             return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
         }
 
-        Ok(vec![F::from(*value)])
+        Ok(vec![F::try_from(*value)?])
     }
 
     fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
@@ -371,7 +371,9 @@ impl<F: FieldElement> Type for Histogram<F> {
         let range_check = call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])?;
 
         // Check that the elements of `input` sum to 1.
-        let mut sum_check = -(F::one() / F::from(F::valid_integer_try_from(num_shares)?));
+        let mut sum_check = F::try_from(F::valid_integer_try_from(num_shares)?)?
+            .inv()
+            .neg();
         for val in input.iter() {
             sum_check += *val;
         }
@@ -488,7 +490,10 @@ where
             }
         }
 
-        Ok(measurement.iter().map(|value| F::from(*value)).collect())
+        Ok(measurement
+            .iter()
+            .map(|value| F::try_from(*value))
+            .collect::<Result<_, FieldError>>()?)
     }
 
     fn decode_result(
@@ -515,7 +520,7 @@ where
     ) -> Result<F, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
-        let s = F::from(F::valid_integer_try_from(num_shares)?).inv();
+        let s = F::try_from(F::valid_integer_try_from(num_shares)?)?.inv();
         let mut r = joint_rand[0];
         let mut outp = F::zero();
         let mut padded_chunk = vec![F::zero(); 2 * self.chunk_len];
@@ -622,6 +627,7 @@ mod tests {
     use crate::flp::gadgets::ParallelSum;
     #[cfg(feature = "multithreaded")]
     use crate::flp::gadgets::ParallelSumMultithreaded;
+    use std::convert::TryFrom;
 
     // Number of shares to split input and proofs into in `flp_test`.
     const NUM_SHARES: usize = 3;
@@ -674,7 +680,7 @@ mod tests {
         // Test FLP on invalid input.
         flp_validity_test(
             &count,
-            &[TestField::from(1337)],
+            &[TestField::try_from(1337).unwrap()],
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
@@ -685,7 +691,12 @@ mod tests {
         // Try running the validity circuit on an input that's too short.
         count.valid(&mut count.gadget(), &[], &[], 1).unwrap_err();
         count
-            .valid(&mut count.gadget(), &[1.into(), 2.into()], &[], 1)
+            .valid(
+                &mut count.gadget(),
+                &[TestField::one(), 2.try_into().unwrap()],
+                &[],
+                1,
+            )
             .unwrap_err();
     }
 
@@ -694,7 +705,7 @@ mod tests {
         let sum = Sum::new(11).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
-        let nine = TestField::from(9);
+        let nine = TestField::try_from(9).unwrap();
 
         // Round trip
         assert_eq!(
@@ -712,7 +723,7 @@ mod tests {
             &sum.encode_measurement(&1337).unwrap(),
             &ValidityTestCase {
                 expect_valid: true,
-                expected_output: Some(vec![TestField::from(1337)]),
+                expected_output: Some(vec![TestField::try_from(1337).unwrap()]),
             },
         )
         .unwrap();
@@ -742,7 +753,7 @@ mod tests {
             &[one, zero, one, one, zero, one, one, one, zero],
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
-                expected_output: Some(vec![TestField::from(237)]),
+                expected_output: Some(vec![TestField::try_from(237).unwrap()]),
             },
         )
         .unwrap();
@@ -774,7 +785,7 @@ mod tests {
         let average = Average::new(11).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
-        let ten = TestField::from(10);
+        let ten = TestField::try_from(10).unwrap();
 
         // Testing that average correctly quotients the sum of the measurements
         // by the number of measurements.
@@ -816,7 +827,7 @@ mod tests {
         let hist = Histogram::new(vec![10, 20]).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
-        let nine = TestField::from(9);
+        let nine = TestField::try_from(9).unwrap();
 
         assert_eq!(&hist.encode_measurement(&7).unwrap(), &[one, zero, zero]);
         assert_eq!(&hist.encode_measurement(&10).unwrap(), &[one, zero, zero]);
@@ -919,7 +930,7 @@ mod tests {
         S: 'static + ParallelSumGadget<TestField, BlindPolyEval<TestField>> + Eq,
     {
         let one = TestField::one();
-        let nine = TestField::from(9);
+        let nine = TestField::try_from(9).unwrap();
 
         // Test on valid inputs.
         for len in 0..10 {

@@ -115,7 +115,7 @@ mod tests {
         field::{Field96, FieldPrio2},
         vdaf::prg::{Prg, PrgAes128, Seed},
     };
-    use std::convert::TryInto;
+    use std::convert::{TryFrom, TryInto};
 
     #[test]
     fn secret_sharing_interop() {
@@ -201,7 +201,7 @@ mod tests {
             b"",
         );
         let mut prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
-        let expected = Field96::from(39729620190871453347343769187);
+        let expected = Field96::try_from(39729620190871453347343769187).unwrap();
         let actual = prng.nth(145).unwrap();
         assert_eq!(actual, expected);
     }

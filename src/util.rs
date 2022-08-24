@@ -131,19 +131,19 @@ pub fn reconstruct_shares<F: FieldElement>(share1: &[F], share2: &[F]) -> Option
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::field::{Field32, Field64};
+    use crate::{
+        field::{Field32, Field64},
+        prng::Prng,
+    };
     use assert_matches::assert_matches;
+    use std::convert::{TryFrom, TryInto};
 
     pub fn secret_share(share: &mut [Field32]) -> Vec<Field32> {
-        use rand::Rng;
-        let mut rng = rand::thread_rng();
-        let mut random = vec![0u32; share.len()];
+        let mut prng = Prng::new().unwrap();
         let mut share2 = vec![Field32::zero(); share.len()];
 
-        rng.fill(&mut random[..]);
-
-        for (r, f) in random.iter().zip(share2.iter_mut()) {
-            *f = Field32::from(*r);
+        for f in share2.iter_mut() {
+            *f = prng.get();
         }
 
         for (f1, f2) in share.iter_mut().zip(share2.iter()) {
@@ -158,12 +158,12 @@ pub mod tests {
         let dim = 15;
         let len = proof_length(dim);
 
-        let mut share = vec![Field32::from(0); len];
+        let mut share = vec![Field32::zero(); len];
         let unpacked = unpack_proof_mut(&mut share, dim).unwrap();
-        *unpacked.f0 = Field32::from(12);
+        *unpacked.f0 = Field32::try_from(12).unwrap();
         assert_eq!(share[dim], 12);
 
-        let mut short_share = vec![Field32::from(0); len - 1];
+        let mut short_share = vec![Field32::zero(); len - 1];
         assert_matches!(
             unpack_proof_mut(&mut short_share, dim),
             Err(SerializeError::UnpackInputSizeMismatch)
@@ -175,10 +175,10 @@ pub mod tests {
         let dim = 15;
         let len = proof_length(dim);
 
-        let share = vec![Field64::from(0); len];
+        let share = vec![Field64::zero(); len];
         unpack_proof(&share, dim).unwrap();
 
-        let short_share = vec![Field64::from(0); len - 1];
+        let short_share = vec![Field64::zero(); len - 1];
         assert_matches!(
             unpack_proof(&short_share, dim),
             Err(SerializeError::UnpackInputSizeMismatch)
@@ -188,8 +188,8 @@ pub mod tests {
     #[test]
     fn secret_sharing() {
         let mut share1 = vec![Field32::zero(); 10];
-        share1[3] = 21.into();
-        share1[8] = 123.into();
+        share1[3] = 21.try_into().unwrap();
+        share1[8] = 123.try_into().unwrap();
 
         let original_data = share1.clone();
 

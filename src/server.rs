@@ -285,6 +285,7 @@ mod tests {
         util::{self, unpack_proof_mut},
     };
     use serde_json;
+    use std::convert::TryFrom;
 
     #[test]
     fn test_validation() {
@@ -295,9 +296,12 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut proof: Vec<Field32> = proof_u32.iter().map(|x| Field32::from(*x)).collect();
+        let mut proof: Vec<Field32> = proof_u32
+            .iter()
+            .map(|x| Field32::try_from(*x).unwrap())
+            .collect();
         let share2 = util::tests::secret_share(&mut proof);
-        let eval_at = Field32::from(12313);
+        let eval_at = Field32::try_from(12313).unwrap();
 
         let mut validation_mem = ValidationMemory::new(dim);
 
@@ -317,9 +321,12 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut proof: Vec<Field32> = proof_u32.iter().map(|x| Field32::from(*x)).collect();
+        let mut proof: Vec<Field32> = proof_u32
+            .iter()
+            .map(|x| Field32::try_from(*x).unwrap())
+            .collect();
         let share2 = util::tests::secret_share(&mut proof);
-        let eval_at = Field32::from(12313);
+        let eval_at = Field32::try_from(12313).unwrap();
 
         let mut validation_mem = ValidationMemory::new(dim);
 
@@ -363,7 +370,7 @@ mod tests {
         let mut data = vec![FieldPrio2::zero(); dim];
 
         if let Tweak::WrongInput = tweak {
-            data[0] = FieldPrio2::from(2);
+            data[0] = FieldPrio2::try_from(2).unwrap();
         }
 
         let (share1_original, share2) = client.encode_simple(&data).unwrap();
@@ -372,7 +379,7 @@ mod tests {
         let mut share1_field = FieldPrio2::byte_slice_into_vec(&decrypted_share1).unwrap();
         let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
-        let one = FieldPrio2::from(1);
+        let one = FieldPrio2::one();
 
         match tweak {
             Tweak::DataPartOfShare => unpacked_share1.data[0] += one,

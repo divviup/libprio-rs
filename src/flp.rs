@@ -304,7 +304,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
             // evaluation of the gadget.
             let m = wire_poly_len(gadget.calls());
             let m_inv =
-                Self::Field::from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                Self::Field::try_from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                    .unwrap()
                     .inv();
             let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
             for wire in 0..gadget.arity() {
@@ -446,7 +447,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
             // polynomial at query randomness `r`.
             let m = (1 + gadget.calls()).next_power_of_two();
             let m_inv =
-                Self::Field::from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                Self::Field::try_from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
+                    .unwrap()
                     .inv();
             let mut f = vec![Self::Field::zero(); m];
             for wire in 0..gadget.arity() {
@@ -877,8 +879,10 @@ mod tests {
 
         fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
             Ok(vec![
-                F::from(*measurement),
-                F::from(*measurement).pow(F::Integer::try_from(3).unwrap()),
+                F::try_from(*measurement).unwrap(),
+                F::try_from(*measurement)
+                    .unwrap()
+                    .pow(F::Integer::try_from(3).unwrap()),
             ])
         }
 
@@ -1012,7 +1016,7 @@ mod tests {
         }
 
         fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
-            Ok(vec![F::from(*measurement)])
+            Ok(vec![F::try_from(*measurement).unwrap()])
         }
 
         fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {

@@ -4,6 +4,7 @@ use prio::client::*;
 use prio::encrypt::*;
 use prio::field::*;
 use prio::server::*;
+use std::convert::TryFrom;
 
 fn main() {
     let priv_key1 = PrivateKey::from_base64(
@@ -30,7 +31,7 @@ fn main() {
 
     let data1 = data1_u32
         .iter()
-        .map(|x| Field32::from(*x))
+        .map(|x| Field32::try_from(*x).unwrap())
         .collect::<Vec<Field32>>();
 
     let data2_u32 = [0, 0, 1, 0, 0, 0, 0, 0];
@@ -38,12 +39,12 @@ fn main() {
 
     let data2 = data2_u32
         .iter()
-        .map(|x| Field32::from(*x))
+        .map(|x| Field32::try_from(*x).unwrap())
         .collect::<Vec<Field32>>();
 
     let (share1_1, share1_2) = client1.encode_simple(&data1).unwrap();
     let (share2_1, share2_2) = client2.encode_simple(&data2).unwrap();
-    let eval_at = Field32::from(12313);
+    let eval_at = Field32::try_from(12313).unwrap();
 
     let mut server1 = Server::new(dim, true, priv_key1).unwrap();
     let mut server2 = Server::new(dim, false, priv_key2).unwrap();
