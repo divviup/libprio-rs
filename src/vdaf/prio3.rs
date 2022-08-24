@@ -29,6 +29,7 @@
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
+use super::VERSION;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::FieldElement;
 #[cfg(feature = "crypto-dependencies")]
@@ -51,10 +52,6 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
-
-// Domain-separation tag used to bind the VDAF operations to the document version. This will be
-// reved with each draft with breaking changes.
-const VERS_PRIO3: &[u8] = b"vdaf-03 prio3";
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
 #[cfg(feature = "crypto-dependencies")]
@@ -281,8 +278,9 @@ where
         measurement: &T::Measurement,
         rand_source: RandSource,
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
-        let mut info = [0; VERS_PRIO3.len() + 1];
-        info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
+        let mut info = [0; VERSION.len() + 5];
+        info[..VERSION.len()].copy_from_slice(VERSION);
+        info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
 
         let num_aggregators = self.num_aggregators;
         let input = self.typ.encode_measurement(measurement)?;
@@ -295,8 +293,8 @@ where
             let mut helper = HelperShare::from_rand_source(rand_source)?;
 
             let mut deriver = P::init(helper.joint_rand_param.blind.as_ref());
-            deriver.update(&[agg_id]);
-            info[VERS_PRIO3.len()] = agg_id;
+            info[VERSION.len() + 4] = agg_id;
+            deriver.update(&info);
             let prng: Prng<T::Field, _> =
                 Prng::from_seed_stream(P::seed_stream(&helper.input_share, &info));
             for (x, y) in leader_input_share
@@ -316,8 +314,9 @@ where
 
         let leader_blind = Seed::from_rand_source(rand_source)?;
 
+        info[VERSION.len() + 4] = 0; // ID of the leader
         let mut deriver = P::init(leader_blind.as_ref());
-        deriver.update(&[0]); // ID of the leader
+        deriver.update(&info);
         for x in leader_input_share.iter() {
             deriver.update(&(*x).into());
         }
@@ -326,19 +325,20 @@ where
         joint_rand_seed.xor_accumulate(&leader_joint_rand_seed_hint);
 
         // Run the proof-generation algorithm.
+        let domain_separation_tag = &info[..VERSION.len() + 4];
         let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, VERS_PRIO3));
+            Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
         let joint_rand: Vec<T::Field> = prng.take(self.typ.joint_rand_len()).collect();
         let prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
             &Seed::from_rand_source(rand_source)?,
-            VERS_PRIO3,
+            domain_separation_tag,
         ));
         let prove_rand: Vec<T::Field> = prng.take(self.typ.prove_rand_len()).collect();
         let mut leader_proof_share = self.typ.prove(&input, &prove_rand, &joint_rand)?;
 
         // Generate the proof shares and finalize the joint randomness seed hints.
         for (j, helper) in helper_shares.iter_mut().enumerate() {
-            info[VERS_PRIO3.len()] = j as u8 + 1;
+            info[VERSION.len() + 4] = j as u8 + 1;
             let prng: Prng<T::Field, _> =
                 Prng::from_seed_stream(P::seed_stream(&helper.proof_share, &info));
             for (x, y) in leader_proof_share
@@ -417,6 +417,7 @@ where
     T: Type,
     P: Prg<L>,
 {
+    const ID: u32 = T::ID;
     type Measurement = T::Measurement;
     type AggregateResult = T::AggregateResult;
     type AggregationParam = ();
@@ -684,11 +685,14 @@ where
         VdafError,
     > {
         let agg_id = self.role_try_from(agg_id)?;
-        let mut info = [0; VERS_PRIO3.len() + 1];
-        info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
-        info[VERS_PRIO3.len()] = agg_id;
+        let mut info = [0; VERSION.len() + 5];
+        info[..VERSION.len()].copy_from_slice(VERSION);
+        info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
+        info[VERSION.len() + 4] = agg_id;
+        let domain_separation_tag = &info[..VERSION.len() + 4];
 
         let mut deriver = P::init(verify_key);
+        deriver.update(domain_separation_tag);
         deriver.update(&[255]);
         deriver.update(nonce);
         let query_rand_seed = deriver.into_seed();
@@ -723,7 +727,7 @@ where
         let (joint_rand_seed, joint_rand_seed_share, joint_rand) = if self.typ.joint_rand_len() > 0
         {
             let mut deriver = P::init(msg.joint_rand_param.as_ref().unwrap().blind.as_ref());
-            deriver.update(&[agg_id]);
+            deriver.update(&info);
             for x in input_share {
                 deriver.update(&(*x).into());
             }
@@ -736,7 +740,7 @@ where
             );
 
             let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, VERS_PRIO3));
+                Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
             (
                 Some(joint_rand_seed),
                 Some(joint_rand_seed_share),
@@ -748,7 +752,7 @@ where
 
         // Compute the query randomness.
         let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&query_rand_seed, VERS_PRIO3));
+            Prng::from_seed_stream(P::seed_stream(&query_rand_seed, domain_separation_tag));
         let query_rand: Vec<T::Field> = prng.take(self.typ.query_rand_len()).collect();
 
         // Run the query-generation algorithm.
@@ -847,9 +851,10 @@ where
         let input_share = match step.input_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
-                let mut info = [0; VERS_PRIO3.len() + 1];
-                info[..VERS_PRIO3.len()].clone_from_slice(VERS_PRIO3);
-                info[VERS_PRIO3.len()] = step.agg_id;
+                let mut info = [0; VERSION.len() + 5];
+                info[..VERSION.len()].copy_from_slice(VERSION);
+                info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
+                info[VERSION.len() + 4] = step.agg_id;
                 let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
                 prng.take(self.typ.input_len()).collect()
             }
