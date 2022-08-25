@@ -663,6 +663,7 @@ where
 
     /// Begins the Prep process with the other aggregators. The result of this process is
     /// the aggregator's output share.
+    #[allow(clippy::type_complexity)]
     fn prepare_init(
         &self,
         verify_key: &[u8; L],

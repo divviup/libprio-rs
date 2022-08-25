@@ -440,6 +440,7 @@ where
     type PrepareShare = Poplar1PrepareMessage<I::Field>;
     type PrepareMessage = Poplar1PrepareMessage<I::Field>;
 
+    #[allow(clippy::type_complexity)]
     fn prepare_init(
         &self,
         verify_key: &[u8; L],
