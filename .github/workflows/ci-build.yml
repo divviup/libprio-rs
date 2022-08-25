@@ -11,26 +11,38 @@ env:
   RUSTFLAGS: "-D warnings"
 
 jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v2
-    - name: Lint
-      run: cargo fmt --message-format human -- --check
-
   docs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        default: true
     - name: Docs
       run: cargo doc --all-features
       env:
         RUSTDOCFLAGS: -Dwarnings
 
   build-binaries:
+    strategy:
+      matrix:
+        rust-toolchain: [
+          # MSRV from Cargo.toml
+          "1.58",
+          "stable",
+        ]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust-toolchain }}
+        profile: minimal
+        override: true
+        components: clippy
     - name: Build
       run: cargo build --verbose --package prio-binaries
     - name: Clippy
@@ -51,9 +63,23 @@ jobs:
           "--features=prio2,multithreaded",
           "--features=prio2,test-util,multithreaded",
         ]
+        rust-toolchain: [
+          # MSRV from Cargo.toml
+          "1.58",
+          "stable",
+        ]
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v2
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: ${{ matrix.rust-toolchain }}
+        profile: minimal
+        override: true
+        components: clippy, rustfmt
+    - name: Lint
+      run: cargo fmt --message-format human -- --check
     - name: Clippy
       run: cargo clippy --workspace --all-targets ${{ matrix.features }}
     - name: Build crate
