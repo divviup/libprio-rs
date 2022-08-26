@@ -91,7 +91,7 @@ impl Prio2 {
 }
 
 impl Vdaf for Prio2 {
-    const ID: u32 = 0xFFFF1000;
+    const ID: u32 = 0xFFFF0000;
     type Measurement = Vec<u32>;
     type AggregateResult = Vec<u32>;
     type AggregationParam = ();

@@ -801,7 +801,7 @@ mod tests {
     }
 
     impl<F: FieldElement> Type for TestType<F> {
-        const ID: u32 = 0xFFFF3002;
+        const ID: u32 = 0xFFFF0000;
         type Measurement = F::Integer;
         type AggregateResult = F::Integer;
         type Field = F;
@@ -936,7 +936,7 @@ mod tests {
     }
 
     impl<F: FieldElement> Type for Issue254Type<F> {
-        const ID: u32 = 0xFFFF3003;
+        const ID: u32 = 0xFFFF0000;
         type Measurement = F::Integer;
         type AggregateResult = F::Integer;
         type Field = F;

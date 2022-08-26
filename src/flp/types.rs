@@ -222,7 +222,7 @@ impl<F: FieldElement> Average<F> {
 }
 
 impl<F: FieldElement> Type for Average<F> {
-    const ID: u32 = 0xFFFF3000;
+    const ID: u32 = 0xFFFF0000;
     type Measurement = F::Integer;
     type AggregateResult = f64;
     type Field = F;
@@ -472,7 +472,7 @@ where
     F: FieldElement,
     S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static,
 {
-    const ID: u32 = 0xFFFF3001;
+    const ID: u32 = 0xFFFF0000;
     type Measurement = Vec<F::Integer>;
     type AggregateResult = Vec<F::Integer>;
     type Field = F;
