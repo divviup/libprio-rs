@@ -342,7 +342,7 @@ where
     type Measurement = IdpfInput;
     type AggregateResult = BTreeMap<IdpfInput, u64>;
     type AggregationParam = BTreeSet<IdpfInput>;
-    type PublicShare = (); // TODO: Replace this when the IDPF from BBCG+21 is implemented.
+    type PublicShare = (); // TODO: Replace this when the IDPF from [BBCGGI21] is implemented.
     type InputShare = Poplar1InputShare<I, L>;
     type OutputShare = OutputShare<I::Field>;
     type AggregateShare = AggregateShare<I::Field>;
