@@ -994,6 +994,12 @@ mod tests {
         run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares).unwrap();
 
         test_prepare_state_serialization(&prio3, &1).unwrap();
+
+        let prio3_extra_helper = Prio3::new_aes128_count(3).unwrap();
+        assert_eq!(
+            run_vdaf(&prio3_extra_helper, &(), [1, 0, 0, 1, 1]).unwrap(),
+            3,
+        );
     }
 
     #[test]
