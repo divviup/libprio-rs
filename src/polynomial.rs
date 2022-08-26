@@ -146,6 +146,8 @@ fn fft_interpolate_raw<F: FieldElement>(
         &mut mem.fft_roots_sub,
     );
     if invert {
+        // `n_points` should be far less than the field's prime modulus in all pracitcal cases, so
+        // it is safe to unwrap these results.
         let n_inverse = F::try_from(F::Integer::try_from(n_points).unwrap())
             .unwrap()
             .inv();
@@ -223,6 +225,9 @@ pub(crate) fn poly_range_check<F: FieldElement>(start: usize, end: usize) -> Vec
     let mut p = vec![F::one()];
     let mut q = [F::zero(), F::one()];
     for i in start..end {
+        // `end` should be less than the field's prime modulus, otherwise it doesn't make sense to
+        // check if a field element is in this range. For now, we will unwrap and panic if `end` is
+        // too large.
         q[0] = -F::try_from(F::Integer::try_from(i).unwrap()).unwrap();
         p = poly_mul(&p, &q);
     }

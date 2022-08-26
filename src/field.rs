@@ -219,7 +219,7 @@ pub(crate) trait FieldElementExt: FieldElement {
         let one = Self::Integer::from(Self::one());
         let mut encoded = Vec::with_capacity(bits);
         for _ in 0..bits {
-            let w = Self::try_from(i & one).unwrap();
+            let w = Self::try_from(i & one)?;
             encoded.push(w);
             i = i >> one;
         }

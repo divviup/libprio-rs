@@ -303,10 +303,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
             // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
             // evaluation of the gadget.
             let m = wire_poly_len(gadget.calls());
-            let m_inv =
-                Self::Field::try_from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
-                    .unwrap()
-                    .inv();
+            let m_inv = Self::Field::try_from(
+                <Self::Field as FieldElement>::Integer::try_from(m)
+                    .map_err(|_| FieldError::IntegerTryFrom)?,
+            )?
+            .inv();
             let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
             for wire in 0..gadget.arity() {
                 discrete_fourier_transform(&mut f[wire], &gadget.f_vals[wire], m)?;
@@ -446,10 +447,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
             // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
             // polynomial at query randomness `r`.
             let m = (1 + gadget.calls()).next_power_of_two();
-            let m_inv =
-                Self::Field::try_from(<Self::Field as FieldElement>::Integer::try_from(m).unwrap())
-                    .unwrap()
-                    .inv();
+            let m_inv = Self::Field::try_from(
+                <Self::Field as FieldElement>::Integer::try_from(m)
+                    .map_err(|_| FieldError::IntegerTryFrom)?,
+            )?
+            .inv();
             let mut f = vec![Self::Field::zero(); m];
             for wire in 0..gadget.arity() {
                 discrete_fourier_transform(&mut f, &gadget.f_vals[wire], m)?;
