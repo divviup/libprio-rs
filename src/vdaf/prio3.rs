@@ -29,7 +29,7 @@
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
-use super::VERSION;
+use super::{DST_LEN, VERSION};
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::FieldElement;
 #[cfg(feature = "crypto-dependencies")]
@@ -278,9 +278,9 @@ where
         measurement: &T::Measurement,
         rand_source: RandSource,
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
-        let mut info = [0; VERSION.len() + 5];
+        let mut info = [0; DST_LEN + 1];
         info[..VERSION.len()].copy_from_slice(VERSION);
-        info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
+        info[VERSION.len()..DST_LEN].copy_from_slice(&Self::ID.to_be_bytes());
 
         let num_aggregators = self.num_aggregators;
         let input = self.typ.encode_measurement(measurement)?;
@@ -293,7 +293,7 @@ where
             let mut helper = HelperShare::from_rand_source(rand_source)?;
 
             let mut deriver = P::init(helper.joint_rand_param.blind.as_ref());
-            info[VERSION.len() + 4] = agg_id;
+            info[DST_LEN] = agg_id;
             deriver.update(&info);
             let prng: Prng<T::Field, _> =
                 Prng::from_seed_stream(P::seed_stream(&helper.input_share, &info));
@@ -314,7 +314,7 @@ where
 
         let leader_blind = Seed::from_rand_source(rand_source)?;
 
-        info[VERSION.len() + 4] = 0; // ID of the leader
+        info[DST_LEN] = 0; // ID of the leader
         let mut deriver = P::init(leader_blind.as_ref());
         deriver.update(&info);
         for x in leader_input_share.iter() {
@@ -325,7 +325,7 @@ where
         joint_rand_seed.xor_accumulate(&leader_joint_rand_seed_hint);
 
         // Run the proof-generation algorithm.
-        let domain_separation_tag = &info[..VERSION.len() + 4];
+        let domain_separation_tag = &info[..DST_LEN];
         let prng: Prng<T::Field, _> =
             Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
         let joint_rand: Vec<T::Field> = prng.take(self.typ.joint_rand_len()).collect();
@@ -338,7 +338,7 @@ where
 
         // Generate the proof shares and finalize the joint randomness seed hints.
         for (j, helper) in helper_shares.iter_mut().enumerate() {
-            info[VERSION.len() + 4] = j as u8 + 1;
+            info[DST_LEN] = j as u8 + 1;
             let prng: Prng<T::Field, _> =
                 Prng::from_seed_stream(P::seed_stream(&helper.proof_share, &info));
             for (x, y) in leader_proof_share
@@ -685,11 +685,11 @@ where
         VdafError,
     > {
         let agg_id = self.role_try_from(agg_id)?;
-        let mut info = [0; VERSION.len() + 5];
+        let mut info = [0; DST_LEN + 1];
         info[..VERSION.len()].copy_from_slice(VERSION);
-        info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
-        info[VERSION.len() + 4] = agg_id;
-        let domain_separation_tag = &info[..VERSION.len() + 4];
+        info[VERSION.len()..DST_LEN].copy_from_slice(&Self::ID.to_be_bytes());
+        info[DST_LEN] = agg_id;
+        let domain_separation_tag = &info[..DST_LEN];
 
         let mut deriver = P::init(verify_key);
         deriver.update(domain_separation_tag);
@@ -851,10 +851,10 @@ where
         let input_share = match step.input_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
-                let mut info = [0; VERSION.len() + 5];
+                let mut info = [0; DST_LEN + 1];
                 info[..VERSION.len()].copy_from_slice(VERSION);
-                info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
-                info[VERSION.len() + 4] = step.agg_id;
+                info[VERSION.len()..DST_LEN].copy_from_slice(&Self::ID.to_be_bytes());
+                info[DST_LEN] = step.agg_id;
                 let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
                 prng.take(self.typ.input_len()).collect()
             }

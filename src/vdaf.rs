@@ -15,9 +15,11 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
 
-/// Domain-separation tag used to bind the VDAF operations to the document version. This will be
-/// revised with each draft with breaking changes.
-pub(crate) const VERSION: &[u8] = b"vdaf-03";
+/// A component of the domain-separation tag, used to bind the VDAF operations to the document
+/// version. This will be revised with each draft with breaking changes.
+const VERSION: &[u8] = b"vdaf-03";
+/// Length of the domain-separation tag, including document version and algorithm ID.
+const DST_LEN: usize = VERSION.len() + 4;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
