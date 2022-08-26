@@ -364,16 +364,16 @@ where
                 *x -= y;
             }
 
-            helper.joint_rand_param.seed_hint = Vec::with_capacity(num_aggregators as usize - 1);
-            let hint = &mut helper.joint_rand_param.seed_hint;
+            let mut hint = Vec::with_capacity(num_aggregators as usize - 1);
             hint.push(leader_joint_rand_seed_part.clone());
             hint.extend(helper_joint_rand_parts[..j].iter().cloned());
             hint.extend(helper_joint_rand_parts[j + 1..].iter().cloned());
+            helper.joint_rand_param.seed_hint = hint;
         }
 
         let leader_joint_rand_param = if self.typ.joint_rand_len() > 0 {
             Some(JointRandParam {
-                seed_hint: helper_joint_rand_parts.clone(),
+                seed_hint: helper_joint_rand_parts,
                 blind: leader_blind,
             })
         } else {

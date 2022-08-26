@@ -200,7 +200,7 @@ mod tests {
         let mut prg = P::init(seed.as_ref());
         prg.update(info);
 
-        let mut want: Seed<L> = Seed([0u8; L]);
+        let mut want = Seed([0; L]);
         prg.clone().into_seed_stream().fill(&mut want.0[..]);
         let got = prg.clone().into_seed();
         assert_eq!(got, want);
