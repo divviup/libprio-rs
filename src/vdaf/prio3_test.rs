@@ -85,7 +85,7 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
     let mut prep_shares = Vec::new();
     for (agg_id, input_share) in input_shares.iter().enumerate() {
         let (state, prep_share) = prio3
-            .prepare_init(verify_key, agg_id, &(), &t.nonce, input_share)
+            .prepare_init(verify_key, agg_id, &(), &t.nonce, &(), input_share)
             .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
         prep_shares.push(prep_share);
