@@ -3,61 +3,17 @@
 use cfg_if::cfg_if;
 use iai::black_box;
 use prio::{
-    benchmarked::{benchmarked_iterative_fft, benchmarked_recursive_fft},
-    field::{random_vector, Field128, Field64, FieldElement},
+    field::{random_vector, Field128, Field64},
     vdaf::{
         prio3::{Prio3, Prio3InputShare},
         Client,
     },
 };
 #[cfg(feature = "prio2")]
-use prio::{field::FieldPrio2, server::VerificationMessage};
-
-fn fft_iterative(size: usize) -> Vec<Field128> {
-    let inp = random_vector(size).unwrap();
-    let mut outp = vec![Field128::zero(); size];
-    benchmarked_iterative_fft(&mut outp, &inp);
-    outp
-}
-
-fn fft_iterative_16() -> Vec<Field128> {
-    fft_iterative(16)
-}
-
-fn fft_iterative_256() -> Vec<Field128> {
-    fft_iterative(256)
-}
-
-fn fft_iterative_1024() -> Vec<Field128> {
-    fft_iterative(1024)
-}
-
-fn fft_iterative_4096() -> Vec<Field128> {
-    fft_iterative(4096)
-}
-
-fn fft_recursive(size: usize) -> Vec<Field128> {
-    let inp = random_vector(size).unwrap();
-    let mut outp = vec![Field128::zero(); size];
-    benchmarked_recursive_fft(&mut outp, &inp);
-    outp
-}
-
-fn fft_recursive_16() -> Vec<Field128> {
-    fft_recursive(16)
-}
-
-fn fft_recursive_256() -> Vec<Field128> {
-    fft_recursive(256)
-}
-
-fn fft_recursive_1024() -> Vec<Field128> {
-    fft_recursive(1024)
-}
-
-fn fft_recursive_4096() -> Vec<Field128> {
-    fft_recursive(4096)
-}
+use prio::{
+    field::{FieldElement, FieldPrio2},
+    server::VerificationMessage,
+};
 
 fn prng(size: usize) -> Vec<Field128> {
     random_vector(size).unwrap()
@@ -197,14 +153,6 @@ cfg_if! {
         cfg_if! {
             if #[cfg(feature = "multithreaded")] {
                 iai::main!(
-                    fft_iterative_16,
-                    fft_iterative_256,
-                    fft_iterative_1024,
-                    fft_iterative_4096,
-                    fft_recursive_16,
-                    fft_recursive_256,
-                    fft_recursive_1024,
-                    fft_recursive_4096,
                     prng_16,
                     prng_256,
                     prng_1024,
@@ -223,14 +171,6 @@ cfg_if! {
                 );
             } else {
                 iai::main!(
-                    fft_iterative_16,
-                    fft_iterative_256,
-                    fft_iterative_1024,
-                    fft_iterative_4096,
-                    fft_recursive_16,
-                    fft_recursive_256,
-                    fft_recursive_1024,
-                    fft_recursive_4096,
                     prng_16,
                     prng_256,
                     prng_1024,
@@ -252,14 +192,6 @@ cfg_if! {
         cfg_if! {
             if #[cfg(feature = "multithreaded")] {
                 iai::main!(
-                    fft_iterative_16,
-                    fft_iterative_256,
-                    fft_iterative_1024,
-                    fft_iterative_4096,
-                    fft_recursive_16,
-                    fft_recursive_256,
-                    fft_recursive_1024,
-                    fft_recursive_4096,
                     prng_16,
                     prng_256,
                     prng_1024,
@@ -272,14 +204,6 @@ cfg_if! {
                 );
             } else {
                 iai::main!(
-                    fft_iterative_16,
-                    fft_iterative_256,
-                    fft_iterative_1024,
-                    fft_iterative_4096,
-                    fft_recursive_16,
-                    fft_recursive_256,
-                    fft_recursive_1024,
-                    fft_recursive_4096,
                     prng_16,
                     prng_256,
                     prng_1024,
