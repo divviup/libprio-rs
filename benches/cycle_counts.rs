@@ -93,8 +93,7 @@ fn prio2_prove(size: usize) -> Vec<FieldPrio2> {
     let input = vec![FieldPrio2::zero(); size];
     let pk1 = PublicKey::from_base64(PRIO2_PUBKEY1).unwrap();
     let pk2 = PublicKey::from_base64(PRIO2_PUBKEY2).unwrap();
-    let mut client: Client<FieldPrio2> =
-        Client::new(input.len(), pk1.clone(), pk2.clone()).unwrap();
+    let mut client: Client<FieldPrio2> = Client::new(input.len(), pk1, pk2).unwrap();
     benchmarked_v2_prove(&black_box(input), &mut client)
 }
 
@@ -125,8 +124,7 @@ fn prio2_prove_and_verify(size: usize) -> VerificationMessage<FieldPrio2> {
     let input = vec![FieldPrio2::zero(); size];
     let pk1 = PublicKey::from_base64(PRIO2_PUBKEY1).unwrap();
     let pk2 = PublicKey::from_base64(PRIO2_PUBKEY2).unwrap();
-    let mut client: Client<FieldPrio2> =
-        Client::new(input.len(), pk1.clone(), pk2.clone()).unwrap();
+    let mut client: Client<FieldPrio2> = Client::new(input.len(), pk1, pk2).unwrap();
     let input_and_proof = benchmarked_v2_prove(&input, &mut client);
     let mut validator = ValidationMemory::new(input.len());
     let eval_at = random_vector(1).unwrap()[0];
