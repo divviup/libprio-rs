@@ -300,7 +300,11 @@ where
 
         // Generate the input shares and compute the joint randomness.
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
-        let mut helper_joint_rand_parts = Vec::with_capacity(num_aggregators as usize - 1);
+        let mut helper_joint_rand_parts = if self.typ.joint_rand_len() > 0 {
+            Some(Vec::with_capacity(num_aggregators as usize - 1))
+        } else {
+            None
+        };
         let mut leader_input_share = input.clone();
         for agg_id in 1..num_aggregators {
             let helper = HelperShare::from_rand_source(rand_source)?;
@@ -319,7 +323,9 @@ where
                 deriver.update(&y.into());
             }
 
-            helper_joint_rand_parts.push(deriver.into_seed());
+            if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
+                helper_joint_rand_parts.push(deriver.into_seed());
+            }
             helper_shares.push(helper);
         }
 
@@ -335,15 +341,21 @@ where
         let leader_joint_rand_seed_part = deriver.into_seed();
 
         // Compute the joint randomness seed.
-        let joint_rand_seed = Self::derive_joint_randomness(
-            std::iter::once(&leader_joint_rand_seed_part).chain(helper_joint_rand_parts.iter()),
-        );
+        let joint_rand_seed = helper_joint_rand_parts.as_ref().map(|parts| {
+            Self::derive_joint_randomness(
+                std::iter::once(&leader_joint_rand_seed_part).chain(parts.iter()),
+            )
+        });
 
         // Run the proof-generation algorithm.
         let domain_separation_tag = &info[..DST_LEN];
-        let prng: Prng<T::Field, _> =
-            Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
-        let joint_rand: Vec<T::Field> = prng.take(self.typ.joint_rand_len()).collect();
+        let joint_rand: Vec<T::Field> = joint_rand_seed
+            .map(|joint_rand_seed| {
+                let prng: Prng<T::Field, _> =
+                    Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
+                prng.take(self.typ.joint_rand_len()).collect()
+            })
+            .unwrap_or_default();
         let prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
             &Seed::from_rand_source(rand_source)?,
             domain_separation_tag,
@@ -364,16 +376,18 @@ where
                 *x -= y;
             }
 
-            let mut hint = Vec::with_capacity(num_aggregators as usize - 1);
-            hint.push(leader_joint_rand_seed_part.clone());
-            hint.extend(helper_joint_rand_parts[..j].iter().cloned());
-            hint.extend(helper_joint_rand_parts[j + 1..].iter().cloned());
-            helper.joint_rand_param.seed_hint = hint;
+            if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_ref() {
+                let mut hint = Vec::with_capacity(num_aggregators as usize - 1);
+                hint.push(leader_joint_rand_seed_part.clone());
+                hint.extend(helper_joint_rand_parts[..j].iter().cloned());
+                hint.extend(helper_joint_rand_parts[j + 1..].iter().cloned());
+                helper.joint_rand_param.seed_hint = hint;
+            }
         }
 
         let leader_joint_rand_param = if self.typ.joint_rand_len() > 0 {
             Some(JointRandParam {
-                seed_hint: helper_joint_rand_parts,
+                seed_hint: helper_joint_rand_parts.unwrap_or_default(),
                 blind: leader_blind,
             })
         } else {
