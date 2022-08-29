@@ -732,7 +732,7 @@ checksum = "ac74c624d6b2d21f425f752262f42188365d7b8ff1aff74c82e45136510a4857"
 
 [[package]]
 name = "prio"
-version = "0.8.3"
+version = "0.9.0"
 dependencies = [
  "aes 0.8.1",
  "aes-gcm",
