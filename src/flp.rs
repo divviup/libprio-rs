@@ -110,6 +110,9 @@ pub enum FlpError {
 /// as a vector of field elements and how validity of the encoded measurement is determined.
 /// Validity is determined via an arithmetic circuit evaluated over the encoded measurement.
 pub trait Type: Sized + Eq + Clone + Debug {
+    /// The Prio3 VDAF identifier corresponding to this type.
+    const ID: u32;
+
     /// The type of raw measurement to be encoded.
     type Measurement: Clone + Debug;
 
@@ -798,6 +801,7 @@ mod tests {
     }
 
     impl<F: FieldElement> Type for TestType<F> {
+        const ID: u32 = 0xFFFF0000;
         type Measurement = F::Integer;
         type AggregateResult = F::Integer;
         type Field = F;
@@ -932,6 +936,7 @@ mod tests {
     }
 
     impl<F: FieldElement> Type for Issue254Type<F> {
+        const ID: u32 = 0xFFFF0000;
         type Measurement = F::Integer;
         type AggregateResult = F::Integer;
         type Field = F;

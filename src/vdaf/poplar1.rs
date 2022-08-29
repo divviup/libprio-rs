@@ -339,6 +339,9 @@ where
     I: Idpf<2, 2>,
     P: Prg<L>,
 {
+    // TODO: This currently uses a codepoint reserved for testing purposes. Replace it with
+    // 0x00001000 once the implementation is updated to match draft-irtf-cfrg-vdaf-03.
+    const ID: u32 = 0xFFFF0000;
     type Measurement = IdpfInput;
     type AggregateResult = BTreeMap<IdpfInput, u64>;
     type AggregationParam = BTreeSet<IdpfInput>;

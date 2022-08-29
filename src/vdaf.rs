@@ -15,6 +15,12 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
 
+/// A component of the domain-separation tag, used to bind the VDAF operations to the document
+/// version. This will be revised with each draft with breaking changes.
+const VERSION: &[u8] = b"vdaf-03";
+/// Length of the domain-separation tag, including document version and algorithm ID.
+const DST_LEN: usize = VERSION.len() + 4;
+
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
 pub enum VdafError {
@@ -120,6 +126,9 @@ pub trait Vdaf: Clone + Debug
 where
     for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
 {
+    /// Algorithm identifier for this VDAF.
+    const ID: u32;
+
     /// The type of Client measurement to be aggregated.
     type Measurement: Clone + Debug;
 
