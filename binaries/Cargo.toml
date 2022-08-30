@@ -12,6 +12,7 @@ prio = { path = "..", features = ["test-util", "prio2"] }
 color-eyre = { version = "^0.6" }
 serde_json = { version = "1.0" }
 structopt = { version = "0.3.26" }
+serde = { version = "1.0.143", features = ["derive"] }
 
 [[bin]]
 name = "generate-test-vector"
@@ -20,3 +21,7 @@ path = "src/bin/generate_test_vector.rs"
 [[bin]]
 name = "crypt"
 path = "src/bin/crypt.rs"
+
+[[bin]]
+name = "generate-prg-test-vector"
+path = "src/bin/generate_prg_test_vector.rs"

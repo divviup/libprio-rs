@@ -758,6 +758,7 @@ dependencies = [
  "base64",
  "color-eyre",
  "prio",
+ "serde",
  "serde_json",
  "structopt",
 ]
