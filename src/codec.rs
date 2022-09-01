@@ -304,7 +304,7 @@ pub fn decode_u24_items<P, D: ParameterizedDecode<P>>(
 }
 
 /// Decode the next `length` bytes from `bytes` into as many instances of `D` as possible.
-fn decode_items<P, D: ParameterizedDecode<P>>(
+pub fn decode_items<P, D: ParameterizedDecode<P>>(
     length: usize,
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
