@@ -416,7 +416,7 @@ pub struct ParallelSumMultithreaded<F: FieldElement, G: Gadget<F>> {
 impl<F, G> ParallelSumGadget<F, G> for ParallelSumMultithreaded<F, G>
 where
     F: FieldElement + Sync + Send,
-    G: 'static + Gadget<F> + Clone + Sync,
+    G: 'static + Gadget<F> + Clone + Sync + Send,
 {
     fn new(inner: G, chunks: usize) -> Self {
         Self {
@@ -425,11 +425,37 @@ where
     }
 }
 
+/// Data structures passed between fold operations in [`ParallelSumMultithreaded`].
+#[cfg(feature = "multithreaded")]
+struct ParallelSumFoldState<F, G> {
+    /// Inner gadget.
+    inner: G,
+    /// Output buffer for `call_poly()`.
+    partial_output: Vec<F>,
+    /// Sum accumulator.
+    partial_sum: Vec<F>,
+}
+
+#[cfg(feature = "multithreaded")]
+impl<F, G> ParallelSumFoldState<F, G> {
+    fn new(gadget: &G, length: usize) -> ParallelSumFoldState<F, G>
+    where
+        G: Clone,
+        F: FieldElement,
+    {
+        ParallelSumFoldState {
+            inner: gadget.clone(),
+            partial_output: vec![F::zero(); length],
+            partial_sum: vec![F::zero(); length],
+        }
+    }
+}
+
 #[cfg(feature = "multithreaded")]
 impl<F, G> Gadget<F> for ParallelSumMultithreaded<F, G>
 where
     F: FieldElement + Sync + Send,
-    G: 'static + Gadget<F> + Clone + Sync,
+    G: 'static + Gadget<F> + Clone + Sync + Send,
 {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         self.serial_sum.call(inp)
@@ -438,25 +464,43 @@ where
     fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
+        // Create a copy of the inner gadget and two working buffers on each thread. Evaluate the
+        // gadget on each input polynomial, using the first temporary buffer as an output buffer.
+        // Then accumulate that result into the second temporary buffer, which acts as a running
+        // sum. Then, discard everything but the partial sums, add them, and finally copy the sum
+        // to the output parameter. This is equivalent to the single threaded calculation in
+        // ParallelSum, since we only rearrange additions, and field addition is associative.
         let res = inp
             .par_chunks(self.serial_sum.inner.arity())
-            .map(|chunk| {
-                let mut inner = self.serial_sum.inner.clone();
-                let mut partial_outp = vec![F::zero(); outp.len()];
-                inner.call_poly(&mut partial_outp, chunk).unwrap();
-                partial_outp
-            })
+            .fold(
+                || ParallelSumFoldState::new(&self.serial_sum.inner, outp.len()),
+                |mut state, chunk| {
+                    state
+                        .inner
+                        .call_poly(&mut state.partial_output, chunk)
+                        .unwrap();
+                    for (sum_elem, output_elem) in state
+                        .partial_sum
+                        .iter_mut()
+                        .zip(state.partial_output.iter())
+                    {
+                        *sum_elem += *output_elem;
+                    }
+                    state
+                },
+            )
+            .map(|state| state.partial_sum)
             .reduce(
                 || vec![F::zero(); outp.len()],
                 |mut x, y| {
-                    for i in 0..x.len() {
-                        x[i] += y[i];
+                    for (xi, yi) in x.iter_mut().zip(y.iter()) {
+                        *xi += *yi;
                     }
                     x
                 },
             );
 
-        outp.clone_from_slice(&res[..outp.len()]);
+        outp.copy_from_slice(&res[..]);
         Ok(())
     }
 
