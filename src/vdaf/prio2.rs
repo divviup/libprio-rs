@@ -263,7 +263,6 @@ impl Collector for Prio2 {
         &self,
         _agg_param: &(),
         agg_shares: M,
-        _num_measurements: usize,
     ) -> Result<Vec<u32>, VdafError> {
         let mut agg = AggregateShare(vec![FieldPrio2::zero(); self.input_len]);
         for agg_share in agg_shares.into_iter() {

@@ -222,7 +222,6 @@ where
         &self,
         agg_param: &Self::AggregationParam,
         agg_shares: M,
-        num_measurements: usize,
     ) -> Result<Self::AggregateResult, VdafError>;
 }
 
@@ -388,9 +387,7 @@ where
     let nonce = b"this is a nonce";
 
     let mut agg_shares: Vec<Option<V::AggregateShare>> = vec![None; vdaf.num_aggregators()];
-    let mut num_measurements: usize = 0;
     for measurement in measurements.into_iter() {
-        num_measurements += 1;
         let input_shares = vdaf.shard(&measurement)?;
         let out_shares = run_vdaf_prepare(vdaf, &verify_key, agg_param, nonce, input_shares)?;
         for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
@@ -405,7 +402,6 @@ where
     let res = vdaf.unshard(
         agg_param,
         agg_shares.into_iter().map(|option| option.unwrap()),
-        num_measurements,
     )?;
     Ok(res)
 }
