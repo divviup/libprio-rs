@@ -125,11 +125,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     ) -> Result<Vec<Self::Field>, FlpError>;
 
     /// Decode an aggregate result.
-    fn decode_result(
-        &self,
-        data: &[Self::Field],
-        num_measurements: usize,
-    ) -> Result<Self::AggregateResult, FlpError>;
+    fn decode_result(&self, data: &[Self::Field]) -> Result<Self::AggregateResult, FlpError>;
 
     /// Returns the sequence of gadgets associated with the validity circuit.
     ///
@@ -885,11 +881,7 @@ mod tests {
             Ok(input)
         }
 
-        fn decode_result(
-            &self,
-            _data: &[F],
-            _num_measurements: usize,
-        ) -> Result<F::Integer, FlpError> {
+        fn decode_result(&self, _data: &[F]) -> Result<F::Integer, FlpError> {
             panic!("not implemented");
         }
     }
@@ -1018,11 +1010,7 @@ mod tests {
             Ok(input)
         }
 
-        fn decode_result(
-            &self,
-            _data: &[F],
-            _num_measurements: usize,
-        ) -> Result<F::Integer, FlpError> {
+        fn decode_result(&self, _data: &[F]) -> Result<F::Integer, FlpError> {
             panic!("not implemented");
         }
     }

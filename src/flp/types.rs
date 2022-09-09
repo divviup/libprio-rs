@@ -6,7 +6,6 @@ use crate::field::{FieldElement, FieldElementExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
-use std::convert::TryInto;
 use std::marker::PhantomData;
 
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of
@@ -45,7 +44,7 @@ impl<F: FieldElement> Type for Count<F> {
         Ok(vec![F::from(*value)])
     }
 
-    fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
+    fn decode_result(&self, data: &[F]) -> Result<F::Integer, FlpError> {
         decode_result(data)
     }
 
@@ -137,106 +136,8 @@ impl<F: FieldElement> Type for Sum<F> {
         Ok(v)
     }
 
-    fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
+    fn decode_result(&self, data: &[F]) -> Result<F::Integer, FlpError> {
         decode_result(data)
-    }
-
-    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.bits,
-        ))]
-    }
-
-    fn valid(
-        &self,
-        g: &mut Vec<Box<dyn Gadget<F>>>,
-        input: &[F],
-        joint_rand: &[F],
-        _num_shares: usize,
-    ) -> Result<F, FlpError> {
-        self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
-    }
-
-    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        self.truncate_call_check(&input)?;
-        let res = F::decode_from_bitvector_representation(&input)?;
-        Ok(vec![res])
-    }
-
-    fn input_len(&self) -> usize {
-        self.bits
-    }
-
-    fn proof_len(&self) -> usize {
-        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
-    }
-
-    fn verifier_len(&self) -> usize {
-        3
-    }
-
-    fn output_len(&self) -> usize {
-        1
-    }
-
-    fn joint_rand_len(&self) -> usize {
-        1
-    }
-
-    fn prove_rand_len(&self) -> usize {
-        1
-    }
-
-    fn query_rand_len(&self) -> usize {
-        1
-    }
-}
-
-/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
-/// aggregate is the arithmetic average.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Average<F: FieldElement> {
-    bits: usize,
-    range_checker: Vec<F>,
-}
-
-impl<F: FieldElement> Average<F> {
-    /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
-    /// 2^bits)`.
-    pub fn new(bits: usize) -> Result<Self, FlpError> {
-        if !F::valid_integer_bitlength(bits) {
-            return Err(FlpError::Encode(
-                "invalid bits: number of bits exceeds maximum number of bits in this field"
-                    .to_string(),
-            ));
-        }
-        Ok(Self {
-            bits,
-            range_checker: poly_range_check(0, 2),
-        })
-    }
-}
-
-impl<F: FieldElement> Type for Average<F> {
-    type Measurement = F::Integer;
-    type AggregateResult = f64;
-    type Field = F;
-
-    fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_into_bitvector_representation(summand, self.bits)?;
-        Ok(v)
-    }
-
-    fn decode_result(&self, data: &[F], num_measurements: usize) -> Result<f64, FlpError> {
-        // Compute the average from the aggregated sum.
-        let data = decode_result(data)?;
-        let data: u64 = data.try_into().map_err(|err| {
-            FlpError::Decode(format!("failed to convert {:?} to u64: {}", data, err,))
-        })?;
-        let result = (data as f64) / (num_measurements as f64);
-        Ok(result)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
@@ -343,11 +244,7 @@ impl<F: FieldElement> Type for Histogram<F> {
         Ok(data)
     }
 
-    fn decode_result(
-        &self,
-        data: &[F],
-        _num_measurements: usize,
-    ) -> Result<Vec<F::Integer>, FlpError> {
+    fn decode_result(&self, data: &[F]) -> Result<Vec<F::Integer>, FlpError> {
         decode_result_vec(data, self.buckets.len() + 1)
     }
 
@@ -491,11 +388,7 @@ where
         Ok(measurement.iter().map(|value| F::from(*value)).collect())
     }
 
-    fn decode_result(
-        &self,
-        data: &[F],
-        _num_measurements: usize,
-    ) -> Result<Vec<F::Integer>, FlpError> {
+    fn decode_result(&self, data: &[F]) -> Result<Vec<F::Integer>, FlpError> {
         decode_result_vec(data, self.len)
     }
 
@@ -644,7 +537,6 @@ mod tests {
                     &count
                         .truncate(count.encode_measurement(&1).unwrap())
                         .unwrap(),
-                    1
                 )
                 .unwrap(),
             1,
@@ -698,11 +590,8 @@ mod tests {
 
         // Round trip
         assert_eq!(
-            sum.decode_result(
-                &sum.truncate(sum.encode_measurement(&27).unwrap()).unwrap(),
-                1
-            )
-            .unwrap(),
+            sum.decode_result(&sum.truncate(sum.encode_measurement(&27).unwrap()).unwrap(),)
+                .unwrap(),
             27,
         );
 
@@ -770,48 +659,6 @@ mod tests {
     }
 
     #[test]
-    fn test_average() {
-        let average = Average::new(11).unwrap();
-        let zero = TestField::zero();
-        let one = TestField::one();
-        let ten = TestField::from(10);
-
-        // Testing that average correctly quotients the sum of the measurements
-        // by the number of measurements.
-        assert_eq!(average.decode_result(&[zero], 1).unwrap(), 0.0);
-        assert_eq!(average.decode_result(&[one], 1).unwrap(), 1.0);
-        assert_eq!(average.decode_result(&[one], 2).unwrap(), 0.5);
-        assert_eq!(average.decode_result(&[one], 4).unwrap(), 0.25);
-        assert_eq!(average.decode_result(&[ten], 8).unwrap(), 1.25);
-
-        // round trip of 12 with `num_measurements`=1
-        assert_eq!(
-            average
-                .decode_result(
-                    &average
-                        .truncate(average.encode_measurement(&12).unwrap())
-                        .unwrap(),
-                    1
-                )
-                .unwrap(),
-            12.0
-        );
-
-        // round trip of 12 with `num_measurements`=24
-        assert_eq!(
-            average
-                .decode_result(
-                    &average
-                        .truncate(average.encode_measurement(&12).unwrap())
-                        .unwrap(),
-                    24
-                )
-                .unwrap(),
-            0.5
-        );
-    }
-
-    #[test]
     fn test_histogram() {
         let hist = Histogram::new(vec![10, 20]).unwrap();
         let zero = TestField::zero();
@@ -830,7 +677,6 @@ mod tests {
                 &hist
                     .truncate(hist.encode_measurement(&27).unwrap())
                     .unwrap(),
-                1
             )
             .unwrap(),
             [0, 0, 1]
@@ -969,7 +815,6 @@ mod tests {
                     &count_vec
                         .truncate(count_vec.encode_measurement(&want).unwrap())
                         .unwrap(),
-                    1
                 )
                 .unwrap(),
             want
