@@ -1055,6 +1055,39 @@ mod tests {
     }
 
     #[test]
+    fn test_prio3_countvec() {
+        let prio3 = Prio3::new_aes128_count_vec(2, 20).unwrap();
+        assert_eq!(
+            run_vdaf(
+                &prio3,
+                &(),
+                [vec![
+                    0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,
+                ]]
+            )
+            .unwrap(),
+            vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,]
+        );
+    }
+
+    #[test]
+    #[cfg(feature = "multithreaded")]
+    fn test_prio3_countvec_multithreaded() {
+        let prio3 = Prio3::new_aes128_count_vec_multithreaded(2, 20).unwrap();
+        assert_eq!(
+            run_vdaf(
+                &prio3,
+                &(),
+                [vec![
+                    0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,
+                ]]
+            )
+            .unwrap(),
+            vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,]
+        );
+    }
+
+    #[test]
     fn test_prio3_histogram() {
         let prio3 = Prio3::new_aes128_histogram(2, &[0, 10, 20]).unwrap();
 

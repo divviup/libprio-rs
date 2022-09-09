@@ -640,47 +640,49 @@ mod tests {
     fn test_parallel_sum_multithreaded() {
         use std::iter;
 
-        let poly: Vec<TestField> = random_vector(10).unwrap();
-        let num_calls = 10;
-        let chunks = 23;
+        for num_calls in [1, 10, 100] {
+            let poly: Vec<TestField> = random_vector(10).unwrap();
+            let chunks = 23;
 
-        let mut g =
-            ParallelSumMultithreaded::new(BlindPolyEval::new(poly.clone(), num_calls), chunks);
-        gadget_test(&mut g, num_calls);
+            let mut g =
+                ParallelSumMultithreaded::new(BlindPolyEval::new(poly.clone(), num_calls), chunks);
+            gadget_test(&mut g, num_calls);
 
-        // Test that the multithreaded version has the same output as the normal version.
-        let mut g_serial = ParallelSum::new(BlindPolyEval::new(poly, num_calls), chunks);
-        assert_eq!(g.arity(), g_serial.arity());
-        assert_eq!(g.degree(), g_serial.degree());
-        assert_eq!(g.calls(), g_serial.calls());
+            // Test that the multithreaded version has the same output as the normal version.
+            let mut g_serial = ParallelSum::new(BlindPolyEval::new(poly, num_calls), chunks);
+            assert_eq!(g.arity(), g_serial.arity());
+            assert_eq!(g.degree(), g_serial.degree());
+            assert_eq!(g.calls(), g_serial.calls());
 
-        let arity = g.arity();
-        let degree = g.degree();
+            let arity = g.arity();
+            let degree = g.degree();
 
-        // Test that both gadgets evaluate to the same value when run on scalar inputs.
-        let inp: Vec<TestField> = random_vector(arity).unwrap();
-        let result = g.call(&inp).unwrap();
-        let result_serial = g_serial.call(&inp).unwrap();
-        assert_eq!(result, result_serial);
+            // Test that both gadgets evaluate to the same value when run on scalar inputs.
+            let inp: Vec<TestField> = random_vector(arity).unwrap();
+            let result = g.call(&inp).unwrap();
+            let result_serial = g_serial.call(&inp).unwrap();
+            assert_eq!(result, result_serial);
 
-        // Test that both gadgets evaluate to the same value when run on polynomial inputs.
-        let mut poly_outp = vec![TestField::zero(); (degree * (1 + num_calls)).next_power_of_two()];
-        let mut poly_outp_serial =
-            vec![TestField::zero(); (degree * (1 + num_calls)).next_power_of_two()];
-        let mut prng: Prng<TestField, _> = Prng::new().unwrap();
-        let poly_inp: Vec<_> = iter::repeat_with(|| {
-            iter::repeat_with(|| prng.get())
-                .take(1 + num_calls)
-                .collect::<Vec<_>>()
-        })
-        .take(arity)
-        .collect();
+            // Test that both gadgets evaluate to the same value when run on polynomial inputs.
+            let mut poly_outp =
+                vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
+            let mut poly_outp_serial =
+                vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
+            let mut prng: Prng<TestField, _> = Prng::new().unwrap();
+            let poly_inp: Vec<_> = iter::repeat_with(|| {
+                iter::repeat_with(|| prng.get())
+                    .take(1 + num_calls)
+                    .collect::<Vec<_>>()
+            })
+            .take(arity)
+            .collect();
 
-        g.call_poly(&mut poly_outp, &poly_inp).unwrap();
-        g_serial
-            .call_poly(&mut poly_outp_serial, &poly_inp)
-            .unwrap();
-        assert_eq!(poly_outp, poly_outp_serial);
+            g.call_poly(&mut poly_outp, &poly_inp).unwrap();
+            g_serial
+                .call_poly(&mut poly_outp_serial, &poly_inp)
+                .unwrap();
+            assert_eq!(poly_outp, poly_outp_serial);
+        }
     }
 
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
