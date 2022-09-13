@@ -255,9 +255,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 let inner_arity = inner.arity();
                 if prove_rand_len + inner_arity > prove_rand.len() {
                     return Err(FlpError::Prove(format!(
-                        "short prove randomness: got {}; want {}",
+                        "short prove randomness: got {}; want at least {}",
                         prove_rand.len(),
-                        self.prove_rand_len()
+                        prove_rand_len + inner_arity
                     )));
                 }
 

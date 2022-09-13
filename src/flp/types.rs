@@ -623,18 +623,11 @@ pub(crate) fn decode_result_vec<F: FieldElement>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split_vector, Field64 as TestField};
+    use crate::field::{random_vector, Field64 as TestField};
     use crate::flp::gadgets::ParallelSum;
     #[cfg(feature = "multithreaded")]
     use crate::flp::gadgets::ParallelSumMultithreaded;
-
-    // Number of shares to split input and proofs into in `flp_test`.
-    const NUM_SHARES: usize = 3;
-
-    struct ValidityTestCase<F> {
-        expect_valid: bool,
-        expected_output: Option<Vec<F>>,
-    }
+    use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
 
     #[test]
     fn test_count() {
@@ -662,6 +655,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -672,6 +666,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -683,6 +678,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -718,6 +714,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_output: Some(vec![TestField::from(1337)]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -728,6 +725,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -738,6 +736,7 @@ mod tests {
             &ValidityTestCase {
                 expect_valid: true,
                 expected_output: Some(vec![one]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -748,6 +747,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![TestField::from(237)]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -759,6 +759,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -769,6 +770,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -852,6 +854,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one, zero, zero]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -862,6 +865,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, one, zero]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -872,6 +876,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, zero, one]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -883,6 +888,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -893,6 +899,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -903,6 +910,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -913,6 +921,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: false,
                 expected_output: None,
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -935,6 +944,7 @@ mod tests {
                 &ValidityTestCase::<TestField> {
                     expect_valid: true,
                     expected_output: Some(vec![one; len]),
+                    num_shares: 3,
                 },
             )
             .unwrap();
@@ -948,6 +958,7 @@ mod tests {
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one; len]),
+                num_shares: 3,
             },
         )
         .unwrap();
@@ -961,6 +972,7 @@ mod tests {
                 &ValidityTestCase::<TestField> {
                     expect_valid: false,
                     expected_output: None,
+                    num_shares: 3,
                 },
             )
             .unwrap();
@@ -1028,8 +1040,21 @@ mod tests {
         assert_eq!(verifier.len(), typ.verifier_len());
         assert!(typ.decide(&verifier).unwrap());
     }
+}
 
-    fn flp_validity_test<T: Type>(
+#[cfg(test)]
+mod test_utils {
+    use super::*;
+    use crate::field::{random_vector, split_vector};
+
+    pub(crate) struct ValidityTestCase<F> {
+        pub(crate) expect_valid: bool,
+        pub(crate) expected_output: Option<Vec<F>>,
+        // Number of shares to split input and proofs into in `flp_test`.
+        pub(crate) num_shares: usize,
+    }
+
+    pub(crate) fn flp_validity_test<T: Type>(
         typ: &T,
         input: &[T::Field],
         t: &ValidityTestCase<T::Field>,
@@ -1101,24 +1126,24 @@ mod tests {
         }
 
         // Run distributed FLP.
-        let input_shares: Vec<Vec<T::Field>> = split_vector(input, NUM_SHARES)
+        let input_shares: Vec<Vec<T::Field>> = split_vector(input, t.num_shares)
             .unwrap()
             .into_iter()
             .collect();
 
-        let proof_shares: Vec<Vec<T::Field>> = split_vector(&proof, NUM_SHARES)
+        let proof_shares: Vec<Vec<T::Field>> = split_vector(&proof, t.num_shares)
             .unwrap()
             .into_iter()
             .collect();
 
-        let verifier: Vec<T::Field> = (0..NUM_SHARES)
+        let verifier: Vec<T::Field> = (0..t.num_shares)
             .map(|i| {
                 typ.query(
                     &input_shares[i],
                     &proof_shares[i],
                     &query_rand,
                     &joint_rand,
-                    NUM_SHARES,
+                    t.num_shares,
                 )
                 .unwrap()
             })
@@ -1197,3 +1222,5 @@ mod tests {
         Ok(())
     }
 }
+
+pub mod fixedpoint_l2;

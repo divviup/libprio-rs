@@ -210,7 +210,7 @@ pub fn encode_u8_items<P, E: ParameterizedEncode<P>>(
     }
 
     let len = bytes.len() - len_offset - 1;
-    assert!(len <= u8::MAX.into());
+    assert!(len <= usize::from(u8::MAX));
     bytes[len_offset] = len as u8;
 }
 
@@ -245,7 +245,7 @@ pub fn encode_u16_items<P, E: ParameterizedEncode<P>>(
     }
 
     let len = bytes.len() - len_offset - 2;
-    assert!(len <= u16::MAX.into());
+    assert!(len <= usize::from(u16::MAX));
     for (offset, byte) in u16::to_be_bytes(len as u16).iter().enumerate() {
         bytes[len_offset + offset] = *byte;
     }

@@ -6,7 +6,7 @@ edition = "2018"
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0"
 repository = "https://github.com/divviup/libprio-rs"
-rust-version = "1.58"
+rust-version = "1.61"
 resolver = "2"
 
 [dependencies]
@@ -15,6 +15,7 @@ ctr = { version = "0.9.1", optional = true }
 cmac = { version = "0.7.1", optional = true }
 base64 = "0.13.0"
 byteorder = "1.4.3"
+fixed = "1.19"
 getrandom = { version = "0.2.7", features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
 static_assertions = "1.1.0"
@@ -34,6 +35,7 @@ ring = { version = "0.16.20", optional = true }
 [dev-dependencies]
 assert_matches = "1.5.0"
 criterion = "0.4"
+fixed-macro = "1.1.1"
 iai = "0.1"
 itertools = "0.10.3"
 modinverse = "0.1.0"

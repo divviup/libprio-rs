@@ -2,6 +2,7 @@
 
 use criterion::{criterion_group, criterion_main, Criterion};
 
+use fixed_macro::fixed;
 use prio::benchmarked::*;
 #[cfg(feature = "prio2")]
 use prio::client::Client as Prio2Client;
@@ -260,6 +261,48 @@ pub fn prio3_client(c: &mut Criterion) {
                 prio3.shard(&measurement).unwrap();
             })
         });
+    }
+
+    let len = 1000;
+    let prio3 = Prio3::new_aes128_fixedpoint_boundedl2_vec_sum(num_shares, len).unwrap();
+    let fp_num = fixed!(0.0001: I1F15);
+    let measurement = vec![fp_num; len];
+    println!(
+        "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
+        len,
+        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+    );
+    c.bench_function(
+        &format!("prio3 fixedpoint16 boundedl2 vec ({} entries)", len),
+        |b| {
+            b.iter(|| {
+                prio3.shard(&measurement).unwrap();
+            })
+        },
+    );
+
+    #[cfg(feature = "multithreaded")]
+    {
+        let prio3 =
+            Prio3::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded(num_shares, len).unwrap();
+        let fp_num = fixed!(0.0001: I1F15);
+        let measurement = vec![fp_num; len];
+        println!(
+            "prio3 fixedpoint16 boundedl2 vec multithreaded ({} entries) size = {}",
+            len,
+            prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        );
+        c.bench_function(
+            &format!(
+                "prio3 fixedpoint16 boundedl2 vec multithreaded ({} entries)",
+                len
+            ),
+            |b| {
+                b.iter(|| {
+                    prio3.shard(&measurement).unwrap();
+                })
+            },
+        );
     }
 }
 
