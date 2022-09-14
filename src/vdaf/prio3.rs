@@ -37,7 +37,11 @@ use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
 #[cfg(feature = "crypto-dependencies")]
-use crate::flp::gadgets::{BlindPolyEval, ParallelSum};
+use crate::flp::gadgets::{BlindPolyEval, ParallelSum, PolyEval};
+#[cfg(feature = "crypto-dependencies")]
+use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
+#[cfg(feature = "crypto-dependencies")]
+use crate::flp::types::fixedpoint_l2::FixedPointBoundedL2VecSum;
 #[cfg(feature = "crypto-dependencies")]
 use crate::flp::types::{Average, Count, CountVec, Histogram, Sum};
 use crate::flp::Type;
@@ -47,6 +51,8 @@ use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
 };
+#[cfg(feature = "crypto-dependencies")]
+use fixed::traits::Fixed;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
@@ -124,6 +130,75 @@ impl Prio3Aes128Sum {
         }
 
         Prio3::new(num_aggregators, Sum::new(bits as usize)?)
+    }
+}
+
+/// The fixed point vector sum type. Each measurement is a vector of fixed point numbers
+/// and the aggregate is the sum represented as 64-bit floats. The preparation phase
+/// ensures the L2 norm of the input vector is < 1.
+///
+/// This is useful for aggregating gradients in a federated version of
+/// [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent) with
+/// [differential privacy](https://en.wikipedia.org/wiki/Differential_privacy),
+/// useful, e.g., for [differentially private deep learning](https://arxiv.org/pdf/1607.00133.pdf).
+/// The bound on input norms is required for differential privacy. The fixed point representation
+/// allows an easy conversion to the integer type used in internal computation, while leaving
+/// conversion to the client. The model itself will have floating point parameters, so the output
+/// sum has that type as well.
+#[cfg(feature = "crypto-dependencies")]
+pub type Prio3Aes128FixedPointBoundedL2VecSum<Fx> = Prio3<
+    FixedPointBoundedL2VecSum<
+        Fx,
+        Field128,
+        ParallelSum<Field128, PolyEval<Field128>>,
+        ParallelSum<Field128, BlindPolyEval<Field128>>,
+    >,
+    PrgAes128,
+    16,
+>;
+
+#[cfg(feature = "crypto-dependencies")]
+impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3Aes128FixedPointBoundedL2VecSum<Fx> {
+    /// Construct an instance of this VDAF with the given number of aggregators and number of
+    /// vector entries.
+    pub fn new_aes128_fixedpoint_boundedl2_vec_sum(
+        num_aggregators: u8,
+        entries: usize,
+    ) -> Result<Self, VdafError> {
+        check_num_aggregators(num_aggregators)?;
+        Prio3::new(num_aggregators, FixedPointBoundedL2VecSum::new(entries)?)
+    }
+}
+
+/// The fixed point vector sum type. Each measurement is a vector of fixed point numbers
+/// and the aggregate is the sum represented as 64-bit floats. The verification function
+/// ensures the L2 norm of the input vector is < 1.
+#[cfg(feature = "multithreaded")]
+#[cfg(feature = "crypto-dependencies")]
+#[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
+pub type Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
+    FixedPointBoundedL2VecSum<
+        Fx,
+        Field128,
+        ParallelSumMultithreaded<Field128, PolyEval<Field128>>,
+        ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>,
+    >,
+    PrgAes128,
+    16,
+>;
+
+#[cfg(feature = "multithreaded")]
+#[cfg(feature = "crypto-dependencies")]
+#[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
+impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx> {
+    /// Construct an instance of this VDAF with the given number of aggregators and number of
+    /// vector entries.
+    pub fn new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded(
+        num_aggregators: u8,
+        entries: usize,
+    ) -> Result<Self, VdafError> {
+        check_num_aggregators(num_aggregators)?;
+        Prio3::new(num_aggregators, FixedPointBoundedL2VecSum::new(entries)?)
     }
 }
 
@@ -985,8 +1060,12 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::flp::gadgets::ParallelSumGadget;
     use crate::vdaf::{run_vdaf, run_vdaf_prepare};
     use assert_matches::assert_matches;
+    use fixed::types::extra::{U15, U31, U63};
+    use fixed::{FixedI16, FixedI32, FixedI64};
+    use fixed_macro::fixed;
     use rand::prelude::*;
 
     #[test]
@@ -1085,6 +1164,157 @@ mod tests {
             .unwrap(),
             vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,]
         );
+    }
+
+    #[test]
+    fn test_prio3_bounded_fpvec_sum() {
+        type P<Fx> = Prio3Aes128FixedPointBoundedL2VecSum<Fx>;
+        let ctor_16 = P::<FixedI16<U15>>::new_aes128_fixedpoint_boundedl2_vec_sum;
+        let ctor_32 = P::<FixedI32<U31>>::new_aes128_fixedpoint_boundedl2_vec_sum;
+        let ctor_64 = P::<FixedI64<U63>>::new_aes128_fixedpoint_boundedl2_vec_sum;
+
+        #[cfg(feature = "multithreaded")]
+        type PM<Fx> = Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx>;
+        #[cfg(feature = "multithreaded")]
+        let ctor_mt_16 = PM::<FixedI16<U15>>::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded;
+        #[cfg(feature = "multithreaded")]
+        let ctor_mt_32 = PM::<FixedI32<U31>>::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded;
+        #[cfg(feature = "multithreaded")]
+        let ctor_mt_64 = PM::<FixedI64<U63>>::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded;
+
+        {
+            // 16 bit fixedpoint
+            let fp16_4_inv = fixed!(0.25: I1F15);
+            let fp16_8_inv = fixed!(0.125: I1F15);
+            let fp16_16_inv = fixed!(0.0625: I1F15);
+
+            // two aggregators, three entries per vector.
+            {
+                let prio3_16 = ctor_16(2, 3).unwrap();
+                test_fixed(fp16_4_inv, fp16_8_inv, fp16_16_inv, prio3_16);
+            }
+
+            #[cfg(feature = "multithreaded")]
+            {
+                let prio3_16_mt = ctor_mt_16(2, 3).unwrap();
+                test_fixed(fp16_4_inv, fp16_8_inv, fp16_16_inv, prio3_16_mt);
+            }
+        }
+
+        {
+            // 32 bit fixedpoint
+            let fp32_4_inv = fixed!(0.25: I1F31);
+            let fp32_8_inv = fixed!(0.125: I1F31);
+            let fp32_16_inv = fixed!(0.0625: I1F31);
+
+            {
+                let prio3_32 = ctor_32(2, 3).unwrap();
+                test_fixed(fp32_4_inv, fp32_8_inv, fp32_16_inv, prio3_32);
+            }
+
+            #[cfg(feature = "multithreaded")]
+            {
+                let prio3_32_mt = ctor_mt_32(2, 3).unwrap();
+                test_fixed(fp32_4_inv, fp32_8_inv, fp32_16_inv, prio3_32_mt);
+            }
+        }
+
+        {
+            // 64 bit fixedpoint
+            let fp64_4_inv = fixed!(0.25: I1F63);
+            let fp64_8_inv = fixed!(0.125: I1F63);
+            let fp64_16_inv = fixed!(0.0625: I1F63);
+
+            {
+                let prio3_64 = ctor_64(2, 3).unwrap();
+                test_fixed(fp64_4_inv, fp64_8_inv, fp64_16_inv, prio3_64);
+            }
+
+            #[cfg(feature = "multithreaded")]
+            {
+                let prio3_64_mt = ctor_mt_64(2, 3).unwrap();
+                test_fixed(fp64_4_inv, fp64_8_inv, fp64_16_inv, prio3_64_mt);
+            }
+        }
+
+        fn test_fixed<Fx, PE, BPE>(
+            fp_4_inv: Fx,
+            fp_8_inv: Fx,
+            fp_16_inv: Fx,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, Field128, PE, BPE>, PrgAes128, 16>,
+        ) where
+            Fx: Fixed + CompatibleFloat<Field128> + std::ops::Neg<Output = Fx>,
+            PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
+            BPE: Eq + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Clone + 'static,
+        {
+            let fp_vec1 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
+            let fp_vec2 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
+
+            let fp_vec3 = vec![-fp_4_inv, -fp_8_inv, -fp_16_inv];
+            let fp_vec4 = vec![-fp_4_inv, -fp_8_inv, -fp_16_inv];
+
+            let fp_vec5 = vec![fp_4_inv, -fp_8_inv, -fp_16_inv];
+            let fp_vec6 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
+
+            // positive entries
+            let fp_list = [fp_vec1, fp_vec2];
+            assert_eq!(
+                run_vdaf(&prio3, &(), fp_list).unwrap(),
+                vec!(0.5, 0.25, 0.125),
+            );
+
+            // negative entries
+            let fp_list2 = [fp_vec3, fp_vec4];
+            assert_eq!(
+                run_vdaf(&prio3, &(), fp_list2).unwrap(),
+                vec!(-0.5, -0.25, -0.125),
+            );
+
+            // both
+            let fp_list3 = [fp_vec5, fp_vec6];
+            assert_eq!(
+                run_vdaf(&prio3, &(), fp_list3).unwrap(),
+                vec!(0.5, 0.0, 0.0),
+            );
+
+            let mut verify_key = [0; 16];
+            thread_rng().fill(&mut verify_key[..]);
+            let nonce = b"This is a good nonce.";
+
+            let (public_share, mut input_shares) =
+                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            input_shares[0].joint_rand_param.as_mut().unwrap().blind.0[0] ^= 255;
+            let result =
+                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+            assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+            let (public_share, mut input_shares) =
+                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            input_shares[0].joint_rand_param.as_mut().unwrap().seed_hint[0].0[0] ^= 255;
+            let result =
+                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+            assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+            let (public_share, mut input_shares) =
+                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
+                data[0] += Field128::one();
+            });
+            let result =
+                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+            assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+            let (public_share, mut input_shares) =
+                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            assert_matches!(input_shares[0].proof_share, Share::Leader(ref mut data) => {
+                    data[0] += Field128::one();
+            });
+            let result =
+                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+            assert_matches!(result, Err(VdafError::Uncategorized(_)));
+
+            test_prepare_state_serialization(&prio3, &vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+        }
     }
 
     #[test]
