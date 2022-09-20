@@ -4,8 +4,11 @@
 //! Utilities for ECIES encryption / decryption used by the Prio client and server.
 
 use crate::prng::PrngError;
-use aes_gcm::{aead::generic_array::GenericArray, AeadInPlace, Aes128Gcm, KeyInit};
+use aes::{cipher::typenum::U16, Aes128};
+use aes_gcm::{aead::generic_array::GenericArray, AeadInPlace, AesGcm, KeyInit};
 use ring::agreement;
+
+type Aes128Gcm = AesGcm<Aes128, U16>;
 
 /// Length of the EC public key (X9.62 format)
 pub const PUBLICKEY_LENGTH: usize = 65;
