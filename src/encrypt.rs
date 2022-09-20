@@ -4,12 +4,11 @@
 //! Utilities for ECIES encryption / decryption used by the Prio client and server.
 
 use crate::prng::PrngError;
-
-use aes_gcm::aead::generic_array::typenum::U16;
-use aes_gcm::aead::generic_array::GenericArray;
-use aes_gcm::{AeadInPlace, NewAead};
+use aes::{cipher::typenum::U16, Aes128};
+use aes_gcm::{aead::generic_array::GenericArray, AeadInPlace, AesGcm, KeyInit};
 use ring::agreement;
-type Aes128 = aes_gcm::AesGcm<aes_gcm::aes::Aes128, U16>;
+
+type Aes128Gcm = AesGcm<Aes128, U16>;
 
 /// Length of the EC public key (X9.62 format)
 pub const PUBLICKEY_LENGTH: usize = 65;
@@ -160,7 +159,7 @@ fn x963_kdf(z: &[u8], shared_info: &[u8]) -> [u8; 32] {
 }
 
 fn decrypt_aes_gcm(key: &[u8], nonce: &[u8], mut data: Vec<u8>) -> Result<Vec<u8>, EncryptError> {
-    let cipher = Aes128::new(GenericArray::from_slice(key));
+    let cipher = Aes128Gcm::new(GenericArray::from_slice(key));
     cipher
         .decrypt_in_place(GenericArray::from_slice(nonce), &[], &mut data)
         .map_err(|_| EncryptError::Decryption)?;
@@ -168,7 +167,7 @@ fn decrypt_aes_gcm(key: &[u8], nonce: &[u8], mut data: Vec<u8>) -> Result<Vec<u8
 }
 
 fn encrypt_aes_gcm(key: &[u8], nonce: &[u8], mut data: Vec<u8>) -> Result<Vec<u8>, EncryptError> {
-    let cipher = Aes128::new(GenericArray::from_slice(key));
+    let cipher = Aes128Gcm::new(GenericArray::from_slice(key));
     cipher
         .encrypt_in_place(GenericArray::from_slice(nonce), &[], &mut data)
         .map_err(|_| EncryptError::Encryption)?;
