@@ -69,7 +69,7 @@ impl<const L: usize> PartialEq for Seed<L> {
     fn eq(&self, other: &Self) -> bool {
         // Do constant-time compare.
         let mut r = 0;
-        for (x, y) in (&self.0[..]).iter().zip(&other.0[..]) {
+        for (x, y) in self.0[..].iter().zip(&other.0[..]) {
             r |= x ^ y;
         }
         r == 0
