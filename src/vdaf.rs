@@ -263,8 +263,7 @@ impl<F> AsRef<[F]> for OutputShare<F> {
     }
 }
 
-// XXX: drop FieldElement requirement?
-impl<F: FieldElement> From<Vec<F>> for OutputShare<F> {
+impl<F> From<Vec<F>> for OutputShare<F> {
     fn from(other: Vec<F>) -> Self {
         Self(other)
     }
@@ -302,8 +301,7 @@ impl<F: FieldElement> From<OutputShare<F>> for AggregateShare<F> {
     }
 }
 
-// XXX: drop FieldElement requirement?
-impl<F: FieldElement> From<Vec<F>> for AggregateShare<F> {
+impl<F> From<Vec<F>> for AggregateShare<F> {
     fn from(other: Vec<F>) -> Self {
         Self(other)
     }
