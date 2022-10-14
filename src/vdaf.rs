@@ -140,7 +140,7 @@ pub trait Vdaf: Clone + Debug {
     type InputShare: Clone + Debug + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare: Clone + Debug;
+    type OutputShare: Clone + Debug + for<'a> TryFrom<&'a [u8]> + Into<Vec<u8>>;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
@@ -403,10 +403,11 @@ where
             input_shares,
         )?;
         for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
+            let this_agg_share = V::AggregateShare::from(out_share);
             if let Some(ref mut inner) = agg_share {
-                inner.merge(&out_share.into())?;
+                inner.merge(&this_agg_share)?;
             } else {
-                *agg_share = Some(out_share.into());
+                *agg_share = Some(this_agg_share);
             }
         }
     }
