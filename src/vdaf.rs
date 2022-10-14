@@ -144,7 +144,7 @@ pub trait Vdaf: Clone + Debug {
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
-        + TryFrom<Vec<u8>>
+        + for<'a> TryFrom<&'a [u8]>
         + Into<Vec<u8>>;
 
     /// The number of Aggregators. The Client generates as many input shares as there are
@@ -263,6 +263,7 @@ impl<F> AsRef<[F]> for OutputShare<F> {
     }
 }
 
+// XXX: drop FieldElement requirement?
 impl<F: FieldElement> From<Vec<F>> for OutputShare<F> {
     fn from(other: Vec<F>) -> Self {
         Self(other)
@@ -275,11 +276,11 @@ impl<F: FieldElement> From<OutputShare<F>> for Vec<u8> {
     }
 }
 
-impl<F: FieldElement> TryFrom<Vec<u8>> for OutputShare<F> {
+impl<'a, F: FieldElement> TryFrom<&'a [u8]> for OutputShare<F> {
     type Error = FieldError;
 
-    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        fieldvec_try_from_bytes(&bytes)
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        fieldvec_try_from_bytes(bytes)
     }
 }
 
@@ -301,6 +302,7 @@ impl<F: FieldElement> From<OutputShare<F>> for AggregateShare<F> {
     }
 }
 
+// XXX: drop FieldElement requirement?
 impl<F: FieldElement> From<Vec<F>> for AggregateShare<F> {
     fn from(other: Vec<F>) -> Self {
         Self(other)
@@ -339,11 +341,11 @@ impl<F: FieldElement> AggregateShare<F> {
     }
 }
 
-impl<F: FieldElement> TryFrom<Vec<u8>> for AggregateShare<F> {
+impl<'a, F: FieldElement> TryFrom<&'a [u8]> for AggregateShare<F> {
     type Error = FieldError;
 
-    fn try_from(bytes: Vec<u8>) -> Result<Self, Self::Error> {
-        fieldvec_try_from_bytes(&bytes)
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        fieldvec_try_from_bytes(bytes)
     }
 }
 
@@ -506,8 +508,8 @@ mod tests {
     fn fieldvec_roundtrip_test<F, T>()
     where
         F: FieldElement,
-        T: Clone + Debug + PartialEq + From<Vec<F>> + TryFrom<Vec<u8>> + Into<Vec<u8>>,
-        <T as TryFrom<Vec<u8>>>::Error: Debug,
+        T: Clone + Debug + PartialEq + From<Vec<F>> + Into<Vec<u8>> + for<'a> TryFrom<&'a [u8]>,
+        for<'a> <T as TryFrom<&'a [u8]>>::Error: Debug,
     {
         // Generate a value based on an arbitrary vector of field elements.
         let g = F::generator();
@@ -515,7 +517,7 @@ mod tests {
 
         // Round-trip the value through a byte-vector.
         let buf: Vec<u8> = want_value.clone().into();
-        let got_value = T::try_from(buf).unwrap();
+        let got_value = T::try_from(&buf).unwrap();
 
         assert_eq!(want_value, got_value);
     }
