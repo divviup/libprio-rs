@@ -119,9 +119,6 @@ impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
-// TODO(brandon): once GATs are stabilized [https://github.com/rust-lang/rust/issues/44265],
-// state the "&AggregateShare must implement Into<Vec<u8>>" constraint in terms of a where clause
-// on the associated type instead of a where clause on the trait.
 pub trait Vdaf: Clone + Debug {
     /// Algorithm identifier for this VDAF.
     const ID: u32;
