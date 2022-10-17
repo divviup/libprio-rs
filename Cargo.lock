@@ -445,9 +445,9 @@ dependencies = [
 
 [[package]]
 name = "fixed-macro"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f6b2cae66e4989f93364a38a59a12e1830afe3201c7c11e5ea8727534831fbe"
+checksum = "1fd0c48af8cb14e02868f449f8a2187bd78af7a08da201fdc78d518ecb1675bc"
 dependencies = [
  "fixed",
  "fixed-macro-impl",
@@ -456,9 +456,9 @@ dependencies = [
 
 [[package]]
 name = "fixed-macro-impl"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "787fa8e0bf88449e84799f4b440a15bd1958c4552a80abc568d5ba9e20a4283e"
+checksum = "c93086f471c0a1b9c5e300ea92f5cd990ac6d3f8edf27616ef624b8fa6402d4b"
 dependencies = [
  "fixed",
  "paste",
@@ -470,9 +470,9 @@ dependencies = [
 
 [[package]]
 name = "fixed-macro-types"
-version = "1.1.1"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13c7241f3a037641b460153db21d5611c789e7e0504bf52e20a9b4bbe1d7cc00"
+checksum = "044a61b034a2264a7f65aa0c3cd112a01b4d4ee58baace51fead3f21b993c7e4"
 dependencies = [
  "fixed",
  "fixed-macro-impl",
