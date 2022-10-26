@@ -16,10 +16,7 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
-      with:
-        toolchain: stable
-        default: true
+      uses: dtolnay/rust-toolchain@stable
     - name: Docs
       run: cargo doc --all-features
       env:
@@ -37,11 +34,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust-toolchain }}
-        profile: minimal
-        override: true
         components: clippy
     - name: Build
       run: cargo build --verbose --package prio-binaries
@@ -72,11 +67,9 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Install Rust toolchain
-      uses: actions-rs/toolchain@v1
+      uses: dtolnay/rust-toolchain@master
       with:
         toolchain: ${{ matrix.rust-toolchain }}
-        profile: minimal
-        override: true
         components: clippy, rustfmt
     - name: Lint
       run: cargo fmt --message-format human -- --check
