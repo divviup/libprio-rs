@@ -119,13 +119,7 @@ impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
-// TODO(brandon): once GATs are stabilized [https://github.com/rust-lang/rust/issues/44265],
-// state the "&AggregateShare must implement Into<Vec<u8>>" constraint in terms of a where clause
-// on the associated type instead of a where clause on the trait.
-pub trait Vdaf: Clone + Debug
-where
-    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
-{
+pub trait Vdaf: Clone + Debug {
     /// Algorithm identifier for this VDAF.
     const ID: u32;
 
@@ -146,10 +140,12 @@ where
     type InputShare: Clone + Debug + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
-    type OutputShare: Clone + Debug;
+    type OutputShare: Clone + Debug + for<'a> TryFrom<&'a [u8]> + Into<Vec<u8>>;
 
     /// An Aggregator's share of the aggregate result.
-    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare> + for<'a> TryFrom<&'a [u8]>;
+    type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
+        + for<'a> TryFrom<&'a [u8]>
+        + Into<Vec<u8>>;
 
     /// The number of Aggregators. The Client generates as many input shares as there are
     /// Aggregators.
@@ -157,10 +153,7 @@ where
 }
 
 /// The Client's role in the execution of a VDAF.
-pub trait Client: Vdaf
-where
-    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
-{
+pub trait Client: Vdaf {
     /// Shards a measurement into a public share and a sequence of input shares, one for each
     /// Aggregator.
     fn shard(
@@ -170,10 +163,7 @@ where
 }
 
 /// The Aggregator's role in the execution of a VDAF.
-pub trait Aggregator<const L: usize>: Vdaf
-where
-    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
-{
+pub trait Aggregator<const L: usize>: Vdaf {
     /// State of the Aggregator during the Prepare process.
     type PrepareState: Clone + Debug;
 
@@ -230,10 +220,7 @@ where
 }
 
 /// The Collector's role in the execution of a VDAF.
-pub trait Collector: Vdaf
-where
-    for<'a> &'a Self::AggregateShare: Into<Vec<u8>>,
-{
+pub trait Collector: Vdaf {
     /// Combines aggregate shares into the aggregate result.
     fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
         &self,
@@ -245,10 +232,7 @@ where
 
 /// A state transition of an Aggregator during the Prepare process.
 #[derive(Debug)]
-pub enum PrepareTransition<V: Aggregator<L>, const L: usize>
-where
-    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
-{
+pub enum PrepareTransition<V: Aggregator<L>, const L: usize> {
     /// Continue processing.
     Continue(V::PrepareState, V::PrepareShare),
 
@@ -285,17 +269,17 @@ impl<F> From<Vec<F>> for OutputShare<F> {
     }
 }
 
-impl<F: FieldElement> TryFrom<&[u8]> for OutputShare<F> {
+impl<F: FieldElement> From<OutputShare<F>> for Vec<u8> {
+    fn from(output_share: OutputShare<F>) -> Self {
+        fieldvec_to_vec(&output_share.0)
+    }
+}
+
+impl<'a, F: FieldElement> TryFrom<&'a [u8]> for OutputShare<F> {
     type Error = FieldError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         fieldvec_try_from_bytes(bytes)
-    }
-}
-
-impl<F: FieldElement> From<&OutputShare<F>> for Vec<u8> {
-    fn from(output_share: &OutputShare<F>) -> Self {
-        fieldvec_to_vec(&output_share.0)
     }
 }
 
@@ -305,13 +289,13 @@ impl<F: FieldElement> From<&OutputShare<F>> for Vec<u8> {
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AggregateShare<F>(Vec<F>);
 
-impl<F> AsRef<[F]> for AggregateShare<F> {
+impl<F: FieldElement> AsRef<[F]> for AggregateShare<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
     }
 }
 
-impl<F> From<OutputShare<F>> for AggregateShare<F> {
+impl<F: FieldElement> From<OutputShare<F>> for AggregateShare<F> {
     fn from(other: OutputShare<F>) -> Self {
         Self(other.0)
     }
@@ -355,7 +339,7 @@ impl<F: FieldElement> AggregateShare<F> {
     }
 }
 
-impl<F: FieldElement> TryFrom<&[u8]> for AggregateShare<F> {
+impl<'a, F: FieldElement> TryFrom<&'a [u8]> for AggregateShare<F> {
     type Error = FieldError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
@@ -363,8 +347,8 @@ impl<F: FieldElement> TryFrom<&[u8]> for AggregateShare<F> {
     }
 }
 
-impl<F: FieldElement> From<&AggregateShare<F>> for Vec<u8> {
-    fn from(aggregate_share: &AggregateShare<F>) -> Self {
+impl<F: FieldElement> From<AggregateShare<F>> for Vec<u8> {
+    fn from(aggregate_share: AggregateShare<F>) -> Self {
         fieldvec_to_vec(&aggregate_share.0)
     }
 }
@@ -393,7 +377,6 @@ pub(crate) fn run_vdaf<V, M, const L: usize>(
 ) -> Result<V::AggregateResult, VdafError>
 where
     V: Client + Aggregator<L> + Collector,
-    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::Measurement>,
 {
     use rand::prelude::*;
@@ -418,10 +401,11 @@ where
             input_shares,
         )?;
         for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
+            let this_agg_share = V::AggregateShare::from(out_share);
             if let Some(ref mut inner) = agg_share {
-                inner.merge(&out_share.into())?;
+                inner.merge(&this_agg_share)?;
             } else {
-                *agg_share = Some(out_share.into());
+                *agg_share = Some(this_agg_share);
             }
         }
     }
@@ -445,7 +429,6 @@ pub(crate) fn run_vdaf_prepare<V, M, const L: usize>(
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
     V: Client + Aggregator<L> + Collector,
-    for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
     M: IntoIterator<Item = V::InputShare>,
 {
     let input_shares = input_shares
@@ -524,16 +507,15 @@ mod tests {
     fn fieldvec_roundtrip_test<F, T>()
     where
         F: FieldElement,
-        for<'a> T: Debug + PartialEq + From<Vec<F>> + TryFrom<&'a [u8]>,
+        T: Clone + Debug + PartialEq + From<Vec<F>> + Into<Vec<u8>> + for<'a> TryFrom<&'a [u8]>,
         for<'a> <T as TryFrom<&'a [u8]>>::Error: Debug,
-        for<'a> Vec<u8>: From<&'a T>,
     {
         // Generate a value based on an arbitrary vector of field elements.
         let g = F::generator();
         let want_value = T::from(iterate(F::one(), |&v| g * v).take(10).collect());
 
         // Round-trip the value through a byte-vector.
-        let buf: Vec<u8> = (&want_value).into();
+        let buf: Vec<u8> = want_value.clone().into();
         let got_value = T::try_from(&buf).unwrap();
 
         assert_eq!(want_value, got_value);
