@@ -107,7 +107,10 @@ impl Vdaf for Prio2 {
 }
 
 impl Client for Prio2 {
-    fn shard(&self, measurement: &Vec<u32>) -> Result<((), Vec<Share<FieldPrio2, 32>>), VdafError> {
+    fn shard(
+        &self,
+        measurement: &Vec<u32>,
+    ) -> Result<(Self::PublicShare, Vec<Share<FieldPrio2, 32>>), VdafError> {
         if measurement.len() != self.input_len {
             return Err(VdafError::Uncategorized("incorrect input length".into()));
         }
@@ -194,7 +197,7 @@ impl Aggregator<32> for Prio2 {
         &self,
         agg_key: &[u8; 32],
         agg_id: usize,
-        _agg_param: &(),
+        _agg_param: &Self::AggregationParam,
         nonce: &[u8],
         _public_share: &Self::PublicShare,
         input_share: &Share<FieldPrio2, 32>,
@@ -252,7 +255,7 @@ impl Aggregator<32> for Prio2 {
 
     fn aggregate<M: IntoIterator<Item = OutputShare<FieldPrio2>>>(
         &self,
-        _agg_param: &(),
+        _agg_param: &Self::AggregationParam,
         out_shares: M,
     ) -> Result<AggregateShare<FieldPrio2>, VdafError> {
         let mut agg_share = AggregateShare(vec![FieldPrio2::zero(); self.input_len]);
@@ -267,7 +270,7 @@ impl Aggregator<32> for Prio2 {
 impl Collector for Prio2 {
     fn unshard<M: IntoIterator<Item = AggregateShare<FieldPrio2>>>(
         &self,
-        _agg_param: &(),
+        _agg_param: &Self::AggregationParam,
         agg_shares: M,
         _num_measurements: usize,
     ) -> Result<Vec<u32>, VdafError> {

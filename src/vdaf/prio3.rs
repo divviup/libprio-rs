@@ -703,7 +703,7 @@ where
     fn shard(
         &self,
         measurement: &T::Measurement,
-    ) -> Result<((), Vec<Prio3InputShare<T::Field, L>>), VdafError> {
+    ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, L>>), VdafError> {
         self.shard_with_rand_source(measurement, getrandom::getrandom)
             .map(|input_shares| ((), input_shares))
     }
@@ -780,9 +780,9 @@ where
         &self,
         verify_key: &[u8; L],
         agg_id: usize,
-        _agg_param: &(),
+        _agg_param: &Self::AggregationParam,
         nonce: &[u8],
-        _public_share: &(),
+        _public_share: &Self::PublicShare,
         msg: &Prio3InputShare<T::Field, L>,
     ) -> Result<
         (
@@ -999,7 +999,7 @@ where
     /// Combines aggregate shares into the aggregate result.
     fn unshard<It: IntoIterator<Item = AggregateShare<T::Field>>>(
         &self,
-        _agg_param: &(),
+        _agg_param: &Self::AggregationParam,
         agg_shares: It,
         num_measurements: usize,
     ) -> Result<T::AggregateResult, VdafError> {
