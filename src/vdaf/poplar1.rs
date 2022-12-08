@@ -361,7 +361,10 @@ where
     P: Prg<L>,
 {
     #[allow(clippy::many_single_char_names)]
-    fn shard(&self, input: &IdpfInput) -> Result<((), Vec<Poplar1InputShare<I, L>>), VdafError> {
+    fn shard(
+        &self,
+        input: &IdpfInput,
+    ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<I, L>>), VdafError> {
         let idpf_values: Vec<[I::Field; 2]> = Prng::new()?
             .take(input.level + 1)
             .map(|k| [I::Field::one(), k])
