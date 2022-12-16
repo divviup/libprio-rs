@@ -29,7 +29,7 @@
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
-use super::{DST_LEN, VERSION};
+use super::{add_fieldvec, decode_fieldvec, encode_fieldvec, DST_LEN, VERSION};
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::FieldElement;
 #[cfg(feature = "crypto-dependencies")]
@@ -48,11 +48,12 @@ use crate::flp::Type;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, RandSource, Seed};
 use crate::vdaf::{
-    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, ShareDecodingParameter, Vdaf, VdafError,
+    Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share, ShareDecodingParameter,
+    Vdaf, VdafError,
 };
 #[cfg(feature = "crypto-dependencies")]
 use fixed::traits::Fixed;
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
@@ -526,8 +527,8 @@ where
     type AggregationParam = ();
     type PublicShare = ();
     type InputShare = Prio3InputShare<T::Field, L>;
-    type OutputShare = OutputShare<T::Field>;
-    type AggregateShare = AggregateShare<T::Field>;
+    type OutputShare = Prio3OutputShare<T::Field>;
+    type AggregateShare = Prio3AggregateShare<T::Field>;
 
     fn num_aggregators(&self) -> usize {
         self.num_aggregators as usize
@@ -967,7 +968,7 @@ where
         };
 
         let output_share = match self.typ.truncate(input_share) {
-            Ok(data) => OutputShare(data),
+            Ok(data) => Prio3OutputShare(data),
             Err(err) => {
                 return Err(VdafError::from(err));
             }
@@ -977,12 +978,12 @@ where
     }
 
     /// Aggregates a sequence of output shares into an aggregate share.
-    fn aggregate<It: IntoIterator<Item = OutputShare<T::Field>>>(
+    fn aggregate<It: IntoIterator<Item = Prio3OutputShare<T::Field>>>(
         &self,
         _agg_param: &(),
         output_shares: It,
-    ) -> Result<AggregateShare<T::Field>, VdafError> {
-        let mut agg_share = AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
+    ) -> Result<Prio3AggregateShare<T::Field>, VdafError> {
+        let mut agg_share = Prio3AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
         for output_share in output_shares.into_iter() {
             agg_share.accumulate(&output_share)?;
         }
@@ -997,13 +998,13 @@ where
     P: Prg<L>,
 {
     /// Combines aggregate shares into the aggregate result.
-    fn unshard<It: IntoIterator<Item = AggregateShare<T::Field>>>(
+    fn unshard<It: IntoIterator<Item = Prio3AggregateShare<T::Field>>>(
         &self,
         _agg_param: &Self::AggregationParam,
         agg_shares: It,
         num_measurements: usize,
     ) -> Result<T::AggregateResult, VdafError> {
-        let mut agg = AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
+        let mut agg = Prio3AggregateShare(vec![T::Field::zero(); self.typ.output_len()]);
         for agg_share in agg_shares.into_iter() {
             agg.merge(&agg_share)?;
         }
@@ -1057,11 +1058,122 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
     Ok(())
 }
 
+/// A Prio3 output share comprised of a vector of field elements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Prio3OutputShare<F>(Vec<F>);
+
+impl<F> AsRef<[F]> for Prio3OutputShare<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F> From<Vec<F>> for Prio3OutputShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
+impl<F> Encode for Prio3OutputShare<F>
+where
+    F: FieldElement,
+{
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_fieldvec(self, bytes)
+    }
+}
+
+impl<'a, F, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, &'a ())>
+    for Prio3OutputShare<F>
+where
+    F: FieldElement,
+    T: Type,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(vdaf.output_len(), bytes).map(Prio3OutputShare)
+    }
+}
+
+/// A Prio3 aggregate share, comprised of a vector of field elements.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Prio3AggregateShare<F>(Vec<F>);
+
+impl<F> AsRef<[F]> for Prio3AggregateShare<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F> From<Prio3OutputShare<F>> for Prio3AggregateShare<F> {
+    fn from(other: Prio3OutputShare<F>) -> Self {
+        Self(other.0)
+    }
+}
+
+impl<F> From<Vec<F>> for Prio3AggregateShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
+impl<F> Aggregatable for Prio3AggregateShare<F>
+where
+    F: FieldElement,
+{
+    type OutputShare = Prio3OutputShare<F>;
+
+    fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError> {
+        self.sum(agg_share.as_ref())
+    }
+
+    fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError> {
+        // For prio3, no conversion is needed between output shares and aggregation shares.
+        self.sum(output_share.as_ref())
+    }
+}
+
+impl<F> Prio3AggregateShare<F>
+where
+    F: FieldElement,
+{
+    fn sum(&mut self, other: &[F]) -> Result<(), VdafError> {
+        add_fieldvec(&mut self.0, other)
+    }
+}
+
+impl<F> Encode for Prio3AggregateShare<F>
+where
+    F: FieldElement,
+{
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_fieldvec(self, bytes)
+    }
+}
+
+impl<'a, F, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, &'a ())>
+    for Prio3AggregateShare<F>
+where
+    F: FieldElement,
+    T: Type,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(vdaf.output_len(), bytes).map(Prio3AggregateShare)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::flp::gadgets::ParallelSumGadget;
-    use crate::vdaf::{run_vdaf, run_vdaf_prepare};
+    use crate::vdaf::{fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare};
     use assert_matches::assert_matches;
     use fixed::types::extra::{U15, U31, U63};
     use fixed::{FixedI16, FixedI32, FixedI64};
@@ -1394,5 +1506,53 @@ mod tests {
             assert_eq!(got, want);
         }
         Ok(())
+    }
+
+    #[test]
+    fn roundtrip_output_share() {
+        let vdaf = Prio3::new_aes128_count(2).unwrap();
+        fieldvec_roundtrip_test::<Field64, Prio3Aes128Count, Prio3OutputShare<Field64>>(
+            &vdaf,
+            &(),
+            1,
+        );
+
+        let vdaf = Prio3::new_aes128_sum(2, 17).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Sum, Prio3OutputShare<Field128>>(
+            &vdaf,
+            &(),
+            1,
+        );
+
+        let vdaf = Prio3::new_aes128_histogram(2, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Histogram, Prio3OutputShare<Field128>>(
+            &vdaf,
+            &(),
+            12,
+        );
+    }
+
+    #[test]
+    fn roundtrip_aggregate_share() {
+        let vdaf = Prio3::new_aes128_count(2).unwrap();
+        fieldvec_roundtrip_test::<Field64, Prio3Aes128Count, Prio3AggregateShare<Field64>>(
+            &vdaf,
+            &(),
+            1,
+        );
+
+        let vdaf = Prio3::new_aes128_sum(2, 17).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Sum, Prio3AggregateShare<Field128>>(
+            &vdaf,
+            &(),
+            1,
+        );
+
+        let vdaf = Prio3::new_aes128_histogram(2, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Histogram, Prio3AggregateShare<Field128>>(
+            &vdaf,
+            &(),
+            12,
+        );
     }
 }
