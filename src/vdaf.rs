@@ -271,7 +271,7 @@ impl<F> From<Vec<F>> for OutputShare<F> {
 
 impl<F: FieldElement> From<OutputShare<F>> for Vec<u8> {
     fn from(output_share: OutputShare<F>) -> Self {
-        fieldvec_to_vec(&output_share.0)
+        fieldvec_to_vec(output_share.0)
     }
 }
 
@@ -349,7 +349,7 @@ impl<'a, F: FieldElement> TryFrom<&'a [u8]> for AggregateShare<F> {
 
 impl<F: FieldElement> From<AggregateShare<F>> for Vec<u8> {
     fn from(aggregate_share: AggregateShare<F>) -> Self {
-        fieldvec_to_vec(&aggregate_share.0)
+        fieldvec_to_vec(aggregate_share.0)
     }
 }
 
