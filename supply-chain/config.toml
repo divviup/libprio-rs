@@ -376,16 +376,6 @@ version = "0.6.3"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"test-util\" feature is enabled."
 
-[[exemptions.rayon]]
-version = "1.6.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"multithreaded\" feature is enabled."
-
-[[exemptions.rayon-core]]
-version = "1.10.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"multithreaded\" feature is enabled."
-
 [[exemptions.regex]]
 version = "1.6.0"
 criteria = "safe-to-run"
