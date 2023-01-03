@@ -7,13 +7,13 @@ use super::{AggregateShare, OutputShare};
 use crate::{
     client as v2_client,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{FieldElement, FieldPrio2},
+    field::{decode_fieldvec, FieldElement, FieldPrio2},
     prng::Prng,
     server as v2_server,
     util::proof_length,
     vdaf::{
-        decode_fieldvec, prg::Seed, Aggregatable, Aggregator, Client, Collector, PrepareTransition,
-        Share, ShareDecodingParameter, Vdaf, VdafError,
+        prg::Seed, Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share,
+        ShareDecodingParameter, Vdaf, VdafError,
     },
 };
 use ring::hmac;

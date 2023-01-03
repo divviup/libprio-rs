@@ -772,6 +772,43 @@ pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
     Ok(Prng::new()?.take(len).collect())
 }
 
+/// `encode_fieldvec` serializes a type that is equivalent to a vector of field elements.
+#[inline(always)]
+pub(crate) fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(val: T, bytes: &mut Vec<u8>) {
+    for elem in val.as_ref() {
+        bytes.append(&mut (*elem).into());
+    }
+}
+
+/// `decode_fieldvec` deserializes some number of field elements from a cursor, and advances the
+/// cursor's position.
+pub(crate) fn decode_fieldvec<F: FieldElement>(
+    count: usize,
+    input: &mut Cursor<&[u8]>,
+) -> Result<Vec<F>, CodecError> {
+    let mut vec = Vec::with_capacity(count);
+    let mut buffer = vec![0; count * F::ENCODED_SIZE];
+    input.read_exact(&mut buffer)?;
+    for chunk in buffer.chunks(F::ENCODED_SIZE) {
+        vec.push(F::try_from(chunk).map_err(|e| CodecError::Other(Box::new(e)))?);
+    }
+    Ok(vec)
+}
+
+/// `add_fieldvec` adds one vector of field elements to another elementwise, in-place, and returns an
+/// error if the vectors have different lengths.
+pub(crate) fn add_fieldvec<F: FieldElement>(left: &mut [F], right: &[F]) -> Result<(), FieldError> {
+    if left.len() != right.len() {
+        return Err(FieldError::InputSizeMismatch);
+    }
+
+    for (x, y) in left.iter_mut().zip(right.iter()) {
+        *x += *y;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

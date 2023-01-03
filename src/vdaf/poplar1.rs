@@ -30,16 +30,14 @@ use crate::codec::{
     decode_u16_items, decode_u24_items, encode_u16_items, encode_u24_items, CodecError, Decode,
     Encode, ParameterizedDecode,
 };
-use crate::field::{split_vector, FieldElement};
+use crate::field::{decode_fieldvec, split_vector, FieldElement};
 use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, Seed};
 use crate::vdaf::{
-    Aggregator, Client, Collector, PrepareTransition, Share, ShareDecodingParameter, Vdaf,
-    VdafError,
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
+    Share, ShareDecodingParameter, Vdaf, VdafError,
 };
-
-use super::{decode_fieldvec, Aggregatable, AggregateShare, OutputShare};
 
 /// An input for an IDPF ([`Idpf`]).
 ///

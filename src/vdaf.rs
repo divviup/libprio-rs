@@ -7,16 +7,13 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{FieldElement, FieldError},
+    field::{add_fieldvec, encode_fieldvec, FieldElement, FieldError},
     flp::FlpError,
     prng::PrngError,
     vdaf::prg::Seed,
 };
 use serde::{Deserialize, Serialize};
-use std::{
-    fmt::Debug,
-    io::{Cursor, Read},
-};
+use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
@@ -315,7 +312,7 @@ impl<F: FieldElement> Aggregatable for AggregateShare<F> {
 
 impl<F: FieldElement> AggregateShare<F> {
     fn sum(&mut self, other: &[F]) -> Result<(), VdafError> {
-        add_fieldvec(&mut self.0, other)
+        add_fieldvec(&mut self.0, other).map_err(Into::into)
     }
 }
 
@@ -323,47 +320,6 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         encode_fieldvec(&self.0, bytes)
     }
-}
-
-/// encode_fieldvec serializes a type that is equivalent to a vector of field elements.
-#[inline(always)]
-fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(val: T, bytes: &mut Vec<u8>) {
-    for elem in val.as_ref() {
-        bytes.append(&mut (*elem).into());
-    }
-}
-
-/// decode_fieldvec deserializes some number of field elements from a cursor, and advances the
-/// cursor's position.
-fn decode_fieldvec<F: FieldElement>(
-    count: usize,
-    input: &mut Cursor<&[u8]>,
-) -> Result<Vec<F>, CodecError> {
-    let mut vec = Vec::with_capacity(count);
-    let mut buffer = vec![0; count * F::ENCODED_SIZE];
-    input.read_exact(&mut buffer)?;
-    for chunk in buffer.chunks(F::ENCODED_SIZE) {
-        vec.push(F::try_from(chunk).map_err(|e| CodecError::Other(Box::new(e)))?);
-    }
-    Ok(vec)
-}
-
-/// add_fieldvec adds one vector of field elements to another elementwise, in-place, and returns an
-/// error if the vectors have different lengths.
-fn add_fieldvec<F: FieldElement>(left: &mut [F], right: &[F]) -> Result<(), VdafError> {
-    if left.len() != right.len() {
-        return Err(VdafError::Uncategorized(format!(
-            "cannot sum shares of different lengths (left = {}, right = {}",
-            left.len(),
-            right.len()
-        )));
-    }
-
-    for (x, y) in left.iter_mut().zip(right.iter()) {
-        *x += *y;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

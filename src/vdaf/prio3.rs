@@ -29,9 +29,8 @@
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
-use super::{decode_fieldvec, AggregateShare, OutputShare, DST_LEN, VERSION};
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
-use crate::field::FieldElement;
+use crate::field::{decode_fieldvec, FieldElement};
 #[cfg(feature = "crypto-dependencies")]
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
@@ -48,8 +47,8 @@ use crate::flp::Type;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, RandSource, Seed};
 use crate::vdaf::{
-    Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share, ShareDecodingParameter,
-    Vdaf, VdafError,
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
+    Share, ShareDecodingParameter, Vdaf, VdafError, DST_LEN, VERSION,
 };
 #[cfg(feature = "crypto-dependencies")]
 use fixed::traits::Fixed;
