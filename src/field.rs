@@ -167,9 +167,7 @@ pub trait FieldElement:
     /// impossible.
     fn slice_into_byte_vec(values: &[Self]) -> Vec<u8> {
         let mut vec = Vec::with_capacity(values.len() * Self::ENCODED_SIZE);
-        for elem in values {
-            vec.append(&mut (*elem).into());
-        }
+        encode_fieldvec(values, &mut vec);
         vec
     }
 
