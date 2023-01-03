@@ -3,6 +3,7 @@
 //! Port of the ENPA Prio system to a VDAF. It is backwards compatible with
 //! [`Client`](crate::client::Client) and [`Server`](crate::server::Server).
 
+use super::{AggregateShare, OutputShare};
 use crate::{
     client as v2_client,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -11,8 +12,8 @@ use crate::{
     server as v2_server,
     util::proof_length,
     vdaf::{
-        decode_fieldvec, encode_fieldvec, prg::Seed, Aggregatable, Aggregator, Client, Collector,
-        PrepareTransition, Share, ShareDecodingParameter, Vdaf, VdafError,
+        decode_fieldvec, prg::Seed, Aggregatable, Aggregator, Client, Collector, PrepareTransition,
+        Share, ShareDecodingParameter, Vdaf, VdafError,
     },
 };
 use ring::hmac;
@@ -20,8 +21,6 @@ use std::{
     convert::{TryFrom, TryInto},
     io::Cursor,
 };
-
-use super::add_fieldvec;
 
 /// The Prio2 VDAF. It supports the same measurement type as
 /// [`Prio3Aes128CountVec`](crate::vdaf::prio3::Prio3Aes128CountVec) but uses the proof system
@@ -99,8 +98,8 @@ impl Vdaf for Prio2 {
     type AggregationParam = ();
     type PublicShare = ();
     type InputShare = Share<FieldPrio2, 32>;
-    type OutputShare = Prio2OutputShare<FieldPrio2>;
-    type AggregateShare = Prio2AggregateShare<FieldPrio2>;
+    type OutputShare = OutputShare<FieldPrio2>;
+    type AggregateShare = AggregateShare<FieldPrio2>;
 
     fn num_aggregators(&self) -> usize {
         // Prio2 can easily be extended to support more than two Aggregators.
@@ -252,15 +251,15 @@ impl Aggregator<32> for Prio2 {
                 prng.take(self.input_len).collect()
             }
         };
-        Ok(PrepareTransition::Finish(Prio2OutputShare::from(data)))
+        Ok(PrepareTransition::Finish(OutputShare::from(data)))
     }
 
-    fn aggregate<M: IntoIterator<Item = Prio2OutputShare<FieldPrio2>>>(
+    fn aggregate<M: IntoIterator<Item = OutputShare<FieldPrio2>>>(
         &self,
         _agg_param: &Self::AggregationParam,
         out_shares: M,
-    ) -> Result<Prio2AggregateShare<FieldPrio2>, VdafError> {
-        let mut agg_share = Prio2AggregateShare(vec![FieldPrio2::zero(); self.input_len]);
+    ) -> Result<AggregateShare<FieldPrio2>, VdafError> {
+        let mut agg_share = AggregateShare(vec![FieldPrio2::zero(); self.input_len]);
         for out_share in out_shares.into_iter() {
             agg_share.accumulate(&out_share)?;
         }
@@ -270,13 +269,13 @@ impl Aggregator<32> for Prio2 {
 }
 
 impl Collector for Prio2 {
-    fn unshard<M: IntoIterator<Item = Prio2AggregateShare<FieldPrio2>>>(
+    fn unshard<M: IntoIterator<Item = AggregateShare<FieldPrio2>>>(
         &self,
         _agg_param: &Self::AggregationParam,
         agg_shares: M,
         _num_measurements: usize,
     ) -> Result<Vec<u32>, VdafError> {
-        let mut agg = Prio2AggregateShare(vec![FieldPrio2::zero(); self.input_len]);
+        let mut agg = AggregateShare(vec![FieldPrio2::zero(); self.input_len]);
         for agg_share in agg_shares.into_iter() {
             agg.merge(&agg_share)?;
         }
@@ -301,32 +300,7 @@ impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Share<FieldPrio2, 32> {
     }
 }
 
-/// A Prio2 output share comprised of a vector of field elements.
-#[derive(Debug, Clone)]
-pub struct Prio2OutputShare<F>(Vec<F>);
-
-impl<F> AsRef<[F]> for Prio2OutputShare<F> {
-    fn as_ref(&self) -> &[F] {
-        &self.0
-    }
-}
-
-impl<F> From<Vec<F>> for Prio2OutputShare<F> {
-    fn from(vec: Vec<F>) -> Self {
-        Prio2OutputShare(vec)
-    }
-}
-
-impl<F> Encode for Prio2OutputShare<F>
-where
-    F: FieldElement,
-{
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_fieldvec(self, bytes)
-    }
-}
-
-impl<'a, F> ParameterizedDecode<(&'a Prio2, &'a ())> for Prio2OutputShare<F>
+impl<'a, F> ParameterizedDecode<(&'a Prio2, &'a ())> for OutputShare<F>
 where
     F: FieldElement,
 {
@@ -334,36 +308,11 @@ where
         (prio2, _): &(&'a Prio2, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(prio2.input_len, bytes).map(Prio2OutputShare)
+        decode_fieldvec(prio2.input_len, bytes).map(OutputShare)
     }
 }
 
-/// A Prio2 aggregate share comprised of a vector of field elements.
-#[derive(Debug, Clone)]
-pub struct Prio2AggregateShare<F>(Vec<F>);
-
-impl<F> AsRef<[F]> for Prio2AggregateShare<F> {
-    fn as_ref(&self) -> &[F] {
-        &self.0
-    }
-}
-
-impl<F> From<Prio2OutputShare<F>> for Prio2AggregateShare<F> {
-    fn from(value: Prio2OutputShare<F>) -> Self {
-        Prio2AggregateShare(value.0)
-    }
-}
-
-impl<F> Encode for Prio2AggregateShare<F>
-where
-    F: FieldElement,
-{
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_fieldvec(self, bytes)
-    }
-}
-
-impl<'a, F> ParameterizedDecode<(&'a Prio2, &'a ())> for Prio2AggregateShare<F>
+impl<'a, F> ParameterizedDecode<(&'a Prio2, &'a ())> for AggregateShare<F>
 where
     F: FieldElement,
 {
@@ -371,22 +320,7 @@ where
         (prio2, _): &(&'a Prio2, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(prio2.input_len, bytes).map(Prio2AggregateShare)
-    }
-}
-
-impl<F> Aggregatable for Prio2AggregateShare<F>
-where
-    F: FieldElement,
-{
-    type OutputShare = Prio2OutputShare<F>;
-
-    fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError> {
-        add_fieldvec(&mut self.0, agg_share.as_ref())
-    }
-
-    fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError> {
-        add_fieldvec(&mut self.0, output_share.as_ref())
+        decode_fieldvec(prio2.input_len, bytes).map(AggregateShare)
     }
 }
 
@@ -520,16 +454,12 @@ mod tests {
     #[test]
     fn roundtrip_output_share() {
         let vdaf = Prio2::new(31).unwrap();
-        fieldvec_roundtrip_test::<FieldPrio2, Prio2, Prio2OutputShare<FieldPrio2>>(&vdaf, &(), 31);
+        fieldvec_roundtrip_test::<FieldPrio2, Prio2, OutputShare<FieldPrio2>>(&vdaf, &(), 31);
     }
 
     #[test]
     fn roundtrip_aggregate_share() {
         let vdaf = Prio2::new(31).unwrap();
-        fieldvec_roundtrip_test::<FieldPrio2, Prio2, Prio2AggregateShare<FieldPrio2>>(
-            &vdaf,
-            &(),
-            31,
-        );
+        fieldvec_roundtrip_test::<FieldPrio2, Prio2, AggregateShare<FieldPrio2>>(&vdaf, &(), 31);
     }
 }

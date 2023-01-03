@@ -5,13 +5,18 @@
 //!
 //! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 
-use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
-use crate::field::{FieldElement, FieldError};
-use crate::flp::FlpError;
-use crate::prng::PrngError;
-use crate::vdaf::prg::Seed;
-use std::fmt::Debug;
-use std::io::{Cursor, Read};
+use crate::{
+    codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    field::{FieldElement, FieldError},
+    flp::FlpError,
+    prng::PrngError,
+    vdaf::prg::Seed,
+};
+use serde::{Deserialize, Serialize};
+use std::{
+    fmt::Debug,
+    io::{Cursor, Read},
+};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
@@ -252,6 +257,72 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 
     /// Update an aggregate share by adding `output share`
     fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError>;
+}
+
+/// An output share comprised of a vector of `F` elements.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OutputShare<F>(Vec<F>);
+
+impl<F> AsRef<[F]> for OutputShare<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F> From<Vec<F>> for OutputShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
+impl<F: FieldElement> Encode for OutputShare<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_fieldvec(&self.0, bytes)
+    }
+}
+
+/// An aggregate share suitable for VDAFs whose output shares and aggregate
+/// shares are vectors of `F` elements, and when an output share needs no
+/// special transformation to be merged into an aggregate share.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AggregateShare<F>(Vec<F>);
+
+impl<F: FieldElement> AsRef<[F]> for AggregateShare<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
+    }
+}
+
+impl<F> From<OutputShare<F>> for AggregateShare<F> {
+    fn from(other: OutputShare<F>) -> Self {
+        Self(other.0)
+    }
+}
+
+impl<F: FieldElement> Aggregatable for AggregateShare<F> {
+    type OutputShare = OutputShare<F>;
+
+    fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError> {
+        self.sum(agg_share.as_ref())
+    }
+
+    fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError> {
+        // For poplar1, prio2, and prio3, no conversion is needed between output shares and
+        // aggregate shares.
+        self.sum(output_share.as_ref())
+    }
+}
+
+impl<F: FieldElement> AggregateShare<F> {
+    fn sum(&mut self, other: &[F]) -> Result<(), VdafError> {
+        add_fieldvec(&mut self.0, other)
+    }
+}
+
+impl<F: FieldElement> Encode for AggregateShare<F> {
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        encode_fieldvec(&self.0, bytes)
+    }
 }
 
 /// encode_fieldvec serializes a type that is equivalent to a vector of field elements.
