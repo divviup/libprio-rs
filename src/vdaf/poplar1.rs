@@ -730,7 +730,7 @@ where
         (_, agg_param): &(&'a Poplar1<I, P, L>, &'a BTreeSet<IdpfInput>),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(agg_param.len(), bytes).map(OutputShare)
+        decode_fieldvec(agg_param.len(), bytes).map(Self)
     }
 }
 
@@ -744,7 +744,7 @@ where
         (_, agg_param): &(&'a Poplar1<I, P, L>, &'a BTreeSet<IdpfInput>),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(agg_param.len(), bytes).map(AggregateShare)
+        decode_fieldvec(agg_param.len(), bytes).map(Self)
     }
 }
 

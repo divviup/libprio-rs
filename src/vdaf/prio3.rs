@@ -1067,7 +1067,7 @@ where
         (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(vdaf.output_len(), bytes).map(OutputShare)
+        decode_fieldvec(vdaf.output_len(), bytes).map(Self)
     }
 }
 
@@ -1082,7 +1082,7 @@ where
         (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(vdaf.output_len(), bytes).map(AggregateShare)
+        decode_fieldvec(vdaf.output_len(), bytes).map(Self)
     }
 }
 

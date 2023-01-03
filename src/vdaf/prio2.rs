@@ -308,7 +308,7 @@ where
         (prio2, _): &(&'a Prio2, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(prio2.input_len, bytes).map(OutputShare)
+        decode_fieldvec(prio2.input_len, bytes).map(Self)
     }
 }
 
@@ -320,7 +320,7 @@ where
         (prio2, _): &(&'a Prio2, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        decode_fieldvec(prio2.input_len, bytes).map(AggregateShare)
+        decode_fieldvec(prio2.input_len, bytes).map(Self)
     }
 }
 
