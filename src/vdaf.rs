@@ -534,7 +534,8 @@ mod tests {
     }
 }
 
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub mod poplar1;
 pub mod prg;
 #[cfg(feature = "prio2")]

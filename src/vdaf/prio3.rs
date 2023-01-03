@@ -36,12 +36,14 @@ use crate::field::FieldElement;
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+use crate::flp::gadgets::PolyEval;
 #[cfg(feature = "crypto-dependencies")]
-use crate::flp::gadgets::{BlindPolyEval, ParallelSum, PolyEval};
-#[cfg(feature = "crypto-dependencies")]
-use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
-#[cfg(feature = "crypto-dependencies")]
-use crate::flp::types::fixedpoint_l2::FixedPointBoundedL2VecSum;
+use crate::flp::gadgets::{BlindPolyEval, ParallelSum};
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+use crate::flp::types::fixedpoint_l2::{
+    compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
+};
 #[cfg(feature = "crypto-dependencies")]
 use crate::flp::types::{Average, Count, CountVec, Histogram, Sum};
 use crate::flp::Type;
@@ -51,7 +53,7 @@ use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
 };
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use fixed::traits::Fixed;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -145,7 +147,8 @@ impl Prio3Aes128Sum {
 /// allows an easy conversion to the integer type used in internal computation, while leaving
 /// conversion to the client. The model itself will have floating point parameters, so the output
 /// sum has that type as well.
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub type Prio3Aes128FixedPointBoundedL2VecSum<Fx> = Prio3<
     FixedPointBoundedL2VecSum<
         Fx,
@@ -157,7 +160,8 @@ pub type Prio3Aes128FixedPointBoundedL2VecSum<Fx> = Prio3<
     16,
 >;
 
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3Aes128FixedPointBoundedL2VecSum<Fx> {
     /// Construct an instance of this VDAF with the given number of aggregators and number of
     /// vector entries.
@@ -173,8 +177,12 @@ impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3Aes128FixedPointBoundedL2VecSum
 /// The fixed point vector sum type. Each measurement is a vector of fixed point numbers
 /// and the aggregate is the sum represented as 64-bit floats. The verification function
 /// ensures the L2 norm of the input vector is < 1.
-#[cfg(feature = "multithreaded")]
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(
+    feature = "crypto-dependencies",
+    feature = "experimental",
+    feature = "multithreaded"
+))]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
     FixedPointBoundedL2VecSum<
@@ -187,8 +195,12 @@ pub type Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
     16,
 >;
 
-#[cfg(feature = "multithreaded")]
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(
+    feature = "crypto-dependencies",
+    feature = "experimental",
+    feature = "multithreaded"
+))]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx> {
     /// Construct an instance of this VDAF with the given number of aggregators and number of
@@ -1060,11 +1072,16 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "experimental")]
     use crate::flp::gadgets::ParallelSumGadget;
     use crate::vdaf::{run_vdaf, run_vdaf_prepare};
     use assert_matches::assert_matches;
-    use fixed::types::extra::{U15, U31, U63};
-    use fixed::{FixedI16, FixedI32, FixedI64};
+    #[cfg(feature = "experimental")]
+    use fixed::{
+        types::extra::{U15, U31, U63},
+        FixedI16, FixedI32, FixedI64,
+    };
+    #[cfg(feature = "experimental")]
     use fixed_macro::fixed;
     use rand::prelude::*;
 
@@ -1167,6 +1184,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "experimental")]
     fn test_prio3_bounded_fpvec_sum() {
         type P<Fx> = Prio3Aes128FixedPointBoundedL2VecSum<Fx>;
         let ctor_16 = P::<FixedI16<U15>>::new_aes128_fixedpoint_boundedl2_vec_sum;
