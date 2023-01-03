@@ -727,7 +727,6 @@ make_field!(
 /// # Errors
 ///
 /// Fails if the two vectors do not have the same length.
-#[cfg(any(test, feature = "prio2"))]
 pub(crate) fn merge_vector<F: FieldElement>(
     accumulator: &mut [F],
     other_vector: &[F],
@@ -793,20 +792,6 @@ pub(crate) fn decode_fieldvec<F: FieldElement>(
         vec.push(F::try_from(chunk).map_err(|e| CodecError::Other(Box::new(e)))?);
     }
     Ok(vec)
-}
-
-/// `add_fieldvec` adds one vector of field elements to another elementwise, in-place, and returns an
-/// error if the vectors have different lengths.
-pub(crate) fn add_fieldvec<F: FieldElement>(left: &mut [F], right: &[F]) -> Result<(), FieldError> {
-    if left.len() != right.len() {
-        return Err(FieldError::InputSizeMismatch);
-    }
-
-    for (x, y) in left.iter_mut().zip(right.iter()) {
-        *x += *y;
-    }
-
-    Ok(())
 }
 
 #[cfg(test)]

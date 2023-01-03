@@ -7,7 +7,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{add_fieldvec, encode_fieldvec, FieldElement, FieldError},
+    field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
     flp::FlpError,
     prng::PrngError,
     vdaf::prg::Seed,
@@ -312,7 +312,7 @@ impl<F: FieldElement> Aggregatable for AggregateShare<F> {
 
 impl<F: FieldElement> AggregateShare<F> {
     fn sum(&mut self, other: &[F]) -> Result<(), VdafError> {
-        add_fieldvec(&mut self.0, other).map_err(Into::into)
+        merge_vector(&mut self.0, other).map_err(Into::into)
     }
 }
 
