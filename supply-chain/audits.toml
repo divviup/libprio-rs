@@ -1,0 +1,7 @@
+
+# cargo-vet audits file
+
+[[audits.fixed]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.20.0 -> 1.21.0"
