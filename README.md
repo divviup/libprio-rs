@@ -37,14 +37,10 @@ also forthcoming. Prio3 should not yet be used in production applications.
 
 This crate defines the following feature flags:
 
-- `crypto-dependencies`: Enables dependencies on various RustCrypto crates, and
-  uses them to implement `PrgAes128` to support VDAFs. This is enabled by
-  default.
-- `experimental`: Certain experimental APIs are guarded by this feature. They
-  may undergo breaking changes in future patch releases, as an exception to
-  semantic versioning.
-- `multithreaded`: Enables certain Prio3 VDAF implementations that use `serde`
-  for parallelization of gadget evaluations.
-- `prio2`: Enables a VDAF based on the Prio2 system.
-- `test-util`: For internal use only, to support the test suite and test
-  vectors.
+|Name|Default feature?|Description|
+|---|---|---|
+|`crypto-dependencies`|Yes|Enables dependencies on various RustCrypto crates, and uses them to implement `PrgAes128` to support VDAFs.|
+|`experimental`|No|Certain experimental APIs are guarded by this feature. They may undergo breaking changes in future patch releases, as an exception to semantic versioning.|
+|`multithreaded`|No|Enables certain Prio3 VDAF implementations that use `rayon` for parallelization of gadget evaluations.|
+|`prio2`|No|Enables a VDAF based on the Prio2 system.|
+|`test-util`|No|For internal use only, to support the test suite and test vectors.|
