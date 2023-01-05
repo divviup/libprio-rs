@@ -785,6 +785,10 @@ pub(crate) fn decode_fieldvec<F: FieldElement>(
 ) -> Result<Vec<F>, CodecError> {
     let mut vec = Vec::with_capacity(count);
     let mut buffer = [0u8; 64];
+    assert!(
+        buffer.len() >= F::ENCODED_SIZE,
+        "field is too big for buffer"
+    );
     for _ in 0..count {
         input.read_exact(&mut buffer[..F::ENCODED_SIZE])?;
         vec.push(
