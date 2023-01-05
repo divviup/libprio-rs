@@ -1223,4 +1223,6 @@ mod test_utils {
     }
 }
 
+#[cfg(feature = "experimental")]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub mod fixedpoint_l2;

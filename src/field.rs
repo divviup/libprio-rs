@@ -743,7 +743,7 @@ pub(crate) fn merge_vector<F: FieldElement>(
 }
 
 /// Outputs an additive secret sharing of the input.
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(all(feature = "crypto-dependencies", any(test, feature = "experimental")))]
 pub(crate) fn split_vector<F: FieldElement>(
     inp: &[F],
     num_shares: usize,

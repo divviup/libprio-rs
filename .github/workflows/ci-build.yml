@@ -57,6 +57,8 @@ jobs:
           "--features=prio2,test-util",
           "--features=prio2,multithreaded",
           "--features=prio2,test-util,multithreaded",
+          "--features=experimental",
+          "--features=experimental,multithreaded",
         ]
         rust-toolchain: [
           # MSRV from Cargo.toml
