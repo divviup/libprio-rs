@@ -784,10 +784,12 @@ pub(crate) fn decode_fieldvec<F: FieldElement>(
     input: &mut Cursor<&[u8]>,
 ) -> Result<Vec<F>, CodecError> {
     let mut vec = Vec::with_capacity(count);
-    let mut buffer = vec![0; count * F::ENCODED_SIZE];
-    input.read_exact(&mut buffer)?;
-    for chunk in buffer.chunks(F::ENCODED_SIZE) {
-        vec.push(F::try_from(chunk).map_err(|e| CodecError::Other(Box::new(e)))?);
+    let mut buffer = [0u8; 64];
+    for _ in 0..count {
+        input.read_exact(&mut buffer[..F::ENCODED_SIZE])?;
+        vec.push(
+            F::try_from(&buffer[..F::ENCODED_SIZE]).map_err(|e| CodecError::Other(Box::new(e)))?,
+        );
     }
     Ok(vec)
 }
