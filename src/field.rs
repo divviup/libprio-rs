@@ -167,9 +167,7 @@ pub trait FieldElement:
     /// impossible.
     fn slice_into_byte_vec(values: &[Self]) -> Vec<u8> {
         let mut vec = Vec::with_capacity(values.len() * Self::ENCODED_SIZE);
-        for elem in values {
-            vec.append(&mut (*elem).into());
-        }
+        encode_fieldvec(values, &mut vec);
         vec
     }
 
@@ -727,7 +725,6 @@ make_field!(
 /// # Errors
 ///
 /// Fails if the two vectors do not have the same length.
-#[cfg(any(test, feature = "prio2"))]
 pub(crate) fn merge_vector<F: FieldElement>(
     accumulator: &mut [F],
     other_vector: &[F],
@@ -770,6 +767,35 @@ pub(crate) fn split_vector<F: FieldElement>(
 #[cfg(feature = "crypto-dependencies")]
 pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
     Ok(Prng::new()?.take(len).collect())
+}
+
+/// `encode_fieldvec` serializes a type that is equivalent to a vector of field elements.
+#[inline(always)]
+pub(crate) fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(val: T, bytes: &mut Vec<u8>) {
+    for elem in val.as_ref() {
+        bytes.append(&mut (*elem).into());
+    }
+}
+
+/// `decode_fieldvec` deserializes some number of field elements from a cursor, and advances the
+/// cursor's position.
+pub(crate) fn decode_fieldvec<F: FieldElement>(
+    count: usize,
+    input: &mut Cursor<&[u8]>,
+) -> Result<Vec<F>, CodecError> {
+    let mut vec = Vec::with_capacity(count);
+    let mut buffer = [0u8; 64];
+    assert!(
+        buffer.len() >= F::ENCODED_SIZE,
+        "field is too big for buffer"
+    );
+    for _ in 0..count {
+        input.read_exact(&mut buffer[..F::ENCODED_SIZE])?;
+        vec.push(
+            F::try_from(&buffer[..F::ENCODED_SIZE]).map_err(|e| CodecError::Other(Box::new(e)))?,
+        );
+    }
+    Ok(vec)
 }
 
 #[cfg(test)]

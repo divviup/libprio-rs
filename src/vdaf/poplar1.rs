@@ -30,7 +30,7 @@ use crate::codec::{
     decode_u16_items, decode_u24_items, encode_u16_items, encode_u24_items, CodecError, Decode,
     Encode, ParameterizedDecode,
 };
-use crate::field::{split_vector, FieldElement};
+use crate::field::{decode_fieldvec, split_vector, FieldElement};
 use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, Seed};
@@ -720,6 +720,34 @@ where
     }
 }
 
+impl<'a, F, I, P, const L: usize>
+    ParameterizedDecode<(&'a Poplar1<I, P, L>, &'a BTreeSet<IdpfInput>)> for OutputShare<F>
+where
+    F: FieldElement,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        (_, agg_param): &(&'a Poplar1<I, P, L>, &'a BTreeSet<IdpfInput>),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(agg_param.len(), bytes).map(Self)
+    }
+}
+
+impl<'a, F, I, P, const L: usize>
+    ParameterizedDecode<(&'a Poplar1<I, P, L>, &'a BTreeSet<IdpfInput>)> for AggregateShare<F>
+where
+    F: FieldElement,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        (_, agg_param): &(&'a Poplar1<I, P, L>, &'a BTreeSet<IdpfInput>),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(agg_param.len(), bytes).map(Self)
+    }
+}
+
 fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
     match agg_id {
         0 => Ok(true),
@@ -733,8 +761,7 @@ mod tests {
     use super::*;
 
     use crate::field::Field128;
-    use crate::vdaf::prg::PrgAes128;
-    use crate::vdaf::{run_vdaf, run_vdaf_prepare};
+    use crate::vdaf::{fieldvec_roundtrip_test, prg::PrgAes128, run_vdaf, run_vdaf_prepare};
     use rand::prelude::*;
 
     #[test]
@@ -932,5 +959,36 @@ mod tests {
         for (got, want) in btree.values().zip(counts.iter()) {
             assert_eq!(got, want, "got {:?} want {:?}", btree.values(), counts);
         }
+    }
+
+    #[test]
+    fn roundtrip_output_share() {
+        let vdaf = Poplar1::new(17);
+        let agg_param = BTreeSet::from([
+            IdpfInput::new(b"AA", 15).unwrap(),
+            IdpfInput::new(b"Aa", 15).unwrap(),
+            IdpfInput::new(b"A1", 15).unwrap(),
+        ]);
+        fieldvec_roundtrip_test::<
+            Field128,
+            Poplar1<ToyIdpf<Field128>, PrgAes128, 16>,
+            OutputShare<Field128>,
+        >(&vdaf, &agg_param, 3);
+    }
+
+    #[test]
+    fn roundtrip_aggregate_share() {
+        let vdaf = Poplar1::new(17);
+        let agg_param = BTreeSet::from([
+            IdpfInput::new(b"AA", 15).unwrap(),
+            IdpfInput::new(b"Aa", 15).unwrap(),
+            IdpfInput::new(b"A1", 15).unwrap(),
+        ]);
+        assert_eq!(agg_param.len(), 3);
+        fieldvec_roundtrip_test::<
+            Field128,
+            Poplar1<ToyIdpf<Field128>, PrgAes128, 16>,
+            AggregateShare<Field128>,
+        >(&vdaf, &agg_param, 3);
     }
 }

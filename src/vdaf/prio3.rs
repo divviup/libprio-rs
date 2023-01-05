@@ -29,9 +29,8 @@
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
-use super::{DST_LEN, VERSION};
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
-use crate::field::FieldElement;
+use crate::field::{decode_fieldvec, FieldElement};
 #[cfg(feature = "crypto-dependencies")]
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
@@ -51,7 +50,7 @@ use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, RandSource, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, ShareDecodingParameter, Vdaf, VdafError,
+    Share, ShareDecodingParameter, Vdaf, VdafError, DST_LEN, VERSION,
 };
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use fixed::traits::Fixed;
@@ -1069,12 +1068,42 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
     Ok(())
 }
 
+impl<'a, F, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, &'a ())>
+    for OutputShare<F>
+where
+    F: FieldElement,
+    T: Type,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(vdaf.output_len(), bytes).map(Self)
+    }
+}
+
+impl<'a, F, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, &'a ())>
+    for AggregateShare<F>
+where
+    F: FieldElement,
+    T: Type,
+    P: Prg<L>,
+{
+    fn decode_with_param(
+        (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(vdaf.output_len(), bytes).map(Self)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[cfg(feature = "experimental")]
     use crate::flp::gadgets::ParallelSumGadget;
-    use crate::vdaf::{run_vdaf, run_vdaf_prepare};
+    use crate::vdaf::{fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare};
     use assert_matches::assert_matches;
     #[cfg(feature = "experimental")]
     use fixed::{
@@ -1412,5 +1441,45 @@ mod tests {
             assert_eq!(got, want);
         }
         Ok(())
+    }
+
+    #[test]
+    fn roundtrip_output_share() {
+        let vdaf = Prio3::new_aes128_count(2).unwrap();
+        fieldvec_roundtrip_test::<Field64, Prio3Aes128Count, OutputShare<Field64>>(&vdaf, &(), 1);
+
+        let vdaf = Prio3::new_aes128_sum(2, 17).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Sum, OutputShare<Field128>>(&vdaf, &(), 1);
+
+        let vdaf = Prio3::new_aes128_histogram(2, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Histogram, OutputShare<Field128>>(
+            &vdaf,
+            &(),
+            12,
+        );
+    }
+
+    #[test]
+    fn roundtrip_aggregate_share() {
+        let vdaf = Prio3::new_aes128_count(2).unwrap();
+        fieldvec_roundtrip_test::<Field64, Prio3Aes128Count, AggregateShare<Field64>>(
+            &vdaf,
+            &(),
+            1,
+        );
+
+        let vdaf = Prio3::new_aes128_sum(2, 17).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Sum, AggregateShare<Field128>>(
+            &vdaf,
+            &(),
+            1,
+        );
+
+        let vdaf = Prio3::new_aes128_histogram(2, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap();
+        fieldvec_roundtrip_test::<Field128, Prio3Aes128Histogram, AggregateShare<Field128>>(
+            &vdaf,
+            &(),
+            12,
+        );
     }
 }

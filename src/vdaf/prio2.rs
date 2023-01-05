@@ -3,16 +3,17 @@
 //! Port of the ENPA Prio system to a VDAF. It is backwards compatible with
 //! [`Client`](crate::client::Client) and [`Server`](crate::server::Server).
 
+use super::{AggregateShare, OutputShare};
 use crate::{
     client as v2_client,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{FieldElement, FieldPrio2},
+    field::{decode_fieldvec, FieldElement, FieldPrio2},
     prng::Prng,
     server as v2_server,
     util::proof_length,
     vdaf::{
-        prg::Seed, Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare,
-        PrepareTransition, Share, ShareDecodingParameter, Vdaf, VdafError,
+        prg::Seed, Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share,
+        ShareDecodingParameter, Vdaf, VdafError,
     },
 };
 use ring::hmac;
@@ -299,6 +300,30 @@ impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Share<FieldPrio2, 32> {
     }
 }
 
+impl<'a, F> ParameterizedDecode<(&'a Prio2, &'a ())> for OutputShare<F>
+where
+    F: FieldElement,
+{
+    fn decode_with_param(
+        (prio2, _): &(&'a Prio2, &'a ()),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(prio2.input_len, bytes).map(Self)
+    }
+}
+
+impl<'a, F> ParameterizedDecode<(&'a Prio2, &'a ())> for AggregateShare<F>
+where
+    F: FieldElement,
+{
+    fn decode_with_param(
+        (prio2, _): &(&'a Prio2, &'a ()),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        decode_fieldvec(prio2.input_len, bytes).map(Self)
+    }
+}
+
 fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
     match agg_id {
         0 => Ok(true),
@@ -315,7 +340,7 @@ mod tests {
         encrypt::{decrypt_share, encrypt_share, PrivateKey, PublicKey},
         field::random_vector,
         server::Server,
-        vdaf::{run_vdaf, run_vdaf_prepare},
+        vdaf::{fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare},
     };
     use rand::prelude::*;
 
@@ -424,5 +449,17 @@ mod tests {
                     .expect("failed to decode prepare step");
             assert_eq!(got, want);
         }
+    }
+
+    #[test]
+    fn roundtrip_output_share() {
+        let vdaf = Prio2::new(31).unwrap();
+        fieldvec_roundtrip_test::<FieldPrio2, Prio2, OutputShare<FieldPrio2>>(&vdaf, &(), 31);
+    }
+
+    #[test]
+    fn roundtrip_aggregate_share() {
+        let vdaf = Prio2::new(31).unwrap();
+        fieldvec_roundtrip_test::<FieldPrio2, Prio2, AggregateShare<FieldPrio2>>(&vdaf, &(), 31);
     }
 }
