@@ -304,7 +304,7 @@ impl<F: FieldElement> Aggregatable for AggregateShare<F> {
     }
 
     fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError> {
-        // For poplar1, prio2, and prio3, no conversion is needed between output shares and
+        // For Poplar1, Prio2, and Prio3, no conversion is needed between output shares and
         // aggregate shares.
         self.sum(output_share.as_ref())
     }
