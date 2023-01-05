@@ -4,7 +4,7 @@
 //! The Prio v2 server. Only 0 / 1 vectors are supported for now.
 use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
-    field::{merge_vector, FieldElement, FieldError},
+    field::{merge_vector, FftFriendlyFieldElement, FieldError},
     polynomial::{poly_interpret_eval, PolyAuxMemory},
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
@@ -46,7 +46,7 @@ pub struct ValidationMemory<F> {
     poly_mem: PolyAuxMemory<F>,
 }
 
-impl<F: FieldElement> ValidationMemory<F> {
+impl<F: FftFriendlyFieldElement> ValidationMemory<F> {
     /// Construct a new ValidationMemory object for validating proof shares of
     /// length `dimension`.
     pub fn new(dimension: usize) -> Self {
@@ -71,7 +71,7 @@ pub struct Server<F> {
     private_key: PrivateKey,
 }
 
-impl<F: FieldElement> Server<F> {
+impl<F: FftFriendlyFieldElement> Server<F> {
     /// Construct a new server instance
     ///
     /// Params:
@@ -200,7 +200,7 @@ pub struct VerificationMessage<F> {
 
 /// Given a proof and evaluation point, this constructs the verification
 /// message.
-pub fn generate_verification_message<F: FieldElement>(
+pub fn generate_verification_message<F: FftFriendlyFieldElement>(
     dimension: usize,
     eval_at: F,
     proof: &[F],
@@ -263,7 +263,7 @@ pub fn generate_verification_message<F: FieldElement>(
 }
 
 /// Decides if the distributed proof is valid
-pub fn is_valid_share<F: FieldElement>(
+pub fn is_valid_share<F: FftFriendlyFieldElement>(
     v1: &VerificationMessage<F>,
     v2: &VerificationMessage<F>,
 ) -> bool {
@@ -280,7 +280,7 @@ mod tests {
     use super::*;
     use crate::{
         encrypt::{encrypt_share, PublicKey},
-        field::{Field32, FieldPrio2},
+        field::{Field32, FieldElement, FieldPrio2},
         test_vector::Priov2TestVector,
         util::{self, unpack_proof_mut},
     };
