@@ -432,6 +432,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fiat-crypto"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a214f5bb88731d436478f3ae1f8a277b62124089ba9fb67f4f93fb100ef73c90"
+
+[[package]]
 name = "fixed"
 version = "1.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -723,9 +729,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.14.0"
+version = "1.17.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f7254b99e31cad77da24b08ebf628882739a608578bb1bcdfc1f9c21260d7c0"
+checksum = "6f61fba1741ea2b3d6a1e3178721804bb716a68a6aeba1149b5d52e3d464ea66"
 
 [[package]]
 name = "oorandom"
@@ -822,6 +828,7 @@ dependencies = [
  "cmac",
  "criterion",
  "ctr",
+ "fiat-crypto",
  "fixed",
  "fixed-macro",
  "getrandom",
@@ -830,6 +837,7 @@ dependencies = [
  "itertools",
  "modinverse",
  "num-bigint",
+ "once_cell",
  "prio",
  "rand",
  "rayon",
@@ -837,6 +845,7 @@ dependencies = [
  "serde",
  "serde_json",
  "static_assertions",
+ "subtle",
  "thiserror",
 ]
 

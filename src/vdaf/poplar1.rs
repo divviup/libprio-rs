@@ -30,7 +30,7 @@ use crate::codec::{
     decode_u16_items, decode_u24_items, encode_u16_items, encode_u24_items, CodecError, Decode,
     Encode, ParameterizedDecode,
 };
-use crate::field::{decode_fieldvec, split_vector, FieldElement};
+use crate::field::{decode_fieldvec, split_vector, FieldElement, FieldElementWithInteger};
 use crate::fp::log2;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, Seed};
@@ -130,7 +130,7 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
     //
     // NOTE(cjpatton) The IDPF of [BBCG+21] might use different fields for different levels of the
     // prefix tree.
-    type Field: FieldElement;
+    type Field: FieldElementWithInteger;
 
     /// Generate and return a sequence of IDPF shares for `input`. Parameter `output` is an
     /// iterator that is invoked to get the output value for each successive level of the prefix
@@ -157,7 +157,7 @@ pub struct ToyIdpf<F> {
     level: usize,
 }
 
-impl<F: FieldElement> Idpf<2, 2> for ToyIdpf<F> {
+impl<F: FieldElementWithInteger> Idpf<2, 2> for ToyIdpf<F> {
     type Field = F;
 
     fn gen<M: IntoIterator<Item = [Self::Field; 2]>>(
@@ -710,7 +710,7 @@ where
 
         let mut agg = BTreeMap::new();
         for (prefix, count) in agg_param.iter().zip(agg_data.as_ref()) {
-            let count = <I::Field as FieldElement>::Integer::from(*count);
+            let count = <I::Field as FieldElementWithInteger>::Integer::from(*count);
             let count: u64 = count
                 .try_into()
                 .map_err(|_| VdafError::Uncategorized("aggregate overflow".to_string()))?;

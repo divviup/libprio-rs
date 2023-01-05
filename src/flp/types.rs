@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`](crate::flp::Type) implementations.
 
-use crate::field::{FieldElement, FieldElementExt};
+use crate::field::{FftFriendlyFieldElement, FieldElementExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -16,7 +16,7 @@ pub struct Count<F> {
     range_checker: Vec<F>,
 }
 
-impl<F: FieldElement> Count<F> {
+impl<F: FftFriendlyFieldElement> Count<F> {
     /// Return a new [`Count`] type instance.
     pub fn new() -> Self {
         Self {
@@ -25,13 +25,13 @@ impl<F: FieldElement> Count<F> {
     }
 }
 
-impl<F: FieldElement> Default for Count<F> {
+impl<F: FftFriendlyFieldElement> Default for Count<F> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: FieldElement> Type for Count<F> {
+impl<F: FftFriendlyFieldElement> Type for Count<F> {
     const ID: u32 = 0x00000000;
     type Measurement = F::Integer;
     type AggregateResult = F::Integer;
@@ -106,12 +106,12 @@ impl<F: FieldElement> Type for Count<F> {
 ///
 /// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Sum<F: FieldElement> {
+pub struct Sum<F: FftFriendlyFieldElement> {
     bits: usize,
     range_checker: Vec<F>,
 }
 
-impl<F: FieldElement> Sum<F> {
+impl<F: FftFriendlyFieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
     pub fn new(bits: usize) -> Result<Self, FlpError> {
@@ -128,7 +128,7 @@ impl<F: FieldElement> Sum<F> {
     }
 }
 
-impl<F: FieldElement> Type for Sum<F> {
+impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     const ID: u32 = 0x00000001;
     type Measurement = F::Integer;
     type AggregateResult = F::Integer;
@@ -199,12 +199,12 @@ impl<F: FieldElement> Type for Sum<F> {
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the arithmetic average.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Average<F: FieldElement> {
+pub struct Average<F: FftFriendlyFieldElement> {
     bits: usize,
     range_checker: Vec<F>,
 }
 
-impl<F: FieldElement> Average<F> {
+impl<F: FftFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
     pub fn new(bits: usize) -> Result<Self, FlpError> {
@@ -221,7 +221,7 @@ impl<F: FieldElement> Average<F> {
     }
 }
 
-impl<F: FieldElement> Type for Average<F> {
+impl<F: FftFriendlyFieldElement> Type for Average<F> {
     const ID: u32 = 0xFFFF0000;
     type Measurement = F::Integer;
     type AggregateResult = f64;
@@ -298,12 +298,12 @@ impl<F: FieldElement> Type for Average<F> {
 /// The histogram type. Each measurement is a non-negative integer and the aggregate is a histogram
 /// approximating the distribution of the measurements.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Histogram<F: FieldElement> {
+pub struct Histogram<F: FftFriendlyFieldElement> {
     buckets: Vec<F::Integer>,
     range_checker: Vec<F>,
 }
 
-impl<F: FieldElement> Histogram<F> {
+impl<F: FftFriendlyFieldElement> Histogram<F> {
     /// Return a new [`Histogram`] type with the given buckets.
     pub fn new(buckets: Vec<F::Integer>) -> Result<Self, FlpError> {
         if buckets.len() >= u32::MAX as usize {
@@ -329,7 +329,7 @@ impl<F: FieldElement> Histogram<F> {
     }
 }
 
-impl<F: FieldElement> Type for Histogram<F> {
+impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     const ID: u32 = 0x00000002;
     type Measurement = F::Integer;
     type AggregateResult = Vec<F::Integer>;
@@ -432,7 +432,7 @@ pub struct CountVec<F, S> {
     phantom: PhantomData<S>,
 }
 
-impl<F: FieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> CountVec<F, S> {
+impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> CountVec<F, S> {
     /// Returns a new [`CountVec`] with the given length.
     pub fn new(len: usize) -> Self {
         // The optimal chunk length is the square root of the input length. If the input length is
@@ -455,7 +455,7 @@ impl<F: FieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> CountVec<F, S> 
     }
 }
 
-impl<F: FieldElement, S> Clone for CountVec<F, S> {
+impl<F: FftFriendlyFieldElement, S> Clone for CountVec<F, S> {
     fn clone(&self) -> Self {
         Self {
             range_checker: self.range_checker.clone(),
@@ -469,7 +469,7 @@ impl<F: FieldElement, S> Clone for CountVec<F, S> {
 
 impl<F, S> Type for CountVec<F, S>
 where
-    F: FieldElement,
+    F: FftFriendlyFieldElement,
     S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static,
 {
     const ID: u32 = 0xFFFF0000;
@@ -585,7 +585,7 @@ where
 /// * `g` - The gadget to be applied elementwise
 /// * `input` - The vector on whose elements to apply `g`
 /// * `rnd` - The randomness used for the linear combination
-pub(crate) fn call_gadget_on_vec_entries<F: FieldElement>(
+pub(crate) fn call_gadget_on_vec_entries<F: FftFriendlyFieldElement>(
     g: &mut Box<dyn Gadget<F>>,
     input: &[F],
     rnd: F,
@@ -601,7 +601,9 @@ pub(crate) fn call_gadget_on_vec_entries<F: FieldElement>(
 
 /// Given a vector `data` of field elements which should contain exactly one entry, return the
 /// integer representation of that entry.
-pub(crate) fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, FlpError> {
+pub(crate) fn decode_result<F: FftFriendlyFieldElement>(
+    data: &[F],
+) -> Result<F::Integer, FlpError> {
     if data.len() != 1 {
         return Err(FlpError::Decode("unexpected input length".into()));
     }
@@ -610,7 +612,7 @@ pub(crate) fn decode_result<F: FieldElement>(data: &[F]) -> Result<F::Integer, F
 
 /// Given a vector `data` of field elements, return a vector containing the corresponding integer
 /// representations, if the number of entries matches `expected_len`.
-pub(crate) fn decode_result_vec<F: FieldElement>(
+pub(crate) fn decode_result_vec<F: FftFriendlyFieldElement>(
     data: &[F],
     expected_len: usize,
 ) -> Result<Vec<F::Integer>, FlpError> {
@@ -623,7 +625,7 @@ pub(crate) fn decode_result_vec<F: FieldElement>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, Field64 as TestField};
+    use crate::field::{random_vector, Field64 as TestField, FieldElement};
     use crate::flp::gadgets::ParallelSum;
     #[cfg(feature = "multithreaded")]
     use crate::flp::gadgets::ParallelSumMultithreaded;
@@ -1045,7 +1047,7 @@ mod tests {
 #[cfg(test)]
 mod test_utils {
     use super::*;
-    use crate::field::{random_vector, split_vector};
+    use crate::field::{random_vector, split_vector, FieldElement};
 
     pub(crate) struct ValidityTestCase<F> {
         pub(crate) expect_valid: bool,

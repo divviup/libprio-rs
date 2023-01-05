@@ -154,7 +154,7 @@
 
 pub mod compatible_float;
 
-use crate::field::{FieldElement, FieldElementExt};
+use crate::field::{FftFriendlyFieldElement, FieldElementExt, FieldElementWithInteger};
 use crate::flp::gadgets::{BlindPolyEval, ParallelSumGadget, PolyEval};
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::{FlpError, Gadget, Type};
@@ -179,12 +179,11 @@ use std::{convert::TryFrom, convert::TryInto, fmt::Debug, marker::PhantomData};
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct FixedPointBoundedL2VecSum<
     T: Fixed,
-    F: FieldElement,
+    F: FftFriendlyFieldElement,
     SPoly: ParallelSumGadget<F, PolyEval<F>> + Clone,
     SBlindPoly: ParallelSumGadget<F, BlindPolyEval<F>> + Clone,
 > {
     bits_per_entry: usize,
-    fi_bits_per_entry: F::Integer,
     entries: usize,
     bits_for_norm: usize,
     range_01_checker: Vec<F>,
@@ -205,7 +204,7 @@ pub struct FixedPointBoundedL2VecSum<
 impl<T, F, SPoly, SBlindPoly> FixedPointBoundedL2VecSum<T, F, SPoly, SBlindPoly>
 where
     T: Fixed,
-    F: FieldElement,
+    F: FftFriendlyFieldElement,
     SPoly: ParallelSumGadget<F, PolyEval<F>> + Clone,
     SBlindPoly: ParallelSumGadget<F, BlindPolyEval<F>> + Clone,
     u128: TryFrom<F::Integer>,
@@ -215,7 +214,6 @@ where
     pub fn new(entries: usize) -> Result<Self, FlpError> {
         // (0) initialize constants
         let fi_one = F::Integer::from(F::one());
-        let fi_two = fi_one + fi_one;
 
         // (I) Check that the fixed type `F` is compatible.
         //
@@ -239,8 +237,6 @@ where
                 bits_per_entry,
             )));
         }
-        let fi_bits_per_entry: F::Integer = F::valid_integer_try_from(bits_per_entry)
-            .map_err(|_| FlpError::Encode("Could not create FieldInteger from usize even though size check was successful".to_string()))?;
 
         // (II) Check that the field is large enough for the norm.
         //
@@ -283,8 +279,8 @@ where
         // the constant part is 2^(2n-2),
         // the polynomial is:
         //   p(y) = 2^(2n-2) + -(2^n) * y + 1 * y^2
-        let linear_part = fi_one << fi_bits_per_entry;
-        let constant_part = fi_one << (fi_bits_per_entry + fi_bits_per_entry - fi_two);
+        let linear_part = fi_one << bits_per_entry;
+        let constant_part = fi_one << (bits_per_entry + bits_per_entry - 2);
         let norm_summand_poly = vec![F::from(constant_part), -F::from(linear_part), F::one()];
 
         // Compute chunk length and number of calls for parallel sum gadgets.
@@ -298,7 +294,6 @@ where
 
         Ok(Self {
             bits_per_entry,
-            fi_bits_per_entry,
             entries,
             bits_for_norm,
             range_01_checker: poly_range_check(0, 2),
@@ -321,7 +316,7 @@ where
 impl<T, F, SPoly, SBlindPoly> Type for FixedPointBoundedL2VecSum<T, F, SPoly, SBlindPoly>
 where
     T: Fixed + CompatibleFloat<F>,
-    F: FieldElement,
+    F: FftFriendlyFieldElement,
     SPoly: ParallelSumGadget<F, PolyEval<F>> + Eq + Clone + 'static,
     SBlindPoly: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + Clone + 'static,
 {
@@ -351,8 +346,8 @@ where
         // (II) Vector norm.
         // Compute the norm of the input vector.
         let field_entries = integer_entries.map(|x| F::from(x));
-        let norm = compute_norm_of_entries(field_entries, self.fi_bits_per_entry)?;
-        let norm_int = <F as FieldElement>::Integer::from(norm);
+        let norm = compute_norm_of_entries(field_entries, self.bits_per_entry)?;
+        let norm_int = F::Integer::from(norm);
 
         // Write the norm into the `entries` vector.
         F::fill_with_bitvector_representation(
@@ -484,7 +479,7 @@ where
             // Chunks which are too short need to be extended with a share of the
             // encoded zero value, that is: 1/num_shares * (2^(n-1))
             let fi_one = F::Integer::from(F::one());
-            let zero_enc = F::from(fi_one << (self.fi_bits_per_entry - fi_one));
+            let zero_enc = F::from(fi_one << (self.bits_per_entry - 1));
             let zero_enc_share = zero_enc * constant_part_multiplier;
 
             for chunk in decoded_entries?.chunks(self.gadget1_chunk_len) {
@@ -573,13 +568,12 @@ where
 ///
 /// * `entries` - Iterator over the vector entries.
 /// * `bits_per_entry` - Number of bits one entry has.
-fn compute_norm_of_entries<F, Fs>(entries: Fs, fi_bits_per_entry: F::Integer) -> Result<F, FlpError>
+fn compute_norm_of_entries<F, Fs>(entries: Fs, bits_per_entry: usize) -> Result<F, FlpError>
 where
-    F: FieldElement,
+    F: FieldElementWithInteger,
     Fs: IntoIterator<Item = F>,
 {
     let fi_one = F::Integer::from(F::one());
-    let fi_two = fi_one + fi_one;
 
     // The value that is computed here is:
     //    sum_{y in entries} 2^(2n-2) + -(2^n) * y + 1 * y^2
@@ -591,8 +585,8 @@ where
     let mut norm_accumulator = F::zero();
 
     // constants
-    let linear_part = fi_one << fi_bits_per_entry; // = 2^(2n-2)
-    let constant_part = fi_one << (fi_bits_per_entry + fi_bits_per_entry - fi_two); // = 2^n
+    let linear_part = fi_one << bits_per_entry; // = 2^(2n-2)
+    let constant_part = fi_one << (bits_per_entry + bits_per_entry - 2); // = 2^n
 
     // Add term for a given `entry` to `norm_accumulator`.
     for entry in entries.into_iter() {
@@ -605,7 +599,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, Field128};
+    use crate::field::{random_vector, Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
     use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
     use fixed::types::extra::{U127, U14, U63};
@@ -740,7 +734,7 @@ mod tests {
             let zero_enc = Field128::from((2_u128) << (n - 2));
             {
                 let entries = vec![zero_enc; 3];
-                let norm = compute_norm_of_entries(entries, vsum.fi_bits_per_entry).unwrap();
+                let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
                 let expected_norm = Field128::from(0);
                 assert_eq!(norm, expected_norm);
             }
@@ -749,14 +743,14 @@ mod tests {
             {
                 // the largest possible entries (2^n-1)
                 let entries = vec![one_enc; 3];
-                let norm = compute_norm_of_entries(entries, vsum.fi_bits_per_entry).unwrap();
+                let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
                 let expected_norm = Field128::from(3 * (1 + (1 << (2 * n - 2)) - (1 << n)));
                 // = 3 * ((2^n-1)^2 - (2^n-1)*2^16 + 2^(2*n-2))
                 assert_eq!(norm, expected_norm);
 
                 // the smallest possible entries (0)
                 let entries = vec![Field128::from(0), Field128::from(0), Field128::from(0)];
-                let norm = compute_norm_of_entries(entries, vsum.fi_bits_per_entry).unwrap();
+                let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
                 let expected_norm = Field128::from(3 * (1 << (2 * n - 2)));
                 // = 3 * (0^2 - 0*2^n + 2^(2*n-2))
                 assert_eq!(norm, expected_norm);
