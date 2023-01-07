@@ -2,17 +2,23 @@
 
 use cfg_if::cfg_if;
 use iai::black_box;
+#[cfg(any(feature = "prio2", feature = "experimental"))]
+use prio::field::FieldElement;
+#[cfg(feature = "experimental")]
+use prio::{
+    codec::{Decode, ParameterizedDecode},
+    field::Field255,
+    idpf::{self, IdpfInput, IdpfPoplarPublicShare, RingBufferCache},
+    vdaf::prg::{PrgAes128, Seed},
+};
+#[cfg(feature = "prio2")]
+use prio::{field::FieldPrio2, server::VerificationMessage};
 use prio::{
     field::{random_vector, Field128, Field64},
     vdaf::{
         prio3::{Prio3, Prio3InputShare},
         Client,
     },
-};
-#[cfg(feature = "prio2")]
-use prio::{
-    field::{FieldElement, FieldPrio2},
-    server::VerificationMessage,
 };
 
 fn prng(size: usize) -> Vec<Field128> {
@@ -143,77 +149,169 @@ fn prio3_client_count_vec_multithreaded_1000() -> Vec<Prio3InputShare<Field128, 
     prio3.shard(&black_box(measurement)).unwrap().1
 }
 
+#[cfg(feature = "experimental")]
+fn idpf_poplar_gen(input: &IdpfInput, inner_values: Vec<[Field64; 2]>, leaf_value: [Field255; 2]) {
+    idpf::gen::<_, PrgAes128, 16, 2>(input, inner_values, leaf_value).unwrap();
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_gen_8() {
+    let input = IdpfInput::from_bytes(b"A");
+    let one = Field64::one();
+    idpf_poplar_gen(
+        &input,
+        vec![[one, one]; 7],
+        [Field255::one(), Field255::one()],
+    );
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_gen_128() {
+    let input = IdpfInput::from_bytes(b"AAAAAAAAAAAAAAAA");
+    let one = Field64::one();
+    idpf_poplar_gen(
+        &input,
+        vec![[one, one]; 127],
+        [Field255::one(), Field255::one()],
+    );
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_gen_2048() {
+    let input = IdpfInput::from_bytes(&[0x41; 256]);
+    let one = Field64::one();
+    idpf_poplar_gen(
+        &input,
+        vec![[one, one]; 2047],
+        [Field255::one(), Field255::one()],
+    );
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_eval(
+    input: &IdpfInput,
+    public_share: &IdpfPoplarPublicShare<Field64, Field255, 16, 2>,
+    key: &Seed<16>,
+) {
+    let mut cache = RingBufferCache::new(1);
+    idpf::eval::<PrgAes128, 16, 2>(0, public_share, key, input, &mut cache).unwrap();
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_eval_8() {
+    let input = IdpfInput::from_bytes(b"A");
+    let public_share = IdpfPoplarPublicShare::get_decoded_with_param(&8, &[0x7f; 306]).unwrap();
+    let key = Seed::get_decoded(&[0xff; 16]).unwrap();
+    idpf_poplar_eval(&input, &public_share, &key);
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_eval_128() {
+    let input = IdpfInput::from_bytes(b"AAAAAAAAAAAAAAAA");
+    let public_share = IdpfPoplarPublicShare::get_decoded_with_param(&128, &[0x7f; 4176]).unwrap();
+    let key = Seed::get_decoded(&[0xff; 16]).unwrap();
+    idpf_poplar_eval(&input, &public_share, &key);
+}
+
+#[cfg(feature = "experimental")]
+fn idpf_poplar_eval_2048() {
+    let input = IdpfInput::from_bytes(&[0x41; 256]);
+    let public_share =
+        IdpfPoplarPublicShare::get_decoded_with_param(&2048, &[0x7f; 66096]).unwrap();
+    let key = Seed::get_decoded(&[0xff; 16]).unwrap();
+    idpf_poplar_eval(&input, &public_share, &key);
+}
+
+macro_rules! main_base {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        iai::main!(
+            prng_16,
+            prng_256,
+            prng_1024,
+            prng_4096,
+            prio3_client_count,
+            prio3_client_histogram_11,
+            prio3_client_sum_32,
+            prio3_client_count_vec_1000,
+            $( $func_name, )*
+        );
+    };
+}
+
+#[cfg(feature = "prio2")]
+macro_rules! main_add_prio2 {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        main_base!(
+            prio2_prove_10,
+            prio2_prove_100,
+            prio2_prove_1000,
+            prio2_prove_and_verify_10,
+            prio2_prove_and_verify_100,
+            prio2_prove_and_verify_1000,
+            $( $func_name, )*
+        );
+    };
+}
+
+#[cfg(not(feature = "prio2"))]
+macro_rules! main_add_prio2 {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        main_base!(
+            $( $func_name, )*
+        );
+    };
+}
+
+#[cfg(feature = "multithreaded")]
+macro_rules! main_add_multithreaded {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        main_add_prio2!(
+            prio3_client_count_vec_multithreaded_1000,
+            $( $func_name, )*
+        );
+    };
+}
+
+#[cfg(not(feature = "multithreaded"))]
+macro_rules! main_add_multithreaded {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        main_add_prio2!(
+            $( $func_name, )*
+        );
+    };
+}
+
+#[cfg(feature = "experimental")]
+macro_rules! main_add_experimental {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        main_add_multithreaded!(
+            idpf_poplar_gen_8,
+            idpf_poplar_gen_128,
+            idpf_poplar_gen_2048,
+            idpf_poplar_eval_8,
+            idpf_poplar_eval_128,
+            idpf_poplar_eval_2048,
+            $( $func_name, )*
+        );
+    };
+}
+
+#[cfg(not(feature = "experimental"))]
+macro_rules! main_add_experimental {
+    ( $( $func_name:ident ),* $(,)* ) => {
+        main_add_multithreaded!(
+            $( $func_name, )*
+        );
+    };
+}
+
 cfg_if! {
     if #[cfg(windows)] {
         fn main() {
             eprintln!("Cycle count benchmarks are not supported on Windows.");
         }
     }
-    else if #[cfg(feature = "prio2")] {
-        cfg_if! {
-            if #[cfg(feature = "multithreaded")] {
-                iai::main!(
-                    prng_16,
-                    prng_256,
-                    prng_1024,
-                    prng_4096,
-                    prio2_prove_10,
-                    prio2_prove_100,
-                    prio2_prove_1000,
-                    prio2_prove_and_verify_10,
-                    prio2_prove_and_verify_100,
-                    prio2_prove_and_verify_1000,
-                    prio3_client_count,
-                    prio3_client_histogram_11,
-                    prio3_client_sum_32,
-                    prio3_client_count_vec_1000,
-                    prio3_client_count_vec_multithreaded_1000,
-                );
-            } else {
-                iai::main!(
-                    prng_16,
-                    prng_256,
-                    prng_1024,
-                    prng_4096,
-                    prio2_prove_10,
-                    prio2_prove_100,
-                    prio2_prove_1000,
-                    prio2_prove_and_verify_10,
-                    prio2_prove_and_verify_100,
-                    prio2_prove_and_verify_1000,
-                    prio3_client_count,
-                    prio3_client_histogram_11,
-                    prio3_client_sum_32,
-                    prio3_client_count_vec_1000,
-                );
-            }
-        }
-    } else {
-        cfg_if! {
-            if #[cfg(feature = "multithreaded")] {
-                iai::main!(
-                    prng_16,
-                    prng_256,
-                    prng_1024,
-                    prng_4096,
-                    prio3_client_count,
-                    prio3_client_histogram_11,
-                    prio3_client_sum_32,
-                    prio3_client_count_vec_1000,
-                    prio3_client_count_vec_multithreaded_1000,
-                );
-            } else {
-                iai::main!(
-                    prng_16,
-                    prng_256,
-                    prng_1024,
-                    prng_4096,
-                    prio3_client_count,
-                    prio3_client_histogram_11,
-                    prio3_client_sum_32,
-                    prio3_client_count_vec_1000,
-                );
-            }
-        }
+    else {
+        main_add_experimental!();
     }
 }

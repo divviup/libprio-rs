@@ -9,18 +9,14 @@
 //! TODO Make the input shares stateful so that applications can efficiently evaluate the IDPF over
 //! multiple rounds. Question: Will this require API changes to [`crate::vdaf::Vdaf`]?
 //!
-//! TODO Update trait [`Idpf`] so that the IDPF can have a different field type at the leaves than
-//! at the inner nodes.
-//!
-//! TODO Implement the efficient IDPF of [[BBCG+21]]. [`ToyIdpf`] is not space efficient and is
-//! merely intended as a proof-of-concept.
+//! TODO Remove trait [`Idpf`] and integrate IdpfPoplar.
 //!
 //! [BBCG+21]: https://eprint.iacr.org/2021/017
 //! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::{TryFrom, TryInto};
+use std::convert::TryInto;
 use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::FromIterator;
@@ -30,8 +26,7 @@ use crate::codec::{
     decode_u16_items, decode_u24_items, encode_u16_items, encode_u24_items, CodecError, Decode,
     Encode, ParameterizedDecode,
 };
-use crate::field::{decode_fieldvec, split_vector, FieldElement, FieldElementWithInteger};
-use crate::fp::log2;
+use crate::field::{decode_fieldvec, FieldElement, FieldElementWithInteger};
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, Seed};
 use crate::vdaf::{
@@ -41,7 +36,7 @@ use crate::vdaf::{
 
 /// An input for an IDPF ([`Idpf`]).
 ///
-/// TODO Make this an associated type of `Idpf`.
+/// TODO Use `prio::idpf::IdpfInput` instead.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct IdpfInput {
     index: usize,
@@ -72,18 +67,6 @@ impl IdpfInput {
         }
 
         Ok(Self { index, level })
-    }
-
-    /// Construct a new input that is a prefix of `self`. Bounds checking is performed by the
-    /// caller.
-    fn prefix(&self, level: usize) -> Self {
-        let index = self.index & ((1 << level) - 1);
-        Self { index, level }
-    }
-
-    /// Return the position of `self` in the look-up table of `ToyIdpf`.
-    fn data_index(&self) -> usize {
-        self.index | (1 << self.level)
     }
 }
 
@@ -142,99 +125,6 @@ pub trait Idpf<const KEY_LEN: usize, const OUT_LEN: usize>:
 
     /// Evaluate an IDPF share on `prefix`.
     fn eval(&self, prefix: &IdpfInput) -> Result<[Self::Field; OUT_LEN], VdafError>;
-}
-
-/// A "toy" IDPF used for demonstration purposes. The space consumed by each share is `O(2^n)`,
-/// where `n` is the length of the input. The size of each share is restricted to 1MB, so this IDPF
-/// is only suitable for very short inputs.
-//
-// NOTE(cjpatton) It would be straight-forward to generalize this construction to any `KEY_LEN` and
-// `OUT_LEN`.
-#[derive(Debug, Clone)]
-pub struct ToyIdpf<F> {
-    data0: Vec<F>,
-    data1: Vec<F>,
-    level: usize,
-}
-
-impl<F: FieldElementWithInteger> Idpf<2, 2> for ToyIdpf<F> {
-    type Field = F;
-
-    fn gen<M: IntoIterator<Item = [Self::Field; 2]>>(
-        input: &IdpfInput,
-        values: M,
-    ) -> Result<[Self; 2], VdafError> {
-        const MAX_DATA_BYTES: usize = 1024 * 1024; // 1MB
-
-        let max_input_len =
-            usize::try_from(log2((MAX_DATA_BYTES / F::ENCODED_SIZE) as u128)).unwrap();
-        if input.level > max_input_len {
-            return Err(VdafError::Uncategorized(format!(
-                "input length ({}) exceeds maximum of ({})",
-                input.level, max_input_len
-            )));
-        }
-
-        let data_len = 1 << (input.level + 1);
-        let mut data0 = vec![F::zero(); data_len];
-        let mut data1 = vec![F::zero(); data_len];
-        let mut values = values.into_iter();
-        for level in 0..input.level + 1 {
-            let value = values.next().unwrap();
-            let index = input.prefix(level).data_index();
-            data0[index] = value[0];
-            data1[index] = value[1];
-        }
-
-        let mut data0 = split_vector(&data0, 2)?.into_iter();
-        let mut data1 = split_vector(&data1, 2)?.into_iter();
-        Ok([
-            ToyIdpf {
-                data0: data0.next().unwrap(),
-                data1: data1.next().unwrap(),
-                level: input.level,
-            },
-            ToyIdpf {
-                data0: data0.next().unwrap(),
-                data1: data1.next().unwrap(),
-                level: input.level,
-            },
-        ])
-    }
-
-    fn eval(&self, prefix: &IdpfInput) -> Result<[F; 2], VdafError> {
-        if prefix.level > self.level {
-            return Err(VdafError::Uncategorized(format!(
-                "prefix length ({}) exceeds input length ({})",
-                prefix.level, self.level
-            )));
-        }
-
-        let index = prefix.data_index();
-        Ok([self.data0[index], self.data1[index]])
-    }
-}
-
-impl<F: FieldElement> Encode for ToyIdpf<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        encode_u24_items(bytes, &(), &self.data0);
-        encode_u24_items(bytes, &(), &self.data1);
-        (self.level as u64).encode(bytes);
-    }
-}
-
-impl<F: FieldElement> Decode for ToyIdpf<F> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let data0 = decode_u24_items(&(), bytes)?;
-        let data1 = decode_u24_items(&(), bytes)?;
-        let level = u64::decode(bytes)? as usize;
-
-        Ok(Self {
-            data0,
-            data1,
-            level,
-        })
-    }
 }
 
 impl Encode for BTreeSet<IdpfInput> {
@@ -752,241 +642,5 @@ fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
         0 => Ok(true),
         1 => Ok(false),
         _ => Err(VdafError::Uncategorized("unexpected aggregator id".into())),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    use crate::field::Field128;
-    use crate::vdaf::{fieldvec_roundtrip_test, prg::PrgAes128, run_vdaf, run_vdaf_prepare};
-    use rand::prelude::*;
-
-    #[test]
-    fn test_idpf() {
-        // IDPF input equality tests.
-        assert_eq!(
-            IdpfInput::new(b"hello", 40).unwrap(),
-            IdpfInput::new(b"hello", 40).unwrap()
-        );
-        assert_eq!(
-            IdpfInput::new(b"hi", 9).unwrap(),
-            IdpfInput::new(b"ha", 9).unwrap(),
-        );
-        assert_eq!(
-            IdpfInput::new(b"hello", 25).unwrap(),
-            IdpfInput::new(b"help", 25).unwrap()
-        );
-        assert_ne!(
-            IdpfInput::new(b"hello", 40).unwrap(),
-            IdpfInput::new(b"hello", 39).unwrap()
-        );
-        assert_ne!(
-            IdpfInput::new(b"hello", 40).unwrap(),
-            IdpfInput::new(b"hell-", 40).unwrap()
-        );
-
-        // IDPF uniqueness tests
-        let mut unique = BTreeSet::new();
-        assert!(unique.insert(IdpfInput::new(b"hello", 40).unwrap()));
-        assert!(!unique.insert(IdpfInput::new(b"hello", 40).unwrap()));
-        assert!(unique.insert(IdpfInput::new(b"hello", 39).unwrap()));
-        assert!(unique.insert(IdpfInput::new(b"bye", 20).unwrap()));
-
-        // Generate IDPF keys.
-        let input = IdpfInput::new(b"hi", 16).unwrap();
-        let keys = ToyIdpf::<Field128>::gen(
-            &input,
-            std::iter::repeat([Field128::one(), Field128::one()]),
-        )
-        .unwrap();
-
-        // Try evaluating the IDPF keys on all prefixes.
-        for prefix_len in 0..input.level + 1 {
-            let res = eval_idpf(
-                &keys,
-                &input.prefix(prefix_len),
-                &[Field128::one(), Field128::one()],
-            );
-            assert!(res.is_ok(), "prefix_len={prefix_len} error: {res:?}");
-        }
-
-        // Try evaluating the IDPF keys on incorrect prefixes.
-        eval_idpf(
-            &keys,
-            &IdpfInput::new(&[2], 2).unwrap(),
-            &[Field128::zero(), Field128::zero()],
-        )
-        .unwrap();
-
-        eval_idpf(
-            &keys,
-            &IdpfInput::new(&[23, 1], 12).unwrap(),
-            &[Field128::zero(), Field128::zero()],
-        )
-        .unwrap();
-    }
-
-    fn eval_idpf<I, const KEY_LEN: usize, const OUT_LEN: usize>(
-        keys: &[I; KEY_LEN],
-        input: &IdpfInput,
-        expected_output: &[I::Field; OUT_LEN],
-    ) -> Result<(), VdafError>
-    where
-        I: Idpf<KEY_LEN, OUT_LEN>,
-    {
-        let mut output = [I::Field::zero(); OUT_LEN];
-        for key in keys {
-            let output_share = key.eval(input)?;
-            for (x, y) in output.iter_mut().zip(output_share) {
-                *x += y;
-            }
-        }
-
-        if expected_output != &output {
-            return Err(VdafError::Uncategorized(format!(
-                "eval_idpf(): unexpected output: got {output:?}; want {expected_output:?}"
-            )));
-        }
-
-        Ok(())
-    }
-
-    #[test]
-    fn test_poplar1() {
-        const INPUT_LEN: usize = 8;
-
-        let vdaf: Poplar1<ToyIdpf<Field128>, PrgAes128, 16> = Poplar1::new(INPUT_LEN);
-        assert_eq!(vdaf.num_aggregators(), 2);
-
-        // Run the VDAF input-distribution algorithm.
-        let input = vec![IdpfInput::new(&[0b0110_1000], INPUT_LEN).unwrap()];
-
-        let mut agg_param = BTreeSet::new();
-        agg_param.insert(input[0]);
-        check_btree(&run_vdaf(&vdaf, &agg_param, input.clone()).unwrap(), &[1]);
-
-        // Try evaluating the VDAF on each prefix of the input.
-        for prefix_len in 0..input[0].level + 1 {
-            let mut agg_param = BTreeSet::new();
-            agg_param.insert(input[0].prefix(prefix_len));
-            check_btree(&run_vdaf(&vdaf, &agg_param, input.clone()).unwrap(), &[1]);
-        }
-
-        // Try various prefixes.
-        let prefix_len = 4;
-        let mut agg_param = BTreeSet::new();
-        // At length 4, the next two prefixes are equal. Neither one matches the input.
-        agg_param.insert(IdpfInput::new(&[0b0000_0000], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[0b0001_0000], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[0b0000_0001], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[0b0000_1101], prefix_len).unwrap());
-        // At length 4, the next two prefixes are equal. Both match the input.
-        agg_param.insert(IdpfInput::new(&[0b0111_1101], prefix_len).unwrap());
-        agg_param.insert(IdpfInput::new(&[0b0000_1101], prefix_len).unwrap());
-        let aggregate = run_vdaf(&vdaf, &agg_param, input.clone()).unwrap();
-        assert_eq!(aggregate.len(), agg_param.len());
-        check_btree(
-            &aggregate,
-            // We put six prefixes in the aggregation parameter, but the vector we get back is only
-            // 4 elements because at the given prefix length, some of the prefixes are equal.
-            &[0, 0, 0, 1],
-        );
-
-        let mut verify_key = [0; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        let nonce = b"this is a nonce";
-
-        // Try evaluating the VDAF with an invalid aggregation parameter. (It's an error to have a
-        // mixture of prefix lengths.)
-        let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(&[0b0000_0111], 6).unwrap());
-        agg_param.insert(IdpfInput::new(&[0b0000_1000], 7).unwrap());
-        let (public_share, input_shares) = vdaf.shard(&input[0]).unwrap();
-        run_vdaf_prepare(
-            &vdaf,
-            &verify_key,
-            &agg_param,
-            nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap_err();
-
-        // Try evaluating the VDAF with malformed inputs.
-        //
-        // This IDPF key pair evaluates to 1 everywhere, which is illegal.
-        let (public_share, mut input_shares) = vdaf.shard(&input[0]).unwrap();
-        for (i, x) in input_shares[0].idpf.data0.iter_mut().enumerate() {
-            if i != input[0].index {
-                *x += Field128::one();
-            }
-        }
-        let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
-        run_vdaf_prepare(
-            &vdaf,
-            &verify_key,
-            &agg_param,
-            nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap_err();
-
-        // This IDPF key pair has a garbled authentication vector.
-        let (public_share, mut input_shares) = vdaf.shard(&input[0]).unwrap();
-        for x in input_shares[0].idpf.data1.iter_mut() {
-            *x = Field128::zero();
-        }
-        let mut agg_param = BTreeSet::new();
-        agg_param.insert(IdpfInput::new(&[0b0000_0111], 8).unwrap());
-        run_vdaf_prepare(
-            &vdaf,
-            &verify_key,
-            &agg_param,
-            nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap_err();
-    }
-
-    fn check_btree(btree: &BTreeMap<IdpfInput, u64>, counts: &[u64]) {
-        for (got, want) in btree.values().zip(counts.iter()) {
-            assert_eq!(got, want, "got {:?} want {:?}", btree.values(), counts);
-        }
-    }
-
-    #[test]
-    fn roundtrip_output_share() {
-        let vdaf = Poplar1::new(17);
-        let agg_param = BTreeSet::from([
-            IdpfInput::new(b"AA", 15).unwrap(),
-            IdpfInput::new(b"Aa", 15).unwrap(),
-            IdpfInput::new(b"A1", 15).unwrap(),
-        ]);
-        fieldvec_roundtrip_test::<
-            Field128,
-            Poplar1<ToyIdpf<Field128>, PrgAes128, 16>,
-            OutputShare<Field128>,
-        >(&vdaf, &agg_param, 3);
-    }
-
-    #[test]
-    fn roundtrip_aggregate_share() {
-        let vdaf = Poplar1::new(17);
-        let agg_param = BTreeSet::from([
-            IdpfInput::new(b"AA", 15).unwrap(),
-            IdpfInput::new(b"Aa", 15).unwrap(),
-            IdpfInput::new(b"A1", 15).unwrap(),
-        ]);
-        assert_eq!(agg_param.len(), 3);
-        fieldvec_roundtrip_test::<
-            Field128,
-            Poplar1<ToyIdpf<Field128>, PrgAes128, 16>,
-            AggregateShare<Field128>,
-        >(&vdaf, &agg_param, 3);
     }
 }

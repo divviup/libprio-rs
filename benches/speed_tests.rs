@@ -1,27 +1,42 @@
 // SPDX-License-Identifier: MPL-2.0
 
 use criterion::{criterion_group, criterion_main, Criterion};
-
+#[cfg(feature = "experimental")]
+use criterion::{BenchmarkId, Throughput};
 #[cfg(feature = "experimental")]
 use fixed_macro::fixed;
-use prio::benchmarked::*;
-#[cfg(feature = "prio2")]
-use prio::client::Client as Prio2Client;
-use prio::codec::Encode;
-#[cfg(feature = "prio2")]
-use prio::encrypt::PublicKey;
-use prio::field::{random_vector, FftFriendlyFieldElement, Field128 as F, FieldElement};
 #[cfg(feature = "multithreaded")]
 use prio::flp::gadgets::ParallelSumMultithreaded;
-use prio::flp::{
-    gadgets::{BlindPolyEval, Mul, ParallelSum},
-    types::SumVec,
-    Type,
+use prio::{
+    benchmarked::*,
+    codec::Encode,
+    field::{random_vector, FftFriendlyFieldElement, Field128 as F, FieldElement},
+    flp::{
+        gadgets::{BlindPolyEval, Mul, ParallelSum},
+        types::SumVec,
+        Type,
+    },
+    vdaf::{
+        prio3::{Prio3, Prio3InputShare},
+        Client as Prio3Client,
+    },
 };
 #[cfg(feature = "prio2")]
-use prio::server::{generate_verification_message, ValidationMemory};
-use prio::vdaf::prio3::Prio3;
-use prio::vdaf::{prio3::Prio3InputShare, Client as Prio3Client};
+use prio::{
+    client::Client as Prio2Client,
+    encrypt::PublicKey,
+    server::{generate_verification_message, ValidationMemory},
+};
+#[cfg(feature = "experimental")]
+use prio::{
+    field::{Field255, Field64},
+    idpf::{self, IdpfInput, RingBufferCache},
+    vdaf::prg::PrgAes128,
+};
+#[cfg(feature = "experimental")]
+use rand::random;
+#[cfg(feature = "experimental")]
+use std::iter;
 
 /// This benchmark compares the performance of recursive and iterative FFT.
 pub fn fft(c: &mut Criterion) {
@@ -318,9 +333,76 @@ fn prio3_input_share_size<F: FftFriendlyFieldElement, const L: usize>(
     size
 }
 
-#[cfg(feature = "prio2")]
+/// Benchmark IdpfPoplar performance.
+#[cfg(feature = "experimental")]
+pub fn idpf(c: &mut Criterion) {
+    let test_sizes = [8usize, 8 * 16, 8 * 256];
+
+    let mut group = c.benchmark_group("idpf_gen");
+    for size in test_sizes.iter() {
+        group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let input = IdpfInput::from_bools(&bits);
+
+            let mut inner_values = vec![[Field64::one(), Field64::zero()]; size - 1];
+            for (value, random_element) in inner_values
+                .iter_mut()
+                .zip(random_vector::<Field64>(size - 1).unwrap())
+            {
+                value[1] = random_element;
+            }
+            let leaf_value = [Field255::one(), random_vector(1).unwrap()[0]];
+
+            b.iter(|| {
+                idpf::gen::<_, PrgAes128, 16, 2>(&input, inner_values.clone(), leaf_value).unwrap();
+            });
+        });
+    }
+    drop(group);
+
+    let mut group = c.benchmark_group("idpf_eval");
+    for size in test_sizes.iter() {
+        group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let input = IdpfInput::from_bools(&bits);
+
+            let mut inner_values = vec![[Field64::one(), Field64::zero()]; size - 1];
+            for (value, random_element) in inner_values
+                .iter_mut()
+                .zip(random_vector::<Field64>(size - 1).unwrap())
+            {
+                value[1] = random_element;
+            }
+            let leaf_value = [Field255::one(), random_vector(1).unwrap()[0]];
+
+            let (public_share, keys) =
+                idpf::gen::<_, PrgAes128, 16, 2>(&input, inner_values.clone(), leaf_value).unwrap();
+
+            b.iter(|| {
+                // This is an aggressively small cache, to minimize its impact on the benchmark.
+                // In this synthetic benchmark, we are only checking one candidate prefix per level
+                // instead of the usual two, so the cache hit rate will be unaffected.
+                let mut cache = RingBufferCache::new(1);
+
+                for prefix_length in 1..=size {
+                    let prefix = input[..prefix_length].to_owned().into();
+                    idpf::eval::<PrgAes128, 16, 2>(0, &public_share, &keys[0], &prefix, &mut cache)
+                        .unwrap();
+                }
+            });
+        });
+    }
+}
+
+#[cfg(all(feature = "prio2", feature = "experimental"))]
+criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft, idpf);
+#[cfg(all(not(feature = "prio2"), feature = "experimental"))]
+criterion_group!(benches, prio3_client, poly_mul, prng, fft, idpf);
+#[cfg(all(feature = "prio2", not(feature = "experimental")))]
 criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft);
-#[cfg(not(feature = "prio2"))]
+#[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]
 criterion_group!(benches, prio3_client, poly_mul, prng, fft);
 
 criterion_main!(benches);

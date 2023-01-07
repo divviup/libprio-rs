@@ -5,6 +5,8 @@
 //!
 //! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 
+#[cfg(feature = "experimental")]
+use crate::idpf::IdpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
@@ -17,7 +19,7 @@ use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-const VERSION: &[u8] = b"vdaf-03";
+pub(crate) const VERSION: &[u8] = b"vdaf-03";
 /// Length of the domain-separation tag, including document version and algorithm ID.
 const DST_LEN: usize = VERSION.len() + 4;
 
@@ -47,6 +49,11 @@ pub enum VdafError {
     /// failure when calling getrandom().
     #[error("getrandom: {0}")]
     GetRandom(#[from] getrandom::Error),
+
+    /// IDPF error.
+    #[cfg(feature = "experimental")]
+    #[error("idpf error: {0}")]
+    Idpf(#[from] IdpfError),
 }
 
 /// An additive share of a vector of field elements.
