@@ -67,6 +67,10 @@ criteria = "safe-to-deploy"
 version = "1.3.2"
 criteria = "safe-to-run"
 
+[[exemptions.bitvec]]
+version = "1.0.1"
+criteria = "safe-to-deploy"
+
 [[exemptions.block-buffer]]
 version = "0.10.3"
 criteria = "safe-to-deploy"
@@ -207,6 +211,10 @@ criteria = "safe-to-run"
 [[exemptions.fixed-macro-types]]
 version = "1.2.0"
 criteria = "safe-to-run"
+
+[[exemptions.funty]]
+version = "2.0.0"
+criteria = "safe-to-deploy"
 
 [[exemptions.generic-array]]
 version = "0.14.6"
@@ -361,6 +369,10 @@ criteria = "safe-to-run"
 version = "1.0.47"
 criteria = "safe-to-deploy"
 
+[[exemptions.radium]]
+version = "0.7.0"
+criteria = "safe-to-deploy"
+
 [[exemptions.rand]]
 version = "0.8.5"
 criteria = "safe-to-deploy"
@@ -448,6 +460,10 @@ notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" feature
 
 [[exemptions.syn]]
 version = "1.0.104"
+criteria = "safe-to-deploy"
+
+[[exemptions.tap]]
+version = "1.0.1"
 criteria = "safe-to-deploy"
 
 [[exemptions.textwrap]]
@@ -581,4 +597,8 @@ criteria = "safe-to-run"
 
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
+criteria = "safe-to-deploy"
+
+[[exemptions.wyz]]
+version = "0.5.1"
 criteria = "safe-to-deploy"
