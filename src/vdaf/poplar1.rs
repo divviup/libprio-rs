@@ -15,19 +15,13 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{Field255, Field64},
+    idpf::{IdpfInput, IdpfPoplarPublicShare},
     vdaf::{
         prg::{Prg, Seed},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
 use std::{fmt::Debug, io::Cursor, marker::PhantomData};
-
-/// An input for an IDPF.
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct IdpfInput {
-    index: usize,
-    level: usize,
-}
 
 /// The poplar1 VDAF.
 #[derive(Debug)]
@@ -65,7 +59,7 @@ where
     type Measurement = IdpfInput;
     type AggregateResult = Poplar1AggregateResult;
     type AggregationParam = Poplar1AggregationParam;
-    type PublicShare = (); // TODO: Replace this when the IDPF from [BBCGGI21] is implemented.
+    type PublicShare = Poplar1PublicShare<L>;
     type InputShare = Poplar1InputShare<L>;
     type OutputShare = Poplar1OutputShare;
     type AggregateShare = Poplar1AggregateShare;
@@ -180,20 +174,24 @@ impl<'a, P, const L: usize> ParameterizedDecode<(&'a Poplar1<P, L>, usize)>
 
 /// A public share for the Poplar1 VDAF.
 #[derive(Debug, Clone)]
-pub struct Poplar1PublicShare<const L: usize> {}
+pub struct Poplar1PublicShare<const L: usize> {
+    inner: IdpfPoplarPublicShare<Field64, Field255, L, 2>,
+}
 
 impl<const L: usize> Encode for Poplar1PublicShare<L> {
-    fn encode(&self, _bytes: &mut Vec<u8>) {
-        unimplemented!()
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.inner.encode(bytes)
     }
 }
 
-impl<P, const L: usize> ParameterizedDecode<(&Poplar1<P, L>, usize)> for Poplar1PublicShare<L> {
+impl<P, const L: usize> ParameterizedDecode<&Poplar1<P, L>> for Poplar1PublicShare<L> {
     fn decode_with_param(
-        (_poplar1, _agg_id): &(&Poplar1<P, L>, usize),
-        _bytes: &mut Cursor<&[u8]>,
+        poplar1: &&Poplar1<P, L>,
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        unimplemented!()
+        Ok(Poplar1PublicShare {
+            inner: IdpfPoplarPublicShare::decode_with_param(&poplar1.input_length, bytes)?,
+        })
     }
 }
 

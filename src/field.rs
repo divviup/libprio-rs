@@ -25,6 +25,7 @@ use std::{
     marker::PhantomData,
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub, SubAssign},
 };
+use subtle::{Choice, ConstantTimeEq};
 
 #[cfg(feature = "experimental")]
 mod field255;
@@ -417,6 +418,12 @@ macro_rules! make_field {
                 debug_assert!(rhs.0 < $fp.p);
 
                 self.0 == rhs.0
+            }
+        }
+
+        impl ConstantTimeEq for $elem {
+            fn ct_eq(&self, rhs: &Self) -> Choice {
+                self.0.ct_eq(&rhs.0)
             }
         }
 
