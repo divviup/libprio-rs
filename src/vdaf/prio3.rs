@@ -1214,6 +1214,53 @@ mod tests {
 
     #[test]
     #[cfg(feature = "experimental")]
+    fn test_prio3_bounded_fpvec_sum_long() {
+        type P<Fx> = Prio3Aes128FixedPointBoundedL2VecSum<Fx>;
+        #[cfg(feature = "multithreaded")]
+        type PM<Fx> = Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx>;
+        let ctor_32 = P::<FixedI32<U31>>::new_aes128_fixedpoint_boundedl2_vec_sum;
+        #[cfg(feature = "multithreaded")]
+        let ctor_mt_32 = PM::<FixedI32<U31>>::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded;
+
+        {
+            const SIZE: usize = 1000;
+            let fp32_0 = fixed!(0: I1F31);
+
+            // 32 bit fixedpoint, long vector, single-threaded
+            {
+                let prio3_32 = ctor_32(2, SIZE).unwrap();
+                test_fixed_long::<_, _, _, SIZE>(fp32_0, prio3_32);
+            }
+
+            // 32 bit fixedpoint, long vector, single-threaded
+            #[cfg(feature = "multithreaded")]
+            {
+                let prio3_mt_32 = ctor_mt_32(2, SIZE).unwrap();
+                test_fixed_long::<_, _, _, SIZE>(fp32_0, prio3_mt_32);
+            }
+        }
+
+        fn test_fixed_long<Fx, PE, BPE, const LONG_SIZE: usize>(
+            fp_0: Fx,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, Field128, PE, BPE>, PrgAes128, 16>,
+        ) where
+            Fx: Fixed + CompatibleFloat<Field128> + std::ops::Neg<Output = Fx>,
+            PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
+            BPE: Eq + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Clone + 'static,
+        {
+            let fp_vec_long = vec![fp_0; LONG_SIZE];
+
+            // very large vector
+            let fp_list4 = [fp_vec_long.clone(), fp_vec_long];
+            assert_eq!(
+                run_vdaf(&prio3, &(), fp_list4).unwrap(),
+                vec![0.0; LONG_SIZE],
+            );
+        }
+    }
+
+    #[test]
+    #[cfg(feature = "experimental")]
     fn test_prio3_bounded_fpvec_sum() {
         type P<Fx> = Prio3Aes128FixedPointBoundedL2VecSum<Fx>;
         let ctor_16 = P::<FixedI16<U15>>::new_aes128_fixedpoint_boundedl2_vec_sum;
