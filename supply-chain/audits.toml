@@ -1,6 +1,11 @@
 
 # cargo-vet audits file
 
+[[audits.base64]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 0.21.0"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"

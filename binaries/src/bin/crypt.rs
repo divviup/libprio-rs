@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
+use base64::{engine::Engine, prelude::BASE64_STANDARD};
 use color_eyre::eyre::{eyre, Result, WrapErr};
 use prio::{
     client::Client,
@@ -67,7 +68,7 @@ impl FromStr for Input {
             return Ok(Self::Stdin);
         }
 
-        if let Ok(decoded) = base64::decode(s) {
+        if let Ok(decoded) = BASE64_STANDARD.decode(s) {
             return Ok(Self::Parameter(decoded));
         }
 
