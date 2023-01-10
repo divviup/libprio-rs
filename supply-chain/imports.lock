@@ -109,6 +109,11 @@ and does what it says on the tin, providing spin-based synchronization
 primitives.
 """
 
+[[audits.divviup.audits.base64]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.20.0 -> 0.21.0"
+
 [[audits.divviup.audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
