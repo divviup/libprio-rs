@@ -481,6 +481,12 @@ where
         let computed_norm = {
             let mut outp = F::zero();
 
+            // Chunks which are too short need to be extended with a share of the
+            // encoded zero value, that is: 1/num_shares * (2^(n-1))
+            let fi_one = F::Integer::from(F::one());
+            let zero_enc = F::from(fi_one << (self.fi_bits_per_entry - fi_one));
+            let zero_enc_share = zero_enc * constant_part_multiplier;
+
             for chunk in decoded_entries?.chunks(self.gadget1_chunk_len) {
                 let d = chunk.len();
                 if d == self.gadget1_chunk_len {
@@ -489,7 +495,7 @@ where
                     // If the chunk is smaller than the chunk length, extend
                     // chunk with zeros.
                     let mut padded_chunk: Vec<_> = chunk.to_owned();
-                    padded_chunk.resize(self.gadget1_chunk_len, F::zero());
+                    padded_chunk.resize(self.gadget1_chunk_len, zero_enc_share);
                     outp += g[1].call(&padded_chunk)?;
                 }
             }
