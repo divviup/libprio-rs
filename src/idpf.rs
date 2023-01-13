@@ -12,14 +12,7 @@ use crate::{
         VdafError, VERSION,
     },
 };
-use bitvec::{
-    bitvec,
-    boxed::BitBox,
-    prelude::{BitOrder, Lsb0},
-    slice::BitSlice,
-    store::BitStore,
-    vec::BitVec,
-};
+use bitvec::{bitvec, boxed::BitBox, prelude::Lsb0, slice::BitSlice, vec::BitVec};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -79,16 +72,20 @@ impl IdpfInput {
     }
 }
 
-impl<T, O> From<&'_ BitSlice<T, O>> for IdpfInput
-where
-    T: BitStore,
-    O: BitOrder,
-{
-    fn from(bit_slice: &'_ BitSlice<T, O>) -> Self {
+impl From<&'_ BitSlice<u8, Lsb0>> for IdpfInput {
+    fn from(bit_slice: &'_ BitSlice<u8, Lsb0>) -> Self {
         let mut bit_vec = bitvec![0; bit_slice.len()];
         bit_vec.clone_from_bitslice(bit_slice);
         IdpfInput {
             index: bit_vec.into_boxed_bitslice(),
+        }
+    }
+}
+
+impl From<&'_ BitSlice<usize, Lsb0>> for IdpfInput {
+    fn from(bit_slice: &'_ BitSlice<usize, Lsb0>) -> Self {
+        IdpfInput {
+            index: bit_slice.to_owned().into_boxed_bitslice(),
         }
     }
 }
