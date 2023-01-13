@@ -30,7 +30,7 @@
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgAes128;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
-use crate::field::{decode_fieldvec, FieldElement};
+use crate::field::{decode_fieldvec, FftFriendlyFieldElement, FieldElement};
 #[cfg(feature = "crypto-dependencies")]
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
@@ -560,7 +560,7 @@ pub struct Prio3InputShare<F, const L: usize> {
     joint_rand_param: Option<JointRandParam<L>>,
 }
 
-impl<F: FieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
+impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if matches!(
             (&self.input_share, &self.proof_share),
@@ -637,7 +637,7 @@ pub struct Prio3PrepareShare<F, const L: usize> {
     joint_rand_part: Option<Seed<L>>,
 }
 
-impl<F: FieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
+impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         for x in &self.verifier {
             x.encode(bytes);
@@ -648,7 +648,7 @@ impl<F: FieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
     }
 }
 
-impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
+impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
     for Prio3PrepareShare<F, L>
 {
     fn decode_with_param(
@@ -688,7 +688,7 @@ impl<const L: usize> Encode for Prio3PrepareMessage<L> {
     }
 }
 
-impl<F: FieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
+impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
     for Prio3PrepareMessage<L>
 {
     fn decode_with_param(
@@ -729,7 +729,7 @@ pub struct Prio3PrepareState<F, const L: usize> {
     verifier_len: usize,
 }
 
-impl<F: FieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
+impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.input_share.encode(bytes);

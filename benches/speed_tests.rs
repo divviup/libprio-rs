@@ -10,7 +10,7 @@ use prio::client::Client as Prio2Client;
 use prio::codec::Encode;
 #[cfg(feature = "prio2")]
 use prio::encrypt::PublicKey;
-use prio::field::{random_vector, Field128 as F, FieldElement};
+use prio::field::{random_vector, FftFriendlyFieldElement, Field128 as F, FieldElement};
 #[cfg(feature = "multithreaded")]
 use prio::flp::gadgets::ParallelSumMultithreaded;
 use prio::flp::{
@@ -310,7 +310,7 @@ pub fn prio3_client(c: &mut Criterion) {
     }
 }
 
-fn prio3_input_share_size<F: FieldElement, const L: usize>(
+fn prio3_input_share_size<F: FftFriendlyFieldElement, const L: usize>(
     input_shares: &[Prio3InputShare<F, L>],
 ) -> usize {
     let mut size = 0;

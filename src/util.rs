@@ -3,7 +3,7 @@
 
 //! Utility functions for handling Prio stuff.
 
-use crate::field::{FieldElement, FieldError};
+use crate::field::{FftFriendlyFieldElement, FieldError};
 
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]
@@ -29,7 +29,7 @@ pub fn proof_length(dimension: usize) -> usize {
 
 /// Unpacked proof with subcomponents
 #[derive(Debug)]
-pub struct UnpackedProof<'a, F: FieldElement> {
+pub struct UnpackedProof<'a, F: FftFriendlyFieldElement> {
     /// Data
     pub data: &'a [F],
     /// Zeroth coefficient of polynomial f
@@ -44,7 +44,7 @@ pub struct UnpackedProof<'a, F: FieldElement> {
 
 /// Unpacked proof with mutable subcomponents
 #[derive(Debug)]
-pub struct UnpackedProofMut<'a, F: FieldElement> {
+pub struct UnpackedProofMut<'a, F: FftFriendlyFieldElement> {
     /// Data
     pub data: &'a mut [F],
     /// Zeroth coefficient of polynomial f
@@ -58,7 +58,7 @@ pub struct UnpackedProofMut<'a, F: FieldElement> {
 }
 
 /// Unpacks the proof vector into subcomponents
-pub(crate) fn unpack_proof<F: FieldElement>(
+pub(crate) fn unpack_proof<F: FftFriendlyFieldElement>(
     proof: &[F],
     dimension: usize,
 ) -> Result<UnpackedProof<F>, SerializeError> {
@@ -85,7 +85,7 @@ pub(crate) fn unpack_proof<F: FieldElement>(
 // TODO(timg): This is public because it is used by tests/tweaks.rs. We should
 // refactor that test so it doesn't require the crate to expose this function or
 // UnpackedProofMut.
-pub fn unpack_proof_mut<F: FieldElement>(
+pub fn unpack_proof_mut<F: FftFriendlyFieldElement>(
     proof: &mut [F],
     dimension: usize,
 ) -> Result<UnpackedProofMut<F>, SerializeError> {
@@ -111,7 +111,10 @@ pub fn unpack_proof_mut<F: FieldElement>(
 /// Add two field element arrays together elementwise.
 ///
 /// Returns None, when array lengths are not equal.
-pub fn reconstruct_shares<F: FieldElement>(share1: &[F], share2: &[F]) -> Option<Vec<F>> {
+pub fn reconstruct_shares<F: FftFriendlyFieldElement>(
+    share1: &[F],
+    share2: &[F],
+) -> Option<Vec<F>> {
     if share1.len() != share2.len() {
         return None;
     }
@@ -131,7 +134,7 @@ pub fn reconstruct_shares<F: FieldElement>(share1: &[F], share2: &[F]) -> Option
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::field::{Field32, Field64};
+    use crate::field::{Field32, Field64, FieldElement};
     use assert_matches::assert_matches;
 
     pub fn secret_share(share: &mut [Field32]) -> Vec<Field32> {

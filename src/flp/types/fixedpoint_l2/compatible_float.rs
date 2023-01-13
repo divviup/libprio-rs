@@ -3,18 +3,18 @@
 //! Implementations of encoding fixed point types as field elements and field elements as floats
 //! for the [`FixedPointBoundedL2VecSum`](crate::flp::types::fixedpoint_l2::FixedPointBoundedL2VecSum) type.
 
-use crate::field::{Field128, FieldElement};
+use crate::field::{Field128, FieldElementWithInteger};
 use fixed::types::extra::{U15, U31, U63};
 use fixed::{FixedI16, FixedI32, FixedI64};
 
 /// Assign a `Float` type to this type and describe how to represent this type as an integer of the
 /// given field, and how to represent a field element as the assigned `Float` type.
-pub trait CompatibleFloat<F: FieldElement> {
+pub trait CompatibleFloat<F: FieldElementWithInteger> {
     /// Represent a field element as `Float`, given the number of clients `c`.
     fn to_float(t: F, c: u128) -> f64;
 
     /// Represent a value of this type as an integer in the given field.
-    fn to_field_integer(&self) -> <F as FieldElement>::Integer;
+    fn to_field_integer(&self) -> <F as FieldElementWithInteger>::Integer;
 }
 
 impl CompatibleFloat<Field128> for FixedI16<U15> {
@@ -22,7 +22,7 @@ impl CompatibleFloat<Field128> for FixedI16<U15> {
         to_float_bits(d, c, 16)
     }
 
-    fn to_field_integer(&self) -> <Field128 as FieldElement>::Integer {
+    fn to_field_integer(&self) -> <Field128 as FieldElementWithInteger>::Integer {
         //signed two's complement integer representation
         let i: i16 = self.to_bits();
         // reinterpret as unsigned
@@ -37,7 +37,7 @@ impl CompatibleFloat<Field128> for FixedI32<U31> {
         to_float_bits(d, c, 32)
     }
 
-    fn to_field_integer(&self) -> <Field128 as FieldElement>::Integer {
+    fn to_field_integer(&self) -> <Field128 as FieldElementWithInteger>::Integer {
         //signed two's complement integer representation
         let i: i32 = self.to_bits();
         // reinterpret as unsigned
@@ -52,7 +52,7 @@ impl CompatibleFloat<Field128> for FixedI64<U63> {
         to_float_bits(d, c, 64)
     }
 
-    fn to_field_integer(&self) -> <Field128 as FieldElement>::Integer {
+    fn to_field_integer(&self) -> <Field128 as FieldElementWithInteger>::Integer {
         //signed two's complement integer representation
         let i: i64 = self.to_bits();
         // reinterpret as unsigned
@@ -66,7 +66,7 @@ impl CompatibleFloat<Field128> for FixedI64<U63> {
 /// of a `c`-client fixed point vector summation with `n` fractional bits.
 fn to_float_bits(s: Field128, c: u128, n: i32) -> f64 {
     // get integer representation of field element
-    let s_int: u128 = <Field128 as FieldElement>::Integer::from(s);
+    let s_int: u128 = <Field128 as FieldElementWithInteger>::Integer::from(s);
 
     // to decode a single integer, we'd use the function
     //   dec(y) = (y - 2^(n-1)) * 2^(1-n) = y * 2^(1-n) - 1

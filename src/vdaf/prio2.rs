@@ -7,7 +7,7 @@ use super::{AggregateShare, OutputShare};
 use crate::{
     client as v2_client,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{decode_fieldvec, FieldElement, FieldPrio2},
+    field::{decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldPrio2},
     prng::Prng,
     server as v2_server,
     util::proof_length,
