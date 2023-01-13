@@ -606,8 +606,122 @@ mod tests {
     use fixed::{FixedI128, FixedI16, FixedI64};
     use fixed_macro::fixed;
 
+    fn test_fixed<F: Fixed>(fp_vec: Vec<F>, enc_vec: Vec<u128>)
+    where
+        F: CompatibleFloat<Field128>,
+    {
+        let n: usize = (F::INT_NBITS + F::FRAC_NBITS).try_into().unwrap();
+
+        type Ps = ParallelSum<Field128, PolyEval<Field128>>;
+        type Psb = ParallelSum<Field128, BlindPolyEval<Field128>>;
+
+        let vsum: FixedPointBoundedL2VecSum<F, Field128, Ps, Psb> =
+            FixedPointBoundedL2VecSum::new(3).unwrap();
+        let one = Field128::one();
+        // Round trip
+        assert_eq!(
+            vsum.decode_result(
+                &vsum
+                    .truncate(vsum.encode_measurement(&fp_vec).unwrap())
+                    .unwrap(),
+                1
+            )
+            .unwrap(),
+            vec!(0.25, 0.125, 0.0625)
+        );
+
+        // encoded norm does not match computed norm
+        let mut input: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
+        assert_eq!(input[0], Field128::zero());
+        input[0] = one; // it was zero
+        flp_validity_test(
+            &vsum,
+            &input,
+            &ValidityTestCase::<Field128> {
+                expect_valid: false,
+                expected_output: Some(vec![
+                    Field128::from(enc_vec[0] + 1), // = enc(0.25) + 2^0
+                    Field128::from(enc_vec[1]),
+                    Field128::from(enc_vec[2]),
+                ]),
+                num_shares: 3,
+            },
+        )
+        .unwrap();
+
+        // encoding contains entries that are not zero or one
+        let mut input2: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
+        input2[0] = one + one;
+        flp_validity_test(
+            &vsum,
+            &input2,
+            &ValidityTestCase::<Field128> {
+                expect_valid: false,
+                expected_output: Some(vec![
+                    Field128::from(enc_vec[0] + 2), // = enc(0.25) + 2*2^0
+                    Field128::from(enc_vec[1]),
+                    Field128::from(enc_vec[2]),
+                ]),
+                num_shares: 3,
+            },
+        )
+        .unwrap();
+
+        // norm is too big
+        // 2^n - 1, the field element encoded by the all-1 vector
+        let one_enc = Field128::from(((2_u128) << (n - 1)) - 1);
+        flp_validity_test(
+            &vsum,
+            &vec![one; 3 * n + 2 * n - 2], // all vector entries and the norm are all-1-vectors
+            &ValidityTestCase::<Field128> {
+                expect_valid: false,
+                expected_output: Some(vec![one_enc; 3]),
+                num_shares: 3,
+            },
+        )
+        .unwrap();
+
+        // invalid submission length, should be 3n + (2*n - 2) for a
+        // 3-element n-bit vector. 3*n bits for 3 entries, (2*n-2) for norm.
+        let joint_rand = random_vector(vsum.joint_rand_len()).unwrap();
+        vsum.valid(
+            &mut vsum.gadget(),
+            &vec![one; 3 * n + 2 * n - 1],
+            &joint_rand,
+            1,
+        )
+        .unwrap_err();
+
+        // test that the zero vector has correct norm, where zero is encoded as:
+        // enc(0) = 2^(n-1) * 0 + 2^(n-1)
+        let zero_enc = Field128::from((2_u128) << (n - 2));
+        {
+            let entries = vec![zero_enc; 3];
+            let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
+            let expected_norm = Field128::from(0);
+            assert_eq!(norm, expected_norm);
+        }
+
+        // ensure that no overflow occurs with largest possible norm
+        {
+            // the largest possible entries (2^n-1)
+            let entries = vec![one_enc; 3];
+            let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
+            let expected_norm = Field128::from(3 * (1 + (1 << (2 * n - 2)) - (1 << n)));
+            // = 3 * ((2^n-1)^2 - (2^n-1)*2^16 + 2^(2*n-2))
+            assert_eq!(norm, expected_norm);
+
+            // the smallest possible entries (0)
+            let entries = vec![Field128::from(0), Field128::from(0), Field128::from(0)];
+            let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
+            let expected_norm = Field128::from(3 * (1 << (2 * n - 2)));
+            // = 3 * (0^2 - 0*2^n + 2^(2*n-2))
+            assert_eq!(norm, expected_norm);
+        }
+    }
+
     #[test]
-    fn test_bounded_fpvec_sum_parallel() {
+    fn test_bounded_fpvec_sum_parallel_fp16() {
         let fp16_4_inv = fixed!(0.25: I1F15);
         let fp16_8_inv = fixed!(0.125: I1F15);
         let fp16_16_inv = fixed!(0.0625: I1F15);
@@ -619,7 +733,10 @@ mod tests {
         // enc(0.125) =  2^(n-1) * 0.125 + 2^(n-1)   = 36864
         // enc(0.0625) =  2^(n-1) * 0.0625 + 2^(n-1) = 34816
         test_fixed(fp16_vec, vec![40960, 36864, 34816]);
+    }
 
+    #[test]
+    fn test_bounded_fpvec_sum_parallel_fp32() {
         let fp32_4_inv = fixed!(0.25: I1F31);
         let fp32_8_inv = fixed!(0.125: I1F31);
         let fp32_16_inv = fixed!(0.0625: I1F31);
@@ -627,7 +744,10 @@ mod tests {
         let fp32_vec = vec![fp32_4_inv, fp32_8_inv, fp32_16_inv];
         // computed as above but with n=32
         test_fixed(fp32_vec, vec![2684354560, 2415919104, 2281701376]);
+    }
 
+    #[test]
+    fn test_bounded_fpvec_sum_parallel_fp64() {
         let fp64_4_inv = fixed!(0.25: I1F63);
         let fp64_8_inv = fixed!(0.125: I1F63);
         let fp64_16_inv = fixed!(0.0625: I1F63);
@@ -642,121 +762,10 @@ mod tests {
                 9799832789158199296,
             ],
         );
+    }
 
-        fn test_fixed<F: Fixed>(fp_vec: Vec<F>, enc_vec: Vec<u128>)
-        where
-            F: CompatibleFloat<Field128>,
-        {
-            let n: usize = (F::INT_NBITS + F::FRAC_NBITS).try_into().unwrap();
-
-            type Ps = ParallelSum<Field128, PolyEval<Field128>>;
-            type Psb = ParallelSum<Field128, BlindPolyEval<Field128>>;
-
-            let vsum: FixedPointBoundedL2VecSum<F, Field128, Ps, Psb> =
-                FixedPointBoundedL2VecSum::new(3).unwrap();
-            let one = Field128::one();
-            // Round trip
-            assert_eq!(
-                vsum.decode_result(
-                    &vsum
-                        .truncate(vsum.encode_measurement(&fp_vec).unwrap())
-                        .unwrap(),
-                    1
-                )
-                .unwrap(),
-                vec!(0.25, 0.125, 0.0625)
-            );
-
-            // encoded norm does not match computed norm
-            let mut input: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
-            assert_eq!(input[0], Field128::zero());
-            input[0] = one; // it was zero
-            flp_validity_test(
-                &vsum,
-                &input,
-                &ValidityTestCase::<Field128> {
-                    expect_valid: false,
-                    expected_output: Some(vec![
-                        Field128::from(enc_vec[0] + 1), // = enc(0.25) + 2^0
-                        Field128::from(enc_vec[1]),
-                        Field128::from(enc_vec[2]),
-                    ]),
-                    num_shares: 3,
-                },
-            )
-            .unwrap();
-
-            // encoding contains entries that are not zero or one
-            let mut input2: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
-            input2[0] = one + one;
-            flp_validity_test(
-                &vsum,
-                &input2,
-                &ValidityTestCase::<Field128> {
-                    expect_valid: false,
-                    expected_output: Some(vec![
-                        Field128::from(enc_vec[0] + 2), // = enc(0.25) + 2*2^0
-                        Field128::from(enc_vec[1]),
-                        Field128::from(enc_vec[2]),
-                    ]),
-                    num_shares: 3,
-                },
-            )
-            .unwrap();
-
-            // norm is too big
-            // 2^n - 1, the field element encoded by the all-1 vector
-            let one_enc = Field128::from(((2_u128) << (n - 1)) - 1);
-            flp_validity_test(
-                &vsum,
-                &vec![one; 3 * n + 2 * n - 2], // all vector entries and the norm are all-1-vectors
-                &ValidityTestCase::<Field128> {
-                    expect_valid: false,
-                    expected_output: Some(vec![one_enc; 3]),
-                    num_shares: 3,
-                },
-            )
-            .unwrap();
-
-            // invalid submission length, should be 3n + (2*n - 2) for a
-            // 3-element n-bit vector. 3*n bits for 3 entries, (2*n-2) for norm.
-            let joint_rand = random_vector(vsum.joint_rand_len()).unwrap();
-            vsum.valid(
-                &mut vsum.gadget(),
-                &vec![one; 3 * n + 2 * n - 1],
-                &joint_rand,
-                1,
-            )
-            .unwrap_err();
-
-            // test that the zero vector has correct norm, where zero is encoded as:
-            // enc(0) = 2^(n-1) * 0 + 2^(n-1)
-            let zero_enc = Field128::from((2_u128) << (n - 2));
-            {
-                let entries = vec![zero_enc; 3];
-                let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
-                let expected_norm = Field128::from(0);
-                assert_eq!(norm, expected_norm);
-            }
-
-            // ensure that no overflow occurs with largest possible norm
-            {
-                // the largest possible entries (2^n-1)
-                let entries = vec![one_enc; 3];
-                let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
-                let expected_norm = Field128::from(3 * (1 + (1 << (2 * n - 2)) - (1 << n)));
-                // = 3 * ((2^n-1)^2 - (2^n-1)*2^16 + 2^(2*n-2))
-                assert_eq!(norm, expected_norm);
-
-                // the smallest possible entries (0)
-                let entries = vec![Field128::from(0), Field128::from(0), Field128::from(0)];
-                let norm = compute_norm_of_entries(entries, vsum.bits_per_entry).unwrap();
-                let expected_norm = Field128::from(3 * (1 << (2 * n - 2)));
-                // = 3 * (0^2 - 0*2^n + 2^(2*n-2))
-                assert_eq!(norm, expected_norm);
-            }
-        }
-
+    #[test]
+    fn test_bounded_fpvec_sum_parallel_invalid_args() {
         // invalid initialization
         // fixed point too large
         <FixedPointBoundedL2VecSum<
