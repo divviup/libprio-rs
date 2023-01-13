@@ -860,6 +860,7 @@ mod tests {
         prelude::{BitBox, Lsb0},
         slice::BitSlice,
     };
+    use num_bigint::BigUint;
     use rand::random;
     use subtle::Choice;
 
@@ -1616,30 +1617,149 @@ mod tests {
         assert_eq!(message, encoded);
     }
 
-    /// Stores certain values from a Poplar1 test vector that are relevant to testing IdpfPoplar.
+    /// Stores a test vector for the IdpfPoplar key generation algorithm.
     struct IdpfPoplarTestVector {
+        /// The number of bits in IDPF inputs.
         bits: usize,
+        /// The IDPF input provided to the key generation algorithm.
+        alpha: IdpfInput,
+        /// The IDPF output values, at each inner level, provided to the key generation algorithm.
+        beta_inner: Vec<[Field64; 2]>,
+        /// The IDPF output values for the leaf level, provided to the key generation algorithm.
+        beta_leaf: [Field255; 2],
+        /// The two keys returned by the key generation algorithm.
+        keys: [[u8; 16]; 2],
+        /// The public share returned by the key generation algorithm.
         public_share: Vec<u8>,
     }
 
-    /// Load the number of bits and serialized public share from the test vector.
-    fn load_test_vector() -> IdpfPoplarTestVector {
+    /// Load a Poplar1 test vector and transform it into an IdpfPoplar test vector, with some
+    /// additional information.
+    fn load_poplar1_test_vector() -> IdpfPoplarTestVector {
         let test_vec: serde_json::Value =
             serde_json::from_str(include_str!("vdaf/test_vec/03/Poplar1Aes128_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
+
         let bits = test_vec_obj.get("bits").unwrap().as_u64().unwrap();
+        let bits: usize = bits.try_into().unwrap();
+
         let prep = test_vec_obj.get("prep").unwrap().as_array().unwrap();
-        let prep_first = prep.get(0).unwrap().as_object().unwrap();
+        let prep_first = prep[0].as_object().unwrap();
+        let input_shares = prep_first.get("input_shares").unwrap().as_array().unwrap();
+        // The IDPF keys are the first 16 bytes of each input share.
+        let keys = [
+            hex::decode(&input_shares[0].as_str().unwrap()[..32])
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            hex::decode(&input_shares[1].as_str().unwrap()[..32])
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ];
         let public_share_hex = prep_first.get("public_share").unwrap().as_str().unwrap();
+        let public_share = hex::decode(public_share_hex).unwrap();
+
+        // The alpha and beta values below were observed being passed to IdpfPoplar.gen() during
+        // generation of this test vector in the Sage proof-of-concept implementation.
+        let alpha: IdpfInput = bitbox![1, 1, 0, 1].as_bitslice().into();
+        let beta_inner = Vec::from([
+            [Field64::one(), Field64::from(16949890756552313413u64)],
+            [Field64::one(), Field64::from(15973656271355954005u64)],
+            [Field64::one(), Field64::from(10811982792383779992u64)],
+        ]);
+        let beta_leaf = [
+            Field255::one(),
+            Field255::try_from(
+                [
+                    0x7d, 0x1f, 0xd6, 0xdf, 0x94, 0x28, 0x1, 0x45, 0xa0, 0xdc, 0xc9, 0x33, 0xce,
+                    0xb7, 0x6, 0xe9, 0x21, 0x9d, 0x50, 0xe7, 0xc4, 0xf9, 0x2f, 0xd8, 0xca, 0x9a,
+                    0xf, 0xfb, 0x7d, 0x81, 0x96, 0x46,
+                ]
+                .as_slice(),
+            )
+            .unwrap(),
+        ];
+
+        assert_eq!(alpha.len(), bits);
+
         IdpfPoplarTestVector {
-            bits: bits.try_into().unwrap(),
-            public_share: hex::decode(public_share_hex).unwrap(),
+            bits,
+            alpha,
+            beta_inner,
+            beta_leaf,
+            keys,
+            public_share,
+        }
+    }
+
+    /// Load a test vector for IdpfPoplar key generation.
+    fn load_idpfpoplar_test_vector() -> IdpfPoplarTestVector {
+        let test_vec: serde_json::Value =
+            serde_json::from_str(include_str!("vdaf/test_vec/03/IdpfPoplar_0.json")).unwrap();
+        let test_vec_obj = test_vec.as_object().unwrap();
+
+        let beta_inner_level_array = test_vec_obj.get("beta_inner").unwrap().as_array().unwrap();
+        let beta_inner = beta_inner_level_array
+            .iter()
+            .map(|array| {
+                [
+                    Field64::from(array[0].as_str().unwrap().parse::<u64>().unwrap()),
+                    Field64::from(array[1].as_str().unwrap().parse::<u64>().unwrap()),
+                ]
+            })
+            .collect::<Vec<_>>();
+
+        let beta_leaf_array = test_vec_obj.get("beta_leaf").unwrap().as_array().unwrap();
+        let beta_leaf = [
+            Field255::from(
+                beta_leaf_array[0]
+                    .as_str()
+                    .unwrap()
+                    .parse::<BigUint>()
+                    .unwrap(),
+            ),
+            Field255::from(
+                beta_leaf_array[1]
+                    .as_str()
+                    .unwrap()
+                    .parse::<BigUint>()
+                    .unwrap(),
+            ),
+        ];
+
+        let keys_array = test_vec_obj.get("keys").unwrap().as_array().unwrap();
+        let keys = [
+            hex::decode(keys_array[0].as_str().unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+            hex::decode(keys_array[1].as_str().unwrap())
+                .unwrap()
+                .try_into()
+                .unwrap(),
+        ];
+
+        let public_share_hex = test_vec_obj.get("public_share").unwrap();
+        let public_share = hex::decode(public_share_hex.as_str().unwrap()).unwrap();
+
+        // These constants were used in the generation of this test vector.
+        let bits = 10;
+        let alpha: IdpfInput = bits![0; 10].into();
+
+        IdpfPoplarTestVector {
+            bits,
+            alpha,
+            beta_inner,
+            beta_leaf,
+            keys,
+            public_share,
         }
     }
 
     #[test]
     fn idpf_poplar_public_share_deserialize_test_vector() {
-        let test_vector = load_test_vector();
+        let test_vector = load_poplar1_test_vector();
 
         let public_share =
             IdpfPoplarPublicShare::<Field64, Field255, 16, 2>::get_decoded_with_param(
@@ -1698,70 +1818,52 @@ mod tests {
 
     #[test]
     fn idpf_poplar_generate_test_vector() {
-        let test_vector = load_test_vector();
-
-        // Values expected to be passed to IdpfPoplar.gen(). These values were observed during
-        // generation of the test vector in the Sage proof-of-concept implementation.
-        let alpha = bitbox![1, 1, 0, 1].as_bitslice().into();
-        let beta_inner = Vec::from([
-            [Field64::one(), Field64::from(16949890756552313413u64)],
-            [Field64::one(), Field64::from(15973656271355954005u64)],
-            [Field64::one(), Field64::from(10811982792383779992u64)],
-        ]);
-        let beta_leaf = [
-            Field255::one(),
-            Field255::try_from(
-                [
-                    0x7d, 0x1f, 0xd6, 0xdf, 0x94, 0x28, 0x1, 0x45, 0xa0, 0xdc, 0xc9, 0x33, 0xce,
-                    0xb7, 0x6, 0xe9, 0x21, 0x9d, 0x50, 0xe7, 0xc4, 0xf9, 0x2f, 0xd8, 0xca, 0x9a,
-                    0xf, 0xfb, 0x7d, 0x81, 0x96, 0x46,
-                ]
-                .as_slice(),
+        for test_vector in [load_poplar1_test_vector(), load_idpfpoplar_test_vector()] {
+            let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgAes128, 16, 2>(
+                test_vector.bits,
+                &test_vector.alpha,
+                test_vector.beta_inner,
+                test_vector.beta_leaf,
+                |buf| {
+                    buf.fill(1);
+                    Ok(())
+                },
             )
-            .unwrap(),
-        ];
+            .unwrap();
 
-        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgAes128, 16, 2>(
-            test_vector.bits,
-            &alpha,
-            beta_inner,
-            beta_leaf,
-            |buf| {
-                buf.fill(1);
-                Ok(())
-            },
-        )
-        .unwrap();
+            assert_eq!(keys, [Seed([0x01; 16]), Seed([0x01; 16])]);
+            assert_eq!(keys[0].0, test_vector.keys[0]);
+            assert_eq!(keys[1].0, test_vector.keys[1]);
 
-        assert_eq!(keys, [Seed([0x01; 16]), Seed([0x01; 16])]);
-        let expected_public_share = IdpfPoplarPublicShare::get_decoded_with_param(
-            &test_vector.bits,
-            &test_vector.public_share,
-        )
-        .unwrap();
-        for (level, (cws, expected_cws)) in public_share
-            .inner_correction_words
-            .iter()
-            .zip(expected_public_share.inner_correction_words.iter())
-            .enumerate()
-        {
+            let expected_public_share = IdpfPoplarPublicShare::get_decoded_with_param(
+                &test_vector.bits,
+                &test_vector.public_share,
+            )
+            .unwrap();
+            for (level, (cws, expected_cws)) in public_share
+                .inner_correction_words
+                .iter()
+                .zip(expected_public_share.inner_correction_words.iter())
+                .enumerate()
+            {
+                assert_eq!(
+                    cws, expected_cws,
+                    "layer {} did not match\n{:#x?}\n{:#x?}",
+                    level, cws, expected_cws,
+                );
+            }
             assert_eq!(
-                cws, expected_cws,
-                "layer {} did not match\n{:#x?}\n{:#x?}",
-                level, cws, expected_cws,
+                public_share.leaf_correction_words,
+                expected_public_share.leaf_correction_words
             );
-        }
-        assert_eq!(
-            public_share.leaf_correction_words,
-            expected_public_share.leaf_correction_words
-        );
 
-        assert_eq!(
-            public_share, expected_public_share,
-            "public share did not match\n{:#x?}\n{:#x?}",
-            &public_share, &expected_public_share,
-        );
-        let encoded_public_share = public_share.get_encoded();
-        assert_eq!(encoded_public_share, test_vector.public_share);
+            assert_eq!(
+                public_share, expected_public_share,
+                "public share did not match\n{:#x?}\n{:#x?}",
+                &public_share, &expected_public_share,
+            );
+            let encoded_public_share = public_share.get_encoded();
+            assert_eq!(encoded_public_share, test_vector.public_share);
+        }
     }
 }
