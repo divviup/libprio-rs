@@ -439,8 +439,8 @@ where
             correction_words,
             *input_bit,
         ));
-        let cache_key = prefix[..=level].into();
-        cache.insert(&cache_key, &(seed, control_bit.unwrap_u8()));
+        let cache_key = &prefix[..=level];
+        cache.insert(cache_key, &(seed, control_bit.unwrap_u8()));
     }
 
     if prefix.len() == bits {
@@ -504,9 +504,9 @@ where
         // Skip checking for `prefix` in the cache, because we don't store field element
         // values along with seeds and control bits. Instead, start looking one node higher
         // up, so we can recompute everything for the last level of `prefix`.
-        let mut cache_key: IdpfInput = prefix[..prefix.len() - 1].into();
+        let mut cache_key = &prefix[..prefix.len() - 1];
         while !cache_key.is_empty() {
-            if let Some((seed, control_bit)) = cache.get(&cache_key) {
+            if let Some((seed, control_bit)) = cache.get(cache_key) {
                 // Evaluate the IDPF starting from the cached data at a previously-computed
                 // node.
                 return eval_inner::<P, L, OUT_LEN>(
@@ -520,7 +520,7 @@ where
                     cache,
                 );
             }
-            cache_key = cache_key[..cache_key.len() - 1].into();
+            cache_key = &cache_key[..cache_key.len() - 1];
         }
     }
     // Evaluate starting from the root node.
@@ -752,10 +752,10 @@ fn control_bit_to_seed_mask<const L: usize>(control: Choice) -> [u8; L] {
 /// the tree is a prefix of the other input's path.
 pub trait IdpfCache<const L: usize> {
     /// Fetch cached values for the node identified by the IDPF input.
-    fn get(&self, input: &IdpfInput) -> Option<([u8; L], u8)>;
+    fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)>;
 
     /// Store values corresponding to the node identified by the IDPF input.
-    fn insert(&mut self, input: &IdpfInput, values: &([u8; L], u8));
+    fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8));
 }
 
 /// A no-op [`IdpfCache`] implementation that always reports a cache miss.
@@ -770,18 +770,18 @@ impl NoCache {
 }
 
 impl<const L: usize> IdpfCache<L> for NoCache {
-    fn get(&self, _: &IdpfInput) -> Option<([u8; L], u8)> {
+    fn get(&self, _: &BitSlice) -> Option<([u8; L], u8)> {
         None
     }
 
-    fn insert(&mut self, _: &IdpfInput, _: &([u8; L], u8)) {}
+    fn insert(&mut self, _: &BitSlice, _: &([u8; L], u8)) {}
 }
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in an in-memory hash map,
 /// with no eviction.
 #[derive(Default)]
 pub struct HashMapCache<const L: usize> {
-    map: HashMap<IdpfInput, ([u8; L], u8)>,
+    map: HashMap<BitBox, ([u8; L], u8)>,
 }
 
 impl<const L: usize> HashMapCache<L> {
@@ -799,19 +799,22 @@ impl<const L: usize> HashMapCache<L> {
 }
 
 impl<const L: usize> IdpfCache<L> for HashMapCache<L> {
-    fn get(&self, input: &IdpfInput) -> Option<([u8; L], u8)> {
+    fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
         self.map.get(input).cloned()
     }
 
-    fn insert(&mut self, input: &IdpfInput, values: &([u8; L], u8)) {
-        self.map.insert(input.clone(), *values);
+    fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+        if !self.map.contains_key(input) {
+            self.map
+                .insert(input.to_owned().into_boxed_bitslice(), *values);
+        }
     }
 }
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in memory, with
 /// least-recently-used eviction, and lookups via linear probing.
 pub struct RingBufferCache<const L: usize> {
-    ring: VecDeque<(IdpfInput, [u8; L], u8)>,
+    ring: VecDeque<(BitBox, [u8; L], u8)>,
 }
 
 impl<const L: usize> RingBufferCache<L> {
@@ -824,22 +827,23 @@ impl<const L: usize> RingBufferCache<L> {
 }
 
 impl<const L: usize> IdpfCache<L> for RingBufferCache<L> {
-    fn get(&self, input: &IdpfInput) -> Option<([u8; L], u8)> {
+    fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
         // iterate back-to-front, so that we check the most recently pushed entry first.
         for entry in self.ring.iter().rev() {
-            if input == &entry.0 {
+            if input == entry.0 {
                 return Some((entry.1, entry.2));
             }
         }
         None
     }
 
-    fn insert(&mut self, input: &IdpfInput, values: &([u8; L], u8)) {
+    fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
         // evict first (to avoid growing the storage)
         if self.ring.len() == self.ring.capacity() {
             self.ring.pop_front();
         }
-        self.ring.push_back((input.clone(), values.0, values.1));
+        self.ring
+            .push_back((input.to_owned().into_boxed_bitslice(), values.0, values.1));
     }
 }
 
@@ -854,6 +858,7 @@ mod tests {
     use bitvec::{
         bitbox, bits,
         prelude::{BitBox, Lsb0},
+        slice::BitSlice,
     };
     use rand::random;
     use subtle::Choice;
@@ -885,7 +890,7 @@ mod tests {
     /// A lossy IDPF cache, for testing purposes, that randomly returns cache misses.
     #[derive(Default)]
     struct LossyCache<const L: usize> {
-        map: HashMap<IdpfInput, ([u8; L], u8)>,
+        map: HashMap<BitBox, ([u8; L], u8)>,
     }
 
     impl<const L: usize> LossyCache<L> {
@@ -896,7 +901,7 @@ mod tests {
     }
 
     impl<const L: usize> IdpfCache<L> for LossyCache<L> {
-        fn get(&self, input: &IdpfInput) -> Option<([u8; L], u8)> {
+        fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
             if random() {
                 self.map.get(input).cloned()
             } else {
@@ -904,16 +909,19 @@ mod tests {
             }
         }
 
-        fn insert(&mut self, input: &IdpfInput, values: &([u8; L], u8)) {
-            self.map.insert(input.clone(), *values);
+        fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+            if !self.map.contains_key(input) {
+                self.map
+                    .insert(input.to_owned().into_boxed_bitslice(), *values);
+            }
         }
     }
 
     /// A wrapper [`IdpfCache`] implementation that records `get()` calls, for testing purposes.
     struct SnoopingCache<T, const L: usize> {
         inner: T,
-        get_calls: Mutex<Vec<IdpfInput>>,
-        insert_calls: Mutex<Vec<(IdpfInput, [u8; L], u8)>>,
+        get_calls: Mutex<Vec<BitBox>>,
+        insert_calls: Mutex<Vec<(BitBox, [u8; L], u8)>>,
     }
 
     impl<T, const L: usize> SnoopingCache<T, L> {
@@ -930,16 +938,20 @@ mod tests {
     where
         T: IdpfCache<L>,
     {
-        fn get(&self, input: &IdpfInput) -> Option<([u8; L], u8)> {
-            self.get_calls.lock().unwrap().push(input.clone());
+        fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
+            self.get_calls
+                .lock()
+                .unwrap()
+                .push(input.to_owned().into_boxed_bitslice());
             self.inner.get(input)
         }
 
-        fn insert(&mut self, input: &IdpfInput, values: &([u8; L], u8)) {
-            self.insert_calls
-                .lock()
-                .unwrap()
-                .push((input.clone(), values.0, values.1));
+        fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+            self.insert_calls.lock().unwrap().push((
+                input.to_owned().into_boxed_bitslice(),
+                values.0,
+                values.1,
+            ));
             self.inner.insert(input, values)
         }
     }
@@ -1186,7 +1198,7 @@ mod tests {
                 .unwrap()
                 .drain(..)
                 .collect::<Vec<_>>(),
-            vec![bits![1, 1, 0].into(), bits![1, 1].into(), bits![1].into()],
+            vec![bits![1, 1, 0], bits![1, 1], bits![1]],
         );
         assert_eq!(
             cache_0
@@ -1196,12 +1208,7 @@ mod tests {
                 .drain(..)
                 .map(|(input, _, _)| input)
                 .collect::<Vec<_>>(),
-            vec![
-                bits![1].into(),
-                bits![1, 1].into(),
-                bits![1, 1, 0].into(),
-                bits![1, 1, 0, 0].into()
-            ],
+            vec![bits![1], bits![1, 1], bits![1, 1, 0], bits![1, 1, 0, 0]],
         );
 
         check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
@@ -1219,8 +1226,8 @@ mod tests {
                 .lock()
                 .unwrap()
                 .drain(..)
-                .collect::<Vec<_>>(),
-            vec![],
+                .collect::<Vec<BitBox>>(),
+            Vec::<BitBox>::new(),
         );
         assert_eq!(
             cache_0
@@ -1230,7 +1237,7 @@ mod tests {
                 .drain(..)
                 .map(|(input, _, _)| input)
                 .collect::<Vec<_>>(),
-            vec![bits![0].into()],
+            vec![bits![0]],
         );
 
         check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
@@ -1249,7 +1256,7 @@ mod tests {
                 .unwrap()
                 .drain(..)
                 .collect::<Vec<_>>(),
-            vec![bits![0].into()],
+            vec![bits![0]],
         );
         assert_eq!(
             cache_0
@@ -1259,7 +1266,7 @@ mod tests {
                 .drain(..)
                 .map(|(input, _, _)| input)
                 .collect::<Vec<_>>(),
-            vec![bits![0, 1].into()],
+            vec![bits![0, 1]],
         );
 
         check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
@@ -1279,12 +1286,12 @@ mod tests {
                 .drain(..)
                 .collect::<Vec<_>>(),
             vec![
-                bits![0, 1, 1, 1, 0, 1, 0].into(),
-                bits![0, 1, 1, 1, 0, 1].into(),
-                bits![0, 1, 1, 1, 0].into(),
-                bits![0, 1, 1, 1].into(),
-                bits![0, 1, 1].into(),
-                bits![0, 1].into(),
+                bits![0, 1, 1, 1, 0, 1, 0],
+                bits![0, 1, 1, 1, 0, 1],
+                bits![0, 1, 1, 1, 0],
+                bits![0, 1, 1, 1],
+                bits![0, 1, 1],
+                bits![0, 1],
             ],
         );
         assert_eq!(
@@ -1296,11 +1303,11 @@ mod tests {
                 .map(|(input, _, _)| input)
                 .collect::<Vec<_>>(),
             vec![
-                bits![0, 1, 1].into(),
-                bits![0, 1, 1, 1].into(),
-                bits![0, 1, 1, 1, 0].into(),
-                bits![0, 1, 1, 1, 0, 1].into(),
-                bits![0, 1, 1, 1, 0, 1, 0].into(),
+                bits![0, 1, 1],
+                bits![0, 1, 1, 1],
+                bits![0, 1, 1, 1, 0],
+                bits![0, 1, 1, 1, 0, 1],
+                bits![0, 1, 1, 1, 0, 1, 0],
             ],
         );
 
@@ -1320,7 +1327,7 @@ mod tests {
                 .unwrap()
                 .drain(..)
                 .collect::<Vec<_>>(),
-            vec![bits![0, 1, 1, 1, 0, 1, 0].into()],
+            vec![bits![0, 1, 1, 1, 0, 1, 0]],
         );
         assert!(cache_0.insert_calls.lock().unwrap().is_empty());
     }
