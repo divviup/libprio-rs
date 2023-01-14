@@ -606,6 +606,50 @@ mod tests {
     use fixed::{FixedI128, FixedI16, FixedI64};
     use fixed_macro::fixed;
 
+    #[test]
+    fn test_bounded_fpvec_sum_parallel_fp16() {
+        let fp16_4_inv = fixed!(0.25: I1F15);
+        let fp16_8_inv = fixed!(0.125: I1F15);
+        let fp16_16_inv = fixed!(0.0625: I1F15);
+
+        let fp16_vec = vec![fp16_4_inv, fp16_8_inv, fp16_16_inv];
+
+        // the encoded vector has the following entries:
+        // enc(0.25) =  2^(n-1) * 0.25 + 2^(n-1)     = 40960
+        // enc(0.125) =  2^(n-1) * 0.125 + 2^(n-1)   = 36864
+        // enc(0.0625) =  2^(n-1) * 0.0625 + 2^(n-1) = 34816
+        test_fixed(fp16_vec, vec![40960, 36864, 34816]);
+    }
+
+    #[test]
+    fn test_bounded_fpvec_sum_parallel_fp32() {
+        let fp32_4_inv = fixed!(0.25: I1F31);
+        let fp32_8_inv = fixed!(0.125: I1F31);
+        let fp32_16_inv = fixed!(0.0625: I1F31);
+
+        let fp32_vec = vec![fp32_4_inv, fp32_8_inv, fp32_16_inv];
+        // computed as above but with n=32
+        test_fixed(fp32_vec, vec![2684354560, 2415919104, 2281701376]);
+    }
+
+    #[test]
+    fn test_bounded_fpvec_sum_parallel_fp64() {
+        let fp64_4_inv = fixed!(0.25: I1F63);
+        let fp64_8_inv = fixed!(0.125: I1F63);
+        let fp64_16_inv = fixed!(0.0625: I1F63);
+
+        let fp64_vec = vec![fp64_4_inv, fp64_8_inv, fp64_16_inv];
+        // computed as above but with n=64
+        test_fixed(
+            fp64_vec,
+            vec![
+                11529215046068469760,
+                10376293541461622784,
+                9799832789158199296,
+            ],
+        );
+    }
+
     fn test_fixed<F: Fixed>(fp_vec: Vec<F>, enc_vec: Vec<u128>)
     where
         F: CompatibleFloat<Field128>,
@@ -718,50 +762,6 @@ mod tests {
             // = 3 * (0^2 - 0*2^n + 2^(2*n-2))
             assert_eq!(norm, expected_norm);
         }
-    }
-
-    #[test]
-    fn test_bounded_fpvec_sum_parallel_fp16() {
-        let fp16_4_inv = fixed!(0.25: I1F15);
-        let fp16_8_inv = fixed!(0.125: I1F15);
-        let fp16_16_inv = fixed!(0.0625: I1F15);
-
-        let fp16_vec = vec![fp16_4_inv, fp16_8_inv, fp16_16_inv];
-
-        // the encoded vector has the following entries:
-        // enc(0.25) =  2^(n-1) * 0.25 + 2^(n-1)     = 40960
-        // enc(0.125) =  2^(n-1) * 0.125 + 2^(n-1)   = 36864
-        // enc(0.0625) =  2^(n-1) * 0.0625 + 2^(n-1) = 34816
-        test_fixed(fp16_vec, vec![40960, 36864, 34816]);
-    }
-
-    #[test]
-    fn test_bounded_fpvec_sum_parallel_fp32() {
-        let fp32_4_inv = fixed!(0.25: I1F31);
-        let fp32_8_inv = fixed!(0.125: I1F31);
-        let fp32_16_inv = fixed!(0.0625: I1F31);
-
-        let fp32_vec = vec![fp32_4_inv, fp32_8_inv, fp32_16_inv];
-        // computed as above but with n=32
-        test_fixed(fp32_vec, vec![2684354560, 2415919104, 2281701376]);
-    }
-
-    #[test]
-    fn test_bounded_fpvec_sum_parallel_fp64() {
-        let fp64_4_inv = fixed!(0.25: I1F63);
-        let fp64_8_inv = fixed!(0.125: I1F63);
-        let fp64_16_inv = fixed!(0.0625: I1F63);
-
-        let fp64_vec = vec![fp64_4_inv, fp64_8_inv, fp64_16_inv];
-        // computed as above but with n=64
-        test_fixed(
-            fp64_vec,
-            vec![
-                11529215046068469760,
-                10376293541461622784,
-                9799832789158199296,
-            ],
-        );
     }
 
     #[test]
