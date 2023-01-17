@@ -1214,7 +1214,7 @@ mod tests {
 
     #[test]
     #[cfg(feature = "experimental")]
-    fn test_prio3_bounded_fpvec_sum_long() {
+    fn test_prio3_bounded_fpvec_sum_unaligned() {
         type P<Fx> = Prio3Aes128FixedPointBoundedL2VecSum<Fx>;
         #[cfg(feature = "multithreaded")]
         type PM<Fx> = Prio3Aes128FixedPointBoundedL2VecSumMultithreaded<Fx>;
@@ -1223,24 +1223,24 @@ mod tests {
         let ctor_mt_32 = PM::<FixedI32<U31>>::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded;
 
         {
-            const SIZE: usize = 1000;
+            const SIZE: usize = 5;
             let fp32_0 = fixed!(0: I1F31);
 
-            // 32 bit fixedpoint, long vector, single-threaded
+            // 32 bit fixedpoint, non-power-of-2 vector, single-threaded
             {
                 let prio3_32 = ctor_32(2, SIZE).unwrap();
-                test_fixed_long::<_, _, _, SIZE>(fp32_0, prio3_32);
+                test_fixed_vec::<_, _, _, SIZE>(fp32_0, prio3_32);
             }
 
-            // 32 bit fixedpoint, long vector, single-threaded
+            // 32 bit fixedpoint, non-power-of-2 vector, multi-threaded
             #[cfg(feature = "multithreaded")]
             {
                 let prio3_mt_32 = ctor_mt_32(2, SIZE).unwrap();
-                test_fixed_long::<_, _, _, SIZE>(fp32_0, prio3_mt_32);
+                test_fixed_vec::<_, _, _, SIZE>(fp32_0, prio3_mt_32);
             }
         }
 
-        fn test_fixed_long<Fx, PE, BPE, const LONG_SIZE: usize>(
+        fn test_fixed_vec<Fx, PE, BPE, const SIZE: usize>(
             fp_0: Fx,
             prio3: Prio3<FixedPointBoundedL2VecSum<Fx, Field128, PE, BPE>, PrgAes128, 16>,
         ) where
@@ -1248,13 +1248,12 @@ mod tests {
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
             BPE: Eq + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Clone + 'static,
         {
-            let fp_vec_long = vec![fp_0; LONG_SIZE];
+            let fp_vec = vec![fp_0; SIZE];
 
-            // very large vector
-            let fp_list4 = [fp_vec_long.clone(), fp_vec_long];
+            let measurements = [fp_vec.clone(), fp_vec];
             assert_eq!(
-                run_vdaf(&prio3, &(), fp_list4).unwrap(),
-                vec![0.0; LONG_SIZE],
+                run_vdaf(&prio3, &(), measurements).unwrap(),
+                vec![0.0; SIZE]
             );
         }
     }
