@@ -1,10 +1,45 @@
 
 # cargo-vet audits file
 
+[[audits.assert_matches]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "1.5.0"
+
 [[audits.base64]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.20.0 -> 0.21.0"
+
+[[audits.block-buffer]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.9.0"
+
+[[audits.ciborium-io]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.2.0"
+
+[[audits.cmac]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.7.1"
+
+[[audits.crunchy]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.2.2"
+
+[[audits.dbl]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.3.2"
+
+[[audits.either]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "1.6.1"
 
 [[audits.fiat-crypto]]
 who = "David Cook <dcook@divviup.org>"
@@ -25,6 +60,26 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.20.0 -> 1.21.0"
 
+[[audits.fixed-macro]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "1.2.0"
+
+[[audits.fixed-macro-impl]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "1.2.0"
+
+[[audits.ghash]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.5.0"
+
+[[audits.modinverse]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.1.1"
+
 [[audits.once_cell]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -44,3 +99,38 @@ Options. The new implementation based on critical_section appears to be sound.
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.16.0 -> 1.17.0"
+
+[[audits.opaque-debug]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.3.0"
+
+[[audits.proc-macro-error-attr]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "1.0.4"
+
+[[audits.proc-macro2]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.49 -> 1.0.47"
+
+[[audits.unicode-ident]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.2 -> 1.0.3"
+
+[[audits.universal-hash]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.4.1"
+
+[[audits.untrusted]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.7.1"
+
+[[audits.wasm-bindgen-shared]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.2.83"
