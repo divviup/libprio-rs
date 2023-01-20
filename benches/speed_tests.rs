@@ -15,7 +15,7 @@ use prio::field::{random_vector, FftFriendlyFieldElement, Field128 as F, FieldEl
 use prio::flp::gadgets::ParallelSumMultithreaded;
 use prio::flp::{
     gadgets::{BlindPolyEval, Mul, ParallelSum},
-    types::CountVec,
+    types::SumVec,
     Type,
 };
 #[cfg(feature = "prio2")]
@@ -128,7 +128,7 @@ pub fn count_vec(c: &mut Criterion) {
         }
 
         // Prio3
-        let count_vec: CountVec<F, ParallelSum<F, BlindPolyEval<F>>> = CountVec::new(*size);
+        let count_vec: SumVec<F, ParallelSum<F, BlindPolyEval<F>>> = SumVec::new(1, *size).unwrap();
         let joint_rand = random_vector(count_vec.joint_rand_len()).unwrap();
         let prove_rand = random_vector(count_vec.prove_rand_len()).unwrap();
         let proof = count_vec.prove(&input, &prove_rand, &joint_rand).unwrap();
@@ -159,8 +159,8 @@ pub fn count_vec(c: &mut Criterion) {
 
         #[cfg(feature = "multithreaded")]
         {
-            let count_vec: CountVec<F, ParallelSumMultithreaded<F, BlindPolyEval<F>>> =
-                CountVec::new(*size);
+            let count_vec: SumVec<F, ParallelSumMultithreaded<F, BlindPolyEval<F>>> =
+                SumVec::new(1, *size).unwrap();
 
             c.bench_function(
                 &format!("prio3 countvec multithreaded prove, input size={}", *size),
@@ -235,7 +235,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let len = 1000;
-    let prio3 = Prio3::new_aes128_count_vec(num_shares, len).unwrap();
+    let prio3 = Prio3::new_aes128_sum_vec(num_shares, 1, len).unwrap();
     let measurement = vec![0; len];
     println!(
         "prio3 countvec ({} len) share size = {}",
@@ -250,7 +250,7 @@ pub fn prio3_client(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        let prio3 = Prio3::new_aes128_count_vec_multithreaded(num_shares, len).unwrap();
+        let prio3 = Prio3::new_aes128_sum_vec_multithreaded(num_shares, 1, len).unwrap();
         let measurement = vec![0; len];
         println!(
             "prio3 countvec multithreaded ({} len) share size = {}",

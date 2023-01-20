@@ -92,6 +92,10 @@ pub enum FlpError {
     #[error("truncate error: {0}")]
     Truncate(String),
 
+    /// Generic invalid parameter. This may be returned when an FLP type cannot be constructed.
+    #[error("invalid paramter: {0}")]
+    InvalidParameter(String),
+
     /// Returned if an FFT operation propagates an error.
     #[error("FFT error: {0}")]
     Fft(#[from] FftError),

@@ -130,7 +130,7 @@ fn prio3_client_sum_32() -> Vec<Prio3InputShare<Field128, 16>> {
 
 fn prio3_client_count_vec_1000() -> Vec<Prio3InputShare<Field128, 16>> {
     let len = 1000;
-    let prio3 = Prio3::new_aes128_count_vec(2, len).unwrap();
+    let prio3 = Prio3::new_aes128_sum_vec(2, 1, len).unwrap();
     let measurement = vec![0; len];
     prio3.shard(&black_box(measurement)).unwrap().1
 }
@@ -138,7 +138,7 @@ fn prio3_client_count_vec_1000() -> Vec<Prio3InputShare<Field128, 16>> {
 #[cfg(feature = "multithreaded")]
 fn prio3_client_count_vec_multithreaded_1000() -> Vec<Prio3InputShare<Field128, 16>> {
     let len = 1000;
-    let prio3 = Prio3::new_aes128_count_vec_multithreaded(2, len).unwrap();
+    let prio3 = Prio3::new_aes128_sum_vec_multithreaded(2, 1, len).unwrap();
     let measurement = vec![0; len];
     prio3.shard(&black_box(measurement)).unwrap().1
 }

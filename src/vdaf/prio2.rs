@@ -23,8 +23,8 @@ use std::{
 };
 
 /// The Prio2 VDAF. It supports the same measurement type as
-/// [`Prio3Aes128CountVec`](crate::vdaf::prio3::Prio3Aes128CountVec) but uses the proof system
-/// and finite field deployed in ENPA.
+/// [`Prio3Aes128SumVec`](crate::vdaf::prio3::Prio3Aes128SumVec) with `bits == 1` but uses the
+/// proof system and finite field deployed in ENPA.
 #[derive(Clone, Debug)]
 pub struct Prio2 {
     input_len: usize,
