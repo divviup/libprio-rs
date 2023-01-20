@@ -1,7 +1,6 @@
 # libprio-rs
 [![Build Status]][actions] [![Latest Version]][crates.io] [![Docs badge]][docs.rs]
 
-
 [Build Status]: https://github.com/divviup/libprio-rs/workflows/ci-build/badge.svg
 [actions]: https://github.com/divviup/libprio-rs/actions?query=branch%3Amain
 [Latest Version]: https://img.shields.io/crates/v/prio.svg
@@ -27,11 +26,29 @@ in the PPM working group at the IETF. This support is still experimental, and is
 evolving along with the DAP and VDAF specifications. Formal security analysis is
 also forthcoming. Prio3 should not yet be used in production applications.
 
+### Draft versions and release branches
+
+The `main` branch is under continuous development and will usually be partway between VDAF drafts.
+libprio uses stable release branches to maintain implementations of different VDAF draft versions.
+Crate `prio` version `x.y.z` is released from a corresponding `release/x.y` branch. We try to
+maintain [Rust SemVer][semver] compatibility, meaning that API breaks only happen on minor version
+increases (e.g., 0.10 to 0.11).
+
+| Git branch | Draft version | Conforms to specification? | Status |
+| ---------- | ------------- | --------------------- | ------ |
+| `release/0.8` | [`draft-irtf-cfrg-vdaf-01`][vdaf-01] | Yes | Supported |
+| `release/0.9` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Unmaintained as of September 22, 2022 |
+| `release/0.10` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Supported |
+| `main` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Supported, unstable |
+
+[vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
+[vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [prio-server]: https://github.com/divviup/prio-server
 [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/
 [dap]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/
+[semver]: https://doc.rust-lang.org/cargo/reference/semver.html
 
 ## Cargo Features
 
