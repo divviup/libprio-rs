@@ -31,19 +31,18 @@ also forthcoming. Prio3 should not yet be used in production applications.
 The `main` branch is under continuous development and will usually be partway between VDAF drafts.
 libprio uses stable release branches to maintain implementations of different VDAF draft versions.
 Crate `prio` version `x.y.z` is released from a corresponding `release/x.y` branch. We try to
-maintain [SemVer][semver] compatibility, meaning that API breaks only happen on minor version
-increases (e.g., 0.10 to 0.11.
+maintain [Rust SemVer][semver] compatibility, meaning that API breaks only happen on minor version
+increases (e.g., 0.10 to 0.11).
 
 | Git branch | Draft version | Conforms to specification? | Status |
 | ---------- | ------------- | --------------------- | ------ |
 | `release/0.8` | [`draft-irtf-cfrg-vdaf-01`][vdaf-01] | Yes | Supported |
 | `release/0.9` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Unmaintained as of September 22, 2022 |
 | `release/0.10` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Supported |
-| `main` | `draft-ietf-ppm-dap-04` ([forthcoming][vdaf-04]) | Partially | Supported, unstable |
+| `main` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Supported, unstable |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
-[vdaf-04]: https://github.com/cfrg/draft-irtf-cfrg-vdaf/issues?q=label%3Adraft-04
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [prio-server]: https://github.com/divviup/prio-server
