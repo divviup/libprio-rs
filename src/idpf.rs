@@ -63,7 +63,7 @@ impl IdpfInput {
     /// Create a new IDPF input by appending to this input.
     pub fn clone_with_suffix(&self, suffix: &[bool]) -> IdpfInput {
         let mut vec = BitVec::with_capacity(self.index.len() + suffix.len());
-        vec.copy_from_bitslice(&self.index);
+        vec.extend_from_bitslice(&self.index);
         vec.extend(suffix);
         IdpfInput {
             index: vec.into_boxed_bitslice(),
@@ -83,6 +83,22 @@ impl IdpfInput {
     /// Get an iterator over the bits that make up this input.
     pub fn iter(&self) -> impl Iterator<Item = bool> + '_ {
         self.index.iter().by_vals()
+    }
+
+    /// Convert the IDPF into a byte slice. If the length of the underlying bit vector is not a
+    /// multiple of `8`, then the last byte is `0`-padded.
+    pub fn to_bytes(&self) -> Vec<u8> {
+        let mut vec = BitVec::<u8, Lsb0>::with_capacity(self.index.len());
+        vec.extend_from_bitslice(&self.index);
+        vec.set_uninitialized(false);
+        vec.into_vec()
+    }
+
+    #[cfg(test)]
+    pub(crate) fn prefix(&self, level: usize) -> Self {
+        Self {
+            index: self.index[..=level].to_owned().into(),
+        }
     }
 }
 
@@ -1814,5 +1830,21 @@ mod tests {
         );
         let encoded_public_share = public_share.get_encoded();
         assert_eq!(encoded_public_share, test_vector.public_share);
+    }
+
+    #[test]
+    fn idpf_input_from_bytes_to_bytes() {
+        let test_cases: &[&[u8]] = &[b"hello", b"banana", &[1], &[127], &[1, 2, 3, 4], &[]];
+        for test_case in test_cases {
+            assert_eq!(&IdpfInput::from_bytes(test_case).to_bytes(), test_case);
+        }
+    }
+
+    #[test]
+    fn idpf_input_from_bools_to_bytes() {
+        let input = IdpfInput::from_bools(&[true; 7]);
+        assert_eq!(input.to_bytes(), &[127]);
+        let input = IdpfInput::from_bools(&[true; 9]);
+        assert_eq!(input.to_bytes(), &[255, 1]);
     }
 }

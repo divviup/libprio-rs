@@ -107,9 +107,9 @@ where
     // `PrgAes128`. But having to support multiple output types is delicate because the buffer size
     // is computed from the field modulus.
     //
-    // TODO(cjpatton) If we don't end up making this spec change, then add tests to ensure that
-    // changing field types is done correctly.
-    #[cfg(test)]
+    // If we don't end up making this spec change, then add tests to ensure that changing field
+    // types is done correctly.
+    #[cfg(feature = "experimental")]
     pub(crate) fn into_new_field<F1: FieldElement>(self) -> Prng<F1, S> {
         Prng {
             phantom: PhantomData,
@@ -256,6 +256,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "experimental")]
     #[test]
     fn into_new_field() {
         let seed = Seed::generate().unwrap();
