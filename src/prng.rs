@@ -79,7 +79,7 @@ where
                 if let Some(x) = match F::try_from_random(&self.buffer[i..j]) {
                     Ok(x) => Some(x),
                     Err(FieldError::ModulusOverflow) => None, // reject this sample
-                    Err(err) => panic!("unexpected error: {}", err),
+                    Err(err) => panic!("unexpected error: {err}"),
                 } {
                     // Set the buffer index to the next chunk.
                     self.buffer_index = j;
