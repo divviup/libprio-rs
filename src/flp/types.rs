@@ -8,9 +8,7 @@ use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
 use std::marker::PhantomData;
-
-/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of
-/// the measurements (i.e., the total number of `1s`).
+/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Count<F> {
     range_checker: Vec<F>,
@@ -419,47 +417,80 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     }
 }
 
-/// A sequence of counters. This type uses a neat trick from [[BBCG+19], Corollary 4.9] to reduce
-/// the proof size to roughly the square root of the input size.
+/// A sequence of integers in range `[0, 2^bits)`. This type uses a neat trick from [[BBCG+19],
+/// Corollary 4.9] to reduce the proof size to roughly the square root of the input size.
 ///
 /// [BBCG+19]: https://eprint.iacr.org/2019/188
 #[derive(Debug, PartialEq, Eq)]
-pub struct CountVec<F, S> {
+pub struct SumVec<F: FftFriendlyFieldElement, S> {
     range_checker: Vec<F>,
     len: usize,
+    bits: usize,
+    flattened_len: usize,
+    max: F::Integer,
     chunk_len: usize,
     gadget_calls: usize,
     phantom: PhantomData<S>,
 }
 
-impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> CountVec<F, S> {
-    /// Returns a new [`CountVec`] with the given length.
-    pub fn new(len: usize) -> Self {
+impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> SumVec<F, S> {
+    /// Returns a new [`SumVec`] with the desired bit width and vector length.
+    ///
+    /// # Errors
+    ///
+    /// * The length of the encoded measurement, i.e., `bits * len`, overflows addressable memory.
+    /// * The bit width cannot be encoded, i.e., `bits` is larger than or equal to the number of
+    ///   bits required to encode field elements.
+    pub fn new(bits: usize, len: usize) -> Result<Self, FlpError> {
+        let flattened_len = bits.checked_mul(len).ok_or_else(|| {
+            FlpError::InvalidParameter("`bits*len` overflows addressable memory".into())
+        })?;
+
+        // Check if the bit width is too large. This limit is defined to be one bit less than the
+        // number of bits required to encode `F::Integer`. (One less so that we can compute `1 <<
+        // bits` without overflowing.)
+        let limit = std::mem::size_of::<F::Integer>() * 8 - 1;
+        if bits > limit {
+            return Err(FlpError::InvalidParameter(format!(
+                "bit wdith exceeds limit of {limit}"
+            )));
+        }
+
+        // Compute the largest encodable measurement.
+        let one = F::Integer::from(F::one());
+        let max = (one << bits) - one;
+
         // The optimal chunk length is the square root of the input length. If the input length is
         // not a perfect square, then round down. If the result is 0, then let the chunk length be
         // 1 so that the underlying gadget can still be called.
-        let chunk_len = std::cmp::max(1, (len as f64).sqrt() as usize);
+        let chunk_len = std::cmp::max(1, (flattened_len as f64).sqrt() as usize);
 
-        let mut gadget_calls = len / chunk_len;
-        if len % chunk_len != 0 {
+        let mut gadget_calls = flattened_len / chunk_len;
+        if flattened_len % chunk_len != 0 {
             gadget_calls += 1;
         }
 
-        Self {
+        Ok(Self {
             range_checker: poly_range_check(0, 2),
             len,
+            bits,
+            flattened_len,
+            max,
             chunk_len,
             gadget_calls,
             phantom: PhantomData,
-        }
+        })
     }
 }
 
-impl<F: FftFriendlyFieldElement, S> Clone for CountVec<F, S> {
+impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
     fn clone(&self) -> Self {
         Self {
             range_checker: self.range_checker.clone(),
             len: self.len,
+            bits: self.bits,
+            flattened_len: self.flattened_len,
+            max: self.max,
             chunk_len: self.chunk_len,
             gadget_calls: self.gadget_calls,
             phantom: PhantomData,
@@ -467,7 +498,7 @@ impl<F: FftFriendlyFieldElement, S> Clone for CountVec<F, S> {
     }
 }
 
-impl<F, S> Type for CountVec<F, S>
+impl<F, S> Type for SumVec<F, S>
 where
     F: FftFriendlyFieldElement,
     S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static,
@@ -486,14 +517,20 @@ where
             )));
         }
 
-        let max = F::Integer::from(F::one());
-        for value in measurement {
-            if *value > max {
-                return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
+        let mut flattened = Vec::with_capacity(self.flattened_len);
+        for summand in measurement {
+            if summand > &self.max {
+                return Err(FlpError::Encode(format!(
+                    "summand exceeds maximum of 2^{}-1",
+                    self.bits
+                )));
             }
+            flattened.append(&mut F::encode_into_bitvector_representation(
+                summand, self.bits,
+            )?);
         }
 
-        Ok(measurement.iter().map(|value| F::from(*value)).collect())
+        Ok(flattened)
     }
 
     fn decode_result(
@@ -546,11 +583,15 @@ where
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         self.truncate_call_check(&input)?;
-        Ok(input)
+        let mut unflattened = Vec::with_capacity(self.len);
+        for chunk in input.chunks(self.bits) {
+            unflattened.push(F::decode_from_bitvector_representation(chunk)?);
+        }
+        Ok(unflattened)
     }
 
     fn input_len(&self) -> usize {
-        self.len
+        self.flattened_len
     }
 
     fn proof_len(&self) -> usize {
@@ -929,9 +970,9 @@ mod tests {
         .unwrap();
     }
 
-    fn test_count_vec<F, S>(f: F)
+    fn test_sum_vec<F, S>(f: F)
     where
-        F: Fn(usize) -> CountVec<TestField, S>,
+        F: Fn(usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
         S: 'static + ParallelSumGadget<TestField, BlindPolyEval<TestField>> + Eq,
     {
         let one = TestField::one();
@@ -939,10 +980,10 @@ mod tests {
 
         // Test on valid inputs.
         for len in 0..10 {
-            let count_vec = f(len);
+            let sum_vec = f(1, len).unwrap();
             flp_validity_test(
-                &count_vec,
-                &count_vec.encode_measurement(&vec![1; len]).unwrap(),
+                &sum_vec,
+                &sum_vec.encode_measurement(&vec![1; len]).unwrap(),
                 &ValidityTestCase::<TestField> {
                     expect_valid: true,
                     expected_output: Some(vec![one; len]),
@@ -953,10 +994,10 @@ mod tests {
         }
 
         let len = 100;
-        let count_vec = f(len);
+        let sum_vec = f(1, len).unwrap();
         flp_validity_test(
-            &count_vec,
-            &count_vec.encode_measurement(&vec![1; len]).unwrap(),
+            &sum_vec,
+            &sum_vec.encode_measurement(&vec![1; len]).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one; len]),
@@ -965,11 +1006,24 @@ mod tests {
         )
         .unwrap();
 
+        let len = 23;
+        let sum_vec = f(4, len).unwrap();
+        flp_validity_test(
+            &sum_vec,
+            &sum_vec.encode_measurement(&vec![9; len]).unwrap(),
+            &ValidityTestCase::<TestField> {
+                expect_valid: true,
+                expected_output: Some(vec![nine; len]),
+                num_shares: 3,
+            },
+        )
+        .unwrap();
+
         // Test on invalid inputs.
         for len in 1..10 {
-            let count_vec = f(len);
+            let sum_vec = f(1, len).unwrap();
             flp_validity_test(
-                &count_vec,
+                &sum_vec,
                 &vec![nine; len],
                 &ValidityTestCase::<TestField> {
                     expect_valid: false,
@@ -980,13 +1034,26 @@ mod tests {
             .unwrap();
         }
 
+        let len = 23;
+        let sum_vec = f(2, len).unwrap();
+        flp_validity_test(
+            &sum_vec,
+            &vec![nine; 2 * len],
+            &ValidityTestCase::<TestField> {
+                expect_valid: false,
+                expected_output: None,
+                num_shares: 3,
+            },
+        )
+        .unwrap();
+
         // Round trip
         let want = vec![1; len];
         assert_eq!(
-            count_vec
+            sum_vec
                 .decode_result(
-                    &count_vec
-                        .truncate(count_vec.encode_measurement(&want).unwrap())
+                    &sum_vec
+                        .truncate(sum_vec.encode_measurement(&want).unwrap())
                         .unwrap(),
                     1
                 )
@@ -996,20 +1063,22 @@ mod tests {
     }
 
     #[test]
-    fn test_count_vec_serial() {
-        test_count_vec(CountVec::<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>>::new)
+    fn test_sum_vec_serial() {
+        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>>::new)
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
-    fn test_count_vec_parallel() {
-        test_count_vec(CountVec::<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>>::new)
+    fn test_sum_vec_parallel() {
+        test_sum_vec(
+            SumVec::<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>>::new,
+        )
     }
 
     #[test]
-    fn count_vec_serial_long() {
-        let typ: CountVec<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>> =
-            CountVec::new(1000);
+    fn sum_vec_serial_long() {
+        let typ: SumVec<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>> =
+            SumVec::new(1, 1000).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
         let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
@@ -1025,11 +1094,9 @@ mod tests {
 
     #[test]
     #[cfg(feature = "multithreaded")]
-    fn count_vec_parallel_long() {
-        let typ: CountVec<
-            TestField,
-            ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>,
-        > = CountVec::new(1000);
+    fn sum_vec_parallel_long() {
+        let typ: SumVec<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>> =
+            SumVec::new(1, 1000).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
         let joint_rand = random_vector(typ.joint_rand_len()).unwrap();

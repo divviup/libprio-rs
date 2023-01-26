@@ -15,8 +15,8 @@
 //! which are instantiated here:
 //!
 //! - [`Prio3Aes128Count`] for aggregating a counter (*)
-//! - [`Prio3Aes128CountVec`] for aggregating a vector of counters
 //! - [`Prio3Aes128Sum`] for copmputing the sum of integers (*)
+//! - [`Prio3Aes128SumVec`] for aggregating a vector of integers
 //! - [`Prio3Aes128Histogram`] for estimating a distribution via a histogram (*)
 //!
 //! Additional types can be constructed from [`Prio3`] as needed.
@@ -44,7 +44,7 @@ use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
 };
 #[cfg(feature = "crypto-dependencies")]
-use crate::flp::types::{Average, Count, CountVec, Histogram, Sum};
+use crate::flp::types::{Average, Count, Histogram, Sum, SumVec};
 use crate::flp::Type;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, RandSource, Seed};
@@ -75,26 +75,31 @@ impl Prio3Aes128Count {
 /// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
 /// the element-wise sum.
 #[cfg(feature = "crypto-dependencies")]
-pub type Prio3Aes128CountVec =
-    Prio3<CountVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgAes128, 16>;
+pub type Prio3Aes128SumVec =
+    Prio3<SumVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgAes128, 16>;
 
 #[cfg(feature = "crypto-dependencies")]
-impl Prio3Aes128CountVec {
-    /// Construct an instance of Prio3Aes1238CountVec with the given number of aggregators. `len`
-    /// defines the length of each measurement.
-    pub fn new_aes128_count_vec(num_aggregators: u8, len: usize) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, CountVec::new(len))
+impl Prio3Aes128SumVec {
+    /// Construct an instance of Prio3Aes1238SumVec with the given number of aggregators. `bits`
+    /// defines the bit width of each summand of the measurement; `len` defines the length of the
+    /// measurement vector.
+    pub fn new_aes128_sum_vec(
+        num_aggregators: u8,
+        bits: usize,
+        len: usize,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, SumVec::new(bits, len)?)
     }
 }
 
-/// Like [`Prio3Aes128CountVec`] except this type uses multithreading to improve sharding and
+/// Like [`Prio3Aes128SumVec`] except this type uses multithreading to improve sharding and
 /// preparation time. Note that the improvement is only noticeable for very large input lengths,
 /// e.g., 201 and up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
 #[cfg(feature = "crypto-dependencies")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
-pub type Prio3Aes128CountVecMultithreaded = Prio3<
-    CountVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
+pub type Prio3Aes128SumVecMultithreaded = Prio3<
+    SumVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
     PrgAes128,
     16,
 >;
@@ -102,14 +107,16 @@ pub type Prio3Aes128CountVecMultithreaded = Prio3<
 #[cfg(feature = "multithreaded")]
 #[cfg(feature = "crypto-dependencies")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
-impl Prio3Aes128CountVecMultithreaded {
-    /// Construct an instance of Prio3Aes1238CountVecMultithreaded with the given number of
-    /// aggregators. `len` defines the length of each measurement.
-    pub fn new_aes128_count_vec_multithreaded(
+impl Prio3Aes128SumVecMultithreaded {
+    /// Construct an instance of Prio3Aes1238SumVecMultithreaded with the given number of
+    /// aggregators. `bits` defines the bit width of each summand of the measurement; `len` defines
+    /// the length of the measurement vector.
+    pub fn new_aes128_sum_vec_multithreaded(
         num_aggregators: u8,
+        bits: usize,
         len: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, CountVec::new(len))
+        Prio3::new(num_aggregators, SumVec::new(bits, len)?)
     }
 }
 
@@ -1176,35 +1183,39 @@ mod tests {
     }
 
     #[test]
-    fn test_prio3_countvec() {
-        let prio3 = Prio3::new_aes128_count_vec(2, 20).unwrap();
+    fn test_prio3_sum_vec() {
+        let prio3 = Prio3::new_aes128_sum_vec(2, 2, 20).unwrap();
         assert_eq!(
             run_vdaf(
                 &prio3,
                 &(),
-                [vec![
-                    0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,
-                ]]
+                [
+                    vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1],
+                    vec![0, 2, 0, 0, 1, 0, 0, 0, 1, 1, 1, 3, 0, 3, 0, 0, 0, 1, 0, 0],
+                    vec![1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
+                ]
             )
             .unwrap(),
-            vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,]
+            vec![1, 3, 1, 0, 3, 1, 0, 1, 2, 2, 3, 3, 1, 5, 1, 2, 1, 3, 0, 2],
         );
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
-    fn test_prio3_countvec_multithreaded() {
-        let prio3 = Prio3::new_aes128_count_vec_multithreaded(2, 20).unwrap();
+    fn test_prio3_sum_vec_multithreaded() {
+        let prio3 = Prio3::new_aes128_sum_vec_multithreaded(2, 2, 20).unwrap();
         assert_eq!(
             run_vdaf(
                 &prio3,
                 &(),
-                [vec![
-                    0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,
-                ]]
+                [
+                    vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1],
+                    vec![0, 2, 0, 0, 1, 0, 0, 0, 1, 1, 1, 3, 0, 3, 0, 0, 0, 1, 0, 0],
+                    vec![1, 1, 1, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 1],
+                ]
             )
             .unwrap(),
-            vec![0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 1,]
+            vec![1, 3, 1, 0, 3, 1, 0, 1, 2, 2, 3, 3, 1, 5, 1, 2, 1, 3, 0, 2],
         );
     }
 
