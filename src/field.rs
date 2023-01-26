@@ -883,8 +883,7 @@ mod tests {
             assert_eq!(
                 F::generator().pow(int_order),
                 F::root(l).unwrap(),
-                "failure for F::root({})",
-                l
+                "failure for F::root({l})"
             );
             int_order = int_order >> int_one;
         }

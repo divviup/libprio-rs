@@ -35,7 +35,7 @@ fn generate_and_print_priov2_vector(number_of_inputs: usize, dimension: usize) -
         .wrap_err("failed to create test vector")?;
     let json =
         serde_json::to_string(&test_vector).wrap_err("failed to encode test vector to JSON")?;
-    println!("{}", json);
+    println!("{json}");
 
     Ok(())
 }
