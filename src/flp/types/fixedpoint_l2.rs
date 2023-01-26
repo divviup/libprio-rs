@@ -235,8 +235,7 @@ where
             .map_err(|_| FlpError::Encode("Could not convert u32 into usize.".to_string()))?;
         if !F::valid_integer_bitlength(bits_per_entry) {
             return Err(FlpError::Encode(format!(
-                "fixed point type bit length ({}) too large for field modulus",
-                bits_per_entry,
+                "fixed point type bit length ({bits_per_entry}) too large for field modulus",
             )));
         }
         let fi_bits_per_entry: F::Integer = F::valid_integer_try_from(bits_per_entry)
@@ -248,8 +247,7 @@ where
         let bits_for_norm = 2 * bits_per_entry - 2;
         if !F::valid_integer_bitlength(bits_for_norm) {
             return Err(FlpError::Encode(format!(
-                "maximal norm bit length ({}) too large for field modulus",
-                bits_for_norm,
+                "maximal norm bit length ({bits_for_norm}) too large for field modulus",
             )));
         }
 
@@ -260,8 +258,7 @@ where
         // upper bound to that value is `entries * 2^(2*bits - 2)` (see docs of
         // compute_norm_of_entries for details). It has to fit into the field.
         let err = Err(FlpError::Encode(format!(
-            "number of entries ({}) not compatible with field size",
-            entries,
+            "number of entries ({entries}) not compatible with field size",
         )));
 
         if let Some(val) = (entries as u128).checked_mul(1 << bits_for_norm) {

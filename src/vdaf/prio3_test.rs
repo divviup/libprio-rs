@@ -64,20 +64,18 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
         .test_vec_shard(&t.measurement)
         .expect("failed to generate input shares");
 
-    assert_eq!(2, t.input_shares.len(), "#{}", test_num);
+    assert_eq!(2, t.input_shares.len(), "#{test_num}");
     for (agg_id, want) in t.input_shares.iter().enumerate() {
         assert_eq!(
             input_shares[agg_id],
             Prio3InputShare::get_decoded_with_param(&(prio3, agg_id), want.as_ref())
                 .unwrap_or_else(|e| err!(test_num, e, "decode test vector (input share)")),
-            "#{}",
-            test_num
+            "#{test_num}"
         );
         assert_eq!(
             input_shares[agg_id].get_encoded(),
             want.as_ref(),
-            "#{}",
-            test_num
+            "#{test_num}"
         )
     }
 
@@ -91,16 +89,15 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
         prep_shares.push(prep_share);
     }
 
-    assert_eq!(1, t.prep_shares.len(), "#{}", test_num);
+    assert_eq!(1, t.prep_shares.len(), "#{test_num}");
     for (i, want) in t.prep_shares[0].iter().enumerate() {
         assert_eq!(
             prep_shares[i],
             Prio3PrepareShare::get_decoded_with_param(&states[i], want.as_ref())
                 .unwrap_or_else(|e| err!(test_num, e, "decode test vector (prep share)")),
-            "#{}",
-            test_num
+            "#{test_num}"
         );
-        assert_eq!(prep_shares[i].get_encoded(), want.as_ref(), "#{}", test_num);
+        assert_eq!(prep_shares[i].get_encoded(), want.as_ref(), "#{test_num}");
     }
 
     let inbound = prio3
