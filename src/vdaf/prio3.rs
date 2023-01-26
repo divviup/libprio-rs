@@ -121,8 +121,7 @@ impl Prio3Aes128Sum {
     pub fn new_aes128_sum(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
         if bits > 64 {
             return Err(VdafError::Uncategorized(format!(
-                "bit length ({}) exceeds limit for aggregate type (64)",
-                bits
+                "bit length ({bits}) exceeds limit for aggregate type (64)"
             )));
         }
 
@@ -900,13 +899,11 @@ impl<const L: usize> HelperShare<L> {
 fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
     if num_aggregators == 0 {
         return Err(VdafError::Uncategorized(format!(
-            "at least one aggregator is required; got {}",
-            num_aggregators
+            "at least one aggregator is required; got {num_aggregators}"
         )));
     } else if num_aggregators > 254 {
         return Err(VdafError::Uncategorized(format!(
-            "number of aggregators must not exceed 254; got {}",
-            num_aggregators
+            "number of aggregators must not exceed 254; got {num_aggregators}"
         )));
     }
 

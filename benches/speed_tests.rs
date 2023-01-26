@@ -220,7 +220,7 @@ pub fn prio3_client(c: &mut Criterion) {
         bits,
         prio3_input_share_size(&prio3.shard(&measurement).unwrap())
     );
-    c.bench_function(&format!("prio3 sum ({} bits)", bits), |b| {
+    c.bench_function(&format!("prio3 sum ({bits} bits)"), |b| {
         b.iter(|| {
             prio3.shard(&measurement).unwrap();
         })
@@ -234,7 +234,7 @@ pub fn prio3_client(c: &mut Criterion) {
         len,
         prio3_input_share_size(&prio3.shard(&measurement).unwrap())
     );
-    c.bench_function(&format!("prio3 countvec ({} len)", len), |b| {
+    c.bench_function(&format!("prio3 countvec ({len} len)"), |b| {
         b.iter(|| {
             prio3.shard(&measurement).unwrap();
         })
@@ -249,7 +249,7 @@ pub fn prio3_client(c: &mut Criterion) {
             len,
             prio3_input_share_size(&prio3.shard(&measurement).unwrap())
         );
-        c.bench_function(&format!("prio3 parallel countvec ({} len)", len), |b| {
+        c.bench_function(&format!("prio3 parallel countvec ({len} len)"), |b| {
             b.iter(|| {
                 prio3.shard(&measurement).unwrap();
             })

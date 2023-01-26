@@ -880,14 +880,12 @@ mod tests {
         let v = typ.valid(&mut gadgets, input, &joint_rand, 1)?;
         if v != T::Field::zero() && t.expect_valid {
             return Err(FlpError::Test(format!(
-                "expected valid input: valid() returned {}",
-                v
+                "expected valid input: valid() returned {v}"
             )));
         }
         if v == T::Field::zero() && !t.expect_valid {
             return Err(FlpError::Test(format!(
-                "expected invalid input: valid() returned {}",
-                v
+                "expected invalid input: valid() returned {v}"
             )));
         }
 
@@ -1008,8 +1006,7 @@ mod tests {
 
             if &got != want {
                 return Err(FlpError::Test(format!(
-                    "unexpected output: got {:?}; want {:?}",
-                    got, want
+                    "unexpected output: got {got:?}; want {want:?}"
                 )));
             }
         }

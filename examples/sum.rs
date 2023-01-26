@@ -26,7 +26,7 @@ fn main() {
     let mut client2 = Client::new(dim, pub_key1, pub_key2).unwrap();
 
     let data1_u32 = [0, 0, 1, 0, 0, 0, 0, 0];
-    println!("Client 1 Input: {:?}", data1_u32);
+    println!("Client 1 Input: {data1_u32:?}");
 
     let data1 = data1_u32
         .iter()
@@ -34,7 +34,7 @@ fn main() {
         .collect::<Vec<Field32>>();
 
     let data2_u32 = [0, 0, 1, 0, 0, 0, 0, 0];
-    println!("Client 2 Input: {:?}", data2_u32);
+    println!("Client 2 Input: {data2_u32:?}");
 
     let data2 = data2_u32
         .iter()

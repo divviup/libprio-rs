@@ -551,8 +551,7 @@ where
 
         if count != 2 {
             return Err(VdafError::Uncategorized(format!(
-                "unexpected message count: got {}; want 2",
-                count,
+                "unexpected message count: got {count}; want 2",
             )));
         }
 
@@ -808,8 +807,7 @@ mod tests {
 
         if expected_output != &output {
             return Err(VdafError::Uncategorized(format!(
-                "eval_idpf(): unexpected output: got {:?}; want {:?}",
-                output, expected_output
+                "eval_idpf(): unexpected output: got {output:?}; want {expected_output:?}"
             )));
         }
 
