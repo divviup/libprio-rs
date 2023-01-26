@@ -220,7 +220,7 @@ impl Display for Field255 {
         let encoded: [u8; Self::ENCODED_SIZE] = (*self).into();
         write!(f, "0x")?;
         for byte in encoded {
-            write!(f, "{:02x}", byte)?;
+            write!(f, "{byte:02x}")?;
         }
         Ok(())
     }

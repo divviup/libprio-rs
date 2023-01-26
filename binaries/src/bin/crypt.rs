@@ -73,7 +73,7 @@ impl FromStr for Input {
         }
 
         Ok(Self::Path(PathBuf::from_str(s).map_err(|e| {
-            format!("argument could not be parsed as base64 or path: {:?}", e)
+            format!("argument could not be parsed as base64 or path: {e:?}")
         })?))
     }
 }
@@ -114,7 +114,7 @@ impl FromStr for Output {
         }
 
         Ok(Self::Path(PathBuf::from_str(s).map_err(|e| {
-            format!("argument could not be parsed as base64 or path: {:?}", e)
+            format!("argument could not be parsed as base64 or path: {e:?}")
         })?))
     }
 }
@@ -215,7 +215,7 @@ fn decrypt(
         .ok_or_else(|| eyre!("failed to reconstruct input shares"))?;
 
     if pretty_print {
-        writeln!(&mut decrypted_input.into_writer()?, "{:?}", reconstructed)
+        writeln!(&mut decrypted_input.into_writer()?, "{reconstructed:?}")
             .wrap_err("failed to pretty-print reconstructed output")
     } else {
         decrypted_input

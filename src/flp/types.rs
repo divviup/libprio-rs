@@ -236,7 +236,7 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
         // Compute the average from the aggregated sum.
         let data = decode_result(data)?;
         let data: u64 = data.try_into().map_err(|err| {
-            FlpError::Decode(format!("failed to convert {:?} to u64: {}", data, err,))
+            FlpError::Decode(format!("failed to convert {data:?} to u64: {err}",))
         })?;
         let result = (data as f64) / (num_measurements as f64);
         Ok(result)
@@ -1087,14 +1087,12 @@ mod test_utils {
         let v = typ.valid(&mut gadgets, input, &joint_rand, 1)?;
         if v != T::Field::zero() && t.expect_valid {
             return Err(FlpError::Test(format!(
-                "expected valid input: valid() returned {}",
-                v
+                "expected valid input: valid() returned {v}"
             )));
         }
         if v == T::Field::zero() && !t.expect_valid {
             return Err(FlpError::Test(format!(
-                "expected invalid input: valid() returned {}",
-                v
+                "expected invalid input: valid() returned {v}"
             )));
         }
 
@@ -1215,8 +1213,7 @@ mod test_utils {
 
             if &got != want {
                 return Err(FlpError::Test(format!(
-                    "unexpected output: got {:?}; want {:?}",
-                    got, want
+                    "unexpected output: got {got:?}; want {want:?}"
                 )));
             }
         }
