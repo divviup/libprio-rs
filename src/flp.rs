@@ -403,8 +403,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
                     == Self::Field::one()
                 {
                     return Err(FlpError::Query(format!(
-                        "invalid query randomness: encountered 2^{}-th root of unity",
-                        m
+                        "invalid query randomness: encountered 2^{m}-th root of unity"
                     )));
                 }
 

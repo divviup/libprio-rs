@@ -1113,17 +1113,16 @@ mod tests {
             assert_eq!(
                 F::generator().pow(int_order),
                 F::root(l).unwrap(),
-                "failure for F::root({})",
-                l
+                "failure for F::root({l})"
             );
             int_order = int_order >> 1;
         }
 
         // formatting
-        assert_eq!(format!("{}", zero), "0");
-        assert_eq!(format!("{}", one), "1");
-        assert_eq!(format!("{:?}", zero), "0");
-        assert_eq!(format!("{:?}", one), "1");
+        assert_eq!(format!("{zero}"), "0");
+        assert_eq!(format!("{one}"), "1");
+        assert_eq!(format!("{zero:?}"), "0");
+        assert_eq!(format!("{one:?}"), "1");
 
         let three = F::from(F::Integer::try_from(3).unwrap());
         let mut powers_of_three = Vec::with_capacity(500);

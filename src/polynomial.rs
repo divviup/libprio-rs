@@ -312,7 +312,7 @@ mod tests {
         for i in start..end {
             let x = Field64::from(i as u64);
             let y = poly_eval(&p, x);
-            assert_eq!(y, Field64::zero(), "range check failed for {}", i);
+            assert_eq!(y, Field64::zero(), "range check failed for {i}");
         }
 
         // Check the number below the range.
