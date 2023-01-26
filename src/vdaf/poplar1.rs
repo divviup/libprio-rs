@@ -809,7 +809,7 @@ mod tests {
                 &input.prefix(prefix_len),
                 &[Field128::one(), Field128::one()],
             );
-            assert!(res.is_ok(), "prefix_len={} error: {:?}", prefix_len, res);
+            assert!(res.is_ok(), "prefix_len={prefix_len} error: {res:?}");
         }
 
         // Try evaluating the IDPF keys on incorrect prefixes.
