@@ -155,7 +155,6 @@ fn x963_kdf(z: &[u8], shared_info: &[u8]) -> [u8; 32] {
     hasher.update(&1u32.to_be_bytes());
     hasher.update(shared_info);
     let digest = hasher.finish();
-    use std::convert::TryInto;
     // unwrap never fails because SHA256 output len is 32
     digest.as_ref().try_into().unwrap()
 }
