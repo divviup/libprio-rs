@@ -2,7 +2,7 @@
 name = "prio"
 version = "0.8.5"
 authors = ["Josh Aas <jaas@kflag.net>", "Tim Geoghegan <timg@letsencrypt.org>", "Christopher Patton <cpatton@cloudflare.com", "Karl Tarbe <tarbe@apple.com>"]
-edition = "2018"
+edition = "2021"
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0"
 repository = "https://github.com/divviup/libprio-rs"
