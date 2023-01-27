@@ -141,7 +141,7 @@ pub trait Vdaf: Clone + Debug {
     type AggregationParam: Clone + Debug + Decode + Encode;
 
     /// A public share sent by a Client.
-    type PublicShare: Clone + Debug + for<'a> ParameterizedDecode<&'a Self> + Encode;
+    type PublicShare: Clone + Debug + ParameterizedDecode<Self> + Encode;
 
     /// An input share sent by a Client.
     type InputShare: Clone + Debug + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
