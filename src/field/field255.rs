@@ -17,6 +17,7 @@ use std::{
     fmt::{self, Debug, Display, Formatter},
     io::{Cursor, Read},
     marker::PhantomData,
+    mem::size_of,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
 use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
@@ -289,6 +290,24 @@ impl Default for Field255 {
     }
 }
 
+impl TryFrom<Field255> for u64 {
+    type Error = FieldError;
+
+    fn try_from(elem: Field255) -> Result<u64, FieldError> {
+        const PREFIX_LEN: usize = size_of::<u64>();
+        let mut le_bytes = [0; 32];
+
+        fiat_25519_to_bytes(&mut le_bytes, &elem.0);
+        if !bool::from(le_bytes[PREFIX_LEN..].ct_eq(&[0_u8; 32 - PREFIX_LEN])) {
+            return Err(FieldError::IntegerTryFrom);
+        }
+
+        Ok(u64::from_le_bytes(
+            le_bytes[..PREFIX_LEN].try_into().unwrap(),
+        ))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Field255, MODULUS_BIG_ENDIAN};
@@ -456,6 +475,18 @@ mod tests {
                 0xff, 0xff, 0xff, 0xff
             ]
         );
+
+        let want: u64 = 0xffffffffffffffff;
+        assert_eq!(u64::try_from(Field255::from(want)).unwrap(), want);
+
+        let want: u64 = 0x7000000000000001;
+        assert_eq!(u64::try_from(Field255::from(want)).unwrap(), want);
+
+        let want: u64 = 0x1234123412341234;
+        assert_eq!(u64::try_from(Field255::from(want)).unwrap(), want);
+
+        assert!(u64::try_from(Field255::try_from_bytes(&[1; 32], false).unwrap()).is_err());
+        assert!(u64::try_from(Field255::try_from_bytes(&[2; 32], false).unwrap()).is_err());
     }
 
     #[test]
