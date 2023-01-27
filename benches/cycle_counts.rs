@@ -8,7 +8,7 @@ use prio::field::FieldElement;
 use prio::{
     codec::{Decode, ParameterizedDecode},
     field::Field255,
-    idpf::{self, IdpfInput, IdpfPoplarPublicShare, RingBufferCache},
+    idpf::{self, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::prg::{PrgAes128, Seed},
 };
 #[cfg(feature = "prio2")]
@@ -190,7 +190,7 @@ fn idpf_poplar_gen_2048() {
 #[cfg(feature = "experimental")]
 fn idpf_poplar_eval(
     input: &IdpfInput,
-    public_share: &IdpfPoplarPublicShare<Field64, Field255, 16, 2>,
+    public_share: &IdpfPublicShare<Field64, Field255, 16, 2>,
     key: &Seed<16>,
 ) {
     let mut cache = RingBufferCache::new(1);
@@ -200,7 +200,7 @@ fn idpf_poplar_eval(
 #[cfg(feature = "experimental")]
 fn idpf_poplar_eval_8() {
     let input = IdpfInput::from_bytes(b"A");
-    let public_share = IdpfPoplarPublicShare::get_decoded_with_param(&8, &[0x7f; 306]).unwrap();
+    let public_share = IdpfPublicShare::get_decoded_with_param(&8, &[0x7f; 306]).unwrap();
     let key = Seed::get_decoded(&[0xff; 16]).unwrap();
     idpf_poplar_eval(&input, &public_share, &key);
 }
@@ -208,7 +208,7 @@ fn idpf_poplar_eval_8() {
 #[cfg(feature = "experimental")]
 fn idpf_poplar_eval_128() {
     let input = IdpfInput::from_bytes(b"AAAAAAAAAAAAAAAA");
-    let public_share = IdpfPoplarPublicShare::get_decoded_with_param(&128, &[0x7f; 4176]).unwrap();
+    let public_share = IdpfPublicShare::get_decoded_with_param(&128, &[0x7f; 4176]).unwrap();
     let key = Seed::get_decoded(&[0xff; 16]).unwrap();
     idpf_poplar_eval(&input, &public_share, &key);
 }
@@ -216,8 +216,7 @@ fn idpf_poplar_eval_128() {
 #[cfg(feature = "experimental")]
 fn idpf_poplar_eval_2048() {
     let input = IdpfInput::from_bytes(&[0x41; 256]);
-    let public_share =
-        IdpfPoplarPublicShare::get_decoded_with_param(&2048, &[0x7f; 66096]).unwrap();
+    let public_share = IdpfPublicShare::get_decoded_with_param(&2048, &[0x7f; 66096]).unwrap();
     let key = Seed::get_decoded(&[0xff; 16]).unwrap();
     idpf_poplar_eval(&input, &public_share, &key);
 }
