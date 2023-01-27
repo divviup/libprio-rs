@@ -403,6 +403,6 @@ criterion_group!(benches, prio3_client, poly_mul, prng, fft, idpf);
 #[cfg(all(feature = "prio2", not(feature = "experimental")))]
 criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft);
 #[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]
-criterion_group!(benches, prio3_client, poly_mul, prng, fft);
+criterion_group!(benches, prng, prio3_client, poly_mul, fft);
 
 criterion_main!(benches);

@@ -32,7 +32,6 @@ pub(crate) struct Prng<F, S> {
     seed_stream: S,
     buffer: Vec<u8>,
     buffer_index: usize,
-    output_written: usize,
 }
 
 #[cfg(feature = "crypto-dependencies")]
@@ -67,7 +66,6 @@ where
             seed_stream,
             buffer,
             buffer_index: 0,
-            output_written: 0,
         }
     }
 
@@ -76,21 +74,48 @@ where
             // Seek to the next chunk of the buffer that encodes an element of F.
             for i in (self.buffer_index..self.buffer.len()).step_by(F::ENCODED_SIZE) {
                 let j = i + F::ENCODED_SIZE;
+
+                if j > self.buffer.len() {
+                    break;
+                }
+
+                self.buffer_index = j;
+
                 if let Some(x) = match F::try_from_random(&self.buffer[i..j]) {
                     Ok(x) => Some(x),
                     Err(FieldError::ModulusOverflow) => None, // reject this sample
                     Err(err) => panic!("unexpected error: {err}"),
                 } {
-                    // Set the buffer index to the next chunk.
-                    self.buffer_index = j;
-                    self.output_written += 1;
                     return x;
                 }
             }
 
-            // Refresh buffer with the next chunk of PRG output.
-            self.seed_stream.fill(&mut self.buffer);
+            // Refresh buffer with the next chunk of PRG output, filling the front of the buffer
+            // with the leftovers. This ensures continuity of the seed stream after converting the
+            // `Prng` to a new field type via `into_new_field()`.
+            let left_over = self.buffer.len() - self.buffer_index;
+            self.buffer.copy_within(self.buffer_index.., 0);
+            self.seed_stream.fill(&mut self.buffer[left_over..]);
             self.buffer_index = 0;
+        }
+    }
+
+    /// Convert this object into a field element generator for a different field.
+    //
+    // TODO(cjpatton) spec: Consider using distinct seeds for distinct field types. Buffering the
+    // seed stream seems to be important for performance, at least according to the benchmarks for
+    // `PrgAes128`. But having to support multiple output types is delicate because the buffer size
+    // is computed from the field modulus.
+    //
+    // TODO(cjpatton) If we don't end up making this spec change, then add tests to ensure that
+    // changing field types is done correctly.
+    #[cfg(test)]
+    pub(crate) fn into_new_field<F1: FieldElement>(self) -> Prng<F1, S> {
+        Prng {
+            phantom: PhantomData,
+            seed_stream: self.seed_stream,
+            buffer: self.buffer,
+            buffer_index: self.buffer_index,
         }
     }
 }
@@ -206,5 +231,40 @@ mod tests {
         let expected = Field96::from(39729620190871453347343769187);
         let actual = prng.nth(145).unwrap();
         assert_eq!(actual, expected);
+    }
+
+    // Test that the `Prng`'s internal buffer properly copies the end of the buffer to the front
+    // once it reaches the end.
+    #[test]
+    fn left_over_buffer_back_fill() {
+        let seed = Seed::generate().unwrap();
+
+        let mut prng: Prng<Field96, SeedStreamAes128> =
+            Prng::from_seed_stream(PrgAes128::seed_stream(&seed, b""));
+
+        // Construct a `Prng` with a longer-than-usual buffer.
+        let mut prng_weird_buffer_size: Prng<Field96, SeedStreamAes128> =
+            Prng::from_seed_stream(PrgAes128::seed_stream(&seed, b""));
+        let mut extra = [0; 7];
+        prng_weird_buffer_size.seed_stream.fill(&mut extra);
+        prng_weird_buffer_size.buffer.extend_from_slice(&extra);
+
+        // Check that the next several outputs match. We need to check enough outputs to ensure
+        // that we have to refill the buffer.
+        for _ in 0..BUFFER_SIZE_IN_ELEMENTS * 2 {
+            assert_eq!(prng.next().unwrap(), prng_weird_buffer_size.next().unwrap());
+        }
+    }
+
+    #[test]
+    fn into_new_field() {
+        let seed = Seed::generate().unwrap();
+        let want: Prng<Field96, SeedStreamAes128> =
+            Prng::from_seed_stream(PrgAes128::seed_stream(&seed, b""));
+        let want_buffer = want.buffer.clone();
+
+        let got: Prng<FieldPrio2, _> = want.into_new_field();
+        assert_eq!(got.buffer_index, 0);
+        assert_eq!(got.buffer, want_buffer);
     }
 }
