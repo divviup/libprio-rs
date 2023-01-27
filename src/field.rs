@@ -25,6 +25,7 @@ use std::{
     marker::PhantomData,
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub, SubAssign},
 };
+use subtle::{Choice, ConstantTimeEq};
 
 #[cfg(feature = "experimental")]
 mod field255;
@@ -72,6 +73,7 @@ pub trait FieldElement:
     + Copy
     + PartialEq
     + Eq
+    + ConstantTimeEq
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
@@ -420,6 +422,12 @@ macro_rules! make_field {
             }
         }
 
+        impl ConstantTimeEq for $elem {
+            fn ct_eq(&self, rhs: &Self) -> Choice {
+                self.0.ct_eq(&rhs.0)
+            }
+        }
+
         impl Hash for $elem {
             fn hash<H: Hasher>(&self, state: &mut H) {
                 // The fields included in this hash MUST match the fields used
@@ -756,7 +764,7 @@ pub(crate) fn merge_vector<F: FieldElement>(
 }
 
 /// Outputs an additive secret sharing of the input.
-#[cfg(all(feature = "crypto-dependencies", any(test, feature = "experimental")))]
+#[cfg(all(feature = "crypto-dependencies", test))]
 pub(crate) fn split_vector<F: FieldElement>(
     inp: &[F],
     num_shares: usize,

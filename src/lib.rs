@@ -22,6 +22,8 @@ mod fft;
 pub mod field;
 pub mod flp;
 mod fp;
+#[cfg(feature = "experimental")]
+pub mod idpf;
 mod polynomial;
 mod prng;
 // Module test_vector depends on crate `rand` so we make it an optional feature
