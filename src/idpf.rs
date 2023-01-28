@@ -194,7 +194,7 @@ fn generate_correction_word<F, P, const L: usize, const OUT_LEN: usize>(
     value: [F; OUT_LEN],
     keys: &mut [[u8; L]; 2],
     control_bits: &mut [Choice; 2],
-) -> IdpfPoplarCorrectionWord<F, L, OUT_LEN>
+) -> IdpfCorrectionWord<F, L, OUT_LEN>
 where
     F: FieldElement + From<u64>,
     P: Prg<L>,
@@ -250,7 +250,7 @@ where
         *out = (*value - *element_0 + *element_1) * sign;
     }
 
-    IdpfPoplarCorrectionWord {
+    IdpfCorrectionWord {
         seed: cw_seed,
         control_bits: cw_control_bits,
         field_vec: cw_field_vec,
@@ -263,7 +263,7 @@ fn eval_next<F, P, const L: usize, const OUT_LEN: usize>(
     is_leader: bool,
     key: &mut [u8; L],
     control_bit: &mut Choice,
-    correction_word: &IdpfPoplarCorrectionWord<F, L, OUT_LEN>,
+    correction_word: &IdpfCorrectionWord<F, L, OUT_LEN>,
     input_bit: Choice,
 ) -> [F; OUT_LEN]
 where
@@ -309,7 +309,7 @@ fn gen_with_rand_source<
     inner_values: M,
     leaf_value: [FL; OUT_LEN],
     rand_source: RandSource,
-) -> Result<(IdpfPoplarPublicShare<FI, FL, L, OUT_LEN>, [Seed<L>; 2]), VdafError>
+) -> Result<(IdpfPublicShare<FI, FL, L, OUT_LEN>, [Seed<L>; 2]), VdafError>
 where
     FI: FieldElement + From<u64>,
     FL: FieldElement + From<u64>,
@@ -348,7 +348,7 @@ where
         &mut keys,
         &mut control_bits,
     );
-    let public_share = IdpfPoplarPublicShare {
+    let public_share = IdpfPublicShare {
         inner_correction_words,
         leaf_correction_word,
     };
@@ -356,7 +356,7 @@ where
     Ok((public_share, initial_keys))
 }
 
-/// The IdpfPoplar key generation algorithm.
+/// The Idpf key generation algorithm.
 ///
 /// Generate and return a sequence of IDPF shares for `input`. The parameters `inner_values`
 /// and `leaf_value` provide the output values for each successive level of the prefix tree.
@@ -364,13 +364,7 @@ pub fn gen<M, P, const L: usize, const OUT_LEN: usize>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: [Field255; OUT_LEN],
-) -> Result<
-    (
-        IdpfPoplarPublicShare<Field64, Field255, L, OUT_LEN>,
-        [Seed<L>; 2],
-    ),
-    VdafError,
->
+) -> Result<(IdpfPublicShare<Field64, Field255, L, OUT_LEN>, [Seed<L>; 2]), VdafError>
 where
     M: IntoIterator<Item = [Field64; OUT_LEN]>,
     P: Prg<L>,
@@ -391,7 +385,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn eval_from_node<P, const L: usize, const OUT_LEN: usize>(
     is_leader: bool,
-    public_share: &IdpfPoplarPublicShare<Field64, Field255, L, OUT_LEN>,
+    public_share: &IdpfPublicShare<Field64, Field255, L, OUT_LEN>,
     start_level: usize,
     mut key: [u8; L],
     mut control_bit: Choice,
@@ -435,12 +429,12 @@ where
     }
 }
 
-/// The IdpfPoplar key evaluation algorithm.
+/// The Idpf key evaluation algorithm.
 ///
 /// Evaluate an IDPF share on `prefix`.
 pub fn eval<P, const L: usize, const OUT_LEN: usize>(
     agg_id: usize,
-    public_share: &IdpfPoplarPublicShare<Field64, Field255, L, OUT_LEN>,
+    public_share: &IdpfPublicShare<Field64, Field255, L, OUT_LEN>,
     key: &Seed<L>,
     prefix: &IdpfInput,
     cache: &mut dyn IdpfCache<L>,
@@ -503,18 +497,18 @@ where
     )
 }
 
-/// IDPF public share used by Poplar1. This contains the lists of correction words used by all
+/// IDPF public share used by 1. This contains the lists of correction words used by all
 /// parties when evaluating the IDPF.
 #[derive(Debug, Clone)]
-pub struct IdpfPoplarPublicShare<FI, FL, const L: usize, const OUT_LEN: usize> {
+pub struct IdpfPublicShare<FI, FL, const L: usize, const OUT_LEN: usize> {
     /// Correction words for each inner node level.
-    inner_correction_words: Vec<IdpfPoplarCorrectionWord<FI, L, OUT_LEN>>,
+    inner_correction_words: Vec<IdpfCorrectionWord<FI, L, OUT_LEN>>,
     /// Correction word for the leaf node level.
-    leaf_correction_word: IdpfPoplarCorrectionWord<FL, L, OUT_LEN>,
+    leaf_correction_word: IdpfCorrectionWord<FL, L, OUT_LEN>,
 }
 
 impl<FI, FL, const L: usize, const OUT_LEN: usize> ConstantTimeEq
-    for IdpfPoplarPublicShare<FI, FL, L, OUT_LEN>
+    for IdpfPublicShare<FI, FL, L, OUT_LEN>
 where
     FI: ConstantTimeEq,
     FL: ConstantTimeEq,
@@ -526,8 +520,7 @@ where
     }
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> PartialEq
-    for IdpfPoplarPublicShare<FI, FL, L, OUT_LEN>
+impl<FI, FL, const L: usize, const OUT_LEN: usize> PartialEq for IdpfPublicShare<FI, FL, L, OUT_LEN>
 where
     FI: ConstantTimeEq,
     FL: ConstantTimeEq,
@@ -537,15 +530,14 @@ where
     }
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> Eq for IdpfPoplarPublicShare<FI, FL, L, OUT_LEN>
+impl<FI, FL, const L: usize, const OUT_LEN: usize> Eq for IdpfPublicShare<FI, FL, L, OUT_LEN>
 where
     FI: ConstantTimeEq,
     FL: ConstantTimeEq,
 {
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> Encode
-    for IdpfPoplarPublicShare<FI, FL, L, OUT_LEN>
+impl<FI, FL, const L: usize, const OUT_LEN: usize> Encode for IdpfPublicShare<FI, FL, L, OUT_LEN>
 where
     FI: Encode,
     FL: Encode,
@@ -586,7 +578,7 @@ where
 }
 
 impl<FI, FL, const L: usize, const OUT_LEN: usize> ParameterizedDecode<usize>
-    for IdpfPoplarPublicShare<FI, FL, L, OUT_LEN>
+    for IdpfPublicShare<FI, FL, L, OUT_LEN>
 where
     FI: Decode + Default + Copy,
     FL: Decode + Default + Copy,
@@ -606,7 +598,7 @@ where
             for out in field_vec.iter_mut() {
                 *out = FI::decode(bytes)?;
             }
-            inner_correction_words.push(IdpfPoplarCorrectionWord {
+            inner_correction_words.push(IdpfCorrectionWord {
                 seed,
                 control_bits,
                 field_vec,
@@ -622,7 +614,7 @@ where
         for out in field_vec.iter_mut() {
             *out = FL::decode(bytes)?;
         }
-        let leaf_correction_word = IdpfPoplarCorrectionWord {
+        let leaf_correction_word = IdpfCorrectionWord {
             seed,
             control_bits,
             field_vec,
@@ -633,7 +625,7 @@ where
             return Err(CodecError::UnexpectedValue);
         }
 
-        Ok(IdpfPoplarPublicShare {
+        Ok(IdpfPublicShare {
             inner_correction_words,
             leaf_correction_word,
         })
@@ -641,14 +633,13 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct IdpfPoplarCorrectionWord<F, const L: usize, const OUT_LEN: usize> {
+struct IdpfCorrectionWord<F, const L: usize, const OUT_LEN: usize> {
     seed: [u8; L],
     control_bits: [Choice; 2],
     field_vec: [F; OUT_LEN],
 }
 
-impl<F, const L: usize, const OUT_LEN: usize> ConstantTimeEq
-    for IdpfPoplarCorrectionWord<F, L, OUT_LEN>
+impl<F, const L: usize, const OUT_LEN: usize> ConstantTimeEq for IdpfCorrectionWord<F, L, OUT_LEN>
 where
     F: ConstantTimeEq,
 {
@@ -659,7 +650,7 @@ where
     }
 }
 
-impl<F, const L: usize, const OUT_LEN: usize> PartialEq for IdpfPoplarCorrectionWord<F, L, OUT_LEN>
+impl<F, const L: usize, const OUT_LEN: usize> PartialEq for IdpfCorrectionWord<F, L, OUT_LEN>
 where
     F: ConstantTimeEq,
 {
@@ -668,7 +659,7 @@ where
     }
 }
 
-impl<F, const L: usize, const OUT_LEN: usize> Eq for IdpfPoplarCorrectionWord<F, L, OUT_LEN> where
+impl<F, const L: usize, const OUT_LEN: usize> Eq for IdpfCorrectionWord<F, L, OUT_LEN> where
     F: ConstantTimeEq
 {
 }
@@ -857,8 +848,8 @@ mod tests {
     use subtle::Choice;
 
     use super::{
-        HashMapCache, IdpfCache, IdpfInput, IdpfOutputShare, IdpfPoplarCorrectionWord,
-        IdpfPoplarPublicShare, NoCache, RingBufferCache,
+        HashMapCache, IdpfCache, IdpfCorrectionWord, IdpfInput, IdpfOutputShare, IdpfPublicShare,
+        NoCache, RingBufferCache,
     };
     use crate::{
         codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -1050,7 +1041,7 @@ mod tests {
     }
 
     fn check_idpf_poplar_evaluation<P, const L: usize, const OUT_LEN: usize>(
-        public_share: &IdpfPoplarPublicShare<Field64, Field255, L, OUT_LEN>,
+        public_share: &IdpfPublicShare<Field64, Field255, L, OUT_LEN>,
         keys: &[Seed<L>; 2],
         prefix: &IdpfInput,
         expected_output: &IdpfOutputShare<OUT_LEN, Field64, Field255>,
@@ -1384,9 +1375,9 @@ mod tests {
 
     #[test]
     fn idpf_poplar_public_share_round_trip() {
-        let public_share = IdpfPoplarPublicShare {
+        let public_share = IdpfPublicShare {
             inner_correction_words: Vec::from([
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0xab; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
                     field_vec: [
@@ -1394,7 +1385,7 @@ mod tests {
                         Field64::try_from(125159u64).unwrap(),
                     ],
                 },
-                IdpfPoplarCorrectionWord{
+                IdpfCorrectionWord{
                     seed: [0xcd;16],
                     control_bits: [Choice::from(0), Choice::from(1)],
                     field_vec: [
@@ -1403,7 +1394,7 @@ mod tests {
                     ],
                 },
             ]),
-            leaf_correction_word: IdpfPoplarCorrectionWord {
+            leaf_correction_word: IdpfCorrectionWord {
                 seed: [0xff; 16],
                 control_bits: [Choice::from(1), Choice::from(1)],
                 field_vec: [
@@ -1428,55 +1419,55 @@ mod tests {
         ))
         .unwrap();
         let encoded = public_share.get_encoded();
-        let decoded = IdpfPoplarPublicShare::get_decoded_with_param(&3, &message).unwrap();
+        let decoded = IdpfPublicShare::get_decoded_with_param(&3, &message).unwrap();
         assert_eq!(public_share, decoded);
         assert_eq!(message, encoded);
 
         // check serialization of packed control bits when they span multiple bytes:
-        let public_share = IdpfPoplarPublicShare {
+        let public_share = IdpfPublicShare {
             inner_correction_words: Vec::from([
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(0), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
                     field_vec: [Field64::zero(), Field64::zero()],
                 },
             ]),
-            leaf_correction_word: IdpfPoplarCorrectionWord {
+            leaf_correction_word: IdpfCorrectionWord {
                 seed: [0; 16],
                 control_bits: [Choice::from(0), Choice::from(1)],
                 field_vec: [Field255::zero(), Field255::zero()],
@@ -1514,7 +1505,7 @@ mod tests {
         ))
         .unwrap();
         let encoded = public_share.get_encoded();
-        let decoded = IdpfPoplarPublicShare::get_decoded_with_param(&9, &message).unwrap();
+        let decoded = IdpfPublicShare::get_decoded_with_param(&9, &message).unwrap();
         assert_eq!(public_share, decoded);
         assert_eq!(message, encoded);
     }
@@ -1550,16 +1541,16 @@ mod tests {
         ];
 
         for (control_bits, serialized_control_bits) in test_cases {
-            let public_share = IdpfPoplarPublicShare::<Field64, Field255, 16, 2> {
+            let public_share = IdpfPublicShare::<Field64, Field255, 16, 2> {
                 inner_correction_words: control_bits[..control_bits.len() - 2]
                     .chunks(2)
-                    .map(|chunk| IdpfPoplarCorrectionWord {
+                    .map(|chunk| IdpfCorrectionWord {
                         seed: [0; 16],
                         control_bits: [Choice::from(chunk[0] as u8), Choice::from(chunk[1] as u8)],
                         field_vec: [Field64::zero(); 2],
                     })
                     .collect(),
-                leaf_correction_word: IdpfPoplarCorrectionWord {
+                leaf_correction_word: IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [
                         Choice::from(control_bits[control_bits.len() - 2] as u8),
@@ -1581,7 +1572,7 @@ mod tests {
 
             assert_eq!(public_share.get_encoded(), serialized_public_share);
             assert_eq!(
-                IdpfPoplarPublicShare::get_decoded_with_param(&idpf_bits, &serialized_public_share)
+                IdpfPublicShare::get_decoded_with_param(&idpf_bits, &serialized_public_share)
                     .unwrap(),
                 public_share
             );
@@ -1593,13 +1584,13 @@ mod tests {
         let mut buf = vec![0u8; 4096];
 
         buf[0] = 1 << 2;
-        let err = IdpfPoplarPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
+        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
             &1,
             &mut Cursor::new(&buf),
         )
         .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
-        let err = IdpfPoplarPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
+        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
             &5,
             &mut Cursor::new(&buf),
         )
@@ -1607,7 +1598,7 @@ mod tests {
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 4;
-        let err = IdpfPoplarPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
+        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
             &2,
             &mut Cursor::new(&buf),
         )
@@ -1615,7 +1606,7 @@ mod tests {
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 6;
-        let err = IdpfPoplarPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
+        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
             &3,
             &mut Cursor::new(&buf),
         )
@@ -1623,8 +1614,8 @@ mod tests {
         assert_matches!(err, CodecError::UnexpectedValue);
     }
 
-    /// Stores a test vector for the IdpfPoplar key generation algorithm.
-    struct IdpfPoplarTestVector {
+    /// Stores a test vector for the Idpf key generation algorithm.
+    struct IdpfTestVector {
         /// The number of bits in IDPF inputs.
         bits: usize,
         /// The IDPF input provided to the key generation algorithm.
@@ -1639,8 +1630,8 @@ mod tests {
         public_share: Vec<u8>,
     }
 
-    /// Load a test vector for IdpfPoplar key generation.
-    fn load_idpfpoplar_test_vector() -> IdpfPoplarTestVector {
+    /// Load a test vector for Idpf key generation.
+    fn load_idpfpoplar_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
             serde_json::from_str(include_str!("vdaf/test_vec/03/IdpfPoplarAes128_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
@@ -1706,7 +1697,7 @@ mod tests {
         let public_share_hex = test_vec_obj.get("public_share").unwrap();
         let public_share = hex::decode(public_share_hex.as_str().unwrap()).unwrap();
 
-        IdpfPoplarTestVector {
+        IdpfTestVector {
             bits,
             alpha,
             beta_inner,
@@ -1719,7 +1710,7 @@ mod tests {
     #[test]
     fn idpf_poplar_public_share_deserialize() {
         // This encoded public share, and the expected struct below, are taken from the
-        // Poplar1Aes128 test vector.
+        // 1Aes128 test vector.
         let data = hex::decode(concat!(
             "9a",
             "0000000000000000000000000000000000000000000000",
@@ -1732,17 +1723,17 @@ mod tests {
         .unwrap();
         let bits = 4;
         let public_share =
-            IdpfPoplarPublicShare::<Field64, Field255, 16, 2>::get_decoded_with_param(&bits, &data)
+            IdpfPublicShare::<Field64, Field255, 16, 2>::get_decoded_with_param(&bits, &data)
                 .unwrap();
 
-        let expected_public_share = IdpfPoplarPublicShare {
+        let expected_public_share = IdpfPublicShare {
             inner_correction_words: Vec::from([
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(0), Choice::from(1)],
                     field_vec: [Field64::from(1u64), Field64::from(16949890756552313413u64)],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(0), Choice::from(1)],
                     field_vec: [
@@ -1750,7 +1741,7 @@ mod tests {
                         Field64::from(2473087798058630316u64),
                     ],
                 },
-                IdpfPoplarCorrectionWord {
+                IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
                     field_vec: [
@@ -1759,7 +1750,7 @@ mod tests {
                     ],
                 },
             ]),
-            leaf_correction_word: IdpfPoplarCorrectionWord {
+            leaf_correction_word: IdpfCorrectionWord {
                 seed: [0; 16],
                 control_bits: [Choice::from(0), Choice::from(1)],
                 field_vec: [
@@ -1798,11 +1789,9 @@ mod tests {
         assert_eq!(keys[0].0, test_vector.keys[0]);
         assert_eq!(keys[1].0, test_vector.keys[1]);
 
-        let expected_public_share = IdpfPoplarPublicShare::get_decoded_with_param(
-            &test_vector.bits,
-            &test_vector.public_share,
-        )
-        .unwrap();
+        let expected_public_share =
+            IdpfPublicShare::get_decoded_with_param(&test_vector.bits, &test_vector.public_share)
+                .unwrap();
         for (level, (correction_words, expected_correction_words)) in public_share
             .inner_correction_words
             .iter()
