@@ -636,39 +636,33 @@ delta = "0.1.9 -> 0.1.10"
 
 [audits.zcash.criteria.crypto-reviewed]
 description = "The cryptographic code in this crate has been reviewed for correctness by a member of a designated set of cryptography experts within the project."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [audits.zcash.criteria.license-reviewed]
 description = "The license of this crate has been reviewed for compatibility with its usage in this repository. If the crate is not available under the MIT license, `contrib/debian/copyright` has been updated with a corresponding copyright notice for files under `depends/*/vendored-sources/CRATE_NAME`."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.aead]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 delta = "0.4.3 -> 0.5.1"
 notes = "Adds an AeadCore::generate_nonce function to generate random nonces, given a CryptoRng."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.cipher]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 delta = "0.3.0 -> 0.4.3"
 notes = "Significant rework of (mainly RustCrypto-internal) APIs."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.cpufeatures]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "0.2.2 -> 0.2.5"
 notes = "Unsafe changes just introduce `#[inline(never)]` wrappers."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.crypto-common]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = ["crypto-reviewed", "safe-to-deploy"]
 delta = "0.1.3 -> 0.1.6"
 notes = "New trait and type alias look fine."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.getrandom]]
 who = "Jack Grigg <jack@z.cash>"
@@ -678,118 +672,101 @@ notes = """
 Checked that getrandom::wasi::getrandom_inner matches wasi::random_get.
 Checked that getrandom::util_libc::Weak lock ordering matches std::sys::unix::weak::DlsymWeak.
 """
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.indexmap]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.8.1 -> 1.9.1"
 notes = "I'm satisfied that the assertion guarding the new unsafe block is correct."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.inout]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 version = "0.1.3"
 notes = "Reviewed in full."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.itoa]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.1 -> 1.0.3"
 notes = "Update makes no changes to code."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.log]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "0.4.16 -> 0.4.17"
 notes = "I confirmed that the unsafe transmutes are fine; NonZeroU128 and NonZeroI128 are `#[repr(transparent)]` wrappers around u128 and i128 respectively."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.num-integer]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "0.1.44 -> 0.1.45"
 notes = "Fixes some argument-handling panic bugs."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.proc-macro2]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.37 -> 1.0.41"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.serde]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.136 -> 1.0.143"
 notes = "Bumps serde-derive and adds some constructors."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.serde]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.143 -> 1.0.145"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.serde_derive]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.136 -> 1.0.143"
 notes = "Bumps syn, inverts some build flags."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.serde_derive]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.143 -> 1.0.145"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.syn]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.91 -> 1.0.98"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.thiserror]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.30 -> 1.0.32"
 notes = "Bumps thiserror-impl, no code changes."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.thiserror]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.32 -> 1.0.37"
 notes = "The new build script invokes rustc to determine whether it supports the Provider API. The only side-effect is it overwrites `$OUT_DIR/probe.rs`, which is fine because it is unique to the thiserror package."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.thiserror-impl]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.30 -> 1.0.32"
 notes = "Only change is to refine an error message."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.thiserror-impl]]
 who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "1.0.32 -> 1.0.37"
 notes = "Proc macro changes migrating to the Provider API look fine."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.unicode-ident]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 version = "1.0.2"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.universal-hash]]
 who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 delta = "0.4.1 -> 0.5.0"
 notes = "I checked correctness of to_blocks which uses unsafe code in a safe function."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
