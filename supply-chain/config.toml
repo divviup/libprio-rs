@@ -516,3 +516,4 @@ criteria = "safe-to-deploy"
 [[exemptions.wyz]]
 version = "0.5.1"
 criteria = "safe-to-deploy"
+
