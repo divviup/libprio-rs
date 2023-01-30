@@ -31,12 +31,18 @@ use prio::{
 use prio::{
     field::{Field255, Field64},
     idpf::{self, IdpfInput, RingBufferCache},
-    vdaf::prg::PrgAes128,
+    vdaf::{
+        poplar1::{Poplar1, Poplar1AggregationParam},
+        prg::PrgAes128,
+        Aggregator,
+    },
 };
 #[cfg(feature = "experimental")]
-use rand::random;
+use rand::{prelude::*, random};
 #[cfg(feature = "experimental")]
 use std::iter;
+#[cfg(feature = "experimental")]
+use zipf::ZipfDistribution;
 
 /// This benchmark compares the performance of recursive and iterative FFT.
 pub fn fft(c: &mut Criterion) {
@@ -383,7 +389,8 @@ pub fn idpf(c: &mut Criterion) {
             b.iter(|| {
                 // This is an aggressively small cache, to minimize its impact on the benchmark.
                 // In this synthetic benchmark, we are only checking one candidate prefix per level
-                // instead of the usual two, so the cache hit rate will be unaffected.
+                // (typically there are many candidate prefixes per level) so the cache hit rate
+                // will be unaffected.
                 let mut cache = RingBufferCache::new(1);
 
                 for prefix_length in 1..=size {
@@ -396,10 +403,154 @@ pub fn idpf(c: &mut Criterion) {
     }
 }
 
+/// Benchmark Poplar1.
+#[cfg(feature = "experimental")]
+pub fn poplar1(c: &mut Criterion) {
+    let test_sizes = [16_usize, 128, 256];
+
+    let mut group = c.benchmark_group("poplar1_shard");
+    for size in test_sizes.iter() {
+        group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let measurement = IdpfInput::from_bools(&bits);
+            let vdaf = Poplar1::new_aes128(bits.len());
+
+            b.iter(|| {
+                vdaf.shard(&measurement).unwrap();
+            });
+        });
+    }
+    drop(group);
+
+    let mut group = c.benchmark_group("poplar1_prepare_init");
+    for size in test_sizes.iter() {
+        group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let vdaf = Poplar1::new_aes128(size);
+            let verify_key = random();
+            let nonce: [u8; 16] = random();
+
+            // Parameters are chosen to match Chris Wood's experimental setup:
+            // https://github.com/chris-wood/heavy-hitter-comparison
+            let (measurements, prefix_tree) = poplar1_generate_zipf_distributed_batch(
+                size, // bits
+                10,   // threshold
+                1000, // number of measurements
+                128,  // Zipf support
+                1.03, // Zipf exponent
+            );
+
+            // We are benchmarking preparation of a single report. For this test, it doesn't matter
+            // which measurement we generate a report for, so pick the first measurement
+            // arbitrarily.
+            let (public_share, input_shares) = vdaf.shard(&measurements[0]).unwrap();
+
+            // For the aggregation paramter, we use the candidate prefixes from the prefix tree
+            // for the sampled measurements. Run preparation for the last step, which ought to
+            // represent the worst-case performance.
+            let agg_param =
+                Poplar1AggregationParam::try_from_prefixes(prefix_tree[size - 1].clone()).unwrap();
+
+            b.iter(|| {
+                vdaf.prepare_init(
+                    &verify_key,
+                    0,
+                    &agg_param,
+                    &nonce,
+                    &public_share,
+                    &input_shares[0],
+                )
+                .unwrap();
+            });
+        });
+    }
+}
+
+/// Generate a set of Poplar1 measurements with the given bit length `bits`. They are sampled
+/// according to the Zipf distribution with parameters `zipf_support` and `zipf_exponent`. Return
+/// the measurements, along with the prefix tree for the desired threshold.
+///
+/// The prefix tree consists of a sequence of candidate prefixes for each level. For a given level,
+/// the candidate prefixes are computed from the hit counts of the prefixes at the previous level:
+/// For any prefix `p` whose hit count is at least the desired threshold, add `p || 0` and `p || 1`
+/// to the list.
+#[cfg(feature = "experimental")]
+fn poplar1_generate_zipf_distributed_batch(
+    bits: usize,
+    threshold: usize,
+    measurement_count: usize,
+    zipf_support: usize,
+    zipf_exponent: f64,
+) -> (Vec<IdpfInput>, Vec<Vec<IdpfInput>>) {
+    let mut rng = thread_rng();
+
+    // Generate random inputs.
+    let mut inputs = Vec::with_capacity(zipf_support);
+    for _ in 0..zipf_support {
+        let bools: Vec<bool> = (0..bits).map(|_| rng.gen()).collect();
+        inputs.push(IdpfInput::from_bools(&bools));
+    }
+
+    // Sample a number of inputs according to the Zipf distribution.
+    let mut samples = Vec::with_capacity(measurement_count);
+    let zipf = ZipfDistribution::new(zipf_support, zipf_exponent).unwrap();
+    for _ in 0..measurement_count {
+        samples.push(inputs[zipf.sample(&mut rng) - 1].clone());
+    }
+
+    // Compute the prefix tree for the desired threshold.
+    let mut prefix_tree = Vec::with_capacity(bits);
+    prefix_tree.push(vec![
+        IdpfInput::from_bools(&[false]),
+        IdpfInput::from_bools(&[true]),
+    ]);
+
+    for level in 0..bits - 1 {
+        // Compute the hit count of each prefix from the previous level.
+        let mut hit_counts = vec![0; prefix_tree[level].len()];
+        for (hit_count, prefix) in hit_counts.iter_mut().zip(prefix_tree[level].iter()) {
+            for sample in samples.iter() {
+                let mut is_prefix = true;
+                for j in 0..prefix.len() {
+                    if prefix[j] != sample[j] {
+                        is_prefix = false;
+                        break;
+                    }
+                }
+                if is_prefix {
+                    *hit_count += 1;
+                }
+            }
+        }
+
+        // Compute the next set of candidate prefixes.
+        let mut next_prefixes = Vec::new();
+        for (hit_count, prefix) in hit_counts.iter().zip(prefix_tree[level].iter()) {
+            if *hit_count >= threshold {
+                next_prefixes.push(prefix.clone_with_suffix(&[false]));
+                next_prefixes.push(prefix.clone_with_suffix(&[true]));
+            }
+        }
+        prefix_tree.push(next_prefixes);
+    }
+
+    (samples, prefix_tree)
+}
+
 #[cfg(all(feature = "prio2", feature = "experimental"))]
-criterion_group!(benches, prio3_client, idpf, count_vec, prng, fft, poly_mul);
+criterion_group!(
+    benches,
+    poplar1,
+    prio3_client,
+    count_vec,
+    poly_mul,
+    prng,
+    fft,
+    idpf
+);
 #[cfg(all(not(feature = "prio2"), feature = "experimental"))]
-criterion_group!(benches, prio3_client, idpf, prng, fft, poly_mul);
+criterion_group!(benches, poplar1, prio3_client, poly_mul, prng, fft, idpf);
 #[cfg(all(feature = "prio2", not(feature = "experimental")))]
 criterion_group!(benches, prio3_client, count_vec, prng, fft, poly_mul);
 #[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]
