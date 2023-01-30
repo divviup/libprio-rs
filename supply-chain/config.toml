@@ -542,3 +542,4 @@ criteria = "safe-to-run"
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
 criteria = "safe-to-deploy"
+
