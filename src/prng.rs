@@ -14,7 +14,7 @@ use getrandom::getrandom;
 
 use std::marker::PhantomData;
 
-const BUFFER_SIZE_IN_ELEMENTS: usize = 128;
+const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]

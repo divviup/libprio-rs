@@ -397,12 +397,12 @@ pub fn idpf(c: &mut Criterion) {
 }
 
 #[cfg(all(feature = "prio2", feature = "experimental"))]
-criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft, idpf);
+criterion_group!(benches, prio3_client, idpf, count_vec, prng, fft, poly_mul);
 #[cfg(all(not(feature = "prio2"), feature = "experimental"))]
-criterion_group!(benches, prio3_client, poly_mul, prng, fft, idpf);
+criterion_group!(benches, prio3_client, idpf, prng, fft, poly_mul);
 #[cfg(all(feature = "prio2", not(feature = "experimental")))]
-criterion_group!(benches, count_vec, prio3_client, poly_mul, prng, fft);
+criterion_group!(benches, prio3_client, count_vec, prng, fft, poly_mul);
 #[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]
-criterion_group!(benches, prng, prio3_client, poly_mul, fft);
+criterion_group!(benches, prio3_client, prng, fft, poly_mul);
 
 criterion_main!(benches);
