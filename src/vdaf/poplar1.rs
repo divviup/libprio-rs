@@ -641,6 +641,7 @@ where
 // TODO(cjpatton) spec: Consider deriving the shares of a, b, c for each level directly from the
 // seed, rather than iteratively, as we do in Doplar. This would be more efficient for the
 // Aggregators. As long as the Client isn't significantly slower, this should be a win.
+#[allow(non_snake_case)]
 fn compute_next_corr_shares<F: FieldElement + From<u64>, S: SeedStream>(
     prng: &mut Prng<F, S>,
     corr_prng_0: &mut Prng<F, S>,
@@ -651,9 +652,7 @@ fn compute_next_corr_shares<F: FieldElement + From<u64>, S: SeedStream>(
     let a = corr_prng_0.get() + corr_prng_1.get();
     let b = corr_prng_0.get() + corr_prng_1.get();
     let c = corr_prng_0.get() + corr_prng_1.get();
-    #[allow(non_snake_case)]
     let A = -two * a + auth;
-    #[allow(non_snake_case)]
     let B = a * a + b - a * auth + c;
     let corr_1 = [prng.get(), prng.get()];
     let corr_0 = [A - corr_1[0], B - corr_1[1]];
@@ -727,10 +726,11 @@ where
 }
 
 /// Compute the Aggregator's share of the sketch verifier. The shares should sum to zero.
+#[allow(non_snake_case)]
 fn finish_sketch<F: FieldElement>(
     sketch: [F; 3],
-    #[allow(non_snake_case)] A_share: F,
-    #[allow(non_snake_case)] B_share: F,
+    A_share: F,
+    B_share: F,
     is_leader: bool,
 ) -> Vec<F> {
     let mut next_sketch_share = A_share * sketch[0] + B_share;
