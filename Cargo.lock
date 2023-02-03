@@ -875,6 +875,7 @@ version = "0.5.0"
 dependencies = [
  "base64",
  "color-eyre",
+ "fixed-macro",
  "prio",
  "serde_json",
  "structopt",

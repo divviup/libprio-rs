@@ -8,8 +8,9 @@ repository = "https://github.com/divviup/libprio-rs"
 
 [dependencies]
 base64 = "0.21.0"
-prio = { path = "..", features = ["test-util", "prio2"] }
 color-eyre = { version = "^0.6" }
+fixed-macro = "1.2.0"
+prio = { path = "..", features = ["test-util", "prio2", "experimental", "multithreaded"] }
 serde_json = { version = "1.0" }
 structopt = { version = "0.3.26" }
 
