@@ -7,6 +7,8 @@ use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use fixed_macro::fixed;
 #[cfg(feature = "multithreaded")]
 use prio::flp::gadgets::ParallelSumMultithreaded;
+#[cfg(feature = "prio2")]
+use prio::vdaf::prio2::Prio2;
 use prio::{
     benchmarked::*,
     field::{random_vector, Field128 as F, FieldElement},
@@ -15,13 +17,7 @@ use prio::{
         types::SumVec,
         Type,
     },
-    vdaf::{prio3::Prio3, Client as Prio3Client},
-};
-#[cfg(feature = "prio2")]
-use prio::{
-    client::Client as Prio2Client,
-    encrypt::PublicKey,
-    server::{generate_verification_message, ValidationMemory},
+    vdaf::{prio3::Prio3, Client},
 };
 #[cfg(feature = "experimental")]
 use prio::{
@@ -84,46 +80,33 @@ pub fn count_vec(c: &mut Criterion) {
     let mut group = c.benchmark_group("count_vec");
     let test_sizes = [10, 100, 1_000];
     for size in test_sizes {
-        let input = vec![F::zero(); size];
         #[cfg(feature = "prio2")]
         {
-            // Public keys used to instantiate the v2 client.
-            const PUBKEY1: &str = "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=";
-            const PUBKEY2: &str = "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=";
-            let pk1 = PublicKey::from_base64(PUBKEY1).unwrap();
-            let pk2 = PublicKey::from_base64(PUBKEY2).unwrap();
-
             // Prio2
-            let mut client: Prio2Client<F> =
-                Prio2Client::new(size, pk1.clone(), pk2.clone()).unwrap();
+            let input = vec![0u32; size];
+            let prio2 = Prio2::new(size).unwrap();
 
             group.bench_function(BenchmarkId::new("prio2_prove", size), |b| {
                 b.iter(|| {
-                    benchmarked_v2_prove(&input, &mut client);
+                    prio2.shard(&input).unwrap();
                 })
             });
 
-            let mut client: Prio2Client<F> =
-                Prio2Client::new(size, pk1.clone(), pk2.clone()).unwrap();
-            let input_and_proof = benchmarked_v2_prove(&input, &mut client);
-            let mut validator: ValidationMemory<F> = ValidationMemory::new(input.len());
-            let eval_at = random_vector(1).unwrap()[0];
+            let (_, input_shares) = prio2.shard(&input).unwrap();
+            let query_rand = random_vector(1).unwrap()[0];
 
             group.bench_function(BenchmarkId::new("prio2_query", size), |b| {
+                let input_share = &input_shares[0];
                 b.iter(|| {
-                    generate_verification_message(
-                        size,
-                        eval_at,
-                        &input_and_proof,
-                        true,
-                        &mut validator,
-                    )
-                    .unwrap();
+                    prio2
+                        .prepare_init_with_query_rand(query_rand, input_share, true)
+                        .unwrap();
                 })
             });
         }
 
         // Prio3
+        let input = vec![F::zero(); size];
         let sum_vec: SumVec<F, ParallelSum<F, BlindPolyEval<F>>> = SumVec::new(1, size).unwrap();
         let joint_rand = random_vector(sum_vec.joint_rand_len()).unwrap();
         let prove_rand = random_vector(sum_vec.prove_rand_len()).unwrap();
