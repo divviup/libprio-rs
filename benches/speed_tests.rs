@@ -40,28 +40,6 @@ use std::iter;
 #[cfg(feature = "experimental")]
 use zipf::ZipfDistribution;
 
-/// This benchmark compares the performance of recursive and iterative FFT.
-pub fn fft(c: &mut Criterion) {
-    let test_sizes = [16, 256, 1024, 4096];
-    let mut group = c.benchmark_group("fft");
-    for size in test_sizes {
-        let inp = random_vector(size).unwrap();
-        let mut outp = vec![F::zero(); size];
-
-        group.bench_function(BenchmarkId::new("iterative", size), |b| {
-            b.iter(|| {
-                benchmarked_iterative_fft(&mut outp, &inp);
-            })
-        });
-
-        group.bench_function(BenchmarkId::new("recursive", size), |b| {
-            b.iter(|| {
-                benchmarked_recursive_fft(&mut outp, &inp);
-            })
-        });
-    }
-}
-
 /// Speed test for generating a seed and deriving a pseudorandom sequence of field elements.
 pub fn prng(c: &mut Criterion) {
     let mut group = c.benchmark_group("rand");
@@ -485,14 +463,13 @@ criterion_group!(
     count_vec,
     poly_mul,
     prng,
-    fft,
     idpf
 );
 #[cfg(all(not(feature = "prio2"), feature = "experimental"))]
-criterion_group!(benches, poplar1, prio3_client, poly_mul, prng, fft, idpf);
+criterion_group!(benches, poplar1, prio3_client, poly_mul, prng, idpf);
 #[cfg(all(feature = "prio2", not(feature = "experimental")))]
-criterion_group!(benches, prio3_client, count_vec, prng, fft, poly_mul);
+criterion_group!(benches, prio3_client, count_vec, prng, poly_mul);
 #[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]
-criterion_group!(benches, prio3_client, prng, fft, poly_mul);
+criterion_group!(benches, prio3_client, prng, poly_mul);
 
 criterion_main!(benches);
