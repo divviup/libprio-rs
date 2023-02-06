@@ -346,7 +346,6 @@ pub fn poplar1(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("poplar1_prepare_init");
     for size in test_sizes.iter() {
-        group.throughput(Throughput::Bytes(*size as u64 / 8));
         group.measurement_time(Duration::from_secs(30)); // slower benchmark
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_aes128(size);
