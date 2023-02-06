@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-#[cfg(feature = "experimental")]
-use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
+#[cfg(feature = "experimental")]
+use criterion::{BatchSize, Throughput};
 #[cfg(feature = "experimental")]
 use fixed_macro::fixed;
 #[cfg(feature = "multithreaded")]
@@ -30,11 +30,18 @@ use prio::{
     },
 };
 #[cfg(feature = "experimental")]
-use rand::{prelude::*, random};
+use rand::prelude::*;
 #[cfg(feature = "experimental")]
-use std::iter;
+use std::{iter, time::Duration};
 #[cfg(feature = "experimental")]
 use zipf::ZipfDistribution;
+
+/// Seed for generation of random benchmark inputs.
+///
+/// A fixed RNG seed is used to generate inputs in order to minimize run-to-run variability. The
+/// seed value may be freely changed to get a different set of inputs.
+#[cfg(feature = "experimental")]
+const RNG_SEED: u64 = 0;
 
 /// Speed test for generating a seed and deriving a pseudorandom sequence of field elements.
 pub fn prng(c: &mut Criterion) {
@@ -318,13 +325,21 @@ pub fn poplar1(c: &mut Criterion) {
     for size in test_sizes.iter() {
         group.throughput(Throughput::Bytes(*size as u64 / 8));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
-            let measurement = IdpfInput::from_bools(&bits);
-            let vdaf = Poplar1::new_aes128(bits.len());
+            let vdaf = Poplar1::new_aes128(size);
+            let mut rng = StdRng::seed_from_u64(RNG_SEED);
 
-            b.iter(|| {
-                vdaf.shard(&measurement).unwrap();
-            });
+            b.iter_batched(
+                || {
+                    let bits = iter::repeat_with(|| rng.gen())
+                        .take(size)
+                        .collect::<Vec<bool>>();
+                    IdpfInput::from_bools(&bits)
+                },
+                |measurement| {
+                    vdaf.shard(&measurement).unwrap();
+                },
+                BatchSize::SmallInput,
+            );
         });
     }
     group.finish();
@@ -332,43 +347,60 @@ pub fn poplar1(c: &mut Criterion) {
     let mut group = c.benchmark_group("poplar1_prepare_init");
     for size in test_sizes.iter() {
         group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.measurement_time(Duration::from_secs(30)); // slower benchmark
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_aes128(size);
-            let verify_key = random();
-            let nonce: [u8; 16] = random();
+            let mut rng = StdRng::seed_from_u64(RNG_SEED);
 
-            // Parameters are chosen to match Chris Wood's experimental setup:
-            // https://github.com/chris-wood/heavy-hitter-comparison
-            let (measurements, prefix_tree) = poplar1_generate_zipf_distributed_batch(
-                size, // bits
-                10,   // threshold
-                1000, // number of measurements
-                128,  // Zipf support
-                1.03, // Zipf exponent
+            b.iter_batched(
+                || {
+                    let verify_key: [u8; 16] = rng.gen();
+                    let nonce: [u8; 16] = rng.gen();
+
+                    // Parameters are chosen to match Chris Wood's experimental setup:
+                    // https://github.com/chris-wood/heavy-hitter-comparison
+                    let (measurements, prefix_tree) = poplar1_generate_zipf_distributed_batch(
+                        &mut rng, // rng
+                        size,     // bits
+                        10,       // threshold
+                        1000,     // number of measurements
+                        128,      // Zipf support
+                        1.03,     // Zipf exponent
+                    );
+
+                    // We are benchmarking preparation of a single report. For this test, it doesn't matter
+                    // which measurement we generate a report for, so pick the first measurement
+                    // arbitrarily.
+                    let (public_share, input_shares) = vdaf.shard(&measurements[0]).unwrap();
+
+                    // For the aggregation paramter, we use the candidate prefixes from the prefix tree
+                    // for the sampled measurements. Run preparation for the last step, which ought to
+                    // represent the worst-case performance.
+                    let agg_param =
+                        Poplar1AggregationParam::try_from_prefixes(prefix_tree[size - 1].clone())
+                            .unwrap();
+
+                    (
+                        verify_key,
+                        nonce,
+                        agg_param,
+                        public_share,
+                        input_shares.into_iter().next().unwrap(),
+                    )
+                },
+                |(verify_key, nonce, agg_param, public_share, input_share)| {
+                    vdaf.prepare_init(
+                        &verify_key,
+                        0,
+                        &agg_param,
+                        &nonce,
+                        &public_share,
+                        &input_share,
+                    )
+                    .unwrap();
+                },
+                BatchSize::SmallInput,
             );
-
-            // We are benchmarking preparation of a single report. For this test, it doesn't matter
-            // which measurement we generate a report for, so pick the first measurement
-            // arbitrarily.
-            let (public_share, input_shares) = vdaf.shard(&measurements[0]).unwrap();
-
-            // For the aggregation paramter, we use the candidate prefixes from the prefix tree
-            // for the sampled measurements. Run preparation for the last step, which ought to
-            // represent the worst-case performance.
-            let agg_param =
-                Poplar1AggregationParam::try_from_prefixes(prefix_tree[size - 1].clone()).unwrap();
-
-            b.iter(|| {
-                vdaf.prepare_init(
-                    &verify_key,
-                    0,
-                    &agg_param,
-                    &nonce,
-                    &public_share,
-                    &input_shares[0],
-                )
-                .unwrap();
-            });
         });
     }
     group.finish();
@@ -384,14 +416,13 @@ pub fn poplar1(c: &mut Criterion) {
 /// to the list.
 #[cfg(feature = "experimental")]
 fn poplar1_generate_zipf_distributed_batch(
+    rng: &mut impl Rng,
     bits: usize,
     threshold: usize,
     measurement_count: usize,
     zipf_support: usize,
     zipf_exponent: f64,
 ) -> (Vec<IdpfInput>, Vec<Vec<IdpfInput>>) {
-    let mut rng = thread_rng();
-
     // Generate random inputs.
     let mut inputs = Vec::with_capacity(zipf_support);
     for _ in 0..zipf_support {
@@ -403,7 +434,7 @@ fn poplar1_generate_zipf_distributed_batch(
     let mut samples = Vec::with_capacity(measurement_count);
     let zipf = ZipfDistribution::new(zipf_support, zipf_exponent).unwrap();
     for _ in 0..measurement_count {
-        samples.push(inputs[zipf.sample(&mut rng) - 1].clone());
+        samples.push(inputs[zipf.sample(rng) - 1].clone());
     }
 
     // Compute the prefix tree for the desired threshold.
