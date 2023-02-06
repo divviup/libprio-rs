@@ -45,6 +45,7 @@ pub fn prng(c: &mut Criterion) {
             b.iter(|| random_vector::<F>(size))
         });
     }
+    group.finish();
 }
 
 /// The asymptotic cost of polynomial multiplication is `O(n log n)` using FFT and `O(n^2)` using
@@ -73,6 +74,7 @@ pub fn poly_mul(c: &mut Criterion) {
             })
         });
     }
+    group.finish();
 }
 
 /// Benchmark generation and verification of boolean vectors.
@@ -156,6 +158,7 @@ pub fn count_vec(c: &mut Criterion) {
             );
         }
     }
+    group.finish();
 }
 
 /// Benchmark prio3 client performance.
@@ -237,6 +240,8 @@ pub fn prio3_client(c: &mut Criterion) {
             },
         );
     }
+
+    group.finish();
 }
 
 /// Benchmark IdpfPoplar performance.
@@ -265,7 +270,7 @@ pub fn idpf(c: &mut Criterion) {
             });
         });
     }
-    drop(group);
+    group.finish();
 
     let mut group = c.benchmark_group("idpf_eval");
     for size in test_sizes.iter() {
@@ -301,6 +306,7 @@ pub fn idpf(c: &mut Criterion) {
             });
         });
     }
+    group.finish();
 }
 
 /// Benchmark Poplar1.
@@ -321,7 +327,7 @@ pub fn poplar1(c: &mut Criterion) {
             });
         });
     }
-    drop(group);
+    group.finish();
 
     let mut group = c.benchmark_group("poplar1_prepare_init");
     for size in test_sizes.iter() {
@@ -365,6 +371,7 @@ pub fn poplar1(c: &mut Criterion) {
             });
         });
     }
+    group.finish();
 }
 
 /// Generate a set of Poplar1 measurements with the given bit length `bits`. They are sampled
