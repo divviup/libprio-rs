@@ -6,9 +6,8 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{Field255, Field64, FieldElement},
-    prng::Prng,
     vdaf::{
-        prg::{Prg, RandSource, Seed, SeedStream},
+        prg::{CoinToss, Prg, RandSource, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -194,10 +193,9 @@ where
     let mut next_seed = [0u8; L];
     seed_stream.fill(&mut next_seed);
 
-    let prng = Prng::from_seed_stream(seed_stream);
     let mut w = [F::zero(); OUT_LEN];
-    for (w_i, output) in w.iter_mut().zip(prng) {
-        *w_i = output;
+    for w_i in w.iter_mut() {
+        *w_i = F::sample(&mut seed_stream);
     }
 
     (next_seed, w)
