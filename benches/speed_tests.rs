@@ -24,7 +24,7 @@ use prio::{
     field::{Field255, Field64},
     idpf::{self, IdpfInput, RingBufferCache},
     vdaf::{
-        poplar1::{Poplar1, Poplar1AggregationParam},
+        poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
         prg::PrgAes128,
         Aggregator,
     },
@@ -251,17 +251,16 @@ pub fn idpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = IdpfInput::from_bools(&bits);
 
-            let mut inner_values = vec![[Field64::one(), Field64::zero()]; size - 1];
-            for (value, random_element) in inner_values
-                .iter_mut()
-                .zip(random_vector::<Field64>(size - 1).unwrap())
-            {
-                value[1] = random_element;
-            }
-            let leaf_value = [Field255::one(), random_vector(1).unwrap()[0]];
+            let inner_values = random_vector::<Field64>(size - 1)
+                .unwrap()
+                .into_iter()
+                .map(|random_element| Poplar1IdpfValue::new([Field64::one(), random_element]))
+                .collect::<Vec<_>>();
+            let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1).unwrap()[0]]);
 
             b.iter(|| {
-                idpf::gen::<_, PrgAes128, 16, 2>(&input, inner_values.clone(), leaf_value).unwrap();
+                idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_value)
+                    .unwrap();
             });
         });
     }
@@ -274,17 +273,15 @@ pub fn idpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = IdpfInput::from_bools(&bits);
 
-            let mut inner_values = vec![[Field64::one(), Field64::zero()]; size - 1];
-            for (value, random_element) in inner_values
-                .iter_mut()
-                .zip(random_vector::<Field64>(size - 1).unwrap())
-            {
-                value[1] = random_element;
-            }
-            let leaf_value = [Field255::one(), random_vector(1).unwrap()[0]];
+            let inner_values = random_vector::<Field64>(size - 1)
+                .unwrap()
+                .into_iter()
+                .map(|random_element| Poplar1IdpfValue::new([Field64::one(), random_element]))
+                .collect::<Vec<_>>();
+            let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1).unwrap()[0]]);
 
             let (public_share, keys) =
-                idpf::gen::<_, PrgAes128, 16, 2>(&input, inner_values.clone(), leaf_value).unwrap();
+                idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values, leaf_value).unwrap();
 
             b.iter(|| {
                 // This is an aggressively small cache, to minimize its impact on the benchmark.
@@ -295,8 +292,14 @@ pub fn idpf(c: &mut Criterion) {
 
                 for prefix_length in 1..=size {
                     let prefix = input[..prefix_length].to_owned().into();
-                    idpf::eval::<PrgAes128, 16, 2>(0, &public_share, &keys[0], &prefix, &mut cache)
-                        .unwrap();
+                    idpf::eval::<_, _, PrgAes128, 16>(
+                        0,
+                        &public_share,
+                        &keys[0],
+                        &prefix,
+                        &mut cache,
+                    )
+                    .unwrap();
                 }
             });
         });

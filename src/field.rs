@@ -25,7 +25,7 @@ use std::{
     marker::PhantomData,
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub, SubAssign},
 };
-use subtle::{Choice, ConstantTimeEq};
+use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 #[cfg(feature = "experimental")]
 mod field255;
@@ -74,6 +74,8 @@ pub trait FieldElement:
     + PartialEq
     + Eq
     + ConstantTimeEq
+    + ConditionallySelectable
+    + ConditionallyNegatable
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
@@ -425,6 +427,12 @@ macro_rules! make_field {
         impl ConstantTimeEq for $elem {
             fn ct_eq(&self, rhs: &Self) -> Choice {
                 self.0.ct_eq(&rhs.0)
+            }
+        }
+
+        impl ConditionallySelectable for $elem {
+            fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
+                Self(u128::conditional_select(&a.0, &b.0, choice))
             }
         }
 

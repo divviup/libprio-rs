@@ -9,7 +9,10 @@ use prio::{
     codec::{Decode, ParameterizedDecode},
     field::Field255,
     idpf::{self, IdpfInput, IdpfPublicShare, RingBufferCache},
-    vdaf::prg::{PrgAes128, Seed},
+    vdaf::{
+        poplar1::Poplar1IdpfValue,
+        prg::{PrgAes128, Seed},
+    },
 };
 #[cfg(feature = "prio2")]
 use prio::{field::FieldPrio2, server::VerificationMessage};
@@ -150,8 +153,12 @@ fn prio3_client_count_vec_multithreaded_1000() -> Vec<Prio3InputShare<Field128, 
 }
 
 #[cfg(feature = "experimental")]
-fn idpf_poplar_gen(input: &IdpfInput, inner_values: Vec<[Field64; 2]>, leaf_value: [Field255; 2]) {
-    idpf::gen::<_, PrgAes128, 16, 2>(input, inner_values, leaf_value).unwrap();
+fn idpf_poplar_gen(
+    input: &IdpfInput,
+    inner_values: Vec<Poplar1IdpfValue<Field64>>,
+    leaf_value: Poplar1IdpfValue<Field255>,
+) {
+    idpf::gen::<_, _, _, PrgAes128, 16>(input, inner_values, leaf_value).unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -160,8 +167,8 @@ fn idpf_poplar_gen_8() {
     let one = Field64::one();
     idpf_poplar_gen(
         &input,
-        vec![[one, one]; 7],
-        [Field255::one(), Field255::one()],
+        vec![Poplar1IdpfValue::new([one, one]); 7],
+        Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
     );
 }
 
@@ -171,8 +178,8 @@ fn idpf_poplar_gen_128() {
     let one = Field64::one();
     idpf_poplar_gen(
         &input,
-        vec![[one, one]; 127],
-        [Field255::one(), Field255::one()],
+        vec![Poplar1IdpfValue::new([one, one]); 127],
+        Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
     );
 }
 
@@ -182,19 +189,19 @@ fn idpf_poplar_gen_2048() {
     let one = Field64::one();
     idpf_poplar_gen(
         &input,
-        vec![[one, one]; 2047],
-        [Field255::one(), Field255::one()],
+        vec![Poplar1IdpfValue::new([one, one]); 2047],
+        Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
     );
 }
 
 #[cfg(feature = "experimental")]
 fn idpf_poplar_eval(
     input: &IdpfInput,
-    public_share: &IdpfPublicShare<Field64, Field255, 16, 2>,
+    public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, 16>,
     key: &Seed<16>,
 ) {
     let mut cache = RingBufferCache::new(1);
-    idpf::eval::<PrgAes128, 16, 2>(0, public_share, key, input, &mut cache).unwrap();
+    idpf::eval::<_, _, PrgAes128, 16>(0, public_share, key, input, &mut cache).unwrap();
 }
 
 #[cfg(feature = "experimental")]

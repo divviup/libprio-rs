@@ -7,14 +7,21 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{merge_vector, Field255, Field64, FieldElement},
-    idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, RingBufferCache},
+    idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        prg::{Prg, PrgAes128, Seed, SeedStream},
+        prg::{CoinToss, Prg, PrgAes128, Seed, SeedStream},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError, VERSION,
     },
 };
-use std::{convert::TryFrom, fmt::Debug, io::Cursor, marker::PhantomData};
+use std::{
+    convert::TryFrom,
+    fmt::Debug,
+    io::Cursor,
+    marker::PhantomData,
+    ops::{Add, AddAssign, Sub},
+};
+use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 const DST_SHARD_RANDOMNESS: &[u8] = &[255];
 const DST_VERIFY_RANDOMNESS: &[u8] = &[254];
@@ -52,7 +59,8 @@ impl<P, const L: usize> Clone for Poplar1<P, L> {
 }
 
 /// Poplar1 public share. This is comprised of the correction words generated for the IDPF.
-pub type Poplar1PublicShare<const L: usize> = IdpfPublicShare<Field64, Field255, L, 2>;
+pub type Poplar1PublicShare<const L: usize> =
+    IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, L>;
 
 impl<P, const L: usize> ParameterizedDecode<Poplar1<P, L>> for Poplar1PublicShare<L> {
     fn decode_with_param(
@@ -322,10 +330,12 @@ impl<P: Prg<L>, const L: usize> Client for Poplar1<P, L> {
         let auth_leaf = prng.get();
 
         // Generate the IDPF shares.
-        let (public_share, [idpf_key_0, idpf_key_1]) = idpf::gen::<_, P, L, 2>(
+        let (public_share, [idpf_key_0, idpf_key_1]) = idpf::gen::<_, _, _, P, L>(
             input,
-            auth_inner.iter().map(|auth| [Field64::one(), *auth]),
-            [Field255::one(), auth_leaf],
+            auth_inner
+                .iter()
+                .map(|auth| Poplar1IdpfValue([Field64::one(), *auth])),
+            Poplar1IdpfValue([Field255::one(), auth_leaf]),
         )?;
 
         // Generate the correlated randomness for the inner nodes. This includes additive shares of
@@ -602,8 +612,12 @@ impl<P: Prg<L>, const L: usize> Collector for Poplar1<P, L> {
     }
 }
 
-impl From<IdpfOutputShare<2, Field64, Field255>> for [Field64; 2] {
-    fn from(out_share: IdpfOutputShare<2, Field64, Field255>) -> [Field64; 2] {
+impl From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>
+    for Poplar1IdpfValue<Field64>
+{
+    fn from(
+        out_share: IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
+    ) -> Poplar1IdpfValue<Field64> {
         match out_share {
             IdpfOutputShare::Inner(array) => array,
             IdpfOutputShare::Leaf(..) => panic!("tried to convert leaf share into inner field"),
@@ -611,8 +625,12 @@ impl From<IdpfOutputShare<2, Field64, Field255>> for [Field64; 2] {
     }
 }
 
-impl From<IdpfOutputShare<2, Field64, Field255>> for [Field255; 2] {
-    fn from(out_share: IdpfOutputShare<2, Field64, Field255>) -> [Field255; 2] {
+impl From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>
+    for Poplar1IdpfValue<Field255>
+{
+    fn from(
+        out_share: IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
+    ) -> Poplar1IdpfValue<Field255> {
         match out_share {
             IdpfOutputShare::Inner(..) => panic!("tried to convert inner share into leaf field"),
             IdpfOutputShare::Leaf(array) => array,
@@ -672,7 +690,8 @@ fn eval_and_sketch<P, F, const L: usize>(
 where
     P: Prg<L>,
     F: FieldElement,
-    [F; 2]: From<IdpfOutputShare<2, Field64, Field255>>,
+    Poplar1IdpfValue<F>:
+        From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
 {
     let nonce_len = nonce.len().try_into().map_err(|_| {
         VdafError::Uncategorized(format!(
@@ -706,7 +725,12 @@ where
 
     let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
     for prefix in agg_param.prefixes.iter() {
-        let share = <[F; 2]>::from(idpf::eval::<P, L, 2>(
+        let share = Poplar1IdpfValue::<F>::from(idpf::eval::<
+            Poplar1IdpfValue<Field64>,
+            Poplar1IdpfValue<Field255>,
+            P,
+            L,
+        >(
             agg_id,
             public_share,
             idpf_key,
@@ -715,11 +739,11 @@ where
         )?);
 
         let r = verify_prng.get();
-        let checked_data_share = share[0] * r;
+        let checked_data_share = share.0[0] * r;
         sketch_share[0] += checked_data_share;
         sketch_share[1] += checked_data_share * r;
-        sketch_share[2] += share[1] * r;
-        out_share.push(share[0]);
+        sketch_share[2] += share.0[1] * r;
+        out_share.push(share.0[0]);
     }
 
     Ok((out_share, sketch_share))
@@ -774,6 +798,131 @@ fn aggregate<M: IntoIterator<Item = Poplar1FieldVec>>(
         result.accumulate(&share)?;
     }
     Ok(result)
+}
+
+/// A vector of two field elements.
+///
+/// This represents the values that Poplar1 programs into IDPFs while sharding.
+#[derive(Debug, Clone, Copy)]
+pub struct Poplar1IdpfValue<F>([F; 2]);
+
+impl<F> Poplar1IdpfValue<F> {
+    /// Create a new value from a pair of field elements.
+    pub fn new(array: [F; 2]) -> Self {
+        Self(array)
+    }
+}
+
+impl<F> IdpfValue for Poplar1IdpfValue<F>
+where
+    F: FieldElement,
+{
+    fn zero() -> Self {
+        Self([F::zero(); 2])
+    }
+}
+
+impl<F> Add for Poplar1IdpfValue<F>
+where
+    F: Copy + Add<Output = F>,
+{
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self {
+        Self([self.0[0] + rhs.0[0], self.0[1] + rhs.0[1]])
+    }
+}
+
+impl<F> AddAssign for Poplar1IdpfValue<F>
+where
+    F: Copy + AddAssign,
+{
+    fn add_assign(&mut self, rhs: Self) {
+        self.0[0] += rhs.0[0];
+        self.0[1] += rhs.0[1];
+    }
+}
+
+impl<F> Sub for Poplar1IdpfValue<F>
+where
+    F: Copy + Sub<Output = F>,
+{
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self {
+        Self([self.0[0] - rhs.0[0], self.0[1] - rhs.0[1]])
+    }
+}
+
+impl<F> PartialEq for Poplar1IdpfValue<F>
+where
+    F: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<F> ConstantTimeEq for Poplar1IdpfValue<F>
+where
+    F: ConstantTimeEq,
+{
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
+
+impl<F> Encode for Poplar1IdpfValue<F>
+where
+    F: Encode,
+{
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.0[0].encode(bytes);
+        self.0[1].encode(bytes);
+    }
+}
+
+impl<F> Decode for Poplar1IdpfValue<F>
+where
+    F: Decode,
+{
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        Ok(Self([F::decode(bytes)?, F::decode(bytes)?]))
+    }
+}
+
+impl<F> CoinToss for Poplar1IdpfValue<F>
+where
+    F: CoinToss,
+{
+    fn sample<S>(seed_stream: &mut S) -> Self
+    where
+        S: SeedStream,
+    {
+        Self([F::sample(seed_stream), F::sample(seed_stream)])
+    }
+}
+
+impl<F> ConditionallySelectable for Poplar1IdpfValue<F>
+where
+    F: ConditionallySelectable,
+{
+    fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
+        Self([
+            F::conditional_select(&a.0[0], &b.0[0], choice),
+            F::conditional_select(&a.0[1], &b.0[1], choice),
+        ])
+    }
+}
+
+impl<F> ConditionallyNegatable for Poplar1IdpfValue<F>
+where
+    F: ConditionallyNegatable,
+{
+    fn conditional_negate(&mut self, choice: subtle::Choice) {
+        F::conditional_negate(&mut self.0[0], choice);
+        F::conditional_negate(&mut self.0[1], choice);
+    }
 }
 
 #[cfg(test)]
