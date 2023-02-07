@@ -142,10 +142,14 @@ where
     {
         // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
         // `SeedStream` output.
-        let mut buffer = vec![0u8; F::ENCODED_SIZE];
+        let mut buffer = [0u8; 64];
+        assert!(
+            buffer.len() >= F::ENCODED_SIZE,
+            "field is too big for buffer"
+        );
         loop {
-            seed_stream.fill(&mut buffer);
-            match Self::try_from_random(&buffer) {
+            seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
+            match Self::try_from_random(&buffer[..F::ENCODED_SIZE]) {
                 Ok(x) => return x,
                 Err(FieldError::ModulusOverflow) => continue,
                 Err(err) => panic!("unexpected error: {err}"),
