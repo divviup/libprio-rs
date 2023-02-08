@@ -17,6 +17,18 @@ criteria = "safe-to-deploy"
 version = "0.3.66"
 notes = "I am the author of this crate."
 
+[[audits.bytecode-alliance.audits.base64]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+version = "0.21.0"
+notes = "This crate has no dependencies, no build.rs, and contains no unsafe code."
+
+[[audits.bytecode-alliance.audits.base64]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-run"
+version = "0.21.0"
+notes = "This crate has no dependencies, no build.rs, and contains no unsafe code."
+
 [[audits.bytecode-alliance.audits.block-buffer]]
 who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
@@ -109,10 +121,71 @@ and does what it says on the tin, providing spin-based synchronization
 primitives.
 """
 
+[[audits.divviup.audits.assert_matches]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "1.5.0"
+
 [[audits.divviup.audits.base64]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.20.0 -> 0.21.0"
+
+[[audits.divviup.audits.block-buffer]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.9.0"
+
+[[audits.divviup.audits.ciborium-io]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.2.0"
+
+[[audits.divviup.audits.cmac]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.7.1"
+
+[[audits.divviup.audits.dbl]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.3.2"
+
+[[audits.divviup.audits.either]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "1.6.1"
+
+[[audits.divviup.audits.modinverse]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.1.1"
+
+[[audits.divviup.audits.opaque-debug]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.3.0"
+
+[[audits.divviup.audits.proc-macro-error-attr]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "1.0.4"
+
+[[audits.divviup.audits.proc-macro2]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.49 -> 1.0.47"
+
+[[audits.divviup.audits.serde_json]]
+who = "Tim Geoghegan <timg@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.91 -> 1.0.92"
+notes = "The only changes are to doccomments, a dev-dependency and the project's CI workflow, so there should be no risk to dependents."
+
+[[audits.divviup.audits.untrusted]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.7.1"
 
 [audits.embark-studios.audits]
 
