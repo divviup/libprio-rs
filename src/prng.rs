@@ -6,9 +6,9 @@
 //! NOTE: The public API for this module is a work in progress.
 
 use crate::field::{FieldElement, FieldError};
+use crate::vdaf::prg::SeedStream;
 #[cfg(feature = "crypto-dependencies")]
 use crate::vdaf::prg::SeedStreamAes128;
-use crate::vdaf::prg::{CoinToss, SeedStream};
 #[cfg(feature = "crypto-dependencies")]
 use getrandom::getrandom;
 
@@ -132,39 +132,13 @@ where
     }
 }
 
-impl<F> CoinToss for F
-where
-    F: FieldElement,
-{
-    fn sample<S>(seed_stream: &mut S) -> Self
-    where
-        S: SeedStream,
-    {
-        // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
-        // `SeedStream` output.
-        let mut buffer = [0u8; 64];
-        assert!(
-            buffer.len() >= F::ENCODED_SIZE,
-            "field is too big for buffer"
-        );
-        loop {
-            seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
-            match Self::try_from_random(&buffer[..F::ENCODED_SIZE]) {
-                Ok(x) => return x,
-                Err(FieldError::ModulusOverflow) => continue,
-                Err(err) => panic!("unexpected error: {err}"),
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
         codec::Decode,
         field::{Field96, FieldPrio2},
-        vdaf::prg::{Prg, PrgAes128, Seed},
+        vdaf::prg::{CoinToss, Prg, PrgAes128, Seed},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
