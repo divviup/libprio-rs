@@ -169,7 +169,7 @@ impl Debug for SeedStreamAes128 {
     }
 }
 
-/// Types implementing `CoinToss` can be randomly sampled from a VDAF PRG.
+/// Types implementing `CoinToss` can be randomly sampled from a [`SeedStream`].
 pub trait CoinToss {
     /// Randomly generate an object using bytes from a PRG's output stream.
     fn sample<S>(seed_stream: &mut S) -> Self
