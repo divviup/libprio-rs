@@ -161,14 +161,14 @@ where
     VL: IdpfValue,
 {
     /// Combine two output share values into one.
-    pub fn merge(self, other: &Self) -> Result<IdpfOutputShare<VI, VL>, IdpfError> {
+    pub fn merge(self, other: Self) -> Result<IdpfOutputShare<VI, VL>, IdpfError> {
         match (self, other) {
             (IdpfOutputShare::Inner(mut self_value), IdpfOutputShare::Inner(other_value)) => {
-                self_value += *other_value;
+                self_value += other_value;
                 Ok(IdpfOutputShare::Inner(self_value))
             }
             (IdpfOutputShare::Leaf(mut self_value), IdpfOutputShare::Leaf(other_value)) => {
-                self_value += *other_value;
+                self_value += other_value;
                 Ok(IdpfOutputShare::Leaf(self_value))
             }
             (_, _) => Err(IdpfError::MismatchedLevel),
@@ -1041,7 +1041,7 @@ mod tests {
     {
         let share_0 = idpf::eval::<_, _, P, L>(0, public_share, &keys[0], prefix, cache_0).unwrap();
         let share_1 = idpf::eval::<_, _, P, L>(1, public_share, &keys[1], prefix, cache_1).unwrap();
-        let output = share_0.merge(&share_1).unwrap();
+        let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
     }
 
