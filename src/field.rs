@@ -11,6 +11,7 @@ use crate::prng::{Prng, PrngError};
 use crate::{
     codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64, FP96},
+    vdaf::prg::{CoinToss, SeedStream},
 };
 use serde::{
     de::{DeserializeOwned, Visitor},
@@ -25,7 +26,7 @@ use std::{
     marker::PhantomData,
     ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub, SubAssign},
 };
-use subtle::{Choice, ConstantTimeEq};
+use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 #[cfg(feature = "experimental")]
 mod field255;
@@ -74,6 +75,8 @@ pub trait FieldElement:
     + PartialEq
     + Eq
     + ConstantTimeEq
+    + ConditionallySelectable
+    + ConditionallyNegatable
     + Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
@@ -425,6 +428,12 @@ macro_rules! make_field {
         impl ConstantTimeEq for $elem {
             fn ct_eq(&self, rhs: &Self) -> Choice {
                 self.0.ct_eq(&rhs.0)
+            }
+        }
+
+        impl ConditionallySelectable for $elem {
+            fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
+                Self(u128::conditional_select(&a.0, &b.0, choice))
             }
         }
 
@@ -820,6 +829,32 @@ pub(crate) fn decode_fieldvec<F: FieldElement>(
         );
     }
     Ok(vec)
+}
+
+impl<F> CoinToss for F
+where
+    F: FieldElement,
+{
+    fn sample<S>(seed_stream: &mut S) -> Self
+    where
+        S: SeedStream,
+    {
+        // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
+        // `SeedStream` output.
+        let mut buffer = [0u8; 64];
+        assert!(
+            buffer.len() >= F::ENCODED_SIZE,
+            "field is too big for buffer"
+        );
+        loop {
+            seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
+            match Self::try_from_random(&buffer[..F::ENCODED_SIZE]) {
+                Ok(x) => return x,
+                Err(FieldError::ModulusOverflow) => continue,
+                Err(err) => panic!("unexpected error: {err}"),
+            }
+        }
+    }
 }
 
 #[cfg(test)]

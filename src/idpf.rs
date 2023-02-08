@@ -5,10 +5,8 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{Field255, Field64, FieldElement},
-    prng::Prng,
     vdaf::{
-        prg::{Prg, RandSource, Seed, SeedStream},
+        prg::{CoinToss, Prg, RandSource, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -17,9 +15,9 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     io::{Cursor, Read},
-    ops::Index,
+    ops::{Add, AddAssign, Index, Sub},
 };
-use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
+use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 /// IDPF-related errors.
 #[derive(Debug, thiserror::Error)]
@@ -127,34 +125,51 @@ where
     }
 }
 
-/// An output from evaluation of an IDPF at some level and index.
-#[derive(Debug, PartialEq, Eq)]
-pub enum IdpfOutputShare<const OUT_LEN: usize, FI, FL> {
-    /// An IDPF output share corresponding to an inner tree node.
-    Inner([FI; OUT_LEN]),
-    /// An IDPF output share corresponding to a leaf tree node.
-    Leaf([FL; OUT_LEN]),
+/// Trait for values to be programmed into an IDPF.
+///
+/// Values must form an Abelian group, so that they can be secret-shared, and the group operation
+/// must be represented by [`Add`]. An implementation of [`CoinToss`] must be provided to randomly
+/// select a value using PRG output. Values must be encodable and decodable, without need for a
+/// decoding parameter.
+pub trait IdpfValue:
+    Add<Output = Self>
+    + AddAssign
+    + Sub<Output = Self>
+    + ConditionallySelectable
+    + ConditionallyNegatable
+    + CoinToss
+    + Encode
+    + Decode
+    + Sized
+{
+    /// Returns the additive identity.
+    fn zero() -> Self;
 }
 
-impl<const OUT_LEN: usize, FI, FL> IdpfOutputShare<OUT_LEN, FI, FL>
+/// An output from evaluation of an IDPF at some level and index.
+#[derive(Debug, PartialEq, Eq)]
+pub enum IdpfOutputShare<VI, VL> {
+    /// An IDPF output share corresponding to an inner tree node.
+    Inner(VI),
+    /// An IDPF output share corresponding to a leaf tree node.
+    Leaf(VL),
+}
+
+impl<VI, VL> IdpfOutputShare<VI, VL>
 where
-    FI: FieldElement,
-    FL: FieldElement,
+    VI: IdpfValue,
+    VL: IdpfValue,
 {
-    /// Combine two output share vectors into one.
-    pub fn merge(self, other: &Self) -> Result<IdpfOutputShare<OUT_LEN, FI, FL>, IdpfError> {
+    /// Combine two output share values into one.
+    pub fn merge(self, other: Self) -> Result<IdpfOutputShare<VI, VL>, IdpfError> {
         match (self, other) {
-            (IdpfOutputShare::Inner(mut self_array), IdpfOutputShare::Inner(other_array)) => {
-                for (dest, src) in self_array.iter_mut().zip(other_array.iter()) {
-                    *dest += *src;
-                }
-                Ok(IdpfOutputShare::Inner(self_array))
+            (IdpfOutputShare::Inner(mut self_value), IdpfOutputShare::Inner(other_value)) => {
+                self_value += other_value;
+                Ok(IdpfOutputShare::Inner(self_value))
             }
-            (IdpfOutputShare::Leaf(mut self_array), IdpfOutputShare::Leaf(other_array)) => {
-                for (dest, src) in self_array.iter_mut().zip(other_array.iter()) {
-                    *dest += *src;
-                }
-                Ok(IdpfOutputShare::Leaf(self_array))
+            (IdpfOutputShare::Leaf(mut self_value), IdpfOutputShare::Leaf(other_value)) => {
+                self_value += other_value;
+                Ok(IdpfOutputShare::Leaf(self_value))
             }
             (_, _) => Err(IdpfError::MismatchedLevel),
         }
@@ -181,9 +196,9 @@ where
     (seeds, control_bits)
 }
 
-fn convert<F, P, const L: usize, const OUT_LEN: usize>(seed: &[u8; L]) -> ([u8; L], [F; OUT_LEN])
+fn convert<V, P, const L: usize>(seed: &[u8; L]) -> ([u8; L], V)
 where
-    F: FieldElement,
+    V: IdpfValue,
     P: Prg<L>,
 {
     let mut prg = P::init(seed);
@@ -194,25 +209,19 @@ where
     let mut next_seed = [0u8; L];
     seed_stream.fill(&mut next_seed);
 
-    let prng = Prng::from_seed_stream(seed_stream);
-    let mut w = [F::zero(); OUT_LEN];
-    for (w_i, output) in w.iter_mut().zip(prng) {
-        *w_i = output;
-    }
-
-    (next_seed, w)
+    (next_seed, V::sample(&mut seed_stream))
 }
 
 /// Helper method to update seeds, update control bits, and output the correction word for one level
 /// of the IDPF key generation process.
-fn generate_correction_word<F, P, const L: usize, const OUT_LEN: usize>(
+fn generate_correction_word<V, P, const L: usize>(
     input_bit: Choice,
-    value: [F; OUT_LEN],
+    value: V,
     keys: &mut [[u8; L]; 2],
     control_bits: &mut [Choice; 2],
-) -> IdpfCorrectionWord<F, L, OUT_LEN>
+) -> IdpfCorrectionWord<V, L>
 where
-    F: FieldElement + From<u64>,
+    V: IdpfValue,
     P: Prg<L>,
 {
     // Expand both keys into two seeds and two control bits each.
@@ -247,43 +256,33 @@ where
         conditional_xor_seeds(&seed_1_keep, &cw_seed, previous_control_bits[1]),
     ];
 
-    let (new_key_0, elements_0) = convert::<F, P, L, OUT_LEN>(&seeds_corrected[0]);
-    let (new_key_1, elements_1) = convert::<F, P, L, OUT_LEN>(&seeds_corrected[1]);
+    let (new_key_0, elements_0) = convert::<V, P, L>(&seeds_corrected[0]);
+    let (new_key_1, elements_1) = convert::<V, P, L>(&seeds_corrected[1]);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
 
-    let bit_converted = F::from(control_bits[1].unwrap_u8() as u64);
-    // If control_bits[1] is 0, sign will be 1. If control_bits[1] is 1, sign will be -1.
-    let sign = F::one() - bit_converted - bit_converted;
-    let mut cw_field_vec = [F::zero(); OUT_LEN];
-    for (((out, element_0), element_1), value) in cw_field_vec
-        .iter_mut()
-        .zip(elements_0.iter())
-        .zip(elements_1.iter())
-        .zip(value.iter())
-    {
-        *out = (*value - *element_0 + *element_1) * sign;
-    }
+    let mut cw_value = value - elements_0 + elements_1;
+    cw_value.conditional_negate(control_bits[1]);
 
     IdpfCorrectionWord {
         seed: cw_seed,
         control_bits: cw_control_bits,
-        field_vec: cw_field_vec,
+        value: cw_value,
     }
 }
 
 /// Helper function to evaluate one level of an IDPF. This updates the seed and control bit
 /// arguments that are passed in.
-fn eval_next<F, P, const L: usize, const OUT_LEN: usize>(
+fn eval_next<V, P, const L: usize>(
     is_leader: bool,
     key: &mut [u8; L],
     control_bit: &mut Choice,
-    correction_word: &IdpfCorrectionWord<F, L, OUT_LEN>,
+    correction_word: &IdpfCorrectionWord<V, L>,
     input_bit: Choice,
-) -> [F; OUT_LEN]
+) -> V
 where
-    F: FieldElement + From<u64>,
+    V: IdpfValue,
     P: Prg<L>,
 {
     let (mut seeds, mut control_bits) = extend::<P, L>(key);
@@ -296,39 +295,24 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<F, P, L, OUT_LEN>(&seed_corrected);
+    let (new_key, elements) = convert::<V, P, L>(&seed_corrected);
     *key = new_key;
 
-    let mut elements_out = [F::zero(); OUT_LEN];
-    for ((out, input), correction) in elements_out
-        .iter_mut()
-        .zip(elements.iter())
-        .zip(correction_word.field_vec.iter())
-    {
-        *out = *input + *correction * F::from(control_bit.unwrap_u8() as u64);
-        if !is_leader {
-            *out = -*out;
-        }
-    }
-    elements_out
+    let mut out =
+        elements + V::conditional_select(&V::zero(), &correction_word.value, *control_bit);
+    out.conditional_negate(Choice::from((!is_leader) as u8));
+    out
 }
 
-fn gen_with_rand_source<
-    FI,
-    FL,
-    M: IntoIterator<Item = [FI; OUT_LEN]>,
-    P,
-    const L: usize,
-    const OUT_LEN: usize,
->(
+fn gen_with_rand_source<VI, VL, M: IntoIterator<Item = VI>, P, const L: usize>(
     input: &IdpfInput,
     inner_values: M,
-    leaf_value: [FL; OUT_LEN],
+    leaf_value: VL,
     rand_source: RandSource,
-) -> Result<(IdpfPublicShare<FI, FL, L, OUT_LEN>, [Seed<L>; 2]), VdafError>
+) -> Result<(IdpfPublicShare<VI, VL, L>, [Seed<L>; 2]), VdafError>
 where
-    FI: FieldElement + From<u64>,
-    FL: FieldElement + From<u64>,
+    VI: IdpfValue,
+    VL: IdpfValue,
     P: Prg<L>,
 {
     let bits = input.len();
@@ -348,7 +332,7 @@ where
                 IdpfError::InvalidParameter("too many values were supplied".to_string()).into(),
             );
         }
-        inner_correction_words.push(generate_correction_word::<FI, P, L, OUT_LEN>(
+        inner_correction_words.push(generate_correction_word::<VI, P, L>(
             Choice::from(input[level] as u8),
             value,
             &mut keys,
@@ -358,7 +342,7 @@ where
     if inner_correction_words.len() != bits - 1 {
         return Err(IdpfError::InvalidParameter("too few values were supplied".to_string()).into());
     }
-    let leaf_correction_word = generate_correction_word::<FL, P, L, OUT_LEN>(
+    let leaf_correction_word = generate_correction_word::<VL, P, L>(
         Choice::from(input[bits - 1] as u8),
         leaf_value,
         &mut keys,
@@ -372,43 +356,42 @@ where
     Ok((public_share, initial_keys))
 }
 
-/// The Idpf key generation algorithm.
+/// The IDPF key generation algorithm.
 ///
 /// Generate and return a sequence of IDPF shares for `input`. The parameters `inner_values`
 /// and `leaf_value` provide the output values for each successive level of the prefix tree.
-pub fn gen<M, P, const L: usize, const OUT_LEN: usize>(
+pub fn gen<VI, VL, M, P, const L: usize>(
     input: &IdpfInput,
     inner_values: M,
-    leaf_value: [Field255; OUT_LEN],
-) -> Result<(IdpfPublicShare<Field64, Field255, L, OUT_LEN>, [Seed<L>; 2]), VdafError>
+    leaf_value: VL,
+) -> Result<(IdpfPublicShare<VI, VL, L>, [Seed<L>; 2]), VdafError>
 where
-    M: IntoIterator<Item = [Field64; OUT_LEN]>,
+    VI: IdpfValue,
+    VL: IdpfValue,
+    M: IntoIterator<Item = VI>,
     P: Prg<L>,
 {
     if input.is_empty() {
         return Err(IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into());
     }
-    gen_with_rand_source::<_, _, _, P, L, OUT_LEN>(
-        input,
-        inner_values,
-        leaf_value,
-        getrandom::getrandom,
-    )
+    gen_with_rand_source::<_, _, _, P, L>(input, inner_values, leaf_value, getrandom::getrandom)
 }
 
 /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
 /// intermediate values.
 #[allow(clippy::too_many_arguments)]
-fn eval_from_node<P, const L: usize, const OUT_LEN: usize>(
+fn eval_from_node<VI, VL, P, const L: usize>(
     is_leader: bool,
-    public_share: &IdpfPublicShare<Field64, Field255, L, OUT_LEN>,
+    public_share: &IdpfPublicShare<VI, VL, L>,
     start_level: usize,
     mut key: [u8; L],
     mut control_bit: Choice,
     prefix: &IdpfInput,
     cache: &mut dyn IdpfCache<L>,
-) -> Result<IdpfOutputShare<OUT_LEN, Field64, Field255>, IdpfError>
+) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
+    VI: IdpfValue,
+    VL: IdpfValue,
     P: Prg<L>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
@@ -418,7 +401,7 @@ where
         .zip(prefix[start_level..].iter())
         .zip(start_level..)
     {
-        last_inner_output = Some(eval_next::<_, P, L, OUT_LEN>(
+        last_inner_output = Some(eval_next::<_, P, L>(
             is_leader,
             &mut key,
             &mut control_bit,
@@ -430,7 +413,7 @@ where
     }
 
     if prefix.len() == bits {
-        let leaf_output = eval_next::<_, P, L, OUT_LEN>(
+        let leaf_output = eval_next::<_, P, L>(
             is_leader,
             &mut key,
             &mut control_bit,
@@ -445,17 +428,19 @@ where
     }
 }
 
-/// The Idpf key evaluation algorithm.
+/// The IDPF key evaluation algorithm.
 ///
 /// Evaluate an IDPF share on `prefix`.
-pub fn eval<P, const L: usize, const OUT_LEN: usize>(
+pub fn eval<VI, VL, P, const L: usize>(
     agg_id: usize,
-    public_share: &IdpfPublicShare<Field64, Field255, L, OUT_LEN>,
+    public_share: &IdpfPublicShare<VI, VL, L>,
     key: &Seed<L>,
     prefix: &IdpfInput,
     cache: &mut dyn IdpfCache<L>,
-) -> Result<IdpfOutputShare<OUT_LEN, Field64, Field255>, IdpfError>
+) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
+    VI: IdpfValue,
+    VL: IdpfValue,
     P: Prg<L>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
@@ -488,7 +473,7 @@ where
             if let Some((key, control_bit)) = cache.get(cache_key) {
                 // Evaluate the IDPF starting from the cached data at a previously-computed
                 // node, and return the result.
-                return eval_from_node::<P, L, OUT_LEN>(
+                return eval_from_node::<VI, VL, P, L>(
                     is_leader,
                     public_share,
                     /* start_level */ cache_key.len(),
@@ -502,7 +487,7 @@ where
         }
     }
     // Evaluate starting from the root node.
-    eval_from_node::<P, L, OUT_LEN>(
+    eval_from_node::<VI, VL, P, L>(
         is_leader,
         public_share,
         /* start_level */ 0,
@@ -513,21 +498,20 @@ where
     )
 }
 
-/// IDPF public share used by 1. This contains the lists of correction words used by all
-/// parties when evaluating the IDPF.
+/// An IDPF public share. This contains the list of correction words used by all parties when
+/// evaluating the IDPF.
 #[derive(Debug, Clone)]
-pub struct IdpfPublicShare<FI, FL, const L: usize, const OUT_LEN: usize> {
+pub struct IdpfPublicShare<VI, VL, const L: usize> {
     /// Correction words for each inner node level.
-    inner_correction_words: Vec<IdpfCorrectionWord<FI, L, OUT_LEN>>,
+    inner_correction_words: Vec<IdpfCorrectionWord<VI, L>>,
     /// Correction word for the leaf node level.
-    leaf_correction_word: IdpfCorrectionWord<FL, L, OUT_LEN>,
+    leaf_correction_word: IdpfCorrectionWord<VL, L>,
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> ConstantTimeEq
-    for IdpfPublicShare<FI, FL, L, OUT_LEN>
+impl<VI, VL, const L: usize> ConstantTimeEq for IdpfPublicShare<VI, VL, L>
 where
-    FI: ConstantTimeEq,
-    FL: ConstantTimeEq,
+    VI: ConstantTimeEq,
+    VL: ConstantTimeEq,
 {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.inner_correction_words
@@ -536,27 +520,27 @@ where
     }
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> PartialEq for IdpfPublicShare<FI, FL, L, OUT_LEN>
+impl<VI, VL, const L: usize> PartialEq for IdpfPublicShare<VI, VL, L>
 where
-    FI: ConstantTimeEq,
-    FL: ConstantTimeEq,
+    VI: ConstantTimeEq,
+    VL: ConstantTimeEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> Eq for IdpfPublicShare<FI, FL, L, OUT_LEN>
+impl<VI, VL, const L: usize> Eq for IdpfPublicShare<VI, VL, L>
 where
-    FI: ConstantTimeEq,
-    FL: ConstantTimeEq,
+    VI: ConstantTimeEq,
+    VL: ConstantTimeEq,
 {
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> Encode for IdpfPublicShare<FI, FL, L, OUT_LEN>
+impl<VI, VL, const L: usize> Encode for IdpfPublicShare<VI, VL, L>
 where
-    FI: Encode,
-    FL: Encode,
+    VI: Encode,
+    VL: Encode,
 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         // Control bits need to be written within each byte in LSB-to-MSB order, and assigned into
@@ -582,22 +566,17 @@ where
 
         for correction_words in self.inner_correction_words.iter() {
             Seed(correction_words.seed).encode(bytes);
-            for elem in correction_words.field_vec.iter() {
-                elem.encode(bytes);
-            }
+            correction_words.value.encode(bytes);
         }
         Seed(self.leaf_correction_word.seed).encode(bytes);
-        for elem in self.leaf_correction_word.field_vec.iter() {
-            elem.encode(bytes);
-        }
+        self.leaf_correction_word.value.encode(bytes);
     }
 }
 
-impl<FI, FL, const L: usize, const OUT_LEN: usize> ParameterizedDecode<usize>
-    for IdpfPublicShare<FI, FL, L, OUT_LEN>
+impl<VI, VL, const L: usize> ParameterizedDecode<usize> for IdpfPublicShare<VI, VL, L>
 where
-    FI: Decode + Default + Copy,
-    FL: Decode + Default + Copy,
+    VI: Decode + Copy,
+    VL: Decode + Copy,
 {
     fn decode_with_param(bits: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let packed_control_len = (bits + 3) / 4;
@@ -610,14 +589,11 @@ where
         for chunk in unpacked_control_bits[0..(bits - 1) * 2].chunks(2) {
             let control_bits = [(chunk[0] as u8).into(), (chunk[1] as u8).into()];
             let seed = Seed::<L>::decode(bytes)?.0;
-            let mut field_vec = [FI::default(); OUT_LEN];
-            for out in field_vec.iter_mut() {
-                *out = FI::decode(bytes)?;
-            }
+            let value = VI::decode(bytes)?;
             inner_correction_words.push(IdpfCorrectionWord {
                 seed,
                 control_bits,
-                field_vec,
+                value,
             })
         }
 
@@ -626,14 +602,11 @@ where
             (unpacked_control_bits[bits * 2 - 1] as u8).into(),
         ];
         let seed = Seed::<L>::decode(bytes)?.0;
-        let mut field_vec = [FL::default(); OUT_LEN];
-        for out in field_vec.iter_mut() {
-            *out = FL::decode(bytes)?;
-        }
+        let value = VL::decode(bytes)?;
         let leaf_correction_word = IdpfCorrectionWord {
             seed,
             control_bits,
-            field_vec,
+            value,
         };
 
         // Check that unused packed bits are zero.
@@ -649,36 +622,33 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct IdpfCorrectionWord<F, const L: usize, const OUT_LEN: usize> {
+struct IdpfCorrectionWord<V, const L: usize> {
     seed: [u8; L],
     control_bits: [Choice; 2],
-    field_vec: [F; OUT_LEN],
+    value: V,
 }
 
-impl<F, const L: usize, const OUT_LEN: usize> ConstantTimeEq for IdpfCorrectionWord<F, L, OUT_LEN>
+impl<V, const L: usize> ConstantTimeEq for IdpfCorrectionWord<V, L>
 where
-    F: ConstantTimeEq,
+    V: ConstantTimeEq,
 {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.seed.ct_eq(&other.seed)
             & self.control_bits.ct_eq(&other.control_bits)
-            & self.field_vec.ct_eq(&other.field_vec)
+            & self.value.ct_eq(&other.value)
     }
 }
 
-impl<F, const L: usize, const OUT_LEN: usize> PartialEq for IdpfCorrectionWord<F, L, OUT_LEN>
+impl<V, const L: usize> PartialEq for IdpfCorrectionWord<V, L>
 where
-    F: ConstantTimeEq,
+    V: ConstantTimeEq,
 {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<F, const L: usize, const OUT_LEN: usize> Eq for IdpfCorrectionWord<F, L, OUT_LEN> where
-    F: ConstantTimeEq
-{
-}
+impl<V, const L: usize> Eq for IdpfCorrectionWord<V, L> where V: ConstantTimeEq {}
 
 fn xor_seeds<const L: usize>(left: &[u8; L], right: &[u8; L]) -> [u8; L] {
     let mut seed = [0u8; L];
@@ -872,7 +842,10 @@ mod tests {
         field::{Field255, Field64, FieldElement},
         idpf,
         prng::Prng,
-        vdaf::prg::{Prg, PrgAes128, Seed},
+        vdaf::{
+            poplar1::Poplar1IdpfValue,
+            prg::{Prg, PrgAes128, Seed},
+        },
     };
 
     #[test]
@@ -959,118 +932,116 @@ mod tests {
     #[test]
     fn test_idpf_poplar() {
         let input = bitbox![0, 1, 1, 0, 1].into();
-        let (public_share, keys) = idpf::gen::<_, PrgAes128, 16, 2>(
+        let (public_share, keys) = idpf::gen::<_, _, _, PrgAes128, 16>(
             &input,
-            Vec::from([[Field64::one(), Field64::one()]; 4]),
-            [Field255::one(), Field255::one()],
+            Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
+            Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
         )
         .unwrap();
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0].into(),
-            &IdpfOutputShare::Inner([Field64::one(), Field64::one()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![1].into(),
-            &IdpfOutputShare::Inner([Field64::zero(), Field64::zero()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
-            &IdpfOutputShare::Inner([Field64::one(), Field64::one()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 0].into(),
-            &IdpfOutputShare::Inner([Field64::zero(), Field64::zero()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![1, 0].into(),
-            &IdpfOutputShare::Inner([Field64::zero(), Field64::zero()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![1, 1].into(),
-            &IdpfOutputShare::Inner([Field64::zero(), Field64::zero()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1].into(),
-            &IdpfOutputShare::Inner([Field64::one(), Field64::one()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0].into(),
-            &IdpfOutputShare::Inner([Field64::one(), Field64::one()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 1].into(),
-            &IdpfOutputShare::Leaf([Field255::one(), Field255::one()]),
+            &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::one(), Field255::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 0].into(),
-            &IdpfOutputShare::Leaf([Field255::zero(), Field255::zero()]),
+            &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::zero(), Field255::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![1, 0, 1, 0, 0].into(),
-            &IdpfOutputShare::Leaf([Field255::zero(), Field255::zero()]),
+            &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::zero(), Field255::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
     }
 
-    fn check_idpf_poplar_evaluation<P, const L: usize, const OUT_LEN: usize>(
-        public_share: &IdpfPublicShare<Field64, Field255, L, OUT_LEN>,
+    fn check_idpf_poplar_evaluation<P, const L: usize>(
+        public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, L>,
         keys: &[Seed<L>; 2],
         prefix: &IdpfInput,
-        expected_output: &IdpfOutputShare<OUT_LEN, Field64, Field255>,
+        expected_output: &IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
         cache_0: &mut dyn IdpfCache<L>,
         cache_1: &mut dyn IdpfCache<L>,
     ) where
         P: Prg<L>,
     {
-        let share_0 =
-            idpf::eval::<P, L, OUT_LEN>(0, public_share, &keys[0], prefix, cache_0).unwrap();
-        let share_1 =
-            idpf::eval::<P, L, OUT_LEN>(1, public_share, &keys[1], prefix, cache_1).unwrap();
-        let output = share_0.merge(&share_1).unwrap();
+        let share_0 = idpf::eval::<_, _, P, L>(0, public_share, &keys[0], prefix, cache_0).unwrap();
+        let share_1 = idpf::eval::<_, _, P, L>(1, public_share, &keys[1], prefix, cache_1).unwrap();
+        let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
     }
 
@@ -1085,21 +1056,25 @@ mod tests {
         }
         let input = bits.clone().into();
 
-        let mut inner_values = [[Field64::one(), Field64::zero()]; INPUT_LEN - 1];
+        let mut inner_values = Vec::with_capacity(INPUT_LEN - 1);
         let mut prng = Prng::new().unwrap();
-        for level in inner_values.iter_mut() {
-            level[1] = prng.next().unwrap();
+        for _ in 0..INPUT_LEN - 1 {
+            inner_values.push(Poplar1IdpfValue::new([
+                Field64::one(),
+                prng.next().unwrap(),
+            ]));
         }
-        let leaf_values = [Field255::one(), Prng::new().unwrap().next().unwrap()];
+        let leaf_values =
+            Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let (public_share, keys) =
-            idpf::gen::<_, PrgAes128, 16, 2>(&input, Vec::from(inner_values), leaf_values).unwrap();
+            idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
 
         for (level, values) in inner_values.iter().enumerate() {
             let mut prefix = BitBox::from_bitslice(&bits[..=level]).into();
-            check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+            check_idpf_poplar_evaluation::<PrgAes128, 16>(
                 &public_share,
                 &keys,
                 &prefix,
@@ -1109,16 +1084,16 @@ mod tests {
             );
             let flipped_bit = !prefix[level];
             prefix.index.set(level, flipped_bit);
-            check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+            check_idpf_poplar_evaluation::<PrgAes128, 16>(
                 &public_share,
                 &keys,
                 &prefix,
-                &IdpfOutputShare::Inner([Field64::zero(), Field64::zero()]),
+                &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
                 &mut cache_0,
                 &mut cache_1,
             );
         }
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &input,
@@ -1128,11 +1103,11 @@ mod tests {
         );
         let mut modified_bits = bits.clone();
         modified_bits.set(INPUT_LEN - 1, !bits[INPUT_LEN - 1]);
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &modified_bits.into(),
-            &IdpfOutputShare::Leaf([Field255::zero(), Field255::zero()]),
+            &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::zero(), Field255::zero()])),
             &mut cache_0,
             &mut cache_1,
         );
@@ -1143,23 +1118,27 @@ mod tests {
         let bits = bitbox![0, 1, 1, 1, 0, 1, 0, 0];
         let input = bits.into();
 
-        let mut inner_values = [[Field64::one(), Field64::zero()]; 7];
+        let mut inner_values = Vec::with_capacity(7);
         let mut prng = Prng::new().unwrap();
-        for level in inner_values.iter_mut() {
-            level[1] = prng.next().unwrap();
+        for _ in 0..7 {
+            inner_values.push(Poplar1IdpfValue::new([
+                Field64::one(),
+                prng.next().unwrap(),
+            ]));
         }
-        let leaf_values = [Field255::one(), Prng::new().unwrap().next().unwrap()];
+        let leaf_values =
+            Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let (public_share, keys) =
-            idpf::gen::<_, PrgAes128, 16, 2>(&input, Vec::from(inner_values), leaf_values).unwrap();
+            idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![1, 1, 0, 0].into(),
-            &IdpfOutputShare::Inner([Field64::zero(), Field64::zero()]),
+            &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut cache_0,
             &mut cache_1,
         );
@@ -1188,7 +1167,7 @@ mod tests {
             ],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0].into(),
@@ -1216,7 +1195,7 @@ mod tests {
             vec![bitbox![0]],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
@@ -1244,7 +1223,7 @@ mod tests {
             vec![bitbox![0, 1]],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &input,
@@ -1285,7 +1264,7 @@ mod tests {
             ],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &input,
@@ -1310,20 +1289,24 @@ mod tests {
         let bits = bitbox![1, 0, 0, 1, 1, 0, 1, 0];
         let input = bits.into();
 
-        let mut inner_values = [[Field64::one(), Field64::zero()]; 7];
+        let mut inner_values = Vec::with_capacity(7);
         let mut prng = Prng::new().unwrap();
-        for level in inner_values.iter_mut() {
-            level[1] = prng.next().unwrap();
+        for _ in 0..7 {
+            inner_values.push(Poplar1IdpfValue::new([
+                Field64::one(),
+                prng.next().unwrap(),
+            ]));
         }
-        let leaf_values = [Field255::one(), Prng::new().unwrap().next().unwrap()];
+        let leaf_values =
+            Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let (public_share, keys) =
-            idpf::gen::<_, PrgAes128, 16, 2>(&input, Vec::from(inner_values), leaf_values).unwrap();
+            idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
 
         for (level, values) in inner_values.iter().enumerate() {
-            check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+            check_idpf_poplar_evaluation::<PrgAes128, 16>(
                 &public_share,
                 &keys,
                 &input[..=level].to_owned().into(),
@@ -1332,7 +1315,7 @@ mod tests {
                 &mut cache_1,
             );
         }
-        check_idpf_poplar_evaluation::<PrgAes128, 16, 2>(
+        check_idpf_poplar_evaluation::<PrgAes128, 16>(
             &public_share,
             &keys,
             &input,
@@ -1345,32 +1328,36 @@ mod tests {
     #[test]
     fn test_idpf_poplar_error_cases() {
         // Zero bits does not make sense.
-        idpf::gen::<_, PrgAes128, 16, 2>(&bitbox![].into(), Vec::new(), [Field255::zero(); 2])
-            .unwrap_err();
+        idpf::gen::<_, _, _, PrgAes128, 16>(
+            &bitbox![].into(),
+            Vec::<Poplar1IdpfValue<Field64>>::new(),
+            Poplar1IdpfValue::new([Field255::zero(); 2]),
+        )
+        .unwrap_err();
 
-        let (public_share, keys) = idpf::gen::<_, PrgAes128, 16, 2>(
+        let (public_share, keys) = idpf::gen::<_, _, _, PrgAes128, 16>(
             &bitbox![0;10].into(),
-            Vec::from([[Field64::zero(); 2]; 9]),
-            [Field255::zero(); 2],
+            Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
+            Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap();
 
         // Wrong number of values.
-        idpf::gen::<_, PrgAes128, 16, 2>(
+        idpf::gen::<_, _, _, PrgAes128, 16>(
             &bitbox![0; 10].into(),
-            Vec::from([[Field64::zero(); 2]; 8]),
-            [Field255::zero(); 2],
+            Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 8]),
+            Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap_err();
-        idpf::gen::<_, PrgAes128, 16, 2>(
+        idpf::gen::<_, _, _, PrgAes128, 16>(
             &bitbox![0; 10].into(),
-            Vec::from([[Field64::zero(); 2]; 10]),
-            [Field255::zero(); 2],
+            Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 10]),
+            Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap_err();
 
         // Evaluating with empty prefix.
-        assert!(idpf::eval::<PrgAes128, 16, 2>(
+        assert!(idpf::eval::<_, _, PrgAes128, 16>(
             0,
             &public_share,
             &keys[0],
@@ -1379,7 +1366,7 @@ mod tests {
         )
         .is_err());
         // Evaluating with too-long prefix.
-        assert!(idpf::eval::<PrgAes128, 16, 2>(
+        assert!(idpf::eval::<_, _, PrgAes128, 16>(
             0,
             &public_share,
             &keys[0],
@@ -1396,29 +1383,29 @@ mod tests {
                 IdpfCorrectionWord {
                     seed: [0xab; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
-                    field_vec: [
+                    value: Poplar1IdpfValue::new([
                         Field64::try_from(83261u64).unwrap(),
                         Field64::try_from(125159u64).unwrap(),
-                    ],
+                    ]),
                 },
                 IdpfCorrectionWord{
                     seed: [0xcd;16],
                     control_bits: [Choice::from(0), Choice::from(1)],
-                    field_vec: [
+                    value: Poplar1IdpfValue::new([
                         Field64::try_from(17614120u64).unwrap(),
                         Field64::try_from(20674u64).unwrap(),
-                    ],
+                    ]),
                 },
             ]),
             leaf_correction_word: IdpfCorrectionWord {
                 seed: [0xff; 16],
                 control_bits: [Choice::from(1), Choice::from(1)],
-                field_vec: [
+                value: Poplar1IdpfValue::new([
                     Field255::one(),
                     Field255::get_decoded(
                         b"\x12\x34\x56\x78\x9a\xbc\xde\xf0\x12\x34\x56\x78\x9a\xbc\xde\xf0\x12\x34\x56\x78\x9a\xbc\xde\xf0\x12\x34\x56\x78\x9a\xbc\xde\xf0",
                     ).unwrap(),
-                ],
+                ]),
             },
         };
         let message = hex::decode(concat!(
@@ -1445,48 +1432,48 @@ mod tests {
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(0), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(1)],
-                    field_vec: [Field64::zero(), Field64::zero()],
+                    value: Poplar1IdpfValue::new([Field64::zero(), Field64::zero()]),
                 },
             ]),
             leaf_correction_word: IdpfCorrectionWord {
                 seed: [0; 16],
                 control_bits: [Choice::from(0), Choice::from(1)],
-                field_vec: [Field255::zero(), Field255::zero()],
+                value: Poplar1IdpfValue::new([Field255::zero(), Field255::zero()]),
             },
         };
         let message = hex::decode(concat!(
@@ -1557,13 +1544,17 @@ mod tests {
         ];
 
         for (control_bits, serialized_control_bits) in test_cases {
-            let public_share = IdpfPublicShare::<Field64, Field255, 16, 2> {
+            let public_share = IdpfPublicShare::<
+                Poplar1IdpfValue<Field64>,
+                Poplar1IdpfValue<Field255>,
+                16,
+            > {
                 inner_correction_words: control_bits[..control_bits.len() - 2]
                     .chunks(2)
                     .map(|chunk| IdpfCorrectionWord {
                         seed: [0; 16],
                         control_bits: [Choice::from(chunk[0] as u8), Choice::from(chunk[1] as u8)],
-                        field_vec: [Field64::zero(); 2],
+                        value: Poplar1IdpfValue::new([Field64::zero(); 2]),
                     })
                     .collect(),
                 leaf_correction_word: IdpfCorrectionWord {
@@ -1572,7 +1563,7 @@ mod tests {
                         Choice::from(control_bits[control_bits.len() - 2] as u8),
                         Choice::from(control_bits[control_bits.len() - 1] as u8),
                     ],
-                    field_vec: [Field255::zero(); 2],
+                    value: Poplar1IdpfValue::new([Field255::zero(); 2]),
                 },
             };
 
@@ -1600,46 +1591,38 @@ mod tests {
         let mut buf = vec![0u8; 4096];
 
         buf[0] = 1 << 2;
-        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
-            &1,
-            &mut Cursor::new(&buf),
-        )
-        .unwrap_err();
+        let err =
+            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&1, &mut Cursor::new(&buf))
+                .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
-        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
-            &5,
-            &mut Cursor::new(&buf),
-        )
-        .unwrap_err();
+        let err =
+            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&5, &mut Cursor::new(&buf))
+                .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 4;
-        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
-            &2,
-            &mut Cursor::new(&buf),
-        )
-        .unwrap_err();
+        let err =
+            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&2, &mut Cursor::new(&buf))
+                .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 6;
-        let err = IdpfPublicShare::<Field64, Field255, 16, 2>::decode_with_param(
-            &3,
-            &mut Cursor::new(&buf),
-        )
-        .unwrap_err();
+        let err =
+            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&3, &mut Cursor::new(&buf))
+                .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
     }
 
-    /// Stores a test vector for the Idpf key generation algorithm.
+    /// Stores a test vector for the IDPF key generation algorithm.
     struct IdpfTestVector {
         /// The number of bits in IDPF inputs.
         bits: usize,
         /// The IDPF input provided to the key generation algorithm.
         alpha: IdpfInput,
         /// The IDPF output values, at each inner level, provided to the key generation algorithm.
-        beta_inner: Vec<[Field64; 2]>,
+        beta_inner: Vec<Poplar1IdpfValue<Field64>>,
         /// The IDPF output values for the leaf level, provided to the key generation algorithm.
-        beta_leaf: [Field255; 2],
+        beta_leaf: Poplar1IdpfValue<Field255>,
         /// The two keys returned by the key generation algorithm.
         keys: [[u8; 16]; 2],
         /// The public share returned by the key generation algorithm.
@@ -1673,15 +1656,15 @@ mod tests {
         let beta_inner = beta_inner_level_array
             .iter()
             .map(|array| {
-                [
+                Poplar1IdpfValue::new([
                     Field64::from(array[0].as_str().unwrap().parse::<u64>().unwrap()),
                     Field64::from(array[1].as_str().unwrap().parse::<u64>().unwrap()),
-                ]
+                ])
             })
             .collect::<Vec<_>>();
 
         let beta_leaf_array = test_vec_obj.get("beta_leaf").unwrap().as_array().unwrap();
-        let beta_leaf = [
+        let beta_leaf = Poplar1IdpfValue::new([
             Field255::from(
                 beta_leaf_array[0]
                     .as_str()
@@ -1696,7 +1679,7 @@ mod tests {
                     .parse::<BigUint>()
                     .unwrap(),
             ),
-        ];
+        ]);
 
         let keys_array = test_vec_obj.get("keys").unwrap().as_array().unwrap();
         let keys = [
@@ -1738,38 +1721,44 @@ mod tests {
         ))
         .unwrap();
         let bits = 4;
-        let public_share =
-            IdpfPublicShare::<Field64, Field255, 16, 2>::get_decoded_with_param(&bits, &data)
-                .unwrap();
+        let public_share = IdpfPublicShare::<
+            Poplar1IdpfValue<Field64>,
+            Poplar1IdpfValue<Field255>,
+            16,
+        >::get_decoded_with_param(&bits, &data)
+        .unwrap();
 
         let expected_public_share = IdpfPublicShare {
             inner_correction_words: Vec::from([
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(0), Choice::from(1)],
-                    field_vec: [Field64::from(1u64), Field64::from(16949890756552313413u64)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(1u64),
+                        Field64::from(16949890756552313413u64),
+                    ]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(0), Choice::from(1)],
-                    field_vec: [
+                    value: Poplar1IdpfValue::new([
                         Field64::from(18446744069414584320u64),
                         Field64::from(2473087798058630316u64),
-                    ],
+                    ]),
                 },
                 IdpfCorrectionWord {
                     seed: [0; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
-                    field_vec: [
+                    value: Poplar1IdpfValue::new([
                         Field64::from(18446744069414584320u64),
                         Field64::from(7634761277030804329u64),
-                    ],
+                    ]),
                 },
             ]),
             leaf_correction_word: IdpfCorrectionWord {
                 seed: [0; 16],
                 control_bits: [Choice::from(0), Choice::from(1)],
-                field_vec: [
+                value: Poplar1IdpfValue::new([
                     Field255::one(),
                     Field255::try_from(
                         [
@@ -1780,7 +1769,7 @@ mod tests {
                         .as_slice(),
                     )
                     .unwrap(),
-                ],
+                ]),
             },
         };
 
@@ -1790,7 +1779,7 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgAes128, 16, 2>(
+        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgAes128, 16>(
             &test_vector.alpha,
             test_vector.beta_inner,
             test_vector.beta_leaf,

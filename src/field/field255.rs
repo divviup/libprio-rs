@@ -9,7 +9,7 @@ use crate::{
 };
 use fiat_crypto::curve25519_64::{
     fiat_25519_add, fiat_25519_carry, fiat_25519_carry_mul, fiat_25519_from_bytes, fiat_25519_opp,
-    fiat_25519_sub, fiat_25519_tight_field_element, fiat_25519_to_bytes,
+    fiat_25519_selectznz, fiat_25519_sub, fiat_25519_tight_field_element, fiat_25519_to_bytes,
 };
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
@@ -20,7 +20,9 @@ use std::{
     mem::size_of,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
 };
-use subtle::{Choice, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess};
+use subtle::{
+    Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
+};
 
 // `python3 -c "print(', '.join(hex(x) for x in (2**255-19).to_bytes(32, 'big')))"`
 const MODULUS_BIG_ENDIAN: [u8; 32] = [
@@ -88,6 +90,14 @@ impl ConstantTimeEq for Field255 {
         fiat_25519_to_bytes(&mut rhs_encoded, &rhs.0);
 
         self_encoded.ct_eq(&rhs_encoded)
+    }
+}
+
+impl ConditionallySelectable for Field255 {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        let mut output = [0; 5];
+        fiat_25519_selectznz(&mut output, choice.unwrap_u8(), &a.0, &b.0);
+        Field255(output)
     }
 }
 
@@ -171,6 +181,14 @@ impl DivAssign for Field255 {
 }
 
 impl Neg for Field255 {
+    type Output = Field255;
+
+    fn neg(self) -> Field255 {
+        -&self
+    }
+}
+
+impl<'a> Neg for &'a Field255 {
     type Output = Field255;
 
     fn neg(self) -> Field255 {

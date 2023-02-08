@@ -138,7 +138,7 @@ mod tests {
     use crate::{
         codec::Decode,
         field::{Field96, FieldPrio2},
-        vdaf::prg::{Prg, PrgAes128, Seed},
+        vdaf::prg::{CoinToss, Prg, PrgAes128, Seed},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
@@ -223,13 +223,19 @@ mod tests {
     fn rejection_sampling_test_vector() {
         // These constants were found in a brute-force search, and they test that the PRG performs
         // rejection sampling correctly when raw AES-CTR output exceeds the prime modulus.
-        let seed_stream = PrgAes128::seed_stream(
-            &Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 95]).unwrap(),
-            b"",
-        );
-        let mut prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
+        let seed = Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 95]).unwrap();
         let expected = Field96::from(39729620190871453347343769187);
+
+        let seed_stream = PrgAes128::seed_stream(&seed, b"");
+        let mut prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
         let actual = prng.nth(145).unwrap();
+        assert_eq!(actual, expected);
+
+        let mut seed_stream = PrgAes128::seed_stream(&seed, b"");
+        let mut actual = Field96::zero();
+        for _ in 0..=145 {
+            actual = <Field96 as CoinToss>::sample(&mut seed_stream);
+        }
         assert_eq!(actual, expected);
     }
 
