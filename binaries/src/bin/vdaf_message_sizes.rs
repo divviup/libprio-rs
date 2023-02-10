@@ -18,12 +18,13 @@ use prio::{
 
 fn main() {
     let num_shares = 2;
+    let nonce = [0; 16];
 
     let prio3 = Prio3::new_aes128_count(num_shares).unwrap();
     let measurement = 1;
     println!(
         "prio3 count share size = {}",
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     let buckets: Vec<u64> = (1..10).collect();
@@ -32,7 +33,7 @@ fn main() {
     println!(
         "prio3 histogram ({} buckets) share size = {}",
         buckets.len() + 1,
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     let bits = 32;
@@ -41,7 +42,7 @@ fn main() {
     println!(
         "prio3 sum ({} bits) share size = {}",
         bits,
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     let len = 1000;
@@ -50,14 +51,14 @@ fn main() {
     println!(
         "prio3 countvec ({} len) share size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     let prio3 = Prio3::new_aes128_sum_vec_multithreaded(num_shares, 1, len).unwrap();
     println!(
         "prio3 countvec multithreaded ({} len) share size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     let len = 1000;
@@ -67,7 +68,7 @@ fn main() {
     println!(
         "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     let prio3 =
@@ -75,7 +76,7 @@ fn main() {
     println!(
         "prio3 fixedpoint16 boundedl2 vec multithreaded ({} entries) size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement).unwrap().1)
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
     println!();

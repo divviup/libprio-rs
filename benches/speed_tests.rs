@@ -93,15 +93,16 @@ pub fn count_vec(c: &mut Criterion) {
         {
             // Prio2
             let input = vec![0u32; size];
+            let ignored_nonce = [0; 16];
             let prio2 = Prio2::new(size).unwrap();
 
             group.bench_function(BenchmarkId::new("prio2_prove", size), |b| {
                 b.iter(|| {
-                    prio2.shard(&input).unwrap();
+                    prio2.shard(&input, &ignored_nonce).unwrap();
                 })
             });
 
-            let (_, input_shares) = prio2.shard(&input).unwrap();
+            let (_, input_shares) = prio2.shard(&input, &ignored_nonce).unwrap();
             let query_rand = random_vector(1).unwrap()[0];
 
             group.bench_function(BenchmarkId::new("prio2_query", size), |b| {
@@ -173,11 +174,12 @@ pub fn prio3_client(c: &mut Criterion) {
     let num_shares = 2;
     let mut group = c.benchmark_group("prio3_client");
 
+    let nonce = [0; 16];
     let prio3 = Prio3::new_aes128_count(num_shares).unwrap();
     let measurement = 1;
     group.bench_function("count", |b| {
         b.iter(|| {
-            prio3.shard(&measurement).unwrap();
+            prio3.shard(&measurement, &nonce).unwrap();
         })
     });
 
@@ -186,7 +188,7 @@ pub fn prio3_client(c: &mut Criterion) {
     let measurement = 17;
     group.bench_function(BenchmarkId::new("histogram", buckets.len() + 1), |b| {
         b.iter(|| {
-            prio3.shard(&measurement).unwrap();
+            prio3.shard(&measurement, &nonce).unwrap();
         })
     });
 
@@ -195,7 +197,7 @@ pub fn prio3_client(c: &mut Criterion) {
     let measurement = 1337;
     group.bench_function(BenchmarkId::new("sum", bits), |b| {
         b.iter(|| {
-            prio3.shard(&measurement).unwrap();
+            prio3.shard(&measurement, &nonce).unwrap();
         })
     });
 
@@ -204,7 +206,7 @@ pub fn prio3_client(c: &mut Criterion) {
     let measurement = vec![0; len];
     group.bench_function(BenchmarkId::new("countvec", len), |b| {
         b.iter(|| {
-            prio3.shard(&measurement).unwrap();
+            prio3.shard(&measurement, &nonce).unwrap();
         })
     });
 
@@ -214,7 +216,7 @@ pub fn prio3_client(c: &mut Criterion) {
         let measurement = vec![0; len];
         group.bench_function(BenchmarkId::new("countvec_parallel", len), |b| {
             b.iter(|| {
-                prio3.shard(&measurement).unwrap();
+                prio3.shard(&measurement, &nonce).unwrap();
             })
         });
     }
@@ -227,7 +229,7 @@ pub fn prio3_client(c: &mut Criterion) {
         let measurement = vec![fp_num; len];
         group.bench_function(BenchmarkId::new("fixedpoint16_boundedl2_vec", len), |b| {
             b.iter(|| {
-                prio3.shard(&measurement).unwrap();
+                prio3.shard(&measurement, &nonce).unwrap();
             })
         });
     }
@@ -242,7 +244,7 @@ pub fn prio3_client(c: &mut Criterion) {
             BenchmarkId::new("prio3_fixedpoint16_boundedl2_vec_multithreaded", len),
             |b| {
                 b.iter(|| {
-                    prio3.shard(&measurement).unwrap();
+                    prio3.shard(&measurement, &nonce).unwrap();
                 })
             },
         );
@@ -330,6 +332,7 @@ pub fn poplar1(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_aes128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
+            let nonce = rng.gen::<[u8; 16]>();
 
             b.iter_batched(
                 || {
@@ -339,7 +342,7 @@ pub fn poplar1(c: &mut Criterion) {
                     IdpfInput::from_bools(&bits)
                 },
                 |measurement| {
-                    vdaf.shard(&measurement).unwrap();
+                    vdaf.shard(&measurement, &nonce).unwrap();
                 },
                 BatchSize::SmallInput,
             );
@@ -373,7 +376,8 @@ pub fn poplar1(c: &mut Criterion) {
                     // We are benchmarking preparation of a single report. For this test, it doesn't matter
                     // which measurement we generate a report for, so pick the first measurement
                     // arbitrarily.
-                    let (public_share, input_shares) = vdaf.shard(&measurements[0]).unwrap();
+                    let (public_share, input_shares) =
+                        vdaf.shard(&measurements[0], &nonce).unwrap();
 
                     // For the aggregation paramter, we use the candidate prefixes from the prefix tree
                     // for the sampled measurements. Run preparation for the last step, which ought to

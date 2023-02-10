@@ -60,8 +60,9 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
     P: Prg<L>,
     M: From<<T as Type>::Field> + Debug + PartialEq,
 {
+    let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let input_shares = prio3
-        .test_vec_shard(&t.measurement)
+        .test_vec_shard(&t.measurement, &nonce)
         .expect("failed to generate input shares");
 
     assert_eq!(2, t.input_shares.len(), "#{test_num}");
@@ -83,7 +84,7 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
     let mut prep_shares = Vec::new();
     for (agg_id, input_share) in input_shares.iter().enumerate() {
         let (state, prep_share) = prio3
-            .prepare_init(verify_key, agg_id, &(), &t.nonce, &(), input_share)
+            .prepare_init(verify_key, agg_id, &(), &nonce, &(), input_share)
             .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
         prep_shares.push(prep_share);

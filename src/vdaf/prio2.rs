@@ -107,10 +107,11 @@ impl Vdaf for Prio2 {
     }
 }
 
-impl Client for Prio2 {
+impl Client<16> for Prio2 {
     fn shard(
         &self,
         measurement: &Vec<u32>,
+        _nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Share<FieldPrio2, 32>>), VdafError> {
         if measurement.len() != self.input_len {
             return Err(VdafError::Uncategorized("incorrect input length".into()));
@@ -189,7 +190,7 @@ impl ParameterizedDecode<Prio2PrepareState> for Prio2PrepareShare {
     }
 }
 
-impl Aggregator<32> for Prio2 {
+impl Aggregator<32, 16> for Prio2 {
     type PrepareState = Prio2PrepareState;
     type PrepareShare = Prio2PrepareShare;
     type PrepareMessage = ();
@@ -199,7 +200,7 @@ impl Aggregator<32> for Prio2 {
         agg_key: &[u8; 32],
         agg_id: usize,
         _agg_param: &Self::AggregationParam,
-        nonce: &[u8],
+        nonce: &[u8; 16],
         _public_share: &Self::PublicShare,
         input_share: &Share<FieldPrio2, 32>,
     ) -> Result<(Prio2PrepareState, Prio2PrepareShare), VdafError> {
@@ -243,7 +244,7 @@ impl Aggregator<32> for Prio2 {
         &self,
         state: Prio2PrepareState,
         _input: (),
-    ) -> Result<PrepareTransition<Self, 32>, VdafError> {
+    ) -> Result<PrepareTransition<Self, 32, 16>, VdafError> {
         let data = match state.0 {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
@@ -392,9 +393,8 @@ mod tests {
             Share::get_decoded_with_param(&(&prio2, 1), &input_share2).unwrap(),
         ];
 
-        let verify_key = rng.gen();
-        let mut nonce = [0; 16];
-        rng.fill(&mut nonce);
+        let verify_key = rng.gen::<[u8; 32]>();
+        let nonce = rng.gen::<[u8; 16]>();
         run_vdaf_prepare(&prio2, &verify_key, &(), &nonce, (), input_shares).unwrap();
     }
 
@@ -407,7 +407,8 @@ mod tests {
 
         let data = vec![0, 0, 1, 1, 0];
         let prio2 = Prio2::new(data.len()).unwrap();
-        let (_public_share, input_shares) = prio2.shard(&data).unwrap();
+        let ignored_nonce = [0; 16];
+        let (_public_share, input_shares) = prio2.shard(&data, &ignored_nonce).unwrap();
 
         let encrypted_input_share1 =
             encrypt_share(&input_shares[0].get_encoded(), &pub_key1).unwrap();
@@ -435,14 +436,22 @@ mod tests {
 
     #[test]
     fn prepare_state_serialization() {
-        let mut verify_key = [0; 32];
-        thread_rng().fill(&mut verify_key[..]);
+        let mut rng = thread_rng();
+        let verify_key = rng.gen::<[u8; 32]>();
+        let nonce = rng.gen::<[u8; 16]>();
         let data = vec![0, 0, 1, 1, 0];
         let prio2 = Prio2::new(data.len()).unwrap();
-        let (public_share, input_shares) = prio2.shard(&data).unwrap();
+        let (public_share, input_shares) = prio2.shard(&data, &nonce).unwrap();
         for (agg_id, input_share) in input_shares.iter().enumerate() {
             let (want, _msg) = prio2
-                .prepare_init(&verify_key, agg_id, &(), &[], &public_share, input_share)
+                .prepare_init(
+                    &verify_key,
+                    agg_id,
+                    &(),
+                    &[0; 16],
+                    &public_share,
+                    input_share,
+                )
                 .unwrap();
             let got =
                 Prio2PrepareState::get_decoded_with_param(&(&prio2, agg_id), &want.get_encoded())

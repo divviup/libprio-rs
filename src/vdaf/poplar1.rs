@@ -313,10 +313,11 @@ impl<P: Prg<L>, const L: usize> Vdaf for Poplar1<P, L> {
     }
 }
 
-impl<P: Prg<L>, const L: usize> Client for Poplar1<P, L> {
+impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
     fn shard(
         &self,
         input: &IdpfInput,
+        _nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<L>>), VdafError> {
         if input.len() != self.bits {
             return Err(VdafError::Uncategorized(format!(
@@ -396,7 +397,7 @@ impl<P: Prg<L>, const L: usize> Client for Poplar1<P, L> {
     }
 }
 
-impl<P: Prg<L>, const L: usize> Aggregator<L> for Poplar1<P, L> {
+impl<P: Prg<L>, const L: usize> Aggregator<L, 16> for Poplar1<P, L> {
     type PrepareState = Poplar1PrepareState;
     type PrepareShare = Poplar1FieldVec;
     type PrepareMessage = Poplar1PrepareMessage;
@@ -407,7 +408,7 @@ impl<P: Prg<L>, const L: usize> Aggregator<L> for Poplar1<P, L> {
         verify_key: &[u8; L],
         agg_id: usize,
         agg_param: &Poplar1AggregationParam,
-        nonce: &[u8],
+        nonce: &[u8; 16],
         public_share: &Poplar1PublicShare<L>,
         input_share: &Poplar1InputShare<L>,
     ) -> Result<(Poplar1PrepareState, Poplar1FieldVec), VdafError> {
@@ -520,7 +521,7 @@ impl<P: Prg<L>, const L: usize> Aggregator<L> for Poplar1<P, L> {
         &self,
         state: Poplar1PrepareState,
         msg: Poplar1PrepareMessage,
-    ) -> Result<PrepareTransition<Self, L>, VdafError> {
+    ) -> Result<PrepareTransition<Self, L, 16>, VdafError> {
         match (state.0, msg.0) {
             // Round one
             (
@@ -945,15 +946,12 @@ mod tests {
     // to `vdaf::run_vdaf_prepare`, but does not exercise serialization.
     fn run_prepare<P: Prg<L>, const L: usize>(
         vdaf: &Poplar1<P, L>,
+        verify_key: &[u8; L],
+        nonce: &[u8; 16],
         public_share: &Poplar1PublicShare<L>,
         input_shares: &[Poplar1InputShare<L>],
-        verify_key: &[u8; L],
         agg_param: &Poplar1AggregationParam,
     ) -> (Poplar1FieldVec, Poplar1FieldVec) {
-        // NOTE For security reasons, it is important to ensure the nonce is randomly generated and
-        // unique per report. We use a fixed nonce here for ease of testing.
-        let nonce = &[0; 16];
-
         let (prep_state_0, prep_share_0) = vdaf
             .prepare_init(
                 verify_key,
@@ -1013,14 +1011,21 @@ mod tests {
 
     fn test_prepare<P: Prg<L>, const L: usize>(
         vdaf: &Poplar1<P, L>,
+        verify_key: &[u8; L],
+        nonce: &[u8; 16],
         public_share: &Poplar1PublicShare<L>,
         input_shares: &[Poplar1InputShare<L>],
-        verify_key: &[u8; L],
         agg_param: &Poplar1AggregationParam,
         expected_result: Vec<u64>,
     ) {
-        let (out_share_0, out_share_1) =
-            run_prepare(vdaf, public_share, input_shares, verify_key, agg_param);
+        let (out_share_0, out_share_1) = run_prepare(
+            vdaf,
+            verify_key,
+            nonce,
+            public_share,
+            input_shares,
+            agg_param,
+        );
 
         // Convert aggregate shares and unshard.
         let agg_share_0 = vdaf.aggregate(agg_param, [out_share_0]).unwrap();
@@ -1042,14 +1047,20 @@ mod tests {
         measurements: impl IntoIterator<Item = B>,
         expected_result: impl IntoIterator<Item = B>,
     ) {
+        let mut rng = thread_rng();
+
         // Sharding step
-        let reports: Vec<(Poplar1PublicShare<L>, Vec<Poplar1InputShare<L>>)> = measurements
-            .into_iter()
-            .map(|measurement| {
-                vdaf.shard(&IdpfInput::from_bytes(measurement.as_ref()))
-                    .unwrap()
-            })
-            .collect();
+        let reports: Vec<([u8; 16], Poplar1PublicShare<L>, Vec<Poplar1InputShare<L>>)> =
+            measurements
+                .into_iter()
+                .map(|measurement| {
+                    let nonce = rng.gen();
+                    let (public_share, input_shares) = vdaf
+                        .shard(&IdpfInput::from_bytes(measurement.as_ref()), &nonce)
+                        .unwrap();
+                    (nonce, public_share, input_shares)
+                })
+                .collect();
 
         let mut agg_param = Poplar1AggregationParam {
             level: 0,
@@ -1065,9 +1076,15 @@ mod tests {
             let mut out_shares_1 = Vec::with_capacity(reports.len());
 
             // Preparation step
-            for report in reports.iter() {
-                let (out_share_0, out_share_1) =
-                    run_prepare(vdaf, &report.0, &report.1, verify_key, &agg_param);
+            for (nonce, public_share, input_shares) in reports.iter() {
+                let (out_share_0, out_share_1) = run_prepare(
+                    vdaf,
+                    verify_key,
+                    nonce,
+                    public_share,
+                    input_shares,
+                    &agg_param,
+                );
                 out_shares_0.push(out_share_0);
                 out_shares_1.push(out_share_1);
             }
@@ -1118,16 +1135,18 @@ mod tests {
     fn shard_prepare() {
         let mut rng = thread_rng();
         let verify_key = rng.gen();
+        let nonce = rng.gen::<[u8; 16]>();
         let vdaf = Poplar1::new_aes128(64);
 
         let input = IdpfInput::from_bytes(b"12341324");
-        let (public_share, input_shares) = vdaf.shard(&input).unwrap();
+        let (public_share, input_shares) = vdaf.shard(&input, &nonce).unwrap();
 
         test_prepare(
             &vdaf,
+            &verify_key,
+            &nonce,
             &public_share,
             &input_shares,
-            &verify_key,
             &Poplar1AggregationParam {
                 level: 7,
                 prefixes: vec![
@@ -1143,9 +1162,10 @@ mod tests {
         for level in 0..vdaf.bits {
             test_prepare(
                 &vdaf,
+                &verify_key,
+                &nonce,
                 &public_share,
                 &input_shares,
-                &verify_key,
                 &Poplar1AggregationParam {
                     level,
                     prefixes: vec![input.prefix(level)],
