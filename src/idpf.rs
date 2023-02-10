@@ -92,8 +92,8 @@ impl IdpfInput {
         vec.into_vec()
     }
 
-    #[cfg(test)]
-    pub(crate) fn prefix(&self, level: usize) -> Self {
+    /// Return the `level`-bit prefix of this IDPF input.
+    pub fn prefix(&self, level: usize) -> Self {
         Self {
             index: self.index[..=level].to_owned().into(),
         }
