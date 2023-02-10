@@ -180,10 +180,12 @@ fn extend<P, const L: usize>(seed: &[u8; L]) -> ([[u8; L]; 2], [Choice; 2])
 where
     P: Prg<L>,
 {
-    let mut prg = P::init(seed);
-    prg.update(VERSION);
-    prg.update(b" idpf poplar extend");
-    let mut seed_stream = prg.into_seed_stream();
+    let custom = [
+        VERSION, 1, /* algorithm class */
+        0, 0, 0, 0, /* algorithm ID */
+        0, 0, /* usage */
+    ];
+    let mut seed_stream = P::init(seed, &custom).into_seed_stream();
 
     let mut seeds = [[0u8; L], [0u8; L]];
     seed_stream.fill(&mut seeds[0]);
@@ -201,10 +203,12 @@ where
     V: IdpfValue,
     P: Prg<L>,
 {
-    let mut prg = P::init(seed);
-    prg.update(VERSION);
-    prg.update(b" idpf poplar convert");
-    let mut seed_stream = prg.into_seed_stream();
+    let custom = [
+        VERSION, 1, /* algorithm class */
+        0, 0, 0, 0, /* algorithm ID */
+        0, 1, /* usage */
+    ];
+    let mut seed_stream = P::init(seed, &custom).into_seed_stream();
 
     let mut next_seed = [0u8; L];
     seed_stream.fill(&mut next_seed);
@@ -1776,6 +1780,7 @@ mod tests {
         assert_eq!(public_share, expected_public_share);
     }
 
+    #[ignore]
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();

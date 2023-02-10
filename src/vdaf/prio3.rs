@@ -50,7 +50,7 @@ use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, RandSource, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, ShareDecodingParameter, Vdaf, VdafError, DST_LEN, VERSION,
+    Share, ShareDecodingParameter, Vdaf, VdafError,
 };
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use fixed::traits::Fixed;
@@ -59,6 +59,14 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::IntoIterator;
 use std::marker::PhantomData;
+
+const DST_MEASUREMENT_SHARE: u16 = 1;
+const DST_PROOF_SHARE: u16 = 2;
+const DST_JOINT_RANDOMNESS: u16 = 3;
+const DST_PROVE_RANDOMNESS: u16 = 4;
+const DST_QUERY_RANDOMNESS: u16 = 5;
+const DST_JOINT_RAND_SEED: u16 = 6;
+const DST_JOINT_RAND_PART: u16 = 7;
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
 #[cfg(feature = "crypto-dependencies")]
@@ -363,29 +371,20 @@ where
         self.typ.verifier_len()
     }
 
-    fn derive_joint_randomness<'a>(parts: impl Iterator<Item = &'a Seed<L>>) -> Seed<L> {
-        let mut info = [0; VERSION.len() + 5];
-        info[..VERSION.len()].copy_from_slice(VERSION);
-        info[VERSION.len()..VERSION.len() + 4].copy_from_slice(&Self::ID.to_be_bytes());
-        info[VERSION.len() + 4] = 255;
-        let mut deriver = P::init(&[0; L]);
-        deriver.update(&info);
+    fn derive_joint_rand_seed<'a>(parts: impl Iterator<Item = &'a Seed<L>>) -> Seed<L> {
+        let mut prg = P::init(&[0; L], &Self::custom(DST_JOINT_RAND_SEED));
         for part in parts {
-            deriver.update(part.as_ref());
+            prg.update(part.as_ref());
         }
-        deriver.into_seed()
+        prg.into_seed()
     }
 
     fn shard_with_rand_source<const N: usize>(
         &self,
         measurement: &T::Measurement,
-        _nonce: &[u8; N],
+        nonce: &[u8; N],
         rand_source: RandSource,
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
-        let mut info = [0; DST_LEN + 1];
-        info[..VERSION.len()].copy_from_slice(VERSION);
-        info[VERSION.len()..DST_LEN].copy_from_slice(&Self::ID.to_be_bytes());
-
         let num_aggregators = self.num_aggregators;
         let input = self.typ.encode_measurement(measurement)?;
 
@@ -399,69 +398,81 @@ where
         let mut leader_input_share = input.clone();
         for agg_id in 1..num_aggregators {
             let helper = HelperShare::from_rand_source(rand_source)?;
+            let mut joint_rand_part_prg = P::init(
+                helper.joint_rand_param.blind.as_ref(),
+                &Self::custom(DST_JOINT_RAND_PART),
+            );
+            joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
+            joint_rand_part_prg.update(nonce);
 
-            let mut deriver = P::init(helper.joint_rand_param.blind.as_ref());
-            info[DST_LEN] = agg_id;
-            deriver.update(&info);
-            let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&helper.input_share, &info));
+            let input_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+                &helper.input_share,
+                &Self::custom(DST_MEASUREMENT_SHARE),
+                &[agg_id],
+            ));
             for (x, y) in leader_input_share
                 .iter_mut()
-                .zip(prng)
+                .zip(input_share_prng)
                 .take(self.typ.input_len())
             {
                 *x -= y;
-                deriver.update(&y.into());
+                joint_rand_part_prg.update(&y.into());
             }
 
             if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
-                helper_joint_rand_parts.push(deriver.into_seed());
+                helper_joint_rand_parts.push(joint_rand_part_prg.into_seed());
             }
             helper_shares.push(helper);
         }
 
         let leader_blind = Seed::from_rand_source(rand_source)?;
 
-        info[DST_LEN] = 0; // ID of the leader
-        let mut deriver = P::init(leader_blind.as_ref());
-        deriver.update(&info);
+        let mut joint_rand_part_prg =
+            P::init(leader_blind.as_ref(), &Self::custom(DST_JOINT_RAND_PART));
+        joint_rand_part_prg.update(&[0]); // Aggregator ID
+        joint_rand_part_prg.update(nonce);
         for x in leader_input_share.iter() {
-            deriver.update(&(*x).into());
+            joint_rand_part_prg.update(&(*x).into());
         }
 
-        let leader_joint_rand_seed_part = deriver.into_seed();
+        let leader_joint_rand_seed_part = joint_rand_part_prg.into_seed();
 
         // Compute the joint randomness seed.
         let joint_rand_seed = helper_joint_rand_parts.as_ref().map(|parts| {
-            Self::derive_joint_randomness(
+            Self::derive_joint_rand_seed(
                 std::iter::once(&leader_joint_rand_seed_part).chain(parts.iter()),
             )
         });
 
         // Run the proof-generation algorithm.
-        let domain_separation_tag = &info[..DST_LEN];
         let joint_rand: Vec<T::Field> = joint_rand_seed
             .map(|joint_rand_seed| {
-                let prng: Prng<T::Field, _> =
-                    Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
+                let prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+                    &joint_rand_seed,
+                    &Self::custom(DST_JOINT_RANDOMNESS),
+                    &[],
+                ));
                 prng.take(self.typ.joint_rand_len()).collect()
             })
             .unwrap_or_default();
-        let prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+        let prove_rand_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
             &Seed::from_rand_source(rand_source)?,
-            domain_separation_tag,
+            &Self::custom(DST_PROVE_RANDOMNESS),
+            &[],
         ));
-        let prove_rand: Vec<T::Field> = prng.take(self.typ.prove_rand_len()).collect();
+        let prove_rand: Vec<T::Field> = prove_rand_prng.take(self.typ.prove_rand_len()).collect();
         let mut leader_proof_share = self.typ.prove(&input, &prove_rand, &joint_rand)?;
 
         // Generate the proof shares and distribute the joint randomness seed hints.
         for (j, helper) in helper_shares.iter_mut().enumerate() {
-            info[DST_LEN] = j as u8 + 1;
-            let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&helper.proof_share, &info));
+            let proof_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+                &helper.proof_share,
+                &Self::custom(DST_PROOF_SHARE),
+                &[j as u8 + 1],
+            ));
             for (x, y) in leader_proof_share
                 .iter_mut()
-                .zip(prng)
+                .zip(proof_share_prng)
                 .take(self.typ.proof_len())
             {
                 *x -= y;
@@ -810,24 +821,20 @@ where
         VdafError,
     > {
         let agg_id = self.role_try_from(agg_id)?;
-        let mut info = [0; DST_LEN + 1];
-        info[..VERSION.len()].copy_from_slice(VERSION);
-        info[VERSION.len()..DST_LEN].copy_from_slice(&Self::ID.to_be_bytes());
-        info[DST_LEN] = agg_id;
-        let domain_separation_tag = &info[..DST_LEN];
-
-        let mut deriver = P::init(verify_key);
-        deriver.update(domain_separation_tag);
-        deriver.update(&[255]);
-        deriver.update(nonce);
-        let query_rand_prng = Prng::from_seed_stream(deriver.into_seed_stream());
+        let mut query_rand_prg = P::init(verify_key, &Self::custom(DST_QUERY_RANDOMNESS));
+        query_rand_prg.update(nonce);
+        let query_rand_prng = Prng::from_seed_stream(query_rand_prg.into_seed_stream());
 
         // Create a reference to the (expanded) input share.
         let expanded_input_share: Option<Vec<T::Field>> = match msg.input_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let prng = Prng::from_seed_stream(P::seed_stream(seed, &info));
-                Some(prng.take(self.typ.input_len()).collect())
+                let input_share_prng = Prng::from_seed_stream(P::seed_stream(
+                    seed,
+                    &Self::custom(DST_MEASUREMENT_SHARE),
+                    &[agg_id],
+                ));
+                Some(input_share_prng.take(self.typ.input_len()).collect())
             }
         };
         let input_share = match msg.input_share {
@@ -839,7 +846,11 @@ where
         let expanded_proof_share: Option<Vec<T::Field>> = match msg.proof_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let prng = Prng::from_seed_stream(P::seed_stream(seed, &info));
+                let prng = Prng::from_seed_stream(P::seed_stream(
+                    seed,
+                    &Self::custom(DST_PROOF_SHARE),
+                    &[agg_id],
+                ));
                 Some(prng.take(self.typ.proof_len()).collect())
             }
         };
@@ -849,28 +860,35 @@ where
         };
 
         // Compute the joint randomness.
-        let (joint_rand_seed, joint_rand_seed_part, joint_rand) = if self.typ.joint_rand_len() > 0 {
-            let mut deriver = P::init(msg.joint_rand_param.as_ref().unwrap().blind.as_ref());
-            deriver.update(&info);
+        let (joint_rand_seed, joint_rand_part, joint_rand) = if self.typ.joint_rand_len() > 0 {
+            let mut joint_rand_part_prg = P::init(
+                msg.joint_rand_param.as_ref().unwrap().blind.as_ref(),
+                &Self::custom(DST_JOINT_RAND_PART),
+            );
+            joint_rand_part_prg.update(&[agg_id]);
+            joint_rand_part_prg.update(nonce);
             for x in input_share {
-                deriver.update(&(*x).into());
+                joint_rand_part_prg.update(&(*x).into());
             }
-            let joint_rand_seed_part = deriver.into_seed();
+            let joint_rand_part = joint_rand_part_prg.into_seed();
 
             let hints = &msg.joint_rand_param.as_ref().unwrap().seed_hint;
-            let joint_rand_seed = Self::derive_joint_randomness(
+            let joint_rand_seed = Self::derive_joint_rand_seed(
                 hints[..agg_id as usize]
                     .iter()
-                    .chain(std::iter::once(&joint_rand_seed_part))
+                    .chain(std::iter::once(&joint_rand_part))
                     .chain(hints[agg_id as usize..].iter()),
             );
 
-            let prng: Prng<T::Field, _> =
-                Prng::from_seed_stream(P::seed_stream(&joint_rand_seed, domain_separation_tag));
+            let joint_rand_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+                &joint_rand_seed,
+                &Self::custom(DST_JOINT_RANDOMNESS),
+                &[],
+            ));
             (
                 Some(joint_rand_seed),
-                Some(joint_rand_seed_part),
-                prng.take(self.typ.joint_rand_len()).collect(),
+                Some(joint_rand_part),
+                joint_rand_prng.take(self.typ.joint_rand_len()).collect(),
             )
         } else {
             (None, None, Vec::new())
@@ -897,7 +915,7 @@ where
             },
             Prio3PrepareShare {
                 verifier: verifier_share,
-                joint_rand_part: joint_rand_seed_part,
+                joint_rand_part,
             },
         ))
     }
@@ -949,7 +967,7 @@ where
         };
 
         let joint_rand_seed = if self.typ.joint_rand_len() > 0 {
-            Some(Self::derive_joint_randomness(joint_rand_parts.iter()))
+            Some(Self::derive_joint_rand_seed(joint_rand_parts.iter()))
         } else {
             None
         };
@@ -975,11 +993,8 @@ where
         let input_share = match step.input_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
-                let mut info = [0; DST_LEN + 1];
-                info[..VERSION.len()].copy_from_slice(VERSION);
-                info[VERSION.len()..DST_LEN].copy_from_slice(&Self::ID.to_be_bytes());
-                info[DST_LEN] = step.agg_id;
-                let prng = Prng::from_seed_stream(P::seed_stream(&seed, &info));
+                let custom = Self::custom(DST_MEASUREMENT_SHARE);
+                let prng = Prng::from_seed_stream(P::seed_stream(&seed, &custom, &[step.agg_id]));
                 prng.take(self.typ.input_len()).collect()
             }
         };
