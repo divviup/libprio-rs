@@ -279,6 +279,11 @@ impl Poplar1AggregationParam {
     pub fn level(&self) -> usize {
         self.level
     }
+
+    /// Return the prefixes.
+    pub fn prefixes(&self) -> &[IdpfInput] {
+        self.prefixes.as_ref()
+    }
 }
 
 impl Encode for Poplar1AggregationParam {
