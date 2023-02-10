@@ -274,6 +274,11 @@ impl Poplar1AggregationParam {
             prefixes,
         })
     }
+
+    /// Return the level of the IDPF tree.
+    pub fn level(&self) -> usize {
+        self.level
+    }
 }
 
 impl Encode for Poplar1AggregationParam {
