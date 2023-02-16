@@ -131,6 +131,11 @@ criteria = "safe-to-deploy"
 delta = "1.0.91 -> 1.0.92"
 notes = "The only changes are to doccomments, a dev-dependency and the project's CI workflow, so there should be no risk to dependents."
 
+[[audits.serde_json]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.92 -> 1.0.93"
+
 [[audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
