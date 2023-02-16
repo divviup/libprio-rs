@@ -1,5 +1,8 @@
 
 # cargo-vet audits file
 
-[audits]
+[[audits.fixed]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.22.1 -> 1.23.0"
 
