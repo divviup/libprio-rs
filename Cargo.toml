@@ -49,7 +49,7 @@ hex = { version = "0.4.3", features = ["serde"] }
 # https://github.com/rust-lang/cargo/issues/2911#issuecomment-749580481
 prio = { path = ".", features = ["test-util"] }
 cfg-if = "1.0.0"
-once_cell = "1.17.0"
+once_cell = "1.17.1"
 zipf = "7.0.0"
 
 [features]
