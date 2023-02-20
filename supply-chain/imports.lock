@@ -103,6 +103,11 @@ criteria = "safe-to-deploy"
 version = "0.4.0"
 notes = "Contains `forbid_unsafe` and only uses `std::fmt` from the standard library. Otherwise only contains string manipulation."
 
+[[audits.bytecode-alliance.audits.once_cell]]
+who = "Chris Fallin <chris@cfallin.org>"
+criteria = "safe-to-deploy"
+delta = "1.16.0 -> 1.17.0"
+
 [[audits.bytecode-alliance.audits.rustc-demangle]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
@@ -303,6 +308,11 @@ notes = "All code written or reviewed by Josh Stone."
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.12.0 -> 1.13.1"
+
+[[audits.firefox.audits.once_cell]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "1.13.1 -> 1.16.0"
 
 [[audits.firefox.audits.os_str_bytes]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
@@ -574,6 +584,15 @@ who = "Jack Grigg <jack@z.cash>"
 criteria = "safe-to-deploy"
 delta = "0.1.44 -> 0.1.45"
 notes = "Fixes some argument-handling panic bugs."
+
+[[audits.zcash.audits.once_cell]]
+who = "Jack Grigg <jack@z.cash>"
+criteria = "safe-to-deploy"
+delta = "1.17.0 -> 1.17.1"
+notes = """
+Small refactor that reduces the overall amount of `unsafe` code. The new strict provenance
+approach looks reasonable.
+"""
 
 [[audits.zcash.audits.proc-macro2]]
 who = "Daira Hopwood <daira@jacaranda.org>"
