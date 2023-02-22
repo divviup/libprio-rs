@@ -287,9 +287,8 @@ impl Prio3Aes128Average {
 /// let measurements = [0, 1, 1, 1, 0];
 /// for measurement in measurements {
 ///     // Shard
-///     let (public_share, input_shares) = vdaf.shard(&measurement).unwrap();
-///     let mut nonce = [0; 16];
-///     rng.fill(&mut nonce);
+///     let nonce = rng.gen::<[u8; 16]>();
+///     let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
 ///
 ///     // Prepare
 ///     let mut prep_states = vec![];
@@ -377,9 +376,10 @@ where
         deriver.into_seed()
     }
 
-    fn shard_with_rand_source(
+    fn shard_with_rand_source<const N: usize>(
         &self,
         measurement: &T::Measurement,
+        _nonce: &[u8; N],
         rand_source: RandSource,
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
         let mut info = [0; DST_LEN + 1];
@@ -513,11 +513,12 @@ where
     /// Shard measurement with constant randomness of repeated bytes.
     /// This method is not secure. It is used for running test vectors for Prio3.
     #[cfg(feature = "test-util")]
-    pub fn test_vec_shard(
+    pub fn test_vec_shard<const N: usize>(
         &self,
         measurement: &T::Measurement,
+        nonce: &[u8; N],
     ) -> Result<Vec<Prio3InputShare<T::Field, L>>, VdafError> {
-        self.shard_with_rand_source(measurement, |buf| {
+        self.shard_with_rand_source(measurement, nonce, |buf| {
             buf.fill(1);
             Ok(())
         })
@@ -710,7 +711,7 @@ impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3Prepar
     }
 }
 
-impl<T, P, const L: usize> Client for Prio3<T, P, L>
+impl<T, P, const L: usize> Client<16> for Prio3<T, P, L>
 where
     T: Type,
     P: Prg<L>,
@@ -719,8 +720,9 @@ where
     fn shard(
         &self,
         measurement: &T::Measurement,
+        nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, L>>), VdafError> {
-        self.shard_with_rand_source(measurement, getrandom::getrandom)
+        self.shard_with_rand_source(measurement, nonce, getrandom::getrandom)
             .map(|input_shares| ((), input_shares))
     }
 }
@@ -780,7 +782,7 @@ where
     }
 }
 
-impl<T, P, const L: usize> Aggregator<L> for Prio3<T, P, L>
+impl<T, P, const L: usize> Aggregator<L, 16> for Prio3<T, P, L>
 where
     T: Type,
     P: Prg<L>,
@@ -797,7 +799,7 @@ where
         verify_key: &[u8; L],
         agg_id: usize,
         _agg_param: &Self::AggregationParam,
-        nonce: &[u8],
+        nonce: &[u8; 16],
         _public_share: &Self::PublicShare,
         msg: &Prio3InputShare<T::Field, L>,
     ) -> Result<
@@ -959,7 +961,7 @@ where
         &self,
         step: Prio3PrepareState<T::Field, L>,
         msg: Prio3PrepareMessage<L>,
-    ) -> Result<PrepareTransition<Self, L>, VdafError> {
+    ) -> Result<PrepareTransition<Self, L, 16>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
             if step.joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
@@ -1123,17 +1125,18 @@ mod tests {
 
         assert_eq!(run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(), 3);
 
+        let mut nonce = [0; 16];
         let mut verify_key = [0; 16];
         thread_rng().fill(&mut verify_key[..]);
-        let nonce = b"This is a good nonce.";
+        thread_rng().fill(&mut nonce[..]);
 
-        let (public_share, input_shares) = prio3.shard(&0).unwrap();
-        run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares).unwrap();
+        let (public_share, input_shares) = prio3.shard(&0, &nonce).unwrap();
+        run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares).unwrap();
 
-        let (public_share, input_shares) = prio3.shard(&1).unwrap();
-        run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares).unwrap();
+        let (public_share, input_shares) = prio3.shard(&1, &nonce).unwrap();
+        run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares).unwrap();
 
-        test_prepare_state_serialization(&prio3, &1).unwrap();
+        test_prepare_state_serialization(&prio3, &1, &nonce).unwrap();
 
         let prio3_extra_helper = Prio3::new_aes128_count(3).unwrap();
         assert_eq!(
@@ -1153,33 +1156,33 @@ mod tests {
 
         let mut verify_key = [0; 16];
         thread_rng().fill(&mut verify_key[..]);
-        let nonce = b"This is a good nonce.";
+        let nonce = [0; 16];
 
-        let (public_share, mut input_shares) = prio3.shard(&1).unwrap();
+        let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
         input_shares[0].joint_rand_param.as_mut().unwrap().blind.0[0] ^= 255;
-        let result = run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+        let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        let (public_share, mut input_shares) = prio3.shard(&1).unwrap();
+        let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
         input_shares[0].joint_rand_param.as_mut().unwrap().seed_hint[0].0[0] ^= 255;
-        let result = run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+        let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        let (public_share, mut input_shares) = prio3.shard(&1).unwrap();
+        let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
         assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
             data[0] += Field128::one();
         });
-        let result = run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+        let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        let (public_share, mut input_shares) = prio3.shard(&1).unwrap();
+        let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
         assert_matches!(input_shares[0].proof_share, Share::Leader(ref mut data) => {
                 data[0] += Field128::one();
         });
-        let result = run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+        let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        test_prepare_state_serialization(&prio3, &1).unwrap();
+        test_prepare_state_serialization(&prio3, &1, &nonce).unwrap();
     }
 
     #[test]
@@ -1378,42 +1381,48 @@ mod tests {
             );
 
             let mut verify_key = [0; 16];
-            thread_rng().fill(&mut verify_key[..]);
-            let nonce = b"This is a good nonce.";
+            let mut nonce = [0; 16];
+            thread_rng().fill(&mut verify_key);
+            thread_rng().fill(&mut nonce);
 
-            let (public_share, mut input_shares) =
-                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            let (public_share, mut input_shares) = prio3
+                .shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
+                .unwrap();
             input_shares[0].joint_rand_param.as_mut().unwrap().blind.0[0] ^= 255;
             let result =
-                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+                run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
             assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-            let (public_share, mut input_shares) =
-                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            let (public_share, mut input_shares) = prio3
+                .shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
+                .unwrap();
             input_shares[0].joint_rand_param.as_mut().unwrap().seed_hint[0].0[0] ^= 255;
             let result =
-                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+                run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
             assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-            let (public_share, mut input_shares) =
-                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            let (public_share, mut input_shares) = prio3
+                .shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
+                .unwrap();
             assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
                 data[0] += Field128::one();
             });
             let result =
-                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+                run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
             assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-            let (public_share, mut input_shares) =
-                prio3.shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            let (public_share, mut input_shares) = prio3
+                .shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
+                .unwrap();
             assert_matches!(input_shares[0].proof_share, Share::Leader(ref mut data) => {
                     data[0] += Field128::one();
             });
             let result =
-                run_vdaf_prepare(&prio3, &verify_key, &(), nonce, public_share, input_shares);
+                run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
             assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-            test_prepare_state_serialization(&prio3, &vec![fp_4_inv, fp_8_inv, fp_16_inv]).unwrap();
+            test_prepare_state_serialization(&prio3, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
+                .unwrap();
         }
     }
 
@@ -1431,7 +1440,7 @@ mod tests {
         assert_eq!(run_vdaf(&prio3, &(), [15]).unwrap(), vec![0, 0, 1, 0]);
         assert_eq!(run_vdaf(&prio3, &(), [20]).unwrap(), vec![0, 0, 1, 0]);
         assert_eq!(run_vdaf(&prio3, &(), [25]).unwrap(), vec![0, 0, 0, 1]);
-        test_prepare_state_serialization(&prio3, &23).unwrap();
+        test_prepare_state_serialization(&prio3, &23, &[0; 16]).unwrap();
     }
 
     #[test]
@@ -1450,7 +1459,7 @@ mod tests {
     #[test]
     fn test_prio3_input_share() {
         let prio3 = Prio3::new_aes128_sum(5, 16).unwrap();
-        let (_public_share, input_shares) = prio3.shard(&1).unwrap();
+        let (_public_share, input_shares) = prio3.shard(&1, &[0; 16]).unwrap();
 
         // Check that seed shares are distinct.
         for (i, x) in input_shares.iter().enumerate() {
@@ -1477,6 +1486,7 @@ mod tests {
     fn test_prepare_state_serialization<T, P, const L: usize>(
         prio3: &Prio3<T, P, L>,
         measurement: &T::Measurement,
+        nonce: &[u8; 16],
     ) -> Result<(), VdafError>
     where
         T: Type,
@@ -1484,10 +1494,10 @@ mod tests {
     {
         let mut verify_key = [0; L];
         thread_rng().fill(&mut verify_key[..]);
-        let (public_share, input_shares) = prio3.shard(measurement)?;
+        let (public_share, input_shares) = prio3.shard(measurement, nonce)?;
         for (agg_id, input_share) in input_shares.iter().enumerate() {
             let (want, _msg) =
-                prio3.prepare_init(&verify_key, agg_id, &(), &[], &public_share, input_share)?;
+                prio3.prepare_init(&verify_key, agg_id, &(), nonce, &public_share, input_share)?;
             let got =
                 Prio3PrepareState::get_decoded_with_param(&(prio3, agg_id), &want.get_encoded())
                     .expect("failed to decode prepare step");

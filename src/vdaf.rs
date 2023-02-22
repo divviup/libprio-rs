@@ -163,17 +163,18 @@ pub trait Vdaf: Clone + Debug {
 }
 
 /// The Client's role in the execution of a VDAF.
-pub trait Client: Vdaf {
+pub trait Client<const NONCE_SIZE: usize>: Vdaf {
     /// Shards a measurement into a public share and a sequence of input shares, one for each
     /// Aggregator.
     fn shard(
         &self,
         measurement: &Self::Measurement,
+        nonce: &[u8; NONCE_SIZE],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError>;
 }
 
 /// The Aggregator's role in the execution of a VDAF.
-pub trait Aggregator<const L: usize>: Vdaf {
+pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vdaf {
     /// State of the Aggregator during the Prepare process.
     type PrepareState: Clone + Debug;
 
@@ -194,10 +195,10 @@ pub trait Aggregator<const L: usize>: Vdaf {
     /// message.
     fn prepare_init(
         &self,
-        verify_key: &[u8; L],
+        verify_key: &[u8; VERIFY_KEY_SIZE],
         agg_id: usize,
         agg_param: &Self::AggregationParam,
-        nonce: &[u8],
+        nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
     ) -> Result<(Self::PrepareState, Self::PrepareShare), VdafError>;
@@ -219,7 +220,7 @@ pub trait Aggregator<const L: usize>: Vdaf {
         &self,
         state: Self::PrepareState,
         input: Self::PrepareMessage,
-    ) -> Result<PrepareTransition<Self, L>, VdafError>;
+    ) -> Result<PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError>;
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -242,7 +243,11 @@ pub trait Collector: Vdaf {
 
 /// A state transition of an Aggregator during the Prepare process.
 #[derive(Debug)]
-pub enum PrepareTransition<V: Aggregator<L>, const L: usize> {
+pub enum PrepareTransition<
+    V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    const VERIFY_KEY_SIZE: usize,
+    const NONCE_SIZE: usize,
+> {
     /// Continue processing.
     Continue(V::PrepareState, V::PrepareShare),
 
@@ -336,27 +341,25 @@ pub(crate) fn run_vdaf<V, M, const L: usize>(
     measurements: M,
 ) -> Result<V::AggregateResult, VdafError>
 where
-    V: Client + Aggregator<L> + Collector,
+    V: Client<16> + Aggregator<L, 16> + Collector,
     M: IntoIterator<Item = V::Measurement>,
 {
     use rand::prelude::*;
+    let mut rng = thread_rng();
     let mut verify_key = [0; L];
-    thread_rng().fill(&mut verify_key[..]);
-
-    // NOTE Here we use the same nonce for each measurement for testing purposes. However, this is
-    // not secure. In use, the Aggregators MUST ensure that nonces are unique for each measurement.
-    let nonce = b"this is a nonce";
+    rng.fill(&mut verify_key[..]);
 
     let mut agg_shares: Vec<Option<V::AggregateShare>> = vec![None; vdaf.num_aggregators()];
     let mut num_measurements: usize = 0;
     for measurement in measurements.into_iter() {
         num_measurements += 1;
-        let (public_share, input_shares) = vdaf.shard(&measurement)?;
+        let nonce = rng.gen();
+        let (public_share, input_shares) = vdaf.shard(&measurement, &nonce)?;
         let out_shares = run_vdaf_prepare(
             vdaf,
             &verify_key,
             agg_param,
-            nonce,
+            &nonce,
             public_share,
             input_shares,
         )?;
@@ -399,12 +402,12 @@ pub(crate) fn run_vdaf_prepare<V, M, const L: usize>(
     vdaf: &V,
     verify_key: &[u8; L],
     agg_param: &V::AggregationParam,
-    nonce: &[u8],
+    nonce: &[u8; 16],
     public_share: V::PublicShare,
     input_shares: M,
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
-    V: Client + Aggregator<L> + Collector,
+    V: Client<16> + Aggregator<L, 16> + Collector,
     M: IntoIterator<Item = V::InputShare>,
 {
     let input_shares = input_shares
