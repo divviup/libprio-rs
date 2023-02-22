@@ -88,7 +88,7 @@ pub trait Prg<const L: usize>: Clone + Debug {
     type SeedStream: SeedStream;
 
     /// Construct an instance of [`Prg`] with the given seed.
-    fn init(seed_bytes: &[u8; L]) -> Self;
+    fn init(seed_bytes: &[u8; L], custom: &[u8]) -> Self;
 
     /// Update the PRG state by passing in the next fragment of the info string. The final info
     /// string is assembled from the concatenation of sequence of fragments passed to this method.
@@ -106,9 +106,9 @@ pub trait Prg<const L: usize>: Clone + Debug {
     }
 
     /// Construct a seed stream from the given seed and info string.
-    fn seed_stream(seed: &Seed<L>, info: &[u8]) -> Self::SeedStream {
-        let mut prg = Self::init(seed.as_ref());
-        prg.update(info);
+    fn seed_stream(seed: &Seed<L>, custom: &[u8], binder: &[u8]) -> Self::SeedStream {
+        let mut prg = Self::init(seed.as_ref(), custom);
+        prg.update(binder);
         prg.into_seed_stream()
     }
 }
@@ -124,8 +124,12 @@ pub struct PrgAes128(Cmac<Aes128>);
 impl Prg<16> for PrgAes128 {
     type SeedStream = SeedStreamAes128;
 
-    fn init(seed_bytes: &[u8; 16]) -> Self {
-        Self(Cmac::new_from_slice(seed_bytes).unwrap())
+    fn init(seed_bytes: &[u8; 16], custom: &[u8]) -> Self {
+        let mut mac = Cmac::new_from_slice(seed_bytes).unwrap();
+        let custom_len = u16::try_from(custom.len()).expect("customization string is too long");
+        mac.update(&custom_len.to_be_bytes());
+        mac.update(custom);
+        Self(mac)
     }
 
     fn update(&mut self, data: &[u8]) {
@@ -200,7 +204,9 @@ mod tests {
         #[serde(with = "hex")]
         seed: Vec<u8>,
         #[serde(with = "hex")]
-        info: Vec<u8>,
+        custom: Vec<u8>,
+        #[serde(with = "hex")]
+        binder: Vec<u8>,
         length: usize,
         #[serde(with = "hex")]
         derived_seed: Vec<u8>,
@@ -214,10 +220,11 @@ mod tests {
         P: Prg<L>,
     {
         let seed = Seed::generate().unwrap();
-        let info = b"info string";
+        let custom = b"algorithm and usage";
+        let binder = b"bind to artifact";
 
-        let mut prg = P::init(seed.as_ref());
-        prg.update(info);
+        let mut prg = P::init(seed.as_ref(), custom);
+        prg.update(binder);
 
         let mut want = Seed([0; L]);
         prg.clone().into_seed_stream().fill(&mut want.0[..]);
@@ -227,7 +234,7 @@ mod tests {
         let mut want = [0; 45];
         prg.clone().into_seed_stream().fill(&mut want);
         let mut got = [0; 45];
-        P::seed_stream(&seed, info).fill(&mut got);
+        P::seed_stream(&seed, custom, binder).fill(&mut got);
         assert_eq!(got, want);
     }
 
@@ -235,8 +242,8 @@ mod tests {
     fn prg_aes128() {
         let t: PrgTestVector =
             serde_json::from_str(include_str!("test_vec/03/PrgAes128.json")).unwrap();
-        let mut prg = PrgAes128::init(&t.seed.try_into().unwrap());
-        prg.update(&t.info);
+        let mut prg = PrgAes128::init(&t.seed.try_into().unwrap(), &t.custom);
+        prg.update(&t.binder);
 
         assert_eq!(
             prg.clone().into_seed(),

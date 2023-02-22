@@ -11,7 +11,7 @@ use crate::{
     prng::Prng,
     vdaf::{
         prg::{CoinToss, Prg, PrgAes128, Seed, SeedStream},
-        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError, VERSION,
+        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
 use std::{
@@ -23,8 +23,10 @@ use std::{
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
-const DST_SHARD_RANDOMNESS: &[u8] = &[255];
-const DST_VERIFY_RANDOMNESS: &[u8] = &[254];
+const DST_SHARD_RANDOMNESS: u16 = 1;
+const DST_CORR_INNER: u16 = 2;
+const DST_CORR_LEAF: u16 = 3;
+const DST_VERIFY_RANDOMNESS: u16 = 4;
 
 /// Poplar1 with [`PrgAes128`].
 pub type Poplar1Aes128 = Poplar1<PrgAes128, 16>;
@@ -47,6 +49,23 @@ impl Poplar1Aes128 {
 pub struct Poplar1<P, const L: usize> {
     bits: usize,
     phantom: PhantomData<P>,
+}
+
+impl<P: Prg<L>, const L: usize> Poplar1<P, L> {
+    /// Construct a `Prng` with the given seed and info-string suffix.
+    fn init_prng<I, B, F>(seed: &[u8; L], usage: u16, binder_chunks: I) -> Prng<F, P::SeedStream>
+    where
+        I: IntoIterator<Item = B>,
+        B: AsRef<[u8]>,
+        P: Prg<L>,
+        F: FieldElement,
+    {
+        let mut prg = P::init(seed, &Self::custom(usage));
+        for binder_chunk in binder_chunks.into_iter() {
+            prg.update(binder_chunk.as_ref());
+        }
+        Prng::from_seed_stream(prg.into_seed_stream())
+    }
 }
 
 impl<P, const L: usize> Clone for Poplar1<P, L> {
@@ -327,9 +346,10 @@ impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
         }
 
         // Generate the authenticator for each inner level of the IDPF tree.
-        let mut prng = init_prng::<_, _, Field64, _, L>(
-            P::init(Seed::generate()?.as_ref()),
-            [DST_SHARD_RANDOMNESS],
+        let mut prng = Self::init_prng::<_, _, Field64>(
+            Seed::generate()?.as_ref(),
+            DST_SHARD_RANDOMNESS,
+            [&[]],
         );
         let auth_inner: Vec<Field64> = (0..self.bits - 1).map(|_| prng.get()).collect();
 
@@ -358,9 +378,9 @@ impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
         let corr_seed_1 = Seed::generate()?;
         let mut prng = prng.into_new_field::<Field64>();
         let mut corr_prng_0 =
-            init_prng::<_, _, Field64, _, L>(P::init(corr_seed_0.as_ref()), [&[0]]);
+            Self::init_prng::<_, _, Field64>(corr_seed_0.as_ref(), DST_CORR_INNER, [&[0]]);
         let mut corr_prng_1 =
-            init_prng::<_, _, Field64, _, L>(P::init(corr_seed_1.as_ref()), [&[1]]);
+            Self::init_prng::<_, _, Field64>(corr_seed_1.as_ref(), DST_CORR_INNER, [&[1]]);
         let mut corr_inner_0 = Vec::with_capacity(self.bits - 1);
         let mut corr_inner_1 = Vec::with_capacity(self.bits - 1);
         for auth in auth_inner.into_iter() {
@@ -372,8 +392,10 @@ impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
 
         // Generate the correlated randomness for the leaf nodes.
         let mut prng = prng.into_new_field::<Field255>();
-        let mut corr_prng_0 = corr_prng_0.into_new_field::<Field255>();
-        let mut corr_prng_1 = corr_prng_1.into_new_field::<Field255>();
+        let mut corr_prng_0 =
+            Self::init_prng::<_, _, Field255>(corr_seed_0.as_ref(), DST_CORR_LEAF, [&[0]]);
+        let mut corr_prng_1 =
+            Self::init_prng::<_, _, Field255>(corr_seed_1.as_ref(), DST_CORR_LEAF, [&[1]]);
         let (corr_leaf_0, corr_leaf_1) =
             compute_next_corr_shares(&mut prng, &mut corr_prng_0, &mut corr_prng_1, auth_leaf);
 
@@ -422,17 +444,18 @@ impl<P: Prg<L>, const L: usize> Aggregator<L, 16> for Poplar1<P, L> {
             }
         };
 
-        let mut corr_prng = init_prng::<_, _, Field64, _, L>(
-            P::init(input_share.corr_seed.as_ref()),
-            [&[agg_id as u8]],
-        );
-        // Fast-forward the correlated randomness PRG to the level of the tree that we are
-        // aggregating.
-        for _ in 0..3 * agg_param.level {
-            corr_prng.get();
-        }
-
         if agg_param.level < self.bits - 1 {
+            let mut corr_prng = Self::init_prng::<_, _, Field64>(
+                input_share.corr_seed.as_ref(),
+                DST_CORR_INNER,
+                [&[agg_id as u8]],
+            );
+            // Fast-forward the correlated randomness PRG to the level of the tree that we are
+            // aggregating.
+            for _ in 0..3 * agg_param.level {
+                corr_prng.get();
+            }
+
             let (output_share, sketch_share) = eval_and_sketch::<P, Field64, L>(
                 verify_key,
                 agg_id,
@@ -455,6 +478,12 @@ impl<P: Prg<L>, const L: usize> Aggregator<L, 16> for Poplar1<P, L> {
                 Poplar1FieldVec::Inner(sketch_share),
             ))
         } else {
+            let corr_prng = Self::init_prng::<_, _, Field255>(
+                input_share.corr_seed.as_ref(),
+                DST_CORR_LEAF,
+                [&[agg_id as u8]],
+            );
+
             let (output_share, sketch_share) = eval_and_sketch::<P, Field255, L>(
                 verify_key,
                 agg_id,
@@ -649,22 +678,6 @@ impl From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>
     }
 }
 
-/// Construct a `Prng` with the given seed and info-string suffix.
-fn init_prng<I, B, F, P, const L: usize>(mut prg: P, info_suffix_parts: I) -> Prng<F, P::SeedStream>
-where
-    I: IntoIterator<Item = B>,
-    B: AsRef<[u8]>,
-    P: Prg<L>,
-    F: FieldElement,
-{
-    prg.update(VERSION); // info prefix
-    prg.update(&Poplar1::<P, L>::ID.to_be_bytes());
-    for info_suffix_part in info_suffix_parts.into_iter() {
-        prg.update(info_suffix_part.as_ref());
-    }
-    Prng::from_seed_stream(prg.into_seed_stream())
-}
-
 /// Derive shares of the correlated randomness for the next level of the IDPF tree.
 //
 // TODO(cjpatton) spec: Consider deriving the shares of a, b, c for each level directly from the
@@ -716,10 +729,10 @@ where
         .to_be_bytes();
 
     // TODO(cjpatton) spec: Consider not encoding the prefixes here.
-    let mut verify_prng = init_prng::<_, _, _, _, L>(
-        P::init(verify_key),
+    let mut verify_prng = Poplar1::<P, L>::init_prng(
+        verify_key,
+        DST_VERIFY_RANDOMNESS,
         [
-            DST_VERIFY_RANDOMNESS,
             // TODO(cjpatton) spec: Drop length prefix if we decide to fix the nonce length.
             &[nonce_len],
             nonce,

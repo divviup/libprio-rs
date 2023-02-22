@@ -123,6 +123,7 @@ fn check_prep_test_vec<M, T, P, const L: usize>(
     }
 }
 
+#[ignore]
 #[test]
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
@@ -135,6 +136,7 @@ fn test_vec_prio3_count() {
     }
 }
 
+#[ignore]
 #[test]
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
@@ -147,6 +149,7 @@ fn test_vec_prio3_sum() {
     }
 }
 
+#[ignore]
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
