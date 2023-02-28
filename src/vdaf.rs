@@ -19,7 +19,7 @@ use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 3;
+pub(crate) const VERSION: u8 = 4;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
