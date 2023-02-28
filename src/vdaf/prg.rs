@@ -15,6 +15,11 @@ use cmac::{Cmac, Mac};
 #[cfg(feature = "crypto-dependencies")]
 use ctr::Ctr64BE;
 #[cfg(feature = "crypto-dependencies")]
+use sha3::{
+    digest::{ExtendableOutput, Update, XofReader},
+    CShake128, CShake128Core, CShake128Reader,
+};
+#[cfg(feature = "crypto-dependencies")]
 use std::fmt::Formatter;
 use std::{
     fmt::Debug,
@@ -127,13 +132,13 @@ impl Prg<16> for PrgAes128 {
     fn init(seed_bytes: &[u8; 16], custom: &[u8]) -> Self {
         let mut mac = Cmac::new_from_slice(seed_bytes).unwrap();
         let custom_len = u16::try_from(custom.len()).expect("customization string is too long");
-        mac.update(&custom_len.to_be_bytes());
-        mac.update(custom);
+        Mac::update(&mut mac, &custom_len.to_be_bytes());
+        Mac::update(&mut mac, custom);
         Self(mac)
     }
 
     fn update(&mut self, data: &[u8]) {
-        self.0.update(data);
+        Mac::update(&mut self.0, data);
     }
 
     fn into_seed_stream(self) -> SeedStreamAes128 {
@@ -170,6 +175,50 @@ impl Debug for SeedStreamAes128 {
         // [1]: https://docs.rs/ctr/latest/ctr/struct.CtrCore.html
         // [2]: https://docs.rs/cipher/latest/cipher/struct.StreamCipherCoreWrapper.html
         self.0.get_core().fmt(f)
+    }
+}
+
+/// The PRG based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-04]].
+///
+/// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+#[derive(Clone, Debug)]
+#[cfg(feature = "crypto-dependencies")]
+pub struct PrgSha3(CShake128);
+
+#[cfg(feature = "crypto-dependencies")]
+impl Prg<16> for PrgSha3 {
+    type SeedStream = SeedStreamSha3;
+
+    fn init(seed_bytes: &[u8; 16], custom: &[u8]) -> Self {
+        let mut prg = Self(CShake128::from_core(CShake128Core::new(custom)));
+        Update::update(&mut prg.0, seed_bytes);
+        prg
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        Update::update(&mut self.0, data);
+    }
+
+    fn into_seed_stream(self) -> SeedStreamSha3 {
+        SeedStreamSha3::new(self.0.finalize_xof())
+    }
+}
+
+/// The key stream produced by the cSHAKE128 XOF.
+#[cfg(feature = "crypto-dependencies")]
+pub struct SeedStreamSha3(CShake128Reader);
+
+#[cfg(feature = "crypto-dependencies")]
+impl SeedStreamSha3 {
+    pub(crate) fn new(reader: CShake128Reader) -> Self {
+        Self(reader)
+    }
+}
+
+#[cfg(feature = "crypto-dependencies")]
+impl SeedStream for SeedStreamSha3 {
+    fn fill(&mut self, buf: &mut [u8]) {
+        XofReader::read(&mut self.0, buf);
     }
 }
 
@@ -261,5 +310,30 @@ mod tests {
         assert_eq!(got, want);
 
         test_prg::<PrgAes128, 16>();
+    }
+
+    #[test]
+    fn prg_sha3() {
+        let t: PrgTestVector =
+            serde_json::from_str(include_str!("test_vec/04/PrgSha3.json")).unwrap();
+        let mut prg = PrgSha3::init(&t.seed.try_into().unwrap(), &t.custom);
+        prg.update(&t.binder);
+
+        assert_eq!(
+            prg.clone().into_seed(),
+            Seed(t.derived_seed.try_into().unwrap())
+        );
+
+        let mut bytes = std::io::Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut want = Vec::with_capacity(t.length);
+        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
+            want.push(Field128::decode(&mut bytes).unwrap())
+        }
+        let got: Vec<Field128> = Prng::from_seed_stream(prg.clone().into_seed_stream())
+            .take(t.length)
+            .collect();
+        assert_eq!(got, want);
+
+        test_prg::<PrgSha3, 16>();
     }
 }
