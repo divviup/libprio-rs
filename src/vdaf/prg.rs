@@ -180,7 +180,7 @@ impl Debug for SeedStreamAes128 {
 
 /// The PRG based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-04]].
 ///
-/// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+/// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 #[derive(Clone, Debug)]
 #[cfg(feature = "crypto-dependencies")]
 pub struct PrgSha3(CShake128);
@@ -246,7 +246,7 @@ mod tests {
     use super::*;
     use crate::{field::Field128, prng::Prng};
     use serde::{Deserialize, Serialize};
-    use std::convert::TryInto;
+    use std::{convert::TryInto, io::Cursor};
 
     #[derive(Deserialize, Serialize)]
     struct PrgTestVector {
@@ -299,7 +299,7 @@ mod tests {
             Seed(t.derived_seed.try_into().unwrap())
         );
 
-        let mut bytes = std::io::Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
         let mut want = Vec::with_capacity(t.length);
         while (bytes.position() as usize) < t.expanded_vec_field128.len() {
             want.push(Field128::decode(&mut bytes).unwrap())
@@ -324,7 +324,7 @@ mod tests {
             Seed(t.derived_seed.try_into().unwrap())
         );
 
-        let mut bytes = std::io::Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
         let mut want = Vec::with_capacity(t.length);
         while (bytes.position() as usize) < t.expanded_vec_field128.len() {
             want.push(Field128::decode(&mut bytes).unwrap())
