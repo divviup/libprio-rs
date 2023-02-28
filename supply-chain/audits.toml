@@ -85,6 +85,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.5.0"
 
+[[audits.keccak]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.1.2"
+
 [[audits.modinverse]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -135,6 +140,11 @@ notes = "The only changes are to doccomments, a dev-dependency and the project's
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.92 -> 1.0.93"
+
+[[audits.sha3]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.10.6"
 
 [[audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
