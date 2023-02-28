@@ -915,6 +915,13 @@ where
             }
             let own_joint_rand_part = joint_rand_part_prg.into_seed();
 
+            // Make an iterator over the joint randomness parts, but use this aggregator's
+            // contribution, computed from the input share, in lieu of the the corresponding part
+            // from the public share.
+            //
+            // The locally computed part should match the part from the public share for honestly
+            // generated reports. If they do not match, the joint randomness seed check during the
+            // next round of preparation should fail.
             let corrected_joint_rand_parts = public_share
                 .joint_rand_parts
                 .iter()
