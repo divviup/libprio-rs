@@ -336,7 +336,7 @@ impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
     fn shard(
         &self,
         input: &IdpfInput,
-        _nonce: &[u8; 16],
+        nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<L>>), VdafError> {
         if input.len() != self.bits {
             return Err(VdafError::Uncategorized(format!(
@@ -377,10 +377,16 @@ impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
         let corr_seed_0 = Seed::generate()?;
         let corr_seed_1 = Seed::generate()?;
         let mut prng = prng.into_new_field::<Field64>();
-        let mut corr_prng_0 =
-            Self::init_prng::<_, _, Field64>(corr_seed_0.as_ref(), DST_CORR_INNER, [&[0]]);
-        let mut corr_prng_1 =
-            Self::init_prng::<_, _, Field64>(corr_seed_1.as_ref(), DST_CORR_INNER, [&[1]]);
+        let mut corr_prng_0 = Self::init_prng::<_, _, Field64>(
+            corr_seed_0.as_ref(),
+            DST_CORR_INNER,
+            [[0].as_slice(), nonce.as_slice()],
+        );
+        let mut corr_prng_1 = Self::init_prng::<_, _, Field64>(
+            corr_seed_1.as_ref(),
+            DST_CORR_INNER,
+            [[1].as_slice(), nonce.as_slice()],
+        );
         let mut corr_inner_0 = Vec::with_capacity(self.bits - 1);
         let mut corr_inner_1 = Vec::with_capacity(self.bits - 1);
         for auth in auth_inner.into_iter() {
@@ -392,10 +398,16 @@ impl<P: Prg<L>, const L: usize> Client<16> for Poplar1<P, L> {
 
         // Generate the correlated randomness for the leaf nodes.
         let mut prng = prng.into_new_field::<Field255>();
-        let mut corr_prng_0 =
-            Self::init_prng::<_, _, Field255>(corr_seed_0.as_ref(), DST_CORR_LEAF, [&[0]]);
-        let mut corr_prng_1 =
-            Self::init_prng::<_, _, Field255>(corr_seed_1.as_ref(), DST_CORR_LEAF, [&[1]]);
+        let mut corr_prng_0 = Self::init_prng::<_, _, Field255>(
+            corr_seed_0.as_ref(),
+            DST_CORR_LEAF,
+            [[0].as_slice(), nonce.as_slice()],
+        );
+        let mut corr_prng_1 = Self::init_prng::<_, _, Field255>(
+            corr_seed_1.as_ref(),
+            DST_CORR_LEAF,
+            [[1].as_slice(), nonce.as_slice()],
+        );
         let (corr_leaf_0, corr_leaf_1) =
             compute_next_corr_shares(&mut prng, &mut corr_prng_0, &mut corr_prng_1, auth_leaf);
 
@@ -448,7 +460,7 @@ impl<P: Prg<L>, const L: usize> Aggregator<L, 16> for Poplar1<P, L> {
             let mut corr_prng = Self::init_prng::<_, _, Field64>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_INNER,
-                [&[agg_id as u8]],
+                [[agg_id as u8].as_slice(), nonce.as_slice()],
             );
             // Fast-forward the correlated randomness PRG to the level of the tree that we are
             // aggregating.
@@ -481,7 +493,7 @@ impl<P: Prg<L>, const L: usize> Aggregator<L, 16> for Poplar1<P, L> {
             let corr_prng = Self::init_prng::<_, _, Field255>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_LEAF,
-                [&[agg_id as u8]],
+                [[agg_id as u8].as_slice(), nonce.as_slice()],
             );
 
             let (output_share, sketch_share) = eval_and_sketch::<P, Field255, L>(
@@ -705,7 +717,7 @@ fn compute_next_corr_shares<F: FieldElement + From<u64>, S: SeedStream>(
 fn eval_and_sketch<P, F, const L: usize>(
     verify_key: &[u8; L],
     agg_id: usize,
-    nonce: &[u8],
+    nonce: &[u8; 16],
     agg_param: &Poplar1AggregationParam,
     public_share: &Poplar1PublicShare<L>,
     idpf_key: &Seed<L>,
@@ -717,13 +729,6 @@ where
     Poplar1IdpfValue<F>:
         From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
 {
-    let nonce_len = nonce.len().try_into().map_err(|_| {
-        VdafError::Uncategorized(format!(
-            "nonce length cannot exceed 255 bytes ({})",
-            nonce.len()
-        ))
-    })?;
-
     let level = u16::try_from(agg_param.level)
         .map_err(|_| VdafError::Uncategorized(format!("level too deep ({})", agg_param.level)))?
         .to_be_bytes();
@@ -732,12 +737,7 @@ where
     let mut verify_prng = Poplar1::<P, L>::init_prng(
         verify_key,
         DST_VERIFY_RANDOMNESS,
-        [
-            // TODO(cjpatton) spec: Drop length prefix if we decide to fix the nonce length.
-            &[nonce_len],
-            nonce,
-            &level,
-        ],
+        [nonce.as_slice(), level.as_slice()],
     );
 
     let mut out_share = Vec::with_capacity(agg_param.prefixes.len());
