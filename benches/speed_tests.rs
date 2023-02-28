@@ -25,7 +25,7 @@ use prio::{
     idpf::{self, IdpfInput, RingBufferCache},
     vdaf::{
         poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
-        prg::PrgAes128,
+        prg::PrgSha3,
         Aggregator,
     },
 };
@@ -175,7 +175,7 @@ pub fn prio3_client(c: &mut Criterion) {
     let mut group = c.benchmark_group("prio3_client");
 
     let nonce = [0; 16];
-    let prio3 = Prio3::new_aes128_count(num_shares).unwrap();
+    let prio3 = Prio3::new_count(num_shares).unwrap();
     let measurement = 1;
     group.bench_function("count", |b| {
         b.iter(|| {
@@ -184,7 +184,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let buckets: Vec<u64> = (1..10).collect();
-    let prio3 = Prio3::new_aes128_histogram(num_shares, &buckets).unwrap();
+    let prio3 = Prio3::new_histogram(num_shares, &buckets).unwrap();
     let measurement = 17;
     group.bench_function(BenchmarkId::new("histogram", buckets.len() + 1), |b| {
         b.iter(|| {
@@ -193,7 +193,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let bits = 32;
-    let prio3 = Prio3::new_aes128_sum(num_shares, bits).unwrap();
+    let prio3 = Prio3::new_sum(num_shares, bits).unwrap();
     let measurement = 1337;
     group.bench_function(BenchmarkId::new("sum", bits), |b| {
         b.iter(|| {
@@ -202,7 +202,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let len = 1000;
-    let prio3 = Prio3::new_aes128_sum_vec(num_shares, 1, len).unwrap();
+    let prio3 = Prio3::new_sum_vec(num_shares, 1, len).unwrap();
     let measurement = vec![0; len];
     group.bench_function(BenchmarkId::new("countvec", len), |b| {
         b.iter(|| {
@@ -212,7 +212,7 @@ pub fn prio3_client(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        let prio3 = Prio3::new_aes128_sum_vec_multithreaded(num_shares, 1, len).unwrap();
+        let prio3 = Prio3::new_sum_vec_multithreaded(num_shares, 1, len).unwrap();
         let measurement = vec![0; len];
         group.bench_function(BenchmarkId::new("countvec_parallel", len), |b| {
             b.iter(|| {
@@ -224,7 +224,7 @@ pub fn prio3_client(c: &mut Criterion) {
     #[cfg(feature = "experimental")]
     {
         let len = 1000;
-        let prio3 = Prio3::new_aes128_fixedpoint_boundedl2_vec_sum(num_shares, len).unwrap();
+        let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, len).unwrap();
         let fp_num = fixed!(0.0001: I1F15);
         let measurement = vec![fp_num; len];
         group.bench_function(BenchmarkId::new("fixedpoint16_boundedl2_vec", len), |b| {
@@ -236,8 +236,7 @@ pub fn prio3_client(c: &mut Criterion) {
 
     #[cfg(all(feature = "experimental", feature = "multithreaded"))]
     {
-        let prio3 =
-            Prio3::new_aes128_fixedpoint_boundedl2_vec_sum_multithreaded(num_shares, len).unwrap();
+        let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(num_shares, len).unwrap();
         let fp_num = fixed!(0.0001: I1F15);
         let measurement = vec![fp_num; len];
         group.bench_function(
@@ -273,7 +272,7 @@ pub fn idpf(c: &mut Criterion) {
             let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1).unwrap()[0]]);
 
             b.iter(|| {
-                idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_value)
+                idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_value)
                     .unwrap();
             });
         });
@@ -295,7 +294,7 @@ pub fn idpf(c: &mut Criterion) {
             let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1).unwrap()[0]]);
 
             let (public_share, keys) =
-                idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values, leaf_value).unwrap();
+                idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values, leaf_value).unwrap();
 
             b.iter(|| {
                 // This is an aggressively small cache, to minimize its impact on the benchmark.
@@ -306,7 +305,7 @@ pub fn idpf(c: &mut Criterion) {
 
                 for prefix_length in 1..=size {
                     let prefix = input[..prefix_length].to_owned().into();
-                    idpf::eval::<_, _, PrgAes128, 16>(
+                    idpf::eval::<_, _, PrgSha3, 16>(
                         0,
                         &public_share,
                         &keys[0],
@@ -330,7 +329,7 @@ pub fn poplar1(c: &mut Criterion) {
     for size in test_sizes.iter() {
         group.throughput(Throughput::Bytes(*size as u64 / 8));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let vdaf = Poplar1::new_aes128(size);
+            let vdaf = Poplar1::new_sha3(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
             let nonce = rng.gen::<[u8; 16]>();
 
@@ -354,7 +353,7 @@ pub fn poplar1(c: &mut Criterion) {
     for size in test_sizes.iter() {
         group.measurement_time(Duration::from_secs(30)); // slower benchmark
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let vdaf = Poplar1::new_aes128(size);
+            let vdaf = Poplar1::new_sha3(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
 
             b.iter_batched(

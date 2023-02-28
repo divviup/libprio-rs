@@ -10,7 +10,7 @@ use crate::{
     idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        prg::{CoinToss, Prg, PrgAes128, Seed, SeedStream},
+        prg::{CoinToss, Prg, PrgSha3, Seed, SeedStream},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
@@ -28,19 +28,26 @@ const DST_CORR_INNER: u16 = 2;
 const DST_CORR_LEAF: u16 = 3;
 const DST_VERIFY_RANDOMNESS: u16 = 4;
 
-/// Poplar1 with [`PrgAes128`].
-pub type Poplar1Aes128 = Poplar1<PrgAes128, 16>;
-
-impl Poplar1Aes128 {
-    /// Create an instance of [`Poplar1Aes128`]. The caller provides the bit length of each
+impl<P, const L: usize> Poplar1<P, L> {
+    /// Create an instance of [`Poplar1`]. The caller provides the bit length of each
     /// measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-03]]).
     ///
     /// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
-    pub fn new_aes128(bits: usize) -> Self {
+    pub fn new(bits: usize) -> Self {
         Self {
             bits,
             phantom: PhantomData,
         }
+    }
+}
+
+impl Poplar1<PrgSha3, 16> {
+    /// Create an instance of [`Poplar1`] using [`PrgSha3`]. The caller provides the bit length of
+    /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-03]]).
+    ///
+    /// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
+    pub fn new_sha3(bits: usize) -> Self {
+        Poplar1::new(bits)
     }
 }
 
@@ -1149,7 +1156,7 @@ mod tests {
         let mut rng = thread_rng();
         let verify_key = rng.gen();
         let nonce = rng.gen::<[u8; 16]>();
-        let vdaf = Poplar1::new_aes128(64);
+        let vdaf = Poplar1::new_sha3(64);
 
         let input = IdpfInput::from_bytes(b"12341324");
         let (public_share, input_shares) = vdaf.shard(&input, &nonce).unwrap();
@@ -1192,7 +1199,7 @@ mod tests {
     fn heavy_hitters() {
         let mut rng = thread_rng();
         let verify_key = rng.gen();
-        let vdaf = Poplar1::new_aes128(8);
+        let vdaf = Poplar1::new_sha3(8);
 
         run_heavy_hitters(
             &vdaf,
