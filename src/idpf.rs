@@ -564,8 +564,6 @@ where
         );
         control_bits.set_uninitialized(false);
         let mut packed_control = control_bits.into_vec();
-        // Flip the byte order from `bitvec`'s native order to the required big-endian order.
-        packed_control.reverse();
         bytes.append(&mut packed_control);
 
         for correction_words in self.inner_correction_words.iter() {
@@ -586,7 +584,6 @@ where
         let packed_control_len = (bits + 3) / 4;
         let mut packed = vec![0u8; packed_control_len];
         bytes.read_exact(&mut packed)?;
-        packed.reverse();
         let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed);
 
         let mut inner_correction_words = Vec::with_capacity(bits - 1);
@@ -1481,7 +1478,7 @@ mod tests {
             },
         };
         let message = hex::decode(concat!(
-            "02fbdf", // packed correction word control bits, 0b10_11111011_11011111, encoded big-endian
+            "dffb02", // packed correction word control bits: 0b11011111, 0b11111011, 0b10
             "00000000000000000000000000000000",
             "0000000000000000",
             "0000000000000000",
@@ -1529,21 +1526,21 @@ mod tests {
                 &[
                     true, true, false, true, false, false, false, false, true, true,
                 ][..],
-                &[0b11, 0b0000_1011][..],
+                &[0b0000_1011, 0b11][..],
             ),
             (
                 &[
                     true, true, false, true, false, true, true, true, false, true, false, true,
                     false, false, true, false,
                 ][..],
-                &[0b0100_1010, 0b1110_1011][..],
+                &[0b1110_1011, 0b0100_1010][..],
             ),
             (
                 &[
                     true, true, true, true, true, false, true, true, false, true, true, true,
                     false, true, false, true, false, false, true, false, true, true,
                 ][..],
-                &[0b11_0100, 0b1010_1110, 0b1101_1111][..],
+                &[0b1101_1111, 0b1010_1110, 0b11_0100][..],
             ),
         ];
 
@@ -1599,10 +1596,6 @@ mod tests {
             IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&1, &mut Cursor::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
-        let err =
-            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&5, &mut Cursor::new(&buf))
-                .unwrap_err();
-        assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 4;
         let err =
@@ -1613,6 +1606,13 @@ mod tests {
         buf[0] = 1 << 6;
         let err =
             IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&3, &mut Cursor::new(&buf))
+                .unwrap_err();
+        assert_matches!(err, CodecError::UnexpectedValue);
+
+        buf[0] = 0;
+        buf[1] = 1 << 2;
+        let err =
+            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&5, &mut Cursor::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
     }
