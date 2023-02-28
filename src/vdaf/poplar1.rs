@@ -717,7 +717,7 @@ fn compute_next_corr_shares<F: FieldElement + From<u64>, S: SeedStream>(
 fn eval_and_sketch<P, F, const L: usize>(
     verify_key: &[u8; L],
     agg_id: usize,
-    nonce: &[u8],
+    nonce: &[u8; 16],
     agg_param: &Poplar1AggregationParam,
     public_share: &Poplar1PublicShare<L>,
     idpf_key: &Seed<L>,
@@ -729,13 +729,6 @@ where
     Poplar1IdpfValue<F>:
         From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
 {
-    let nonce_len = nonce.len().try_into().map_err(|_| {
-        VdafError::Uncategorized(format!(
-            "nonce length cannot exceed 255 bytes ({})",
-            nonce.len()
-        ))
-    })?;
-
     let level = u16::try_from(agg_param.level)
         .map_err(|_| VdafError::Uncategorized(format!("level too deep ({})", agg_param.level)))?
         .to_be_bytes();
@@ -744,12 +737,7 @@ where
     let mut verify_prng = Poplar1::<P, L>::init_prng(
         verify_key,
         DST_VERIFY_RANDOMNESS,
-        [
-            // TODO(cjpatton) spec: Drop length prefix if we decide to fix the nonce length.
-            &[nonce_len],
-            nonce,
-            &level,
-        ],
+        [nonce.as_slice(), level.as_slice()],
     );
 
     let mut out_share = Vec::with_capacity(agg_param.prefixes.len());
