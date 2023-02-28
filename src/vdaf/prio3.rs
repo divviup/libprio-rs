@@ -387,16 +387,16 @@ where
         rand_source: RandSource,
     ) -> Result<(Prio3PublicShare<L>, Vec<Prio3InputShare<T::Field, L>>), VdafError> {
         let num_aggregators = self.num_aggregators;
-        let input = self.typ.encode_measurement(measurement)?;
+        let encoded_measurement = self.typ.encode_measurement(measurement)?;
 
-        // Generate the input shares and compute the joint randomness.
+        // Generate the measurement shares and compute the joint randomness.
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
         let mut helper_joint_rand_parts = if self.typ.joint_rand_len() > 0 {
             Some(Vec::with_capacity(num_aggregators as usize - 1))
         } else {
             None
         };
-        let mut leader_input_share = input.clone();
+        let mut leader_meas_share = encoded_measurement.clone();
         for agg_id in 1..num_aggregators {
             let helper = HelperShare::from_rand_source(rand_source)?;
             let mut joint_rand_part_prg = P::init(
@@ -406,14 +406,14 @@ where
             joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
             joint_rand_part_prg.update(nonce);
 
-            let input_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
-                &helper.input_share,
+            let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+                &helper.measurement_share,
                 &Self::custom(DST_MEASUREMENT_SHARE),
                 &[agg_id],
             ));
-            for (x, y) in leader_input_share
+            for (x, y) in leader_meas_share
                 .iter_mut()
-                .zip(input_share_prng)
+                .zip(measurement_share_prng)
                 .take(self.typ.input_len())
             {
                 *x -= y;
@@ -432,7 +432,7 @@ where
             P::init(leader_blind.as_ref(), &Self::custom(DST_JOINT_RAND_PART));
         joint_rand_part_prg.update(&[0]); // Aggregator ID
         joint_rand_part_prg.update(nonce);
-        for x in leader_input_share.iter() {
+        for x in leader_meas_share.iter() {
             joint_rand_part_prg.update(&(*x).into());
         }
 
@@ -475,7 +475,9 @@ where
             &[],
         ));
         let prove_rand: Vec<T::Field> = prove_rand_prng.take(self.typ.prove_rand_len()).collect();
-        let mut leader_proof_share = self.typ.prove(&input, &prove_rand, &joint_rand)?;
+        let mut leader_proof_share =
+            self.typ
+                .prove(&encoded_measurement, &prove_rand, &joint_rand)?;
 
         // Generate the proof shares and distribute the joint randomness seed hints.
         for (j, helper) in helper_shares.iter_mut().enumerate() {
@@ -509,7 +511,7 @@ where
         // Prep the output messages.
         let mut out = Vec::with_capacity(num_aggregators as usize);
         out.push(Prio3InputShare {
-            input_share: Share::Leader(leader_input_share),
+            measurement_share: Share::Leader(leader_meas_share),
             proof_share: Share::Leader(leader_proof_share),
             joint_rand_blind: leader_joint_rand_blind,
         });
@@ -522,7 +524,7 @@ where
             };
 
             out.push(Prio3InputShare {
-                input_share: Share::Helper(helper.input_share),
+                measurement_share: Share::Helper(helper.measurement_share),
                 proof_share: Share::Helper(helper.proof_share),
                 joint_rand_blind: helper_joint_rand_blind,
             });
@@ -613,8 +615,8 @@ where
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3InputShare<F, const L: usize> {
-    /// The input share.
-    input_share: Share<F, L>,
+    /// The measurement share.
+    measurement_share: Share<F, L>,
 
     /// The proof share.
     proof_share: Share<F, L>,
@@ -627,13 +629,13 @@ pub struct Prio3InputShare<F, const L: usize> {
 impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if matches!(
-            (&self.input_share, &self.proof_share),
+            (&self.measurement_share, &self.proof_share),
             (Share::Leader(_), Share::Helper(_)) | (Share::Helper(_), Share::Leader(_))
         ) {
             panic!("tried to encode input share with ambiguous encoding")
         }
 
-        self.input_share.encode(bytes);
+        self.measurement_share.encode(bytes);
         self.proof_share.encode(bytes);
         if let Some(ref blind) = self.joint_rand_blind {
             blind.encode(bytes);
@@ -666,7 +668,7 @@ where
             )
         };
 
-        let input_share = Share::decode_with_param(&input_decoder, bytes)?;
+        let measurement_share = Share::decode_with_param(&input_decoder, bytes)?;
         let proof_share = Share::decode_with_param(&proof_decoder, bytes)?;
         let joint_rand_blind = if prio3.typ.joint_rand_len() > 0 {
             let blind = Seed::decode(bytes)?;
@@ -676,7 +678,7 @@ where
         };
 
         Ok(Prio3InputShare {
-            input_share,
+            measurement_share,
             proof_share,
             joint_rand_blind,
         })
@@ -780,7 +782,7 @@ where
 /// State of each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3PrepareState<F, const L: usize> {
-    input_share: Share<F, L>,
+    measurement_share: Share<F, L>,
     joint_rand_seed: Option<Seed<L>>,
     agg_id: u8,
     verifier_len: usize,
@@ -789,7 +791,7 @@ pub struct Prio3PrepareState<F, const L: usize> {
 impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>) {
-        self.input_share.encode(bytes);
+        self.measurement_share.encode(bytes);
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes);
         }
@@ -815,7 +817,7 @@ where
         } else {
             ShareDecodingParameter::Helper
         };
-        let input_share = Share::decode_with_param(&share_decoder, bytes)?;
+        let measurement_share = Share::decode_with_param(&share_decoder, bytes)?;
 
         let joint_rand_seed = if prio3.typ.joint_rand_len() > 0 {
             Some(Seed::decode(bytes)?)
@@ -824,7 +826,7 @@ where
         };
 
         Ok(Self {
-            input_share,
+            measurement_share,
             joint_rand_seed,
             agg_id,
             verifier_len: prio3.typ.verifier_len(),
@@ -864,21 +866,21 @@ where
         query_rand_prg.update(nonce);
         let query_rand_prng = Prng::from_seed_stream(query_rand_prg.into_seed_stream());
 
-        // Create a reference to the (expanded) input share.
-        let expanded_input_share: Option<Vec<T::Field>> = match msg.input_share {
+        // Create a reference to the (expanded) measurement share.
+        let expanded_meas_share: Option<Vec<T::Field>> = match msg.measurement_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
-                let input_share_prng = Prng::from_seed_stream(P::seed_stream(
+                let measurement_share_prng = Prng::from_seed_stream(P::seed_stream(
                     seed,
                     &Self::custom(DST_MEASUREMENT_SHARE),
                     &[agg_id],
                 ));
-                Some(input_share_prng.take(self.typ.input_len()).collect())
+                Some(measurement_share_prng.take(self.typ.input_len()).collect())
             }
         };
-        let input_share = match msg.input_share {
+        let measurement_share = match msg.measurement_share {
             Share::Leader(ref data) => data,
-            Share::Helper(_) => expanded_input_share.as_ref().unwrap(),
+            Share::Helper(_) => expanded_meas_share.as_ref().unwrap(),
         };
 
         // Create a reference to the (expanded) proof share.
@@ -906,7 +908,7 @@ where
             );
             joint_rand_part_prg.update(&[agg_id]);
             joint_rand_part_prg.update(nonce);
-            for x in input_share {
+            for x in measurement_share {
                 joint_rand_part_prg.update(&(*x).into());
             }
             let own_joint_rand_part = joint_rand_part_prg.into_seed();
@@ -935,7 +937,7 @@ where
 
         // Run the query-generation algorithm.
         let verifier_share = self.typ.query(
-            input_share,
+            measurement_share,
             proof_share,
             &query_rand,
             &joint_rand,
@@ -944,7 +946,7 @@ where
 
         Ok((
             Prio3PrepareState {
-                input_share: msg.input_share.clone(),
+                measurement_share: msg.measurement_share.clone(),
                 joint_rand_seed,
                 agg_id,
                 verifier_len: verifier_share.len(),
@@ -1026,7 +1028,7 @@ where
         }
 
         // Compute the output share.
-        let input_share = match step.input_share {
+        let measurement_share = match step.measurement_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
                 let custom = Self::custom(DST_MEASUREMENT_SHARE);
@@ -1035,7 +1037,7 @@ where
             }
         };
 
-        let output_share = match self.typ.truncate(input_share) {
+        let output_share = match self.typ.truncate(measurement_share) {
             Ok(data) => OutputShare(data),
             Err(err) => {
                 return Err(VdafError::from(err));
@@ -1083,7 +1085,7 @@ where
 
 #[derive(Clone)]
 struct HelperShare<const L: usize> {
-    input_share: Seed<L>,
+    measurement_share: Seed<L>,
     proof_share: Seed<L>,
     joint_rand_blind: Seed<L>,
 }
@@ -1091,7 +1093,7 @@ struct HelperShare<const L: usize> {
 impl<const L: usize> HelperShare<L> {
     fn from_rand_source(rand_source: RandSource) -> Result<Self, VdafError> {
         Ok(HelperShare {
-            input_share: Seed::from_rand_source(rand_source)?,
+            measurement_share: Seed::from_rand_source(rand_source)?,
             proof_share: Seed::from_rand_source(rand_source)?,
             joint_rand_blind: Seed::from_rand_source(rand_source)?,
         })
@@ -1203,7 +1205,7 @@ mod tests {
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
         let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
-        assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
+        assert_matches!(input_shares[0].measurement_share, Share::Leader(ref mut data) => {
             data[0] += Field128::one();
         });
         let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
@@ -1430,7 +1432,7 @@ mod tests {
             let (public_share, mut input_shares) = prio3
                 .shard(&vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
                 .unwrap();
-            assert_matches!(input_shares[0].input_share, Share::Leader(ref mut data) => {
+            assert_matches!(input_shares[0].measurement_share, Share::Leader(ref mut data) => {
                 data[0] += Field128::one();
             });
             let result =
@@ -1492,7 +1494,7 @@ mod tests {
             for (j, y) in input_shares.iter().enumerate() {
                 if i != j {
                     if let (Share::Helper(left), Share::Helper(right)) =
-                        (&x.input_share, &y.input_share)
+                        (&x.measurement_share, &y.measurement_share)
                     {
                         assert_ne!(left, right);
                     }
