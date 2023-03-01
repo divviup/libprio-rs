@@ -4,21 +4,58 @@ use prio::{
     client::Client as Prio2Client,
     codec::Encode,
     encrypt::PublicKey,
-    field::{random_vector, FftFriendlyFieldElement, Field128, FieldElement},
+    field::{random_vector, FftFriendlyFieldElement, Field128, Field32, Field64, FieldElement},
     flp::{
-        gadgets::{BlindPolyEval, ParallelSum},
+        gadgets::{BlindPolyEval, ParallelSum, ParallelSumMultithreaded},
         types::SumVec,
         Type,
     },
     vdaf::{
+        prg::PrgSha3,
         prio3::{Prio3, Prio3InputShare},
         Client,
     },
 };
 
+macro_rules! print_sizes {
+    ($field:ident, $bitwidth:literal, $num_shares:ident, $len:ident, $bits:ident, $nonce:ident) => {
+        if $bitwidth > $bits {
+            let prio3 =
+                Prio3::<SumVec<$field, ParallelSum<_, BlindPolyEval<_>>>, PrgSha3, 16>::new(
+                    $num_shares,
+                    SumVec::new($bits, $len).unwrap(),
+                )
+                .unwrap();
+            let measurement = vec![0; $len];
+            let single_threaded_size =
+                prio3_input_share_size(&prio3.shard(&measurement, &$nonce).unwrap().1);
+            println!(
+                "{:10} | {:10} | {:10} | {:10}",
+                $bitwidth, $len, $bits, single_threaded_size,
+            );
+            let prio3 = Prio3::<
+                SumVec<$field, ParallelSumMultithreaded<_, BlindPolyEval<_>>>,
+                PrgSha3,
+                16,
+            >::new($num_shares, SumVec::new($bits, $len).unwrap())
+            .unwrap();
+            let multi_threaded_size =
+                prio3_input_share_size(&prio3.shard(&measurement, &$nonce).unwrap().1);
+            assert_eq!(single_threaded_size, multi_threaded_size);
+        }
+    };
+}
+
 fn main() {
     let num_shares = 2;
     let nonce = [0; 16];
+
+    let prio3 = Prio3::new_count(num_shares).unwrap();
+    let measurement = 1;
+    println!(
+        "prio3 count share size = {}",
+        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+    );
 
     let prio3 = Prio3::new_count(num_shares).unwrap();
     let measurement = 1;
@@ -45,21 +82,20 @@ fn main() {
         prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
     );
 
-    let len = 1000;
-    let prio3 = Prio3::new_sum_vec(num_shares, 1, len).unwrap();
-    let measurement = vec![0; len];
+    //for len in [10, 100, 1000, 10_000, 100_000] {
+    println!("Prio3 SumVec size, single- & multi-threaded");
     println!(
-        "prio3 countvec ({} len) share size = {}",
-        len,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        "{:>10} | {:>10} | {:>10} | {:>10}",
+        "Field", "len", "bits", "size"
     );
-
-    let prio3 = Prio3::new_sum_vec_multithreaded(num_shares, 1, len).unwrap();
-    println!(
-        "prio3 countvec multithreaded ({} len) share size = {}",
-        len,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
-    );
+    println!("--------------------------------------------------");
+    for len in [100, 1000, 10_000] {
+        for bits in [1, 2, 4, 8, 16, 32, 64] {
+            print_sizes!(Field32, 32, num_shares, len, bits, nonce);
+            print_sizes!(Field64, 64, num_shares, len, bits, nonce);
+            print_sizes!(Field128, 128, num_shares, len, bits, nonce);
+        }
+    }
 
     let len = 1000;
     let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, len).unwrap();
