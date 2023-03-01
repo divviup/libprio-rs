@@ -84,7 +84,9 @@ impl<P, const L: usize> Clone for Poplar1<P, L> {
     }
 }
 
-/// Poplar1 public share. This is comprised of the correction words generated for the IDPF.
+/// Poplar1 public share.
+///
+/// This is comprised of the correction words generated for the IDPF.
 pub type Poplar1PublicShare<const L: usize> =
     IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, L>;
 
@@ -97,8 +99,10 @@ impl<P, const L: usize> ParameterizedDecode<Poplar1<P, L>> for Poplar1PublicShar
     }
 }
 
-/// Poplar1 input share. Comprised of an IDPF key share and the correlated randomness used to
-/// compute the sketch during preparation.
+/// Poplar1 input share.
+///
+/// This is comprised of an IDPF key share and the correlated randomness used to compute the sketch
+/// during preparation.
 #[derive(Debug, Clone)]
 pub struct Poplar1InputShare<const L: usize> {
     /// IDPF key share.
@@ -187,7 +191,7 @@ impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
     }
 }
 
-/// A vector of field elements transmitted whilst evaluating Poplar1.
+/// A vector of field elements transmitted while evaluating Poplar1.
 #[derive(Clone, Debug)]
 pub enum Poplar1FieldVec {
     /// Field type for inner nodes of the IDPF tree.
@@ -257,8 +261,10 @@ impl Aggregatable for Poplar1FieldVec {
     }
 }
 
-/// Poplar1 aggregation parameter. This includes an indication of what level of the IDPF tree is
-/// being evaluated and the set of prefixes to evaluate at that level.
+/// Poplar1 aggregation parameter.
+///
+/// This includes an indication of what level of the IDPF tree is being evaluated and the set of
+/// prefixes to evaluate at that level.
 //
 // TODO(cjpatton) spec: Make sure repeated prefixes are disallowed. To make this check easier,
 // consider requring the prefixes to be in lexicographic order.

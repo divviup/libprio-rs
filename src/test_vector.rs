@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Module `test_vector` generates test vectors of serialized Prio inputs and
-//! support for working with test vectors, enabling backward compatibility
-//! testing.
+//! Generates test vectors of serialized Prio inputs, enabling backward compatibility testing.
 
 use crate::{
     client::{Client, ClientError},

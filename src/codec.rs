@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Module `codec` provides support for encoding and decoding messages to or from the TLS wire
-//! encoding, as specified in [RFC 8446, Section 3][1]. It provides traits that can be implemented
-//! on values that need to be encoded or decoded, as well as utility functions for encoding
-//! sequences of values.
+//! Support for encoding and decoding messages to or from the TLS wire encoding, as specified in
+//! [RFC 8446, Section 3][1].
+//!
+//! The [`Encode`], [`Decode`], [`ParameterizedEncode`] and [`ParameterizedDecode`] traits can be
+//! implemented on values that need to be encoded or decoded. Utility functions are provided to
+//! encode or decode sequences of values.
 //!
 //! [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3
 
@@ -16,17 +18,26 @@ use std::{
     num::TryFromIntError,
 };
 
-#[allow(missing_docs)]
+/// An error that occurred during decoding.
 #[derive(Debug, thiserror::Error)]
 pub enum CodecError {
+    /// An I/O error.
     #[error("I/O error")]
     Io(#[from] std::io::Error),
+
+    /// Extra data remained in the input after decoding a value.
     #[error("{0} bytes left in buffer after decoding value")]
     BytesLeftOver(usize),
+
+    /// The length prefix of an encoded vector exceeds the amount of remaining input.
     #[error("length prefix of encoded vector overflows buffer: {0}")]
     LengthPrefixTooBig(usize),
+
+    /// Custom errors from [`Decode`] implementations.
     #[error("other error: {0}")]
     Other(#[source] Box<dyn Error + 'static + Send + Sync>),
+
+    /// An invalid value was decoded.
     #[error("unexpected value")]
     UnexpectedValue,
 }
@@ -38,15 +49,15 @@ pub trait Decode: Sized {
     /// and no further attempt to read from `bytes` should be made.
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError>;
 
-    /// Convenience method to get decoded value. Returns an error if [`Self::decode`] fails, or if
+    /// Convenience method to get a decoded value. Returns an error if [`Self::decode`] fails, or if
     /// there are any bytes left in `bytes` after decoding a value.
     fn get_decoded(bytes: &[u8]) -> Result<Self, CodecError> {
         Self::get_decoded_with_param(&(), bytes)
     }
 }
 
-/// Describes how to decode an object from a byte sequence, with a decoding parameter provided to
-/// provide additional data used in decoding.
+/// Describes how to decode an object from a byte sequence and a decoding parameter that provides
+/// additional context.
 pub trait ParameterizedDecode<P>: Sized {
     /// Read and decode an encoded object from `bytes`. `decoding_parameter` provides details of the
     /// wire encoding such as lengths of different portions of the message. On success, the decoded
@@ -57,7 +68,7 @@ pub trait ParameterizedDecode<P>: Sized {
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError>;
 
-    /// Convenience method to get decoded value. Returns an error if [`Self::decode_with_param`]
+    /// Convenience method to get a decoded value. Returns an error if [`Self::decode_with_param`]
     /// fails, or if there are any bytes left in `bytes` after decoding a value.
     fn get_decoded_with_param(decoding_parameter: &P, bytes: &[u8]) -> Result<Self, CodecError> {
         let mut cursor = Cursor::new(bytes);
@@ -72,8 +83,8 @@ pub trait ParameterizedDecode<P>: Sized {
     }
 }
 
-// Provide a blanket implementation so that any Decode can be used as a ParameterizedDecode<T> for
-// any T.
+/// Provide a blanket implementation so that any [`Decode`] can be used as a
+/// `ParameterizedDecode<T>` for any `T`.
 impl<D: Decode + ?Sized, T> ParameterizedDecode<T> for D {
     fn decode_with_param(
         _decoding_parameter: &T,
@@ -88,7 +99,7 @@ pub trait Encode {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>);
 
-    /// Convenience method to get encoded value.
+    /// Convenience method to encode a value into a new `Vec<u8>`.
     fn get_encoded(&self) -> Vec<u8> {
         self.get_encoded_with_param(&())
     }
@@ -101,7 +112,7 @@ pub trait ParameterizedEncode<P> {
     /// is encoded.
     fn encode_with_param(&self, encoding_parameter: &P, bytes: &mut Vec<u8>);
 
-    /// Convenience method to get encoded value.
+    /// Convenience method to encode a value into a new `Vec<u8>`.
     fn get_encoded_with_param(&self, encoding_parameter: &P) -> Vec<u8> {
         let mut ret = Vec::new();
         self.encode_with_param(encoding_parameter, &mut ret);
@@ -109,8 +120,8 @@ pub trait ParameterizedEncode<P> {
     }
 }
 
-// Provide a blanket implementation so that any Encode can be used as a ParameterizedEncode<T> for
-// any T.
+/// Provide a blanket implementation so that any [`Encode`] can be used as a
+/// `ParameterizedEncode<T>` for any `T`.
 impl<E: Encode + ?Sized, T> ParameterizedEncode<T> for E {
     fn encode_with_param(&self, _encoding_parameter: &T, bytes: &mut Vec<u8>) {
         self.encode(bytes)

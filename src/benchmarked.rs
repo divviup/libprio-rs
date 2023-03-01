@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+#![doc(hidden)]
+
 //! This module provides wrappers around internal components of this crate that we want to
 //! benchmark, but which we don't want to expose in the public API.
 
