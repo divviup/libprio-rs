@@ -119,11 +119,19 @@ pub trait Prg<const L: usize>: Clone + Debug {
 }
 
 /// The PRG based on AES128 as specified in previous versions of draft-irtf-cfrg-vdaf.
+///
+/// This PRG has been removed as of [[draft-irtf-cfrg-vdaf-04]], and is deprecated. [`PrgSha3`]
+/// should be used instead. cSHAKE128 is a safer choice than AES-128 for VDAFs that assume the PRG
+/// acts like a random oracle.
+///
+/// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 #[derive(Clone, Debug)]
 #[cfg(feature = "crypto-dependencies")]
+#[deprecated(since = "0.11.0", note = "Superseded by PrgSha3")]
 pub struct PrgAes128(Cmac<Aes128>);
 
 #[cfg(feature = "crypto-dependencies")]
+#[allow(deprecated)]
 impl Prg<16> for PrgAes128 {
     type SeedStream = SeedStreamAes128;
 
@@ -286,6 +294,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn prg_aes128() {
         let t: PrgTestVector =
             serde_json::from_str(include_str!("test_vec/04/PrgAes128.json")).unwrap();
