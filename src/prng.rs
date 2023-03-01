@@ -25,7 +25,7 @@ pub enum PrngError {
 }
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
-/// sequence is derived from the key stream of AES-128 in CTR mode with a random IV.
+/// sequence is derived from a PRG's key stream.
 #[derive(Debug)]
 pub(crate) struct Prng<F, S> {
     phantom: PhantomData<F>,
@@ -138,7 +138,7 @@ mod tests {
     use crate::{
         codec::Decode,
         field::{Field96, FieldPrio2},
-        vdaf::prg::{CoinToss, Prg, PrgAes128, Seed},
+        vdaf::prg::{CoinToss, Prg, PrgSha3, Seed, SeedStreamSha3},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
@@ -219,22 +219,21 @@ mod tests {
             .collect()
     }
 
-    #[ignore]
     #[test]
     fn rejection_sampling_test_vector() {
         // These constants were found in a brute-force search, and they test that the PRG performs
-        // rejection sampling correctly when raw AES-CTR output exceeds the prime modulus.
-        let seed = Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 95]).unwrap();
-        let expected = Field96::from(39729620190871453347343769187);
+        // rejection sampling correctly when raw cSHAKE128 output exceeds the prime modulus.
+        let seed = Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xd5]).unwrap();
+        let expected = Field96::from(74403028385650568506271441532);
 
-        let seed_stream = PrgAes128::seed_stream(&seed, b"", b"");
+        let seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
         let mut prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
-        let actual = prng.nth(145).unwrap();
+        let actual = prng.nth(9).unwrap();
         assert_eq!(actual, expected);
 
-        let mut seed_stream = PrgAes128::seed_stream(&seed, b"", b"");
+        let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
         let mut actual = Field96::zero();
-        for _ in 0..=145 {
+        for _ in 0..=9 {
             actual = <Field96 as CoinToss>::sample(&mut seed_stream);
         }
         assert_eq!(actual, expected);
@@ -246,12 +245,12 @@ mod tests {
     fn left_over_buffer_back_fill() {
         let seed = Seed::generate().unwrap();
 
-        let mut prng: Prng<Field96, SeedStreamAes128> =
-            Prng::from_seed_stream(PrgAes128::seed_stream(&seed, b"", b""));
+        let mut prng: Prng<Field96, SeedStreamSha3> =
+            Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
 
         // Construct a `Prng` with a longer-than-usual buffer.
-        let mut prng_weird_buffer_size: Prng<Field96, SeedStreamAes128> =
-            Prng::from_seed_stream(PrgAes128::seed_stream(&seed, b"", b""));
+        let mut prng_weird_buffer_size: Prng<Field96, SeedStreamSha3> =
+            Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
         let mut extra = [0; 7];
         prng_weird_buffer_size.seed_stream.fill(&mut extra);
         prng_weird_buffer_size.buffer.extend_from_slice(&extra);
@@ -267,8 +266,8 @@ mod tests {
     #[test]
     fn into_new_field() {
         let seed = Seed::generate().unwrap();
-        let want: Prng<Field96, SeedStreamAes128> =
-            Prng::from_seed_stream(PrgAes128::seed_stream(&seed, b"", b""));
+        let want: Prng<Field96, SeedStreamSha3> =
+            Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
         let want_buffer = want.buffer.clone();
 
         let got: Prng<FieldPrio2, _> = want.into_new_field();

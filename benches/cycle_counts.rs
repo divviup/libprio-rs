@@ -11,7 +11,7 @@ use prio::{
     idpf::{self, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::{
         poplar1::Poplar1IdpfValue,
-        prg::{PrgAes128, Seed},
+        prg::{PrgSha3, Seed},
     },
 };
 #[cfg(feature = "prio2")]
@@ -119,7 +119,7 @@ fn prio2_prove_and_verify_1000() -> VerificationMessage<FieldPrio2> {
 }
 
 fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 16>> {
-    let prio3 = Prio3::new_aes128_count(2).unwrap();
+    let prio3 = Prio3::new_count(2).unwrap();
     let measurement = 1;
     let nonce = [0; 16];
     prio3
@@ -130,7 +130,7 @@ fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 16>> {
 
 fn prio3_client_histogram_11() -> Vec<Prio3InputShare<Field128, 16>> {
     let buckets: Vec<u64> = (1..10).collect();
-    let prio3 = Prio3::new_aes128_histogram(2, &buckets).unwrap();
+    let prio3 = Prio3::new_histogram(2, &buckets).unwrap();
     let measurement = 17;
     let nonce = [0; 16];
     prio3
@@ -140,7 +140,7 @@ fn prio3_client_histogram_11() -> Vec<Prio3InputShare<Field128, 16>> {
 }
 
 fn prio3_client_sum_32() -> Vec<Prio3InputShare<Field128, 16>> {
-    let prio3 = Prio3::new_aes128_sum(2, 16).unwrap();
+    let prio3 = Prio3::new_sum(2, 16).unwrap();
     let measurement = 1337;
     let nonce = [0; 16];
     prio3
@@ -151,7 +151,7 @@ fn prio3_client_sum_32() -> Vec<Prio3InputShare<Field128, 16>> {
 
 fn prio3_client_count_vec_1000() -> Vec<Prio3InputShare<Field128, 16>> {
     let len = 1000;
-    let prio3 = Prio3::new_aes128_sum_vec(2, 1, len).unwrap();
+    let prio3 = Prio3::new_sum_vec(2, 1, len).unwrap();
     let measurement = vec![0; len];
     let nonce = [0; 16];
     prio3
@@ -163,7 +163,7 @@ fn prio3_client_count_vec_1000() -> Vec<Prio3InputShare<Field128, 16>> {
 #[cfg(feature = "multithreaded")]
 fn prio3_client_count_vec_multithreaded_1000() -> Vec<Prio3InputShare<Field128, 16>> {
     let len = 1000;
-    let prio3 = Prio3::new_aes128_sum_vec_multithreaded(2, 1, len).unwrap();
+    let prio3 = Prio3::new_sum_vec_multithreaded(2, 1, len).unwrap();
     let measurement = vec![0; len];
     let nonce = [0; 16];
     prio3
@@ -178,7 +178,7 @@ fn idpf_poplar_gen(
     inner_values: Vec<Poplar1IdpfValue<Field64>>,
     leaf_value: Poplar1IdpfValue<Field255>,
 ) {
-    idpf::gen::<_, _, _, PrgAes128, 16>(input, inner_values, leaf_value).unwrap();
+    idpf::gen::<_, _, _, PrgSha3, 16>(input, inner_values, leaf_value).unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -221,7 +221,7 @@ fn idpf_poplar_eval(
     key: &Seed<16>,
 ) {
     let mut cache = RingBufferCache::new(1);
-    idpf::eval::<_, _, PrgAes128, 16>(0, public_share, key, input, &mut cache).unwrap();
+    idpf::eval::<_, _, PrgSha3, 16>(0, public_share, key, input, &mut cache).unwrap();
 }
 
 #[cfg(feature = "experimental")]

@@ -845,7 +845,7 @@ mod tests {
         prng::Prng,
         vdaf::{
             poplar1::Poplar1IdpfValue,
-            prg::{Prg, PrgAes128, Seed},
+            prg::{Prg, PrgSha3, Seed},
         },
     };
 
@@ -933,14 +933,14 @@ mod tests {
     #[test]
     fn test_idpf_poplar() {
         let input = bitbox![0, 1, 1, 0, 1].into();
-        let (public_share, keys) = idpf::gen::<_, _, _, PrgAes128, 16>(
+        let (public_share, keys) = idpf::gen::<_, _, _, PrgSha3, 16>(
             &input,
             Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
             Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
         )
         .unwrap();
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0].into(),
@@ -948,7 +948,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![1].into(),
@@ -956,7 +956,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
@@ -964,7 +964,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 0].into(),
@@ -972,7 +972,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![1, 0].into(),
@@ -980,7 +980,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![1, 1].into(),
@@ -988,7 +988,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1].into(),
@@ -996,7 +996,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0].into(),
@@ -1004,7 +1004,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 1].into(),
@@ -1012,7 +1012,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 0].into(),
@@ -1020,7 +1020,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![1, 0, 1, 0, 0].into(),
@@ -1069,13 +1069,13 @@ mod tests {
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let (public_share, keys) =
-            idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_values).unwrap();
+            idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
 
         for (level, values) in inner_values.iter().enumerate() {
             let mut prefix = BitBox::from_bitslice(&bits[..=level]).into();
-            check_idpf_poplar_evaluation::<PrgAes128, 16>(
+            check_idpf_poplar_evaluation::<PrgSha3, 16>(
                 &public_share,
                 &keys,
                 &prefix,
@@ -1085,7 +1085,7 @@ mod tests {
             );
             let flipped_bit = !prefix[level];
             prefix.index.set(level, flipped_bit);
-            check_idpf_poplar_evaluation::<PrgAes128, 16>(
+            check_idpf_poplar_evaluation::<PrgSha3, 16>(
                 &public_share,
                 &keys,
                 &prefix,
@@ -1094,7 +1094,7 @@ mod tests {
                 &mut cache_1,
             );
         }
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &input,
@@ -1104,7 +1104,7 @@ mod tests {
         );
         let mut modified_bits = bits.clone();
         modified_bits.set(INPUT_LEN - 1, !bits[INPUT_LEN - 1]);
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &modified_bits.into(),
@@ -1131,11 +1131,11 @@ mod tests {
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let (public_share, keys) =
-            idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_values).unwrap();
+            idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![1, 1, 0, 0].into(),
@@ -1168,7 +1168,7 @@ mod tests {
             ],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0].into(),
@@ -1196,7 +1196,7 @@ mod tests {
             vec![bitbox![0]],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
@@ -1224,7 +1224,7 @@ mod tests {
             vec![bitbox![0, 1]],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &input,
@@ -1265,7 +1265,7 @@ mod tests {
             ],
         );
 
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &input,
@@ -1302,12 +1302,12 @@ mod tests {
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let (public_share, keys) =
-            idpf::gen::<_, _, _, PrgAes128, 16>(&input, inner_values.clone(), leaf_values).unwrap();
+            idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
 
         for (level, values) in inner_values.iter().enumerate() {
-            check_idpf_poplar_evaluation::<PrgAes128, 16>(
+            check_idpf_poplar_evaluation::<PrgSha3, 16>(
                 &public_share,
                 &keys,
                 &input[..=level].to_owned().into(),
@@ -1316,7 +1316,7 @@ mod tests {
                 &mut cache_1,
             );
         }
-        check_idpf_poplar_evaluation::<PrgAes128, 16>(
+        check_idpf_poplar_evaluation::<PrgSha3, 16>(
             &public_share,
             &keys,
             &input,
@@ -1329,14 +1329,14 @@ mod tests {
     #[test]
     fn test_idpf_poplar_error_cases() {
         // Zero bits does not make sense.
-        idpf::gen::<_, _, _, PrgAes128, 16>(
+        idpf::gen::<_, _, _, PrgSha3, 16>(
             &bitbox![].into(),
             Vec::<Poplar1IdpfValue<Field64>>::new(),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap_err();
 
-        let (public_share, keys) = idpf::gen::<_, _, _, PrgAes128, 16>(
+        let (public_share, keys) = idpf::gen::<_, _, _, PrgSha3, 16>(
             &bitbox![0;10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
@@ -1344,13 +1344,13 @@ mod tests {
         .unwrap();
 
         // Wrong number of values.
-        idpf::gen::<_, _, _, PrgAes128, 16>(
+        idpf::gen::<_, _, _, PrgSha3, 16>(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 8]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap_err();
-        idpf::gen::<_, _, _, PrgAes128, 16>(
+        idpf::gen::<_, _, _, PrgSha3, 16>(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 10]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
@@ -1358,7 +1358,7 @@ mod tests {
         .unwrap_err();
 
         // Evaluating with empty prefix.
-        assert!(idpf::eval::<_, _, PrgAes128, 16>(
+        assert!(idpf::eval::<_, _, PrgSha3, 16>(
             0,
             &public_share,
             &keys[0],
@@ -1367,7 +1367,7 @@ mod tests {
         )
         .is_err());
         // Evaluating with too-long prefix.
-        assert!(idpf::eval::<_, _, PrgAes128, 16>(
+        assert!(idpf::eval::<_, _, PrgSha3, 16>(
             0,
             &public_share,
             &keys[0],
@@ -1713,7 +1713,7 @@ mod tests {
     #[test]
     fn idpf_poplar_public_share_deserialize() {
         // This encoded public share, and the expected struct below, are taken from the
-        // 1Aes128 test vector.
+        // Poplar1 test vector.
         let data = hex::decode(concat!(
             "9a",
             "0000000000000000000000000000000000000000000000",
@@ -1784,7 +1784,7 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgAes128, 16>(
+        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgSha3, 16>(
             &test_vector.alpha,
             test_vector.beta_inner,
             test_vector.beta_leaf,
