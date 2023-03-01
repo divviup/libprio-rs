@@ -44,7 +44,7 @@ pub enum VdafError {
     #[error("prng error: {0}")]
     Prng(#[from] PrngError),
 
-    /// failure when calling getrandom().
+    /// Failure when calling getrandom().
     #[error("getrandom: {0}")]
     GetRandom(#[from] getrandom::Error),
 
@@ -187,13 +187,14 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// State of the Aggregator during the Prepare process.
     type PrepareState: Clone + Debug;
 
-    /// The type of messages broadcast by each aggregator at each round of the Prepare Process.
+    /// The type of messages sent by each aggregator at each round of the Prepare Process.
     ///
     /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
     type PrepareShare: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
 
-    /// Result of preprocessing a round of preparation shares.
+    /// Result of preprocessing a round of preparation shares. This is used by all aggregators as an
+    /// input to the next round of the Prepare Process.
     ///
     /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
@@ -273,11 +274,11 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
     /// Update an aggregate share by merging it with another (`agg_share`).
     fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError>;
 
-    /// Update an aggregate share by adding `output share`
+    /// Update an aggregate share by adding `output_share`.
     fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError>;
 }
 
-/// An output share comprised of a vector of `F` elements.
+/// An output share comprised of a vector of field elements.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct OutputShare<F>(Vec<F>);
 
@@ -299,9 +300,10 @@ impl<F: FieldElement> Encode for OutputShare<F> {
     }
 }
 
-/// An aggregate share suitable for VDAFs whose output shares and aggregate
-/// shares are vectors of `F` elements, and when an output share needs no
-/// special transformation to be merged into an aggregate share.
+/// An aggregate share comprised of a vector of field elements.
+///
+/// This is suitable for VDAFs where both output shares and aggregate shares are vectors of field
+/// elements, and output shares need no special transformation to be merged into an aggregate share.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AggregateShare<F>(Vec<F>);
 
