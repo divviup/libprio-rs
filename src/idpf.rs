@@ -176,9 +176,9 @@ where
     }
 }
 
-fn extend<P, const L: usize>(seed: &[u8; L]) -> ([[u8; L]; 2], [Choice; 2])
+fn extend<P, const SEED_SIZE: usize>(seed: &[u8; SEED_SIZE]) -> ([[u8; SEED_SIZE]; 2], [Choice; 2])
 where
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     let custom = [
         VERSION, 1, /* algorithm class */
@@ -187,7 +187,7 @@ where
     ];
     let mut seed_stream = P::init(seed, &custom).into_seed_stream();
 
-    let mut seeds = [[0u8; L], [0u8; L]];
+    let mut seeds = [[0u8; SEED_SIZE], [0u8; SEED_SIZE]];
     seed_stream.fill(&mut seeds[0]);
     seed_stream.fill(&mut seeds[1]);
 
@@ -198,10 +198,10 @@ where
     (seeds, control_bits)
 }
 
-fn convert<V, P, const L: usize>(seed: &[u8; L]) -> ([u8; L], V)
+fn convert<V, P, const SEED_SIZE: usize>(seed: &[u8; SEED_SIZE]) -> ([u8; SEED_SIZE], V)
 where
     V: IdpfValue,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     let custom = [
         VERSION, 1, /* algorithm class */
@@ -210,7 +210,7 @@ where
     ];
     let mut seed_stream = P::init(seed, &custom).into_seed_stream();
 
-    let mut next_seed = [0u8; L];
+    let mut next_seed = [0u8; SEED_SIZE];
     seed_stream.fill(&mut next_seed);
 
     (next_seed, V::sample(&mut seed_stream))
@@ -218,19 +218,19 @@ where
 
 /// Helper method to update seeds, update control bits, and output the correction word for one level
 /// of the IDPF key generation process.
-fn generate_correction_word<V, P, const L: usize>(
+fn generate_correction_word<V, P, const SEED_SIZE: usize>(
     input_bit: Choice,
     value: V,
-    keys: &mut [[u8; L]; 2],
+    keys: &mut [[u8; SEED_SIZE]; 2],
     control_bits: &mut [Choice; 2],
-) -> IdpfCorrectionWord<V, L>
+) -> IdpfCorrectionWord<V, SEED_SIZE>
 where
     V: IdpfValue,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     // Expand both keys into two seeds and two control bits each.
-    let (seed_0, control_bits_0) = extend::<P, L>(&keys[0]);
-    let (seed_1, control_bits_1) = extend::<P, L>(&keys[1]);
+    let (seed_0, control_bits_0) = extend::<P, SEED_SIZE>(&keys[0]);
+    let (seed_1, control_bits_1) = extend::<P, SEED_SIZE>(&keys[1]);
 
     let (keep, lose) = (input_bit, !input_bit);
 
@@ -260,8 +260,8 @@ where
         conditional_xor_seeds(&seed_1_keep, &cw_seed, previous_control_bits[1]),
     ];
 
-    let (new_key_0, elements_0) = convert::<V, P, L>(&seeds_corrected[0]);
-    let (new_key_1, elements_1) = convert::<V, P, L>(&seeds_corrected[1]);
+    let (new_key_0, elements_0) = convert::<V, P, SEED_SIZE>(&seeds_corrected[0]);
+    let (new_key_1, elements_1) = convert::<V, P, SEED_SIZE>(&seeds_corrected[1]);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
@@ -278,18 +278,18 @@ where
 
 /// Helper function to evaluate one level of an IDPF. This updates the seed and control bit
 /// arguments that are passed in.
-fn eval_next<V, P, const L: usize>(
+fn eval_next<V, P, const SEED_SIZE: usize>(
     is_leader: bool,
-    key: &mut [u8; L],
+    key: &mut [u8; SEED_SIZE],
     control_bit: &mut Choice,
-    correction_word: &IdpfCorrectionWord<V, L>,
+    correction_word: &IdpfCorrectionWord<V, SEED_SIZE>,
     input_bit: Choice,
 ) -> V
 where
     V: IdpfValue,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
-    let (mut seeds, mut control_bits) = extend::<P, L>(key);
+    let (mut seeds, mut control_bits) = extend::<P, SEED_SIZE>(key);
 
     seeds[0] = conditional_xor_seeds(&seeds[0], &correction_word.seed, *control_bit);
     control_bits[0] ^= correction_word.control_bits[0] & *control_bit;
@@ -299,7 +299,7 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<V, P, L>(&seed_corrected);
+    let (new_key, elements) = convert::<V, P, SEED_SIZE>(&seed_corrected);
     *key = new_key;
 
     let mut out =
@@ -308,20 +308,20 @@ where
     out
 }
 
-fn gen_with_rand_source<VI, VL, M: IntoIterator<Item = VI>, P, const L: usize>(
+fn gen_with_rand_source<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
     rand_source: RandSource,
-) -> Result<(IdpfPublicShare<VI, VL, L>, [Seed<L>; 2]), VdafError>
+) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     let bits = input.len();
 
-    let initial_keys: [Seed<L>; 2] = [
+    let initial_keys: [Seed<SEED_SIZE>; 2] = [
         Seed::from_rand_source(rand_source)?,
         Seed::from_rand_source(rand_source)?,
     ];
@@ -336,7 +336,7 @@ where
                 IdpfError::InvalidParameter("too many values were supplied".to_string()).into(),
             );
         }
-        inner_correction_words.push(generate_correction_word::<VI, P, L>(
+        inner_correction_words.push(generate_correction_word::<VI, P, SEED_SIZE>(
             Choice::from(input[level] as u8),
             value,
             &mut keys,
@@ -346,7 +346,7 @@ where
     if inner_correction_words.len() != bits - 1 {
         return Err(IdpfError::InvalidParameter("too few values were supplied".to_string()).into());
     }
-    let leaf_correction_word = generate_correction_word::<VL, P, L>(
+    let leaf_correction_word = generate_correction_word::<VL, P, SEED_SIZE>(
         Choice::from(input[bits - 1] as u8),
         leaf_value,
         &mut keys,
@@ -364,39 +364,44 @@ where
 ///
 /// Generate and return a sequence of IDPF shares for `input`. The parameters `inner_values`
 /// and `leaf_value` provide the output values for each successive level of the prefix tree.
-pub fn gen<VI, VL, M, P, const L: usize>(
+pub fn gen<VI, VL, M, P, const SEED_SIZE: usize>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
-) -> Result<(IdpfPublicShare<VI, VL, L>, [Seed<L>; 2]), VdafError>
+) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
     M: IntoIterator<Item = VI>,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     if input.is_empty() {
         return Err(IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into());
     }
-    gen_with_rand_source::<_, _, _, P, L>(input, inner_values, leaf_value, getrandom::getrandom)
+    gen_with_rand_source::<_, _, _, P, SEED_SIZE>(
+        input,
+        inner_values,
+        leaf_value,
+        getrandom::getrandom,
+    )
 }
 
 /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
 /// intermediate values.
 #[allow(clippy::too_many_arguments)]
-fn eval_from_node<VI, VL, P, const L: usize>(
+fn eval_from_node<VI, VL, P, const SEED_SIZE: usize>(
     is_leader: bool,
-    public_share: &IdpfPublicShare<VI, VL, L>,
+    public_share: &IdpfPublicShare<VI, VL, SEED_SIZE>,
     start_level: usize,
-    mut key: [u8; L],
+    mut key: [u8; SEED_SIZE],
     mut control_bit: Choice,
     prefix: &IdpfInput,
-    cache: &mut dyn IdpfCache<L>,
+    cache: &mut dyn IdpfCache<SEED_SIZE>,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
     let mut last_inner_output = None;
@@ -405,7 +410,7 @@ where
         .zip(prefix[start_level..].iter())
         .zip(start_level..)
     {
-        last_inner_output = Some(eval_next::<_, P, L>(
+        last_inner_output = Some(eval_next::<_, P, SEED_SIZE>(
             is_leader,
             &mut key,
             &mut control_bit,
@@ -417,7 +422,7 @@ where
     }
 
     if prefix.len() == bits {
-        let leaf_output = eval_next::<_, P, L>(
+        let leaf_output = eval_next::<_, P, SEED_SIZE>(
             is_leader,
             &mut key,
             &mut control_bit,
@@ -435,17 +440,17 @@ where
 /// The IDPF key evaluation algorithm.
 ///
 /// Evaluate an IDPF share on `prefix`.
-pub fn eval<VI, VL, P, const L: usize>(
+pub fn eval<VI, VL, P, const SEED_SIZE: usize>(
     agg_id: usize,
-    public_share: &IdpfPublicShare<VI, VL, L>,
-    key: &Seed<L>,
+    public_share: &IdpfPublicShare<VI, VL, SEED_SIZE>,
+    key: &Seed<SEED_SIZE>,
     prefix: &IdpfInput,
-    cache: &mut dyn IdpfCache<L>,
+    cache: &mut dyn IdpfCache<SEED_SIZE>,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
     if agg_id > 1 {
@@ -477,7 +482,7 @@ where
             if let Some((key, control_bit)) = cache.get(cache_key) {
                 // Evaluate the IDPF starting from the cached data at a previously-computed
                 // node, and return the result.
-                return eval_from_node::<VI, VL, P, L>(
+                return eval_from_node::<VI, VL, P, SEED_SIZE>(
                     is_leader,
                     public_share,
                     /* start_level */ cache_key.len(),
@@ -491,7 +496,7 @@ where
         }
     }
     // Evaluate starting from the root node.
-    eval_from_node::<VI, VL, P, L>(
+    eval_from_node::<VI, VL, P, SEED_SIZE>(
         is_leader,
         public_share,
         /* start_level */ 0,
@@ -505,14 +510,14 @@ where
 /// An IDPF public share. This contains the list of correction words used by all parties when
 /// evaluating the IDPF.
 #[derive(Debug, Clone)]
-pub struct IdpfPublicShare<VI, VL, const L: usize> {
+pub struct IdpfPublicShare<VI, VL, const SEED_SIZE: usize> {
     /// Correction words for each inner node level.
-    inner_correction_words: Vec<IdpfCorrectionWord<VI, L>>,
+    inner_correction_words: Vec<IdpfCorrectionWord<VI, SEED_SIZE>>,
     /// Correction word for the leaf node level.
-    leaf_correction_word: IdpfCorrectionWord<VL, L>,
+    leaf_correction_word: IdpfCorrectionWord<VL, SEED_SIZE>,
 }
 
-impl<VI, VL, const L: usize> ConstantTimeEq for IdpfPublicShare<VI, VL, L>
+impl<VI, VL, const SEED_SIZE: usize> ConstantTimeEq for IdpfPublicShare<VI, VL, SEED_SIZE>
 where
     VI: ConstantTimeEq,
     VL: ConstantTimeEq,
@@ -524,7 +529,7 @@ where
     }
 }
 
-impl<VI, VL, const L: usize> PartialEq for IdpfPublicShare<VI, VL, L>
+impl<VI, VL, const SEED_SIZE: usize> PartialEq for IdpfPublicShare<VI, VL, SEED_SIZE>
 where
     VI: ConstantTimeEq,
     VL: ConstantTimeEq,
@@ -534,14 +539,14 @@ where
     }
 }
 
-impl<VI, VL, const L: usize> Eq for IdpfPublicShare<VI, VL, L>
+impl<VI, VL, const SEED_SIZE: usize> Eq for IdpfPublicShare<VI, VL, SEED_SIZE>
 where
     VI: ConstantTimeEq,
     VL: ConstantTimeEq,
 {
 }
 
-impl<VI, VL, const L: usize> Encode for IdpfPublicShare<VI, VL, L>
+impl<VI, VL, const SEED_SIZE: usize> Encode for IdpfPublicShare<VI, VL, SEED_SIZE>
 where
     VI: Encode,
     VL: Encode,
@@ -575,7 +580,8 @@ where
     }
 }
 
-impl<VI, VL, const L: usize> ParameterizedDecode<usize> for IdpfPublicShare<VI, VL, L>
+impl<VI, VL, const SEED_SIZE: usize> ParameterizedDecode<usize>
+    for IdpfPublicShare<VI, VL, SEED_SIZE>
 where
     VI: Decode + Copy,
     VL: Decode + Copy,
@@ -589,7 +595,7 @@ where
         let mut inner_correction_words = Vec::with_capacity(bits - 1);
         for chunk in unpacked_control_bits[0..(bits - 1) * 2].chunks(2) {
             let control_bits = [(chunk[0] as u8).into(), (chunk[1] as u8).into()];
-            let seed = Seed::<L>::decode(bytes)?.0;
+            let seed = Seed::<SEED_SIZE>::decode(bytes)?.0;
             let value = VI::decode(bytes)?;
             inner_correction_words.push(IdpfCorrectionWord {
                 seed,
@@ -602,7 +608,7 @@ where
             (unpacked_control_bits[(bits - 1) * 2] as u8).into(),
             (unpacked_control_bits[bits * 2 - 1] as u8).into(),
         ];
-        let seed = Seed::<L>::decode(bytes)?.0;
+        let seed = Seed::<SEED_SIZE>::decode(bytes)?.0;
         let value = VL::decode(bytes)?;
         let leaf_correction_word = IdpfCorrectionWord {
             seed,
@@ -623,13 +629,13 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct IdpfCorrectionWord<V, const L: usize> {
-    seed: [u8; L],
+struct IdpfCorrectionWord<V, const SEED_SIZE: usize> {
+    seed: [u8; SEED_SIZE],
     control_bits: [Choice; 2],
     value: V,
 }
 
-impl<V, const L: usize> ConstantTimeEq for IdpfCorrectionWord<V, L>
+impl<V, const SEED_SIZE: usize> ConstantTimeEq for IdpfCorrectionWord<V, SEED_SIZE>
 where
     V: ConstantTimeEq,
 {
@@ -640,7 +646,7 @@ where
     }
 }
 
-impl<V, const L: usize> PartialEq for IdpfCorrectionWord<V, L>
+impl<V, const SEED_SIZE: usize> PartialEq for IdpfCorrectionWord<V, SEED_SIZE>
 where
     V: ConstantTimeEq,
 {
@@ -649,26 +655,35 @@ where
     }
 }
 
-impl<V, const L: usize> Eq for IdpfCorrectionWord<V, L> where V: ConstantTimeEq {}
+impl<V, const SEED_SIZE: usize> Eq for IdpfCorrectionWord<V, SEED_SIZE> where V: ConstantTimeEq {}
 
-fn xor_seeds<const L: usize>(left: &[u8; L], right: &[u8; L]) -> [u8; L] {
-    let mut seed = [0u8; L];
+fn xor_seeds<const SEED_SIZE: usize>(
+    left: &[u8; SEED_SIZE],
+    right: &[u8; SEED_SIZE],
+) -> [u8; SEED_SIZE] {
+    let mut seed = [0u8; SEED_SIZE];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a ^ b;
     }
     seed
 }
 
-fn and_seeds<const L: usize>(left: &[u8; L], right: &[u8; L]) -> [u8; L] {
-    let mut seed = [0u8; L];
+fn and_seeds<const SEED_SIZE: usize>(
+    left: &[u8; SEED_SIZE],
+    right: &[u8; SEED_SIZE],
+) -> [u8; SEED_SIZE] {
+    let mut seed = [0u8; SEED_SIZE];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a & b;
     }
     seed
 }
 
-fn or_seeds<const L: usize>(left: &[u8; L], right: &[u8; L]) -> [u8; L] {
-    let mut seed = [0u8; L];
+fn or_seeds<const SEED_SIZE: usize>(
+    left: &[u8; SEED_SIZE],
+    right: &[u8; SEED_SIZE],
+) -> [u8; SEED_SIZE] {
+    let mut seed = [0u8; SEED_SIZE];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a | b;
     }
@@ -678,18 +693,18 @@ fn or_seeds<const L: usize>(left: &[u8; L], right: &[u8; L]) -> [u8; L] {
 /// Take a control bit, and fan it out into a byte array that can be used as a mask for PRG seeds,
 /// without branching. If the control bit input is 0, all bytes will be equal to 0, and if the
 /// control bit input is 1, all bytes will be equal to 255.
-fn control_bit_to_seed_mask<const L: usize>(control: Choice) -> [u8; L] {
+fn control_bit_to_seed_mask<const SEED_SIZE: usize>(control: Choice) -> [u8; SEED_SIZE] {
     let mask = -(control.unwrap_u8() as i8) as u8;
-    [mask; L]
+    [mask; SEED_SIZE]
 }
 
 /// Take two seeds and a control bit, and return the first seed if the control bit is zero, or the
 /// XOR of the two seeds if the control bit is one. This does not branch on the control bit.
-fn conditional_xor_seeds<const L: usize>(
-    normal_input: &[u8; L],
-    switched_input: &[u8; L],
+fn conditional_xor_seeds<const SEED_SIZE: usize>(
+    normal_input: &[u8; SEED_SIZE],
+    switched_input: &[u8; SEED_SIZE],
     control: Choice,
-) -> [u8; L] {
+) -> [u8; SEED_SIZE] {
     xor_seeds(
         normal_input,
         &and_seeds(switched_input, &control_bit_to_seed_mask(control)),
@@ -698,7 +713,10 @@ fn conditional_xor_seeds<const L: usize>(
 
 /// Returns one of two seeds, depending on the value of a selector bit. Does not branch on the
 /// selector input or make selector-dependent memory accesses.
-fn conditional_select_seed<const L: usize>(select: Choice, seeds: &[[u8; L]; 2]) -> [u8; L] {
+fn conditional_select_seed<const SEED_SIZE: usize>(
+    select: Choice,
+    seeds: &[[u8; SEED_SIZE]; 2],
+) -> [u8; SEED_SIZE] {
     or_seeds(
         &and_seeds(&control_bit_to_seed_mask(!select), &seeds[0]),
         &and_seeds(&control_bit_to_seed_mask(select), &seeds[1]),
@@ -716,12 +734,12 @@ fn conditional_select_seed<const L: usize>(select: Choice, seeds: &[[u8; L]; 2])
 /// values from nodes further up in the tree may be cached and reused in evaluations of subsequent
 /// longer inputs. If one IDPF input is a prefix of another input, then the first input's path down
 /// the tree is a prefix of the other input's path.
-pub trait IdpfCache<const L: usize> {
+pub trait IdpfCache<const SEED_SIZE: usize> {
     /// Fetch cached values for the node identified by the IDPF input.
-    fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)>;
+    fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)>;
 
     /// Store values corresponding to the node identified by the IDPF input.
-    fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8));
+    fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8));
 }
 
 /// A no-op [`IdpfCache`] implementation that always reports a cache miss.
@@ -735,41 +753,41 @@ impl NoCache {
     }
 }
 
-impl<const L: usize> IdpfCache<L> for NoCache {
-    fn get(&self, _: &BitSlice) -> Option<([u8; L], u8)> {
+impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for NoCache {
+    fn get(&self, _: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
         None
     }
 
-    fn insert(&mut self, _: &BitSlice, _: &([u8; L], u8)) {}
+    fn insert(&mut self, _: &BitSlice, _: &([u8; SEED_SIZE], u8)) {}
 }
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in an in-memory hash map,
 /// with no eviction.
 #[derive(Default)]
-pub struct HashMapCache<const L: usize> {
-    map: HashMap<BitBox, ([u8; L], u8)>,
+pub struct HashMapCache<const SEED_SIZE: usize> {
+    map: HashMap<BitBox, ([u8; SEED_SIZE], u8)>,
 }
 
-impl<const L: usize> HashMapCache<L> {
+impl<const SEED_SIZE: usize> HashMapCache<SEED_SIZE> {
     /// Create a new unpopulated `HashMapCache`.
-    pub fn new() -> HashMapCache<L> {
+    pub fn new() -> HashMapCache<SEED_SIZE> {
         HashMapCache::default()
     }
 
     /// Create a new unpopulated `HashMapCache`, with a set pre-allocated capacity.
-    pub fn with_capacity(capacity: usize) -> HashMapCache<L> {
+    pub fn with_capacity(capacity: usize) -> HashMapCache<SEED_SIZE> {
         Self {
             map: HashMap::with_capacity(capacity),
         }
     }
 }
 
-impl<const L: usize> IdpfCache<L> for HashMapCache<L> {
-    fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
+impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for HashMapCache<SEED_SIZE> {
+    fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
         self.map.get(input).cloned()
     }
 
-    fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+    fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
         if !self.map.contains_key(input) {
             self.map
                 .insert(input.to_owned().into_boxed_bitslice(), *values);
@@ -779,21 +797,21 @@ impl<const L: usize> IdpfCache<L> for HashMapCache<L> {
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in memory, with
 /// least-recently-used eviction, and lookups via linear probing.
-pub struct RingBufferCache<const L: usize> {
-    ring: VecDeque<(BitBox, [u8; L], u8)>,
+pub struct RingBufferCache<const SEED_SIZE: usize> {
+    ring: VecDeque<(BitBox, [u8; SEED_SIZE], u8)>,
 }
 
-impl<const L: usize> RingBufferCache<L> {
+impl<const SEED_SIZE: usize> RingBufferCache<SEED_SIZE> {
     /// Create a new unpopulated `RingBufferCache`.
-    pub fn new(capacity: usize) -> RingBufferCache<L> {
+    pub fn new(capacity: usize) -> RingBufferCache<SEED_SIZE> {
         Self {
             ring: VecDeque::with_capacity(std::cmp::max(capacity, 1)),
         }
     }
 }
 
-impl<const L: usize> IdpfCache<L> for RingBufferCache<L> {
-    fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
+impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for RingBufferCache<SEED_SIZE> {
+    fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
         // iterate back-to-front, so that we check the most recently pushed entry first.
         for entry in self.ring.iter().rev() {
             if input == entry.0 {
@@ -803,7 +821,7 @@ impl<const L: usize> IdpfCache<L> for RingBufferCache<L> {
         None
     }
 
-    fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+    fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
         // evict first (to avoid growing the storage)
         if self.ring.len() == self.ring.capacity() {
             self.ring.pop_front();
@@ -863,19 +881,19 @@ mod tests {
 
     /// A lossy IDPF cache, for testing purposes, that randomly returns cache misses.
     #[derive(Default)]
-    struct LossyCache<const L: usize> {
-        map: HashMap<BitBox, ([u8; L], u8)>,
+    struct LossyCache<const SEED_SIZE: usize> {
+        map: HashMap<BitBox, ([u8; SEED_SIZE], u8)>,
     }
 
-    impl<const L: usize> LossyCache<L> {
+    impl<const SEED_SIZE: usize> LossyCache<SEED_SIZE> {
         /// Create a new unpopulated `LossyCache`.
-        fn new() -> LossyCache<L> {
+        fn new() -> LossyCache<SEED_SIZE> {
             LossyCache::default()
         }
     }
 
-    impl<const L: usize> IdpfCache<L> for LossyCache<L> {
-        fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
+    impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for LossyCache<SEED_SIZE> {
+        fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
             if random() {
                 self.map.get(input).cloned()
             } else {
@@ -883,7 +901,7 @@ mod tests {
             }
         }
 
-        fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+        fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
             if !self.map.contains_key(input) {
                 self.map
                     .insert(input.to_owned().into_boxed_bitslice(), *values);
@@ -892,14 +910,14 @@ mod tests {
     }
 
     /// A wrapper [`IdpfCache`] implementation that records `get()` calls, for testing purposes.
-    struct SnoopingCache<T, const L: usize> {
+    struct SnoopingCache<T, const SEED_SIZE: usize> {
         inner: T,
         get_calls: Mutex<Vec<BitBox>>,
-        insert_calls: Mutex<Vec<(BitBox, [u8; L], u8)>>,
+        insert_calls: Mutex<Vec<(BitBox, [u8; SEED_SIZE], u8)>>,
     }
 
-    impl<T, const L: usize> SnoopingCache<T, L> {
-        fn new(inner: T) -> SnoopingCache<T, L> {
+    impl<T, const SEED_SIZE: usize> SnoopingCache<T, SEED_SIZE> {
+        fn new(inner: T) -> SnoopingCache<T, SEED_SIZE> {
             SnoopingCache {
                 inner,
                 get_calls: Mutex::new(Vec::new()),
@@ -908,11 +926,11 @@ mod tests {
         }
     }
 
-    impl<T, const L: usize> IdpfCache<L> for SnoopingCache<T, L>
+    impl<T, const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for SnoopingCache<T, SEED_SIZE>
     where
-        T: IdpfCache<L>,
+        T: IdpfCache<SEED_SIZE>,
     {
-        fn get(&self, input: &BitSlice) -> Option<([u8; L], u8)> {
+        fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
             self.get_calls
                 .lock()
                 .unwrap()
@@ -920,7 +938,7 @@ mod tests {
             self.inner.get(input)
         }
 
-        fn insert(&mut self, input: &BitSlice, values: &([u8; L], u8)) {
+        fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
             self.insert_calls.lock().unwrap().push((
                 input.to_owned().into_boxed_bitslice(),
                 values.0,
@@ -1030,18 +1048,24 @@ mod tests {
         );
     }
 
-    fn check_idpf_poplar_evaluation<P, const L: usize>(
-        public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, L>,
-        keys: &[Seed<L>; 2],
+    fn check_idpf_poplar_evaluation<P, const SEED_SIZE: usize>(
+        public_share: &IdpfPublicShare<
+            Poplar1IdpfValue<Field64>,
+            Poplar1IdpfValue<Field255>,
+            SEED_SIZE,
+        >,
+        keys: &[Seed<SEED_SIZE>; 2],
         prefix: &IdpfInput,
         expected_output: &IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
-        cache_0: &mut dyn IdpfCache<L>,
-        cache_1: &mut dyn IdpfCache<L>,
+        cache_0: &mut dyn IdpfCache<SEED_SIZE>,
+        cache_1: &mut dyn IdpfCache<SEED_SIZE>,
     ) where
-        P: Prg<L>,
+        P: Prg<SEED_SIZE>,
     {
-        let share_0 = idpf::eval::<_, _, P, L>(0, public_share, &keys[0], prefix, cache_0).unwrap();
-        let share_1 = idpf::eval::<_, _, P, L>(1, public_share, &keys[1], prefix, cache_1).unwrap();
+        let share_0 =
+            idpf::eval::<_, _, P, SEED_SIZE>(0, public_share, &keys[0], prefix, cache_0).unwrap();
+        let share_1 =
+            idpf::eval::<_, _, P, SEED_SIZE>(1, public_share, &keys[1], prefix, cache_1).unwrap();
         let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
     }

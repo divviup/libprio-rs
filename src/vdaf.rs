@@ -56,15 +56,15 @@ pub enum VdafError {
 
 /// An additive share of a vector of field elements.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum Share<F, const L: usize> {
+pub enum Share<F, const SEED_SIZE: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
 
     /// A compressed share, typically sent to the helper.
-    Helper(Seed<L>),
+    Helper(Seed<SEED_SIZE>),
 }
 
-impl<F: Clone, const L: usize> Share<F, L> {
+impl<F: Clone, const SEED_SIZE: usize> Share<F, SEED_SIZE> {
     /// Truncate the Leader's share to the given length. If this is the Helper's share, then this
     /// method clones the input without modifying it.
     #[cfg(feature = "prio2")]
@@ -78,16 +78,16 @@ impl<F: Clone, const L: usize> Share<F, L> {
 
 /// Parameters needed to decode a [`Share`]
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ShareDecodingParameter<const L: usize> {
+pub(crate) enum ShareDecodingParameter<const SEED_SIZE: usize> {
     Leader(usize),
     Helper,
 }
 
-impl<F: FieldElement, const L: usize> ParameterizedDecode<ShareDecodingParameter<L>>
-    for Share<F, L>
+impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<ShareDecodingParameter<SEED_SIZE>>
+    for Share<F, SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &ShareDecodingParameter<L>,
+        decoding_parameter: &ShareDecodingParameter<SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match decoding_parameter {
@@ -106,7 +106,7 @@ impl<F: FieldElement, const L: usize> ParameterizedDecode<ShareDecodingParameter
     }
 }
 
-impl<F: FieldElement, const L: usize> Encode for Share<F, L> {
+impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         match self {
             Share::Leader(share_data) => {
@@ -346,18 +346,18 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
 }
 
 #[cfg(test)]
-pub(crate) fn run_vdaf<V, M, const L: usize>(
+pub(crate) fn run_vdaf<V, M, const SEED_SIZE: usize>(
     vdaf: &V,
     agg_param: &V::AggregationParam,
     measurements: M,
 ) -> Result<V::AggregateResult, VdafError>
 where
-    V: Client<16> + Aggregator<L, 16> + Collector,
+    V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
     M: IntoIterator<Item = V::Measurement>,
 {
     use rand::prelude::*;
     let mut rng = thread_rng();
-    let mut verify_key = [0; L];
+    let mut verify_key = [0; SEED_SIZE];
     rng.fill(&mut verify_key[..]);
 
     let mut agg_shares: Vec<Option<V::AggregateShare>> = vec![None; vdaf.num_aggregators()];
@@ -409,16 +409,16 @@ where
 }
 
 #[cfg(test)]
-pub(crate) fn run_vdaf_prepare<V, M, const L: usize>(
+pub(crate) fn run_vdaf_prepare<V, M, const SEED_SIZE: usize>(
     vdaf: &V,
-    verify_key: &[u8; L],
+    verify_key: &[u8; SEED_SIZE],
     agg_param: &V::AggregationParam,
     nonce: &[u8; 16],
     public_share: V::PublicShare,
     input_shares: M,
 ) -> Result<Vec<V::OutputShare>, VdafError>
 where
-    V: Client<16> + Aggregator<L, 16> + Collector,
+    V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
     M: IntoIterator<Item = V::InputShare>,
 {
     let input_shares = input_shares

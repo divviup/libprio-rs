@@ -108,8 +108,8 @@ fn main() {
     }
 }
 
-fn prio3_input_share_size<F: FftFriendlyFieldElement, const L: usize>(
-    input_shares: &[Prio3InputShare<F, L>],
+fn prio3_input_share_size<F: FftFriendlyFieldElement, const SEED_SIZE: usize>(
+    input_shares: &[Prio3InputShare<F, SEED_SIZE>],
 ) -> usize {
     let mut size = 0;
     for input_share in input_shares {
