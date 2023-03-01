@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-03]].
+//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-04]].
 //!
-//! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
+//! [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 
 use crate::vdaf::{CodecError, Decode, Encode};
 #[cfg(feature = "crypto-dependencies")]
@@ -85,9 +85,9 @@ pub trait SeedStream {
     fn fill(&mut self, buf: &mut [u8]);
 }
 
-/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-03]].
+/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-04]].
 ///
-/// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
+/// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 pub trait Prg<const L: usize>: Clone + Debug {
     /// The type of stream produced by this PRG.
     type SeedStream: SeedStream;
@@ -118,9 +118,7 @@ pub trait Prg<const L: usize>: Clone + Debug {
     }
 }
 
-/// The PRG based on AES128 as specified in [[draft-irtf-cfrg-vdaf-03]].
-///
-/// [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
+/// The PRG based on AES128 as specified in previous versions of draft-irtf-cfrg-vdaf.
 #[derive(Clone, Debug)]
 #[cfg(feature = "crypto-dependencies")]
 pub struct PrgAes128(Cmac<Aes128>);
@@ -290,7 +288,7 @@ mod tests {
     #[test]
     fn prg_aes128() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/03/PrgAes128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/04/PrgAes128.json")).unwrap();
         let mut prg = PrgAes128::init(&t.seed.try_into().unwrap(), &t.custom);
         prg.update(&t.binder);
 

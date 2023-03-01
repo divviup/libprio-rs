@@ -1,7 +1,7 @@
 //! This module implements the incremental distributed point function (IDPF) described in
-//! [[draft-irtf-cfrg-vdaf-03]].
+//! [[draft-irtf-cfrg-vdaf-04]].
 //!
-//! [draft-irtf-cfrg-vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
+//! [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
