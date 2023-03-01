@@ -33,28 +33,28 @@ pub(crate) type RandSource = fn(&mut [u8]) -> Result<(), getrandom::Error>;
 
 /// Input of [`Prg`].
 #[derive(Clone, Debug, Eq)]
-pub struct Seed<const L: usize>(pub(crate) [u8; L]);
+pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
-impl<const L: usize> Seed<L> {
+impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
     /// Generate a uniform random seed.
     pub fn generate() -> Result<Self, getrandom::Error> {
         Self::from_rand_source(getrandom::getrandom)
     }
 
     pub(crate) fn from_rand_source(rand_source: RandSource) -> Result<Self, getrandom::Error> {
-        let mut seed = [0; L];
+        let mut seed = [0; SEED_SIZE];
         rand_source(&mut seed)?;
         Ok(Self(seed))
     }
 }
 
-impl<const L: usize> AsRef<[u8; L]> for Seed<L> {
-    fn as_ref(&self) -> &[u8; L] {
+impl<const SEED_SIZE: usize> AsRef<[u8; SEED_SIZE]> for Seed<SEED_SIZE> {
+    fn as_ref(&self) -> &[u8; SEED_SIZE] {
         &self.0
     }
 }
 
-impl<const L: usize> PartialEq for Seed<L> {
+impl<const SEED_SIZE: usize> PartialEq for Seed<SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
         // Do constant-time compare.
         let mut r = 0;
@@ -65,15 +65,15 @@ impl<const L: usize> PartialEq for Seed<L> {
     }
 }
 
-impl<const L: usize> Encode for Seed<L> {
+impl<const SEED_SIZE: usize> Encode for Seed<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.0[..]);
     }
 }
 
-impl<const L: usize> Decode for Seed<L> {
+impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut seed = [0; L];
+        let mut seed = [0; SEED_SIZE];
         bytes.read_exact(&mut seed)?;
         Ok(Seed(seed))
     }
@@ -88,12 +88,12 @@ pub trait SeedStream {
 /// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-04]].
 ///
 /// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
-pub trait Prg<const L: usize>: Clone + Debug {
+pub trait Prg<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this PRG.
     type SeedStream: SeedStream;
 
     /// Construct an instance of [`Prg`] with the given seed.
-    fn init(seed_bytes: &[u8; L], custom: &[u8]) -> Self;
+    fn init(seed_bytes: &[u8; SEED_SIZE], custom: &[u8]) -> Self;
 
     /// Update the PRG state by passing in the next fragment of the info string. The final info
     /// string is assembled from the concatenation of sequence of fragments passed to this method.
@@ -103,15 +103,15 @@ pub trait Prg<const L: usize>: Clone + Debug {
     fn into_seed_stream(self) -> Self::SeedStream;
 
     /// Finalize the PRG state, producing a seed.
-    fn into_seed(self) -> Seed<L> {
-        let mut new_seed = [0; L];
+    fn into_seed(self) -> Seed<SEED_SIZE> {
+        let mut new_seed = [0; SEED_SIZE];
         let mut seed_stream = self.into_seed_stream();
         seed_stream.fill(&mut new_seed);
         Seed(new_seed)
     }
 
     /// Construct a seed stream from the given seed and info string.
-    fn seed_stream(seed: &Seed<L>, custom: &[u8], binder: &[u8]) -> Self::SeedStream {
+    fn seed_stream(seed: &Seed<SEED_SIZE>, custom: &[u8], binder: &[u8]) -> Self::SeedStream {
         let mut prg = Self::init(seed.as_ref(), custom);
         prg.update(binder);
         prg.into_seed_stream()
@@ -270,9 +270,9 @@ mod tests {
     }
 
     // Test correctness of dervied methods.
-    fn test_prg<P, const L: usize>()
+    fn test_prg<P, const SEED_SIZE: usize>()
     where
-        P: Prg<L>,
+        P: Prg<SEED_SIZE>,
     {
         let seed = Seed::generate().unwrap();
         let custom = b"algorithm and usage";
@@ -281,7 +281,7 @@ mod tests {
         let mut prg = P::init(seed.as_ref(), custom);
         prg.update(binder);
 
-        let mut want = Seed([0; L]);
+        let mut want = Seed([0; SEED_SIZE]);
         prg.clone().into_seed_stream().fill(&mut want.0[..]);
         let got = prg.clone().into_seed();
         assert_eq!(got, want);

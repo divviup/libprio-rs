@@ -329,20 +329,20 @@ impl Prio3Average {
 /// assert_eq!(agg_res, 3);
 /// ```
 #[derive(Clone, Debug)]
-pub struct Prio3<T, P, const L: usize>
+pub struct Prio3<T, P, const SEED_SIZE: usize>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     num_aggregators: u8,
     typ: T,
     phantom: PhantomData<P>,
 }
 
-impl<T, P, const L: usize> Prio3<T, P, L>
+impl<T, P, const SEED_SIZE: usize> Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     /// Construct an instance of this Prio3 VDAF with the given number of aggregators and the
     /// underlying type.
@@ -365,8 +365,10 @@ where
         self.typ.verifier_len()
     }
 
-    fn derive_joint_rand_seed<'a>(parts: impl Iterator<Item = &'a Seed<L>>) -> Seed<L> {
-        let mut prg = P::init(&[0; L], &Self::custom(DST_JOINT_RAND_SEED));
+    fn derive_joint_rand_seed<'a>(
+        parts: impl Iterator<Item = &'a Seed<SEED_SIZE>>,
+    ) -> Seed<SEED_SIZE> {
+        let mut prg = P::init(&[0; SEED_SIZE], &Self::custom(DST_JOINT_RAND_SEED));
         for part in parts {
             prg.update(part.as_ref());
         }
@@ -379,7 +381,13 @@ where
         measurement: &T::Measurement,
         nonce: &[u8; N],
         rand_source: RandSource,
-    ) -> Result<(Prio3PublicShare<L>, Vec<Prio3InputShare<T::Field, L>>), VdafError> {
+    ) -> Result<
+        (
+            Prio3PublicShare<SEED_SIZE>,
+            Vec<Prio3InputShare<T::Field, SEED_SIZE>>,
+        ),
+        VdafError,
+    > {
         let num_aggregators = self.num_aggregators;
         let encoded_measurement = self.typ.encode_measurement(measurement)?;
 
@@ -533,7 +541,13 @@ where
         &self,
         measurement: &T::Measurement,
         nonce: &[u8; N],
-    ) -> Result<(Prio3PublicShare<L>, Vec<Prio3InputShare<T::Field, L>>), VdafError> {
+    ) -> Result<
+        (
+            Prio3PublicShare<SEED_SIZE>,
+            Vec<Prio3InputShare<T::Field, SEED_SIZE>>,
+        ),
+        VdafError,
+    > {
         self.shard_with_rand_source(measurement, nonce, |buf| {
             buf.fill(1);
             Ok(())
@@ -548,17 +562,17 @@ where
     }
 }
 
-impl<T, P, const L: usize> Vdaf for Prio3<T, P, L>
+impl<T, P, const SEED_SIZE: usize> Vdaf for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     const ID: u32 = T::ID;
     type Measurement = T::Measurement;
     type AggregateResult = T::AggregateResult;
     type AggregationParam = ();
-    type PublicShare = Prio3PublicShare<L>;
-    type InputShare = Prio3InputShare<T::Field, L>;
+    type PublicShare = Prio3PublicShare<SEED_SIZE>;
+    type InputShare = Prio3InputShare<T::Field, SEED_SIZE>;
     type OutputShare = OutputShare<T::Field>;
     type AggregateShare = AggregateShare<T::Field>;
 
@@ -569,12 +583,12 @@ where
 
 /// Message broadcast by the [`Client`] to every [`Aggregator`] during the Sharding phase.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Prio3PublicShare<const L: usize> {
+pub struct Prio3PublicShare<const SEED_SIZE: usize> {
     /// Contributions to the joint randomness from every aggregator's share.
-    joint_rand_parts: Option<Vec<Seed<L>>>,
+    joint_rand_parts: Option<Vec<Seed<SEED_SIZE>>>,
 }
 
-impl<const L: usize> Encode for Prio3PublicShare<L> {
+impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let Some(joint_rand_parts) = self.joint_rand_parts.as_ref() {
             for part in joint_rand_parts.iter() {
@@ -584,17 +598,18 @@ impl<const L: usize> Encode for Prio3PublicShare<L> {
     }
 }
 
-impl<T, P, const L: usize> ParameterizedDecode<Prio3<T, P, L>> for Prio3PublicShare<L>
+impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Prio3<T, P, SEED_SIZE>>
+    for Prio3PublicShare<SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3<T, P, L>,
+        decoding_parameter: &Prio3<T, P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         if decoding_parameter.typ.joint_rand_len() > 0 {
-            let joint_rand_parts = iter::repeat_with(|| Seed::<L>::decode(bytes))
+            let joint_rand_parts = iter::repeat_with(|| Seed::<SEED_SIZE>::decode(bytes))
                 .take(decoding_parameter.num_aggregators.into())
                 .collect::<Result<Vec<_>, _>>()?;
             Ok(Self {
@@ -610,19 +625,19 @@ where
 
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Prio3InputShare<F, const L: usize> {
+pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     /// The measurement share.
-    measurement_share: Share<F, L>,
+    measurement_share: Share<F, SEED_SIZE>,
 
     /// The proof share.
-    proof_share: Share<F, L>,
+    proof_share: Share<F, SEED_SIZE>,
 
     /// Blinding seed used by the Aggregator to compute the joint randomness. This field is optional
     /// because not every [`Type`] requires joint randomness.
-    joint_rand_blind: Option<Seed<L>>,
+    joint_rand_blind: Option<Seed<SEED_SIZE>>,
 }
 
-impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3InputShare<F, L> {
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if matches!(
             (&self.measurement_share, &self.proof_share),
@@ -639,14 +654,14 @@ impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3InputShare<F, L
     }
 }
 
-impl<'a, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, usize)>
-    for Prio3InputShare<T::Field, L>
+impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, usize)>
+    for Prio3InputShare<T::Field, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     fn decode_with_param(
-        (prio3, agg_id): &(&'a Prio3<T, P, L>, usize),
+        (prio3, agg_id): &(&'a Prio3<T, P, SEED_SIZE>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let agg_id = prio3
@@ -684,15 +699,17 @@ where
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// Message broadcast by each [`Aggregator`](crate::vdaf::Aggregator) in each round of the
 /// Preparation phase.
-pub struct Prio3PrepareShare<F, const L: usize> {
+pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
     /// A share of the FLP verifier message. (See [`Type`](crate::flp::Type).)
     verifier: Vec<F>,
 
     /// A part of the joint randomness seed.
-    joint_rand_part: Option<Seed<L>>,
+    joint_rand_part: Option<Seed<SEED_SIZE>>,
 }
 
-impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareShare<F, L> {
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
+    for Prio3PrepareShare<F, SEED_SIZE>
+{
     fn encode(&self, bytes: &mut Vec<u8>) {
         for x in &self.verifier {
             x.encode(bytes);
@@ -703,11 +720,11 @@ impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareShare<F,
     }
 }
 
-impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
-    for Prio3PrepareShare<F, L>
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
+    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareShare<F, SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, L>,
+        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let mut verifier = Vec::with_capacity(decoding_parameter.verifier_len);
@@ -730,12 +747,12 @@ impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3Prepar
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 /// Result of combining a round of [`Prio3PrepareShare`] messages.
-pub struct Prio3PrepareMessage<const L: usize> {
+pub struct Prio3PrepareMessage<const SEED_SIZE: usize> {
     /// The joint randomness seed computed by the Aggregators.
-    joint_rand_seed: Option<Seed<L>>,
+    joint_rand_seed: Option<Seed<SEED_SIZE>>,
 }
 
-impl<const L: usize> Encode for Prio3PrepareMessage<L> {
+impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes);
@@ -743,11 +760,11 @@ impl<const L: usize> Encode for Prio3PrepareMessage<L> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3PrepareState<F, L>>
-    for Prio3PrepareMessage<L>
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
+    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareMessage<SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, L>,
+        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
@@ -760,31 +777,33 @@ impl<F: FftFriendlyFieldElement, const L: usize> ParameterizedDecode<Prio3Prepar
     }
 }
 
-impl<T, P, const L: usize> Client<16> for Prio3<T, P, L>
+impl<T, P, const SEED_SIZE: usize> Client<16> for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     #[allow(clippy::type_complexity)]
     fn shard(
         &self,
         measurement: &T::Measurement,
         nonce: &[u8; 16],
-    ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, L>>), VdafError> {
+    ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, SEED_SIZE>>), VdafError> {
         self.shard_with_rand_source(measurement, nonce, getrandom::getrandom)
     }
 }
 
 /// State of each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Prio3PrepareState<F, const L: usize> {
-    measurement_share: Share<F, L>,
-    joint_rand_seed: Option<Seed<L>>,
+pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
+    measurement_share: Share<F, SEED_SIZE>,
+    joint_rand_seed: Option<Seed<SEED_SIZE>>,
     agg_id: u8,
     verifier_len: usize,
 }
 
-impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareState<F, L> {
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
+    for Prio3PrepareState<F, SEED_SIZE>
+{
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.measurement_share.encode(bytes);
@@ -794,14 +813,14 @@ impl<F: FftFriendlyFieldElement, const L: usize> Encode for Prio3PrepareState<F,
     }
 }
 
-impl<'a, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, usize)>
-    for Prio3PrepareState<T::Field, L>
+impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, usize)>
+    for Prio3PrepareState<T::Field, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     fn decode_with_param(
-        (prio3, agg_id): &(&'a Prio3<T, P, L>, usize),
+        (prio3, agg_id): &(&'a Prio3<T, P, SEED_SIZE>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let agg_id = prio3
@@ -830,30 +849,30 @@ where
     }
 }
 
-impl<T, P, const L: usize> Aggregator<L, 16> for Prio3<T, P, L>
+impl<T, P, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16> for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
-    type PrepareState = Prio3PrepareState<T::Field, L>;
-    type PrepareShare = Prio3PrepareShare<T::Field, L>;
-    type PrepareMessage = Prio3PrepareMessage<L>;
+    type PrepareState = Prio3PrepareState<T::Field, SEED_SIZE>;
+    type PrepareShare = Prio3PrepareShare<T::Field, SEED_SIZE>;
+    type PrepareMessage = Prio3PrepareMessage<SEED_SIZE>;
 
     /// Begins the Prep process with the other aggregators. The result of this process is
     /// the aggregator's output share.
     #[allow(clippy::type_complexity)]
     fn prepare_init(
         &self,
-        verify_key: &[u8; L],
+        verify_key: &[u8; SEED_SIZE],
         agg_id: usize,
         _agg_param: &Self::AggregationParam,
         nonce: &[u8; 16],
         public_share: &Self::PublicShare,
-        msg: &Prio3InputShare<T::Field, L>,
+        msg: &Prio3InputShare<T::Field, SEED_SIZE>,
     ) -> Result<
         (
-            Prio3PrepareState<T::Field, L>,
-            Prio3PrepareShare<T::Field, L>,
+            Prio3PrepareState<T::Field, SEED_SIZE>,
+            Prio3PrepareShare<T::Field, SEED_SIZE>,
         ),
         VdafError,
     > {
@@ -972,10 +991,10 @@ where
         ))
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareShare<T::Field, L>>>(
+    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareShare<T::Field, SEED_SIZE>>>(
         &self,
         inputs: M,
-    ) -> Result<Prio3PrepareMessage<L>, VdafError> {
+    ) -> Result<Prio3PrepareMessage<SEED_SIZE>, VdafError> {
         let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
         let mut joint_rand_parts = Vec::with_capacity(self.num_aggregators());
         let mut count = 0;
@@ -1029,9 +1048,9 @@ where
 
     fn prepare_step(
         &self,
-        step: Prio3PrepareState<T::Field, L>,
-        msg: Prio3PrepareMessage<L>,
-    ) -> Result<PrepareTransition<Self, L, 16>, VdafError> {
+        step: Prio3PrepareState<T::Field, SEED_SIZE>,
+        msg: Prio3PrepareMessage<SEED_SIZE>,
+    ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
             if step.joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
@@ -1076,10 +1095,10 @@ where
     }
 }
 
-impl<T, P, const L: usize> Collector for Prio3<T, P, L>
+impl<T, P, const SEED_SIZE: usize> Collector for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     /// Combines aggregate shares into the aggregate result.
     fn unshard<It: IntoIterator<Item = AggregateShare<T::Field>>>(
@@ -1098,13 +1117,13 @@ where
 }
 
 #[derive(Clone)]
-struct HelperShare<const L: usize> {
-    measurement_share: Seed<L>,
-    proof_share: Seed<L>,
-    joint_rand_blind: Seed<L>,
+struct HelperShare<const SEED_SIZE: usize> {
+    measurement_share: Seed<SEED_SIZE>,
+    proof_share: Seed<SEED_SIZE>,
+    joint_rand_blind: Seed<SEED_SIZE>,
 }
 
-impl<const L: usize> HelperShare<L> {
+impl<const SEED_SIZE: usize> HelperShare<SEED_SIZE> {
     fn from_rand_source(rand_source: RandSource) -> Result<Self, VdafError> {
         Ok(HelperShare {
             measurement_share: Seed::from_rand_source(rand_source)?,
@@ -1128,30 +1147,30 @@ fn check_num_aggregators(num_aggregators: u8) -> Result<(), VdafError> {
     Ok(())
 }
 
-impl<'a, F, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, &'a ())>
+impl<'a, F, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, &'a ())>
     for OutputShare<F>
 where
     F: FieldElement,
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     fn decode_with_param(
-        (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
+        (vdaf, _): &(&'a Prio3<T, P, SEED_SIZE>, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(vdaf.output_len(), bytes).map(Self)
     }
 }
 
-impl<'a, F, T, P, const L: usize> ParameterizedDecode<(&'a Prio3<T, P, L>, &'a ())>
+impl<'a, F, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, &'a ())>
     for AggregateShare<F>
 where
     F: FieldElement,
     T: Type,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
 {
     fn decode_with_param(
-        (vdaf, _): &(&'a Prio3<T, P, L>, &'a ()),
+        (vdaf, _): &(&'a Prio3<T, P, SEED_SIZE>, &'a ()),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(vdaf.output_len(), bytes).map(Self)
@@ -1525,16 +1544,16 @@ mod tests {
         }
     }
 
-    fn test_prepare_state_serialization<T, P, const L: usize>(
-        prio3: &Prio3<T, P, L>,
+    fn test_prepare_state_serialization<T, P, const SEED_SIZE: usize>(
+        prio3: &Prio3<T, P, SEED_SIZE>,
         measurement: &T::Measurement,
         nonce: &[u8; 16],
     ) -> Result<(), VdafError>
     where
         T: Type,
-        P: Prg<L>,
+        P: Prg<SEED_SIZE>,
     {
-        let mut verify_key = [0; L];
+        let mut verify_key = [0; SEED_SIZE];
         thread_rng().fill(&mut verify_key[..]);
         let (public_share, input_shares) = prio3.shard(measurement, nonce)?;
         for (agg_id, input_share) in input_shares.iter().enumerate() {

@@ -51,14 +51,14 @@ macro_rules! err {
 
 // TODO Generalize this method to work with any VDAF. To do so we would need to add
 // `test_vec_setup()` and `test_vec_shard()` to traits. (There may be a less invasive alternative.)
-fn check_prep_test_vec<M, T, P, const L: usize>(
-    prio3: &Prio3<T, P, L>,
-    verify_key: &[u8; L],
+fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
+    prio3: &Prio3<T, P, SEED_SIZE>,
+    verify_key: &[u8; SEED_SIZE],
     test_num: usize,
     t: &TPrio3Prep<M>,
 ) where
     T: Type<Measurement = M>,
-    P: Prg<L>,
+    P: Prg<SEED_SIZE>,
     M: From<<T as Type>::Field> + Debug + PartialEq,
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
