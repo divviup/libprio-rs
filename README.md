@@ -39,7 +39,8 @@ increases (e.g., 0.10 to 0.11).
 | `release/0.8` | [`draft-irtf-cfrg-vdaf-01`][vdaf-01] | Yes | Supported |
 | `release/0.9` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Unmaintained as of September 22, 2022 |
 | `release/0.10` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | Yes | Supported |
-| `main` | [`draft-irtf-cfrg-vdaf-04`][vdaf-04] | Yes | Supported, unstable |
+| `release/0.11` | [`draft-irtf-cfrg-vdaf-04`][vdaf-04] | Yes | Unmaintained |
+| `main` | draft-irtf-cfrg-vdaf-05 (forthcoming) | No | Supported, unstable |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
