@@ -141,6 +141,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.92 -> 1.0.93"
 
+[[audits.serde_json]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.93 -> 1.0.94"
+
 [[audits.sha3]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
