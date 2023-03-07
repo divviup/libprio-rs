@@ -59,15 +59,6 @@ pub enum FieldError {
     IntegerTryFrom,
 }
 
-/// Byte order for encoding FieldElement values into byte sequences.
-#[derive(Clone, Copy, Debug)]
-enum ByteOrder {
-    /// Big endian byte order.
-    BigEndian,
-    /// Little endian byte order.
-    LittleEndian,
-}
-
 /// Objects with this trait represent an element of `GF(p)` for some prime `p`.
 pub trait FieldElement:
     Sized
@@ -354,7 +345,7 @@ pub trait FftFriendlyFieldElement: FieldElementWithInteger {
 macro_rules! make_field {
     (
         $(#[$meta:meta])*
-        $elem:ident, $int:ident, $fp:ident, $encoding_size:literal, $encoding_order:expr,
+        $elem:ident, $int:ident, $fp:ident, $encoding_size:literal,
     ) => {
         $(#[$meta])*
         ///
@@ -395,12 +386,7 @@ macro_rules! make_field {
 
                 let mut int = 0;
                 for i in 0..Self::ENCODED_SIZE {
-                    let j = match $encoding_order {
-                        ByteOrder::LittleEndian => i,
-                        ByteOrder::BigEndian => Self::ENCODED_SIZE - i - 1,
-                    };
-
-                    int |= (bytes[j] as u128) << (i << 3);
+                    int |= (bytes[i] as u128) << (i << 3);
                 }
 
                 int &= mask;
@@ -591,12 +577,7 @@ macro_rules! make_field {
                 let int = $fp.residue(elem.0);
                 let mut slice = [0; $elem::ENCODED_SIZE];
                 for i in 0..$elem::ENCODED_SIZE {
-                    let j = match $encoding_order {
-                        ByteOrder::LittleEndian => i,
-                        ByteOrder::BigEndian => $elem::ENCODED_SIZE - i - 1,
-                    };
-
-                    slice[j] = ((int >> (i << 3)) & 0xff) as u8;
+                    slice[i] = ((int >> (i << 3)) & 0xff) as u8;
                 }
                 slice
             }
@@ -712,21 +693,11 @@ macro_rules! make_field {
 }
 
 make_field!(
-    /// `GF(4293918721)`, a 32-bit field.
-    Field32,
-    u32,
-    FP32,
-    4,
-    ByteOrder::BigEndian,
-);
-
-make_field!(
     /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
     FieldPrio2,
     u32,
     FP32,
     4,
-    ByteOrder::LittleEndian,
 );
 
 make_field!(
@@ -735,7 +706,6 @@ make_field!(
     u64,
     FP64,
     8,
-    ByteOrder::BigEndian,
 );
 
 make_field!(
@@ -744,7 +714,6 @@ make_field!(
     u128,
     FP96,
     12,
-    ByteOrder::BigEndian,
 );
 
 make_field!(
@@ -753,7 +722,6 @@ make_field!(
     u128,
     FP128,
     16,
-    ByteOrder::BigEndian,
 );
 
 /// Merge two vectors of fields by summing other_vector into accumulator.
@@ -1082,27 +1050,16 @@ mod tests {
     use assert_matches::assert_matches;
 
     #[test]
-    fn test_endianness() {
-        let little_endian_encoded: [u8; FieldPrio2::ENCODED_SIZE] =
-            FieldPrio2(0x12_34_56_78).into();
-
-        let mut big_endian_encoded: [u8; Field32::ENCODED_SIZE] = Field32(0x12_34_56_78).into();
-        big_endian_encoded.reverse();
-
-        assert_eq!(little_endian_encoded, big_endian_encoded);
-    }
-
-    #[test]
     fn test_accumulate() {
-        let mut lhs = vec![Field32(1); 10];
-        let rhs = vec![Field32(2); 10];
+        let mut lhs = vec![FieldPrio2(1); 10];
+        let rhs = vec![FieldPrio2(2); 10];
 
         merge_vector(&mut lhs, &rhs).unwrap();
 
-        lhs.iter().for_each(|f| assert_eq!(*f, Field32(3)));
-        rhs.iter().for_each(|f| assert_eq!(*f, Field32(2)));
+        lhs.iter().for_each(|f| assert_eq!(*f, FieldPrio2(3)));
+        rhs.iter().for_each(|f| assert_eq!(*f, FieldPrio2(2)));
 
-        let wrong_len = vec![Field32::zero(); 9];
+        let wrong_len = vec![FieldPrio2::zero(); 9];
         let result = merge_vector(&mut lhs, &wrong_len);
         assert_matches!(result, Err(FieldError::InputSizeMismatch));
     }
@@ -1201,12 +1158,7 @@ mod tests {
     }
 
     #[test]
-    fn test_field32() {
-        field_element_test::<Field32>();
-    }
-
-    #[test]
-    fn test_field_priov2() {
+    fn test_field_prio2() {
         field_element_test::<FieldPrio2>();
     }
 

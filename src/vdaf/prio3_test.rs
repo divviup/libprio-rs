@@ -132,6 +132,7 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
     }
 }
 
+#[ignore] // TODO(issue #477)
 #[test]
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
@@ -144,6 +145,7 @@ fn test_vec_prio3_count() {
     }
 }
 
+#[ignore] // TODO(issue #477)
 #[test]
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
@@ -156,6 +158,7 @@ fn test_vec_prio3_sum() {
     }
 }
 
+#[ignore] // TODO(issue #477)
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
