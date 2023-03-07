@@ -30,7 +30,7 @@ jobs:
       matrix:
         rust-toolchain: [
           # MSRV from Cargo.toml
-          "1.58",
+          "1.59",
           "stable",
         ]
     runs-on: ubuntu-latest
@@ -65,7 +65,7 @@ jobs:
         ]
         rust-toolchain: [
           # MSRV from Cargo.toml
-          "1.58",
+          "1.59",
           "stable",
         ]
     runs-on: ubuntu-latest
