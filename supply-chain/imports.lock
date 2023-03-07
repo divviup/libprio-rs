@@ -232,6 +232,16 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.92 -> 1.0.93"
 
+[[audits.divviup.audits.thiserror]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.39"
+
+[[audits.divviup.audits.thiserror-impl]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.39"
+
 [[audits.divviup.audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
