@@ -55,6 +55,11 @@ could cause a panic, and I am relying on the Coq code having satisfied the
 necessary preconditions to ensure panics due to overflows are unreachable.
 """
 
+[[audits.fiat-crypto]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.1.17 -> 0.1.18"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
