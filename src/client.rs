@@ -244,7 +244,7 @@ fn construct_proof<F: FftFriendlyFieldElement>(
 
 #[test]
 fn test_encode() {
-    use crate::field::Field32;
+    use crate::field::FieldPrio2;
     let pub_key1 = PublicKey::from_base64(
         "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
     )
@@ -257,8 +257,8 @@ fn test_encode() {
     let data_u32 = [0u32, 1, 0, 1, 1, 0, 0, 0, 1];
     let data = data_u32
         .iter()
-        .map(|x| Field32::from(*x))
-        .collect::<Vec<Field32>>();
+        .map(|x| FieldPrio2::from(*x))
+        .collect::<Vec<FieldPrio2>>();
     let encoded_shares = encode_simple(&data, pub_key1, pub_key2);
     assert!(encoded_shares.is_ok());
 }

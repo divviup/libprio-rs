@@ -24,10 +24,10 @@ use subtle::{
     Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
 };
 
-// `python3 -c "print(', '.join(hex(x) for x in (2**255-19).to_bytes(32, 'big')))"`
-const MODULUS_BIG_ENDIAN: [u8; 32] = [
-    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xed,
+// `python3 -c "print(', '.join(hex(x) for x in (2**255-19).to_bytes(32, 'little')))"`
+const MODULUS_LITTLE_ENDIAN: [u8; 32] = [
+    0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
 ];
 
 /// `GF(2^255 - 19)`, a 255-bit field.
@@ -51,16 +51,17 @@ impl Field255 {
         value.copy_from_slice(&bytes[..Self::ENCODED_SIZE]);
 
         if mask_top_bit {
-            value[0] &= 0b0111_1111;
+            value[31] &= 0b0111_1111;
         }
 
-        // Walk through the big-endian encoding of the provided value, and identify whether the
-        // first byte that differs from the field's modulus is less than the corresponding byte or
-        // greater than the corresponding byte, in constant time. (Or whether the provided value is
-        // equal to the field modulus)
+        // Walk through the bytes of the provided value from most significant to least,
+        // and identify whether the first byte that differs from the field's modulus is less than
+        // the corresponding byte or greater than the corresponding byte, in constant time. (Or
+        // whether the provided value is equal to the field modulus.)
         let mut less_than_modulus = Choice::from(0u8);
         let mut greater_than_modulus = Choice::from(0u8);
-        for (value_byte, modulus_byte) in value.iter().zip(MODULUS_BIG_ENDIAN.iter()) {
+        for (value_byte, modulus_byte) in value.iter().rev().zip(MODULUS_LITTLE_ENDIAN.iter().rev())
+        {
             less_than_modulus |= value_byte.ct_lt(modulus_byte) & !greater_than_modulus;
             greater_than_modulus |= value_byte.ct_gt(modulus_byte) & !less_than_modulus;
         }
@@ -69,9 +70,6 @@ impl Field255 {
             return Err(FieldError::ModulusOverflow);
         }
 
-        // Switch from big endian to little endian. Note that VDAF requires big-endian
-        // serialization, while fiat-crypto uses little-endian serialization.
-        value.reverse();
         let mut output = [0; 5];
         fiat_25519_from_bytes(&mut output, &value);
 
@@ -202,9 +200,9 @@ impl<'a> Neg for &'a Field255 {
 
 impl From<u64> for Field255 {
     fn from(value: u64) -> Self {
-        let input_bytes = value.to_be_bytes();
+        let input_bytes = value.to_le_bytes();
         let mut field_bytes = [0u8; Self::ENCODED_SIZE];
-        field_bytes[Self::ENCODED_SIZE - input_bytes.len()..].copy_from_slice(&input_bytes);
+        field_bytes[..input_bytes.len()].copy_from_slice(&input_bytes);
         Self::try_from_bytes(&field_bytes, false).unwrap()
     }
 }
@@ -221,9 +219,6 @@ impl From<Field255> for [u8; Field255::ENCODED_SIZE] {
     fn from(element: Field255) -> Self {
         let mut array = [0; Field255::ENCODED_SIZE];
         fiat_25519_to_bytes(&mut array, &element.0);
-        // Note that VDAF requires big-endian serialization, while fiat-crypto uses little-endian
-        // serialization. See https://github.com/cfrg/draft-irtf-cfrg-vdaf/issues/90.
-        array.reverse();
         array
     }
 }
@@ -328,7 +323,7 @@ impl TryFrom<Field255> for u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{Field255, MODULUS_BIG_ENDIAN};
+    use super::{Field255, MODULUS_LITTLE_ENDIAN};
     use crate::{
         codec::Encode,
         field::{
@@ -342,7 +337,7 @@ mod tests {
     use once_cell::sync::Lazy;
     use std::convert::{TryFrom, TryInto};
 
-    static MODULUS: Lazy<BigUint> = Lazy::new(|| BigUint::from_bytes_be(&MODULUS_BIG_ENDIAN));
+    static MODULUS: Lazy<BigUint> = Lazy::new(|| BigUint::from_bytes_le(&MODULUS_LITTLE_ENDIAN));
 
     impl From<BigUint> for Field255 {
         fn from(value: BigUint) -> Self {
@@ -396,8 +391,8 @@ mod tests {
         assert_eq!(
             one_bytes,
             [
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 1
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0
             ]
         );
     }
@@ -409,8 +404,8 @@ mod tests {
         assert_eq!(
             one_encoded,
             [
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-                0, 0, 0, 1
+                1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0
             ]
         );
     }
@@ -425,9 +420,9 @@ mod tests {
         assert_matches!(
             Field255::try_from_bytes(
                 &[
-                    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xed, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                    0xff, 0xff, 0xff, 0xff, 0xff, 0xed,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
                 ],
                 false,
             ),
@@ -436,9 +431,9 @@ mod tests {
         assert_matches!(
             Field255::try_from_bytes(
                 &[
-                    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                    0xff, 0xff, 0xff, 0xff, 0xff, 0xee,
+                    0xee, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
                 ],
                 false,
             ),
@@ -447,9 +442,9 @@ mod tests {
         assert_matches!(
             Field255::try_from_bytes(
                 &[
-                    0x7f, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
+                    0xec, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
                     0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
-                    0xff, 0xff, 0xff, 0xff, 0xff, 0xec,
+                    0xff, 0xff, 0xff, 0xff, 0xff, 0x7f,
                 ],
                 true,
             ),
@@ -458,9 +453,9 @@ mod tests {
         assert_matches!(
             Field255::try_from_bytes(
                 &[
-                    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
                 ],
                 false
             ),
@@ -469,9 +464,9 @@ mod tests {
         assert_matches!(
             Field255::try_from_bytes(
                 &[
-                    0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x80,
                 ],
                 true
             ),
@@ -488,9 +483,9 @@ mod tests {
         assert_eq!(
             max_bytes,
             [
+                0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
                 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0xff, 0xff,
-                0xff, 0xff, 0xff, 0xff
+                0x00, 0x00, 0x00, 0x00
             ]
         );
 
@@ -515,11 +510,11 @@ mod tests {
         );
         assert_eq!(
             format!("{}", Field255::one()),
-            "0x0000000000000000000000000000000000000000000000000000000000000001"
+            "0x0100000000000000000000000000000000000000000000000000000000000000"
         );
         assert_eq!(
             format!("{}", -Field255::one()),
-            "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffec"
+            "0xecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f"
         );
         assert_eq!(
             format!("{:?}", Field255::zero()),
@@ -527,11 +522,7 @@ mod tests {
         );
         assert_eq!(
             format!("{:?}", Field255::one()),
-            "0x0000000000000000000000000000000000000000000000000000000000000001"
-        );
-        assert_eq!(
-            format!("{:?}", -Field255::one()),
-            "0x7fffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffec"
+            "0x0100000000000000000000000000000000000000000000000000000000000000"
         );
     }
 }

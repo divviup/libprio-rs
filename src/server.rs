@@ -280,7 +280,7 @@ mod tests {
     use super::*;
     use crate::{
         encrypt::{encrypt_share, PublicKey},
-        field::{Field32, FieldElement, FieldPrio2},
+        field::{FieldElement, FieldPrio2},
         test_vector::Priov2TestVector,
         util::{self, unpack_proof_mut},
     };
@@ -295,9 +295,9 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut proof: Vec<Field32> = proof_u32.iter().map(|x| Field32::from(*x)).collect();
+        let mut proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
         let share2 = util::tests::secret_share(&mut proof);
-        let eval_at = Field32::from(12313);
+        let eval_at = FieldPrio2::from(12313);
 
         let mut validation_mem = ValidationMemory::new(dim);
 
@@ -317,9 +317,9 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut proof: Vec<Field32> = proof_u32.iter().map(|x| Field32::from(*x)).collect();
+        let mut proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
         let share2 = util::tests::secret_share(&mut proof);
-        let eval_at = Field32::from(12313);
+        let eval_at = FieldPrio2::from(12313);
 
         let mut validation_mem = ValidationMemory::new(dim);
 
@@ -330,7 +330,8 @@ mod tests {
 
         // serialize and deserialize the first verification message
         let serialized = serde_json::to_string(&v1).unwrap();
-        let deserialized: VerificationMessage<Field32> = serde_json::from_str(&serialized).unwrap();
+        let deserialized: VerificationMessage<FieldPrio2> =
+            serde_json::from_str(&serialized).unwrap();
 
         assert!(is_valid_share(&deserialized, &v2));
     }

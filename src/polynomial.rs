@@ -230,7 +230,9 @@ pub(crate) fn poly_range_check<F: FftFriendlyFieldElement>(start: usize, end: us
 #[cfg(test)]
 mod tests {
     use crate::{
-        field::{FftFriendlyFieldElement, Field32, Field64, FieldElement, FieldElementWithInteger},
+        field::{
+            FftFriendlyFieldElement, Field64, FieldElement, FieldElementWithInteger, FieldPrio2,
+        },
         polynomial::{
             fft_get_roots, poly_deg, poly_eval, poly_fft, poly_mul, poly_range_check, PolyAuxMemory,
         },
@@ -241,8 +243,8 @@ mod tests {
     #[test]
     fn test_roots() {
         let count = 128;
-        let roots = fft_get_roots::<Field32>(count, false);
-        let roots_inv = fft_get_roots::<Field32>(count, true);
+        let roots = fft_get_roots::<FieldPrio2>(count, false);
+        let roots_inv = fft_get_roots::<FieldPrio2>(count, true);
 
         for i in 0..count {
             assert_eq!(roots[i] * roots_inv[i], 1);
@@ -253,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let mut poly = vec![Field32::from(0); 4];
+        let mut poly = vec![FieldPrio2::from(0); 4];
         poly[0] = 2.into();
         poly[1] = 1.into();
         poly[2] = 5.into();
@@ -266,8 +268,8 @@ mod tests {
 
     #[test]
     fn test_poly_deg() {
-        let zero = Field32::zero();
-        let one = Field32::root(0).unwrap();
+        let zero = FieldPrio2::zero();
+        let one = FieldPrio2::root(0).unwrap();
         assert_eq!(poly_deg(&[zero]), 0);
         assert_eq!(poly_deg(&[one]), 0);
         assert_eq!(poly_deg(&[zero, one]), 1);
@@ -331,13 +333,13 @@ mod tests {
         let count = 128;
         let mut mem = PolyAuxMemory::new(count / 2);
 
-        let mut poly = vec![Field32::from(0); count];
-        let mut points2 = vec![Field32::from(0); count];
+        let mut poly = vec![FieldPrio2::from(0); count];
+        let mut points2 = vec![FieldPrio2::from(0); count];
 
         let points = (0..count)
             .into_iter()
-            .map(|_| Field32::from(random::<u32>()))
-            .collect::<Vec<Field32>>();
+            .map(|_| FieldPrio2::from(random::<u32>()))
+            .collect::<Vec<FieldPrio2>>();
 
         // From points to coeffs and back
         poly_fft(
@@ -371,7 +373,7 @@ mod tests {
 
         #[allow(clippy::needless_range_loop)]
         for i in 0..count {
-            let mut should_be = Field32::from(0);
+            let mut should_be = FieldPrio2::from(0);
             for j in 0..count {
                 should_be = mem.roots_2n[i].pow(u32::try_from(j).unwrap()) * points[j] + should_be;
             }

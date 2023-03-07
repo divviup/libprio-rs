@@ -137,7 +137,7 @@ mod tests {
     use super::*;
     use crate::{
         codec::Decode,
-        field::{Field96, FieldPrio2},
+        field::{Field64, Field96, FieldPrio2},
         vdaf::prg::{CoinToss, Prg, PrgSha3, Seed, SeedStreamSha3},
     };
     #[cfg(feature = "prio2")]
@@ -223,18 +223,20 @@ mod tests {
     fn rejection_sampling_test_vector() {
         // These constants were found in a brute-force search, and they test that the PRG performs
         // rejection sampling correctly when raw cSHAKE128 output exceeds the prime modulus.
-        let seed = Seed::get_decoded(&[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xd5]).unwrap();
-        let expected = Field96::from(74403028385650568506271441532);
+        let seed =
+            Seed::get_decoded(b"\x23\x1c\x40\x0d\xcb\xaf\xce\x34\x5e\xfd\x3c\xa7\x79\x65\xee\x06")
+                .unwrap();
+        let expected = Field64::from(13681157193520586550);
 
         let seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
-        let mut prng = Prng::<Field96, _>::from_seed_stream(seed_stream);
-        let actual = prng.nth(9).unwrap();
+        let mut prng = Prng::<Field64, _>::from_seed_stream(seed_stream);
+        let actual = prng.nth(4).unwrap();
         assert_eq!(actual, expected);
 
         let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
-        let mut actual = Field96::zero();
-        for _ in 0..=9 {
-            actual = <Field96 as CoinToss>::sample(&mut seed_stream);
+        let mut actual = Field64::zero();
+        for _ in 0..=4 {
+            actual = <Field64 as CoinToss>::sample(&mut seed_stream);
         }
         assert_eq!(actual, expected);
     }
