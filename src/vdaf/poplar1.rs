@@ -926,6 +926,10 @@ where
         self.0[0].encode(bytes);
         self.0[1].encode(bytes);
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(self.0[0].encoded_len()? + self.0[1].encoded_len()?)
+    }
 }
 
 impl<F> Decode for Poplar1IdpfValue<F>

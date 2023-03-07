@@ -623,6 +623,10 @@ macro_rules! make_field {
                 let slice = <[u8; $elem::ENCODED_SIZE]>::from(*self);
                 bytes.extend_from_slice(&slice);
             }
+
+            fn encoded_len(&self) -> Option<usize> {
+                Some(Self::ENCODED_SIZE)
+            }
         }
 
         impl Decode for $elem {
@@ -968,6 +972,7 @@ pub(crate) mod test_utils {
             want.encode(&mut bytes);
 
             assert_eq!(bytes.len(), F::ENCODED_SIZE);
+            assert_eq!(want.encoded_len().unwrap(), F::ENCODED_SIZE);
 
             let got = F::get_decoded(&bytes).unwrap();
             assert_eq!(got, *want);

@@ -148,6 +148,10 @@ impl Encode for Prio2PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.0.encode(bytes);
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        self.0.encoded_len()
+    }
 }
 
 impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
@@ -174,6 +178,10 @@ impl Encode for Prio2PrepareShare {
         self.0.f_r.encode(bytes);
         self.0.g_r.encode(bytes);
         self.0.h_r.encode(bytes);
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(self.0.f_r.encoded_len()? + self.0.g_r.encoded_len()? + self.0.h_r.encoded_len()?)
     }
 }
 

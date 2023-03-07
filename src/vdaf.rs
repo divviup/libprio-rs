@@ -119,6 +119,19 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
             }
         }
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        match self {
+            Share::Leader(share_data) => {
+                let mut len = 0;
+                for x in share_data {
+                    len += x.encoded_len()?;
+                }
+                Some(len)
+            }
+            Share::Helper(share_seed) => share_seed.encoded_len(),
+        }
+    }
 }
 
 /// The base trait for VDAF schemes. This trait is inherited by traits [`Client`], [`Aggregator`],
@@ -298,6 +311,10 @@ impl<F: FieldElement> Encode for OutputShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         encode_fieldvec(&self.0, bytes)
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(F::ENCODED_SIZE * self.0.len())
+    }
 }
 
 /// An aggregate share comprised of a vector of field elements.
@@ -342,6 +359,10 @@ impl<F: FieldElement> AggregateShare<F> {
 impl<F: FieldElement> Encode for AggregateShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         encode_fieldvec(&self.0, bytes)
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(F::ENCODED_SIZE * self.0.len())
     }
 }
 

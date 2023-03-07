@@ -578,6 +578,17 @@ where
         Seed(self.leaf_correction_word.seed).encode(bytes);
         self.leaf_correction_word.value.encode(bytes);
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let control_bits_count = (self.inner_correction_words.len() + 1) * 2;
+        let mut len =
+            (control_bits_count + 7) / 8 + SEED_SIZE * (self.inner_correction_words.len() + 1);
+        for correction_words in self.inner_correction_words.iter() {
+            len += correction_words.value.encoded_len()?;
+        }
+        len += self.leaf_correction_word.value.encoded_len()?;
+        Some(len)
+    }
 }
 
 impl<VI, VL, const SEED_SIZE: usize> ParameterizedDecode<usize>
@@ -1450,6 +1461,7 @@ mod tests {
         let decoded = IdpfPublicShare::get_decoded_with_param(&3, &message).unwrap();
         assert_eq!(public_share, decoded);
         assert_eq!(message, encoded);
+        assert_eq!(public_share.encoded_len().unwrap(), encoded.len());
 
         // check serialization of packed control bits when they span multiple bytes:
         let public_share = IdpfPublicShare {

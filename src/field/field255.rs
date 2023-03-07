@@ -265,6 +265,10 @@ impl Encode for Field255 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&<[u8; Self::ENCODED_SIZE]>::from(*self));
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(Self::ENCODED_SIZE)
+    }
 }
 
 impl Decode for Field255 {
