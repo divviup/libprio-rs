@@ -232,6 +232,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.92 -> 1.0.93"
 
+[[audits.divviup.audits.serde_json]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.93 -> 1.0.94"
+
 [[audits.divviup.audits.thiserror]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
@@ -711,6 +716,11 @@ delta = "1.0.83 -> 1.0.85"
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.85 -> 1.0.91"
+
+[[audits.firefox.audits.serde_json]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.91 -> 1.0.93"
 
 [[audits.firefox.audits.syn]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
