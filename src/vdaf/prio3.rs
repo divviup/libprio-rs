@@ -596,6 +596,15 @@ impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
             }
         }
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        if let Some(joint_rand_parts) = self.joint_rand_parts.as_ref() {
+            // Each seed has the same size.
+            Some(SEED_SIZE * joint_rand_parts.len())
+        } else {
+            Some(0)
+        }
+    }
 }
 
 impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Prio3<T, P, SEED_SIZE>>
@@ -651,6 +660,14 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputSh
         if let Some(ref blind) = self.joint_rand_blind {
             blind.encode(bytes);
         }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let mut len = self.measurement_share.encoded_len()? + self.proof_share.encoded_len()?;
+        if let Some(ref blind) = self.joint_rand_blind {
+            len += blind.encoded_len()?;
+        }
+        Some(len)
     }
 }
 
@@ -718,6 +735,15 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
             seed.encode(bytes);
         }
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        // Each element of the verifier has the same size.
+        let mut len = F::ENCODED_SIZE * self.verifier.len();
+        if let Some(ref seed) = self.joint_rand_part {
+            len += seed.encoded_len()?;
+        }
+        Some(len)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
@@ -756,6 +782,14 @@ impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes);
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        if let Some(ref seed) = self.joint_rand_seed {
+            seed.encoded_len()
+        } else {
+            Some(0)
         }
     }
 }
@@ -810,6 +844,14 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes);
         }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let mut len = self.measurement_share.encoded_len()?;
+        if let Some(ref seed) = self.joint_rand_seed {
+            len += seed.encoded_len()?;
+        }
+        Some(len)
     }
 }
 
@@ -1210,7 +1252,7 @@ mod tests {
         let (public_share, input_shares) = prio3.shard(&1, &nonce).unwrap();
         run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares).unwrap();
 
-        test_prepare_state_serialization(&prio3, &1, &nonce).unwrap();
+        test_serialization(&prio3, &1, &nonce).unwrap();
 
         let prio3_extra_helper = Prio3::new_count(3).unwrap();
         assert_eq!(
@@ -1251,7 +1293,7 @@ mod tests {
         let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        test_prepare_state_serialization(&prio3, &1, &nonce).unwrap();
+        test_serialization(&prio3, &1, &nonce).unwrap();
     }
 
     #[test]
@@ -1482,8 +1524,7 @@ mod tests {
                 run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
             assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-            test_prepare_state_serialization(&prio3, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
-                .unwrap();
+            test_serialization(&prio3, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce).unwrap();
         }
     }
 
@@ -1501,7 +1542,7 @@ mod tests {
         assert_eq!(run_vdaf(&prio3, &(), [15]).unwrap(), vec![0, 0, 1, 0]);
         assert_eq!(run_vdaf(&prio3, &(), [20]).unwrap(), vec![0, 0, 1, 0]);
         assert_eq!(run_vdaf(&prio3, &(), [25]).unwrap(), vec![0, 0, 0, 1]);
-        test_prepare_state_serialization(&prio3, &23, &[0; 16]).unwrap();
+        test_serialization(&prio3, &23, &[0; 16]).unwrap();
     }
 
     #[test]
@@ -1544,7 +1585,7 @@ mod tests {
         }
     }
 
-    fn test_prepare_state_serialization<T, P, const SEED_SIZE: usize>(
+    fn test_serialization<T, P, const SEED_SIZE: usize>(
         prio3: &Prio3<T, P, SEED_SIZE>,
         measurement: &T::Measurement,
         nonce: &[u8; 16],
@@ -1556,14 +1597,73 @@ mod tests {
         let mut verify_key = [0; SEED_SIZE];
         thread_rng().fill(&mut verify_key[..]);
         let (public_share, input_shares) = prio3.shard(measurement, nonce)?;
+
+        let encoded_public_share = public_share.get_encoded();
+        let decoded_public_share =
+            Prio3PublicShare::get_decoded_with_param(prio3, &encoded_public_share)
+                .expect("failed to decode public share");
+        assert_eq!(decoded_public_share, public_share);
+        assert_eq!(
+            public_share.encoded_len().unwrap(),
+            encoded_public_share.len()
+        );
+
         for (agg_id, input_share) in input_shares.iter().enumerate() {
-            let (want, _msg) =
-                prio3.prepare_init(&verify_key, agg_id, &(), nonce, &public_share, input_share)?;
-            let got =
-                Prio3PrepareState::get_decoded_with_param(&(prio3, agg_id), &want.get_encoded())
-                    .expect("failed to decode prepare step");
-            assert_eq!(got, want);
+            let encoded_input_share = input_share.get_encoded();
+            let decoded_input_share =
+                Prio3InputShare::get_decoded_with_param(&(prio3, agg_id), &encoded_input_share)
+                    .expect("failed to decode input share");
+            assert_eq!(&decoded_input_share, input_share);
+            assert_eq!(
+                input_share.encoded_len().unwrap(),
+                encoded_input_share.len()
+            );
         }
+
+        let mut prepare_shares = Vec::new();
+        let mut last_prepare_state = None;
+        for (agg_id, input_share) in input_shares.iter().enumerate() {
+            let (prepare_state, prepare_share) =
+                prio3.prepare_init(&verify_key, agg_id, &(), nonce, &public_share, input_share)?;
+
+            let encoded_prepare_state = prepare_state.get_encoded();
+            let decoded_prepare_state =
+                Prio3PrepareState::get_decoded_with_param(&(prio3, agg_id), &encoded_prepare_state)
+                    .expect("failed to decode prepare state");
+            assert_eq!(decoded_prepare_state, prepare_state);
+            assert_eq!(
+                prepare_state.encoded_len().unwrap(),
+                encoded_prepare_state.len()
+            );
+
+            let encoded_prepare_share = prepare_share.get_encoded();
+            let decoded_prepare_share =
+                Prio3PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
+                    .expect("failed to decode prepare share");
+            assert_eq!(decoded_prepare_share, prepare_share);
+            assert_eq!(
+                prepare_share.encoded_len().unwrap(),
+                encoded_prepare_share.len()
+            );
+
+            prepare_shares.push(prepare_share);
+            last_prepare_state = Some(prepare_state);
+        }
+
+        let prepare_message = prio3.prepare_preprocess(prepare_shares).unwrap();
+
+        let encoded_prepare_message = prepare_message.get_encoded();
+        let decoded_prepare_message = Prio3PrepareMessage::get_decoded_with_param(
+            &last_prepare_state.unwrap(),
+            &encoded_prepare_message,
+        )
+        .expect("failed to decode prepare message");
+        assert_eq!(decoded_prepare_message, prepare_message);
+        assert_eq!(
+            prepare_message.encoded_len().unwrap(),
+            encoded_prepare_message.len()
+        );
+
         Ok(())
     }
 

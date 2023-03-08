@@ -148,6 +148,10 @@ impl Encode for Prio2PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.0.encode(bytes);
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        self.0.encoded_len()
+    }
 }
 
 impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
@@ -174,6 +178,10 @@ impl Encode for Prio2PrepareShare {
         self.0.f_r.encode(bytes);
         self.0.g_r.encode(bytes);
         self.0.h_r.encode(bytes);
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(FieldPrio2::ENCODED_SIZE * 3)
     }
 }
 
@@ -443,7 +451,7 @@ mod tests {
         let prio2 = Prio2::new(data.len()).unwrap();
         let (public_share, input_shares) = prio2.shard(&data, &nonce).unwrap();
         for (agg_id, input_share) in input_shares.iter().enumerate() {
-            let (want, _msg) = prio2
+            let (prepare_state, prepare_share) = prio2
                 .prepare_init(
                     &verify_key,
                     agg_id,
@@ -453,10 +461,30 @@ mod tests {
                     input_share,
                 )
                 .unwrap();
-            let got =
-                Prio2PrepareState::get_decoded_with_param(&(&prio2, agg_id), &want.get_encoded())
-                    .expect("failed to decode prepare step");
-            assert_eq!(got, want);
+
+            let encoded_prepare_state = prepare_state.get_encoded();
+            let decoded_prepare_state = Prio2PrepareState::get_decoded_with_param(
+                &(&prio2, agg_id),
+                &encoded_prepare_state,
+            )
+            .expect("failed to decode prepare state");
+            assert_eq!(decoded_prepare_state, prepare_state);
+            assert_eq!(
+                prepare_state.encoded_len().unwrap(),
+                encoded_prepare_state.len()
+            );
+
+            let encoded_prepare_share = prepare_share.get_encoded();
+            let decoded_prepare_share =
+                Prio2PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
+                    .expect("failed to decode prepare share");
+            assert_eq!(decoded_prepare_share.0.f_r, prepare_share.0.f_r);
+            assert_eq!(decoded_prepare_share.0.g_r, prepare_share.0.g_r);
+            assert_eq!(decoded_prepare_share.0.h_r, prepare_share.0.h_r);
+            assert_eq!(
+                prepare_share.encoded_len().unwrap(),
+                encoded_prepare_share.len()
+            );
         }
     }
 
