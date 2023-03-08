@@ -598,13 +598,12 @@ impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let mut len = 0;
         if let Some(joint_rand_parts) = self.joint_rand_parts.as_ref() {
-            for part in joint_rand_parts.iter() {
-                len += part.encoded_len()?;
-            }
+            // Each seed has the same size.
+            Some(SEED_SIZE * joint_rand_parts.len())
+        } else {
+            Some(0)
         }
-        Some(len)
     }
 }
 
@@ -738,10 +737,8 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let mut len = 0;
-        for x in &self.verifier {
-            len += x.encoded_len()?;
-        }
+        // Each element of the verifier has the same size.
+        let mut len = F::ENCODED_SIZE * self.verifier.len();
         if let Some(ref seed) = self.joint_rand_part {
             len += seed.encoded_len()?;
         }

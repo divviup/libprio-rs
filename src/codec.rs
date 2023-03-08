@@ -104,7 +104,8 @@ pub trait Encode {
         self.get_encoded_with_param(&())
     }
 
-    /// Returns a hint indicating how many bytes will be required to encode this value.
+    /// Returns an optional hint indicating how many bytes will be required to encode this value, or
+    /// `None` by default.
     fn encoded_len(&self) -> Option<usize> {
         None
     }
@@ -128,7 +129,8 @@ pub trait ParameterizedEncode<P> {
         ret
     }
 
-    /// Returns a hint indicating how many bytes will be required to encode this value.
+    /// Returns an optional hint indicating how many bytes will be required to encode this value, or
+    /// `None` by default.
     fn encoded_len_with_param(&self, _encoding_parameter: &P) -> Option<usize> {
         None
     }

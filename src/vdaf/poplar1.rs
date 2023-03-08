@@ -920,7 +920,7 @@ where
 
 impl<F> Encode for Poplar1IdpfValue<F>
 where
-    F: Encode,
+    F: FieldElement,
 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.0[0].encode(bytes);
@@ -928,7 +928,7 @@ where
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(self.0[0].encoded_len()? + self.0[1].encoded_len()?)
+        Some(F::ENCODED_SIZE * 2)
     }
 }
 

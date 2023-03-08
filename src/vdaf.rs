@@ -123,11 +123,8 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
     fn encoded_len(&self) -> Option<usize> {
         match self {
             Share::Leader(share_data) => {
-                let mut len = 0;
-                for x in share_data {
-                    len += x.encoded_len()?;
-                }
-                Some(len)
+                // Each element of the data vector has the same size.
+                Some(share_data.len() * F::ENCODED_SIZE)
             }
             Share::Helper(share_seed) => share_seed.encoded_len(),
         }
