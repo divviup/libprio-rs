@@ -6,7 +6,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     vdaf::{
-        prg::{CoinToss, Prg, RandSource, Seed, SeedStream},
+        prg::{CoinToss, Prg, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -308,11 +308,11 @@ where
     out
 }
 
-fn gen_with_rand_source<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize>(
+fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
-    rand_source: RandSource,
+    random: &[u8],
 ) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
 where
     VI: IdpfValue,
@@ -321,9 +321,14 @@ where
 {
     let bits = input.len();
 
+    if random.len() != SEED_SIZE * 2 {
+        return Err(VdafError::Uncategorized(
+            "incorrect random input length".to_string(),
+        ));
+    }
     let initial_keys: [Seed<SEED_SIZE>; 2] = [
-        Seed::from_rand_source(rand_source)?,
-        Seed::from_rand_source(rand_source)?,
+        Seed::from_bytes(random[..SEED_SIZE].try_into().unwrap()),
+        Seed::from_bytes(random[SEED_SIZE..SEED_SIZE * 2].try_into().unwrap()),
     ];
 
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
@@ -378,12 +383,9 @@ where
     if input.is_empty() {
         return Err(IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into());
     }
-    gen_with_rand_source::<_, _, _, P, SEED_SIZE>(
-        input,
-        inner_values,
-        leaf_value,
-        getrandom::getrandom,
-    )
+    let mut random = vec![0u8; SEED_SIZE * 2];
+    getrandom::getrandom(&mut random)?;
+    gen_with_random::<_, _, _, P, SEED_SIZE>(input, inner_values, leaf_value, &random)
 }
 
 /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
@@ -837,6 +839,7 @@ mod tests {
         collections::HashMap,
         convert::{TryFrom, TryInto},
         io::Cursor,
+        iter,
         str::FromStr,
         sync::Mutex,
     };
@@ -1809,14 +1812,15 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgSha3, 16>(
+        let random = iter::repeat(0..=255)
+            .flatten()
+            .take(32)
+            .collect::<Vec<u8>>();
+        let (public_share, keys) = idpf::gen_with_random::<_, _, _, PrgSha3, 16>(
             &test_vector.alpha,
             test_vector.beta_inner,
             test_vector.beta_leaf,
-            |buf| {
-                buf.fill(1);
-                Ok(())
-            },
+            &random,
         )
         .unwrap();
 

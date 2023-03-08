@@ -47,7 +47,7 @@ use crate::flp::types::fixedpoint_l2::{
 use crate::flp::types::{Average, Count, Histogram, Sum, SumVec};
 use crate::flp::Type;
 use crate::prng::Prng;
-use crate::vdaf::prg::{Prg, RandSource, Seed};
+use crate::vdaf::prg::{Prg, Seed};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -375,12 +375,24 @@ where
         prg.into_seed()
     }
 
+    fn random_size(&self) -> usize {
+        if self.typ.joint_rand_len() == 0 {
+            // Two seeds per helper for measurement and proof shares, plus one seed for proving
+            // randomness.
+            (usize::from(self.num_aggregators) * 2 - 1) * SEED_SIZE
+        } else {
+            // Two seeds per helper for measurement and proof shares, plus one seed for proving
+            // randomness, plus one seed per aggregator for joint randomness blinds.
+            (usize::from(self.num_aggregators) * 3 - 1) * SEED_SIZE
+        }
+    }
+
     #[allow(clippy::type_complexity)]
-    fn shard_with_rand_source<const N: usize>(
+    fn shard_with_random<const N: usize>(
         &self,
         measurement: &T::Measurement,
         nonce: &[u8; N],
-        rand_source: RandSource,
+        random: &[u8],
     ) -> Result<
         (
             Prio3PublicShare<SEED_SIZE>,
@@ -388,6 +400,11 @@ where
         ),
         VdafError,
     > {
+        if random.len() != self.random_size() {
+            return Err(VdafError::Uncategorized(
+                "incorrect random input length".to_string(),
+            ));
+        }
         let num_aggregators = self.num_aggregators;
         let encoded_measurement = self.typ.encode_measurement(measurement)?;
 
@@ -400,67 +417,98 @@ where
         };
         let mut leader_measurement_share = encoded_measurement.clone();
         for agg_id in 1..num_aggregators {
-            let helper = HelperShare::from_rand_source(rand_source)?;
-            let mut joint_rand_part_prg = P::init(
-                helper.joint_rand_blind.as_ref(),
-                &Self::custom(DST_JOINT_RAND_PART),
-            );
-            joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
-            joint_rand_part_prg.update(nonce);
-
+            let measurement_share_seed_offset = (usize::from(agg_id) - 1) * SEED_SIZE;
+            let measurement_share_seed = random
+                [measurement_share_seed_offset..measurement_share_seed_offset + SEED_SIZE]
+                .try_into()
+                .unwrap();
+            let proof_share_seed_offset =
+                (usize::from(num_aggregators) - 1 + usize::from(agg_id) - 1) * SEED_SIZE;
+            let proof_share_seed = random
+                [proof_share_seed_offset..proof_share_seed_offset + SEED_SIZE]
+                .try_into()
+                .unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
-                &helper.measurement_share,
+                &Seed(measurement_share_seed),
                 &Self::custom(DST_MEASUREMENT_SHARE),
                 &[agg_id],
             ));
-            for (x, y) in leader_measurement_share
-                .iter_mut()
-                .zip(measurement_share_prng)
-                .take(self.typ.input_len())
-            {
-                *x -= y;
-                joint_rand_part_prg.update(&y.into());
-            }
+            let joint_rand_blind =
+                if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
+                    let joint_rand_blind_offset =
+                        (usize::from(num_aggregators) * 2 - 1 + usize::from(agg_id)) * SEED_SIZE;
+                    let joint_rand_blind = random
+                        [joint_rand_blind_offset..joint_rand_blind_offset + SEED_SIZE]
+                        .try_into()
+                        .unwrap();
 
-            if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
-                helper_joint_rand_parts.push(joint_rand_part_prg.into_seed());
-            }
+                    let mut joint_rand_part_prg =
+                        P::init(&joint_rand_blind, &Self::custom(DST_JOINT_RAND_PART));
+                    joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
+                    joint_rand_part_prg.update(nonce);
+
+                    for (x, y) in leader_measurement_share
+                        .iter_mut()
+                        .zip(measurement_share_prng)
+                    {
+                        *x -= y;
+                        joint_rand_part_prg.update(&y.into());
+                    }
+
+                    helper_joint_rand_parts.push(joint_rand_part_prg.into_seed());
+
+                    Some(joint_rand_blind)
+                } else {
+                    for (x, y) in leader_measurement_share
+                        .iter_mut()
+                        .zip(measurement_share_prng)
+                    {
+                        *x -= y;
+                    }
+                    None
+                };
+            let helper =
+                HelperShare::from_seeds(measurement_share_seed, proof_share_seed, joint_rand_blind);
             helper_shares.push(helper);
         }
 
-        let leader_blind = Seed::from_rand_source(rand_source)?;
-
-        let mut joint_rand_part_prg =
-            P::init(leader_blind.as_ref(), &Self::custom(DST_JOINT_RAND_PART));
-        joint_rand_part_prg.update(&[0]); // Aggregator ID
-        joint_rand_part_prg.update(nonce);
-        for x in leader_measurement_share.iter() {
-            joint_rand_part_prg.update(&(*x).into());
-        }
-
-        let leader_joint_rand_seed_part = joint_rand_part_prg.into_seed();
-
-        // Compute the joint randomness seed.
-        let joint_rand_seed = helper_joint_rand_parts.as_ref().map(|parts| {
-            Self::derive_joint_rand_seed(
-                std::iter::once(&leader_joint_rand_seed_part).chain(parts.iter()),
-            )
-        });
-
+        let mut leader_blind_opt = None;
         let public_share = Prio3PublicShare {
             joint_rand_parts: helper_joint_rand_parts
                 .as_ref()
                 .map(|helper_joint_rand_parts| {
+                    let leader_blind_offset = (usize::from(num_aggregators) * 2 - 1) * SEED_SIZE;
+                    let leader_blind_bytes = random
+                        [leader_blind_offset..leader_blind_offset + SEED_SIZE]
+                        .try_into()
+                        .unwrap();
+                    let leader_blind = Seed::from_bytes(leader_blind_bytes);
+
+                    let mut joint_rand_part_prg =
+                        P::init(leader_blind.as_ref(), &Self::custom(DST_JOINT_RAND_PART));
+                    joint_rand_part_prg.update(&[0]); // Aggregator ID
+                    joint_rand_part_prg.update(nonce);
+                    for x in leader_measurement_share.iter() {
+                        joint_rand_part_prg.update(&(*x).into());
+                    }
+                    leader_blind_opt = Some(leader_blind);
+
+                    let leader_joint_rand_seed_part = joint_rand_part_prg.into_seed();
+
                     let mut vec = Vec::with_capacity(self.num_aggregators());
-                    vec.push(leader_joint_rand_seed_part.clone());
+                    vec.push(leader_joint_rand_seed_part);
                     vec.extend(helper_joint_rand_parts.iter().cloned());
                     vec
                 }),
         };
 
-        // Run the proof-generation algorithm.
-        let joint_rand: Vec<T::Field> = joint_rand_seed
-            .map(|joint_rand_seed| {
+        // Compute the joint randomness.
+        let joint_rand: Vec<T::Field> = public_share
+            .joint_rand_parts
+            .as_ref()
+            .map(|joint_rand_parts| {
+                let joint_rand_seed = Self::derive_joint_rand_seed(joint_rand_parts.iter());
+
                 let prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
                     &joint_rand_seed,
                     &Self::custom(DST_JOINT_RANDOMNESS),
@@ -469,8 +517,14 @@ where
                 prng.take(self.typ.joint_rand_len()).collect()
             })
             .unwrap_or_default();
+
+        // Run the proof-generation algorithm.
+        let prove_rand_seed_offset = ((usize::from(num_aggregators) - 1) * 2) * SEED_SIZE;
+        let prove_rand_seed = random[prove_rand_seed_offset..prove_rand_seed_offset + SEED_SIZE]
+            .try_into()
+            .unwrap();
         let prove_rand_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
-            &Seed::from_rand_source(rand_source)?,
+            &Seed::from_bytes(prove_rand_seed),
             &Self::custom(DST_PROVE_RANDOMNESS),
             &[],
         ));
@@ -493,40 +547,21 @@ where
             {
                 *x -= y;
             }
-
-            if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_ref() {
-                let mut hint = Vec::with_capacity(num_aggregators as usize - 1);
-                hint.push(leader_joint_rand_seed_part.clone());
-                hint.extend(helper_joint_rand_parts[..j].iter().cloned());
-                hint.extend(helper_joint_rand_parts[j + 1..].iter().cloned());
-            }
         }
-
-        let leader_joint_rand_blind = if self.typ.joint_rand_len() > 0 {
-            Some(leader_blind)
-        } else {
-            None
-        };
 
         // Prep the output messages.
         let mut out = Vec::with_capacity(num_aggregators as usize);
         out.push(Prio3InputShare {
             measurement_share: Share::Leader(leader_measurement_share),
             proof_share: Share::Leader(leader_proof_share),
-            joint_rand_blind: leader_joint_rand_blind,
+            joint_rand_blind: leader_blind_opt,
         });
 
         for helper in helper_shares.into_iter() {
-            let helper_joint_rand_blind = if self.typ.joint_rand_len() > 0 {
-                Some(helper.joint_rand_blind)
-            } else {
-                None
-            };
-
             out.push(Prio3InputShare {
                 measurement_share: Share::Helper(helper.measurement_share),
                 proof_share: Share::Helper(helper.proof_share),
-                joint_rand_blind: helper_joint_rand_blind,
+                joint_rand_blind: helper.joint_rand_blind,
             });
         }
 
@@ -548,10 +583,12 @@ where
         ),
         VdafError,
     > {
-        self.shard_with_rand_source(measurement, nonce, |buf| {
-            buf.fill(1);
-            Ok(())
-        })
+        let size = self.random_size();
+        let random = iter::repeat(0..=255)
+            .flatten()
+            .take(size)
+            .collect::<Vec<u8>>();
+        self.shard_with_random(measurement, nonce, &random)
     }
 
     fn role_try_from(&self, agg_id: usize) -> Result<u8, VdafError> {
@@ -788,7 +825,9 @@ where
         measurement: &T::Measurement,
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, SEED_SIZE>>), VdafError> {
-        self.shard_with_rand_source(measurement, nonce, getrandom::getrandom)
+        let mut random = vec![0u8; self.random_size()];
+        getrandom::getrandom(&mut random)?;
+        self.shard_with_random(measurement, nonce, &random)
     }
 }
 
@@ -1120,16 +1159,20 @@ where
 struct HelperShare<const SEED_SIZE: usize> {
     measurement_share: Seed<SEED_SIZE>,
     proof_share: Seed<SEED_SIZE>,
-    joint_rand_blind: Seed<SEED_SIZE>,
+    joint_rand_blind: Option<Seed<SEED_SIZE>>,
 }
 
 impl<const SEED_SIZE: usize> HelperShare<SEED_SIZE> {
-    fn from_rand_source(rand_source: RandSource) -> Result<Self, VdafError> {
-        Ok(HelperShare {
-            measurement_share: Seed::from_rand_source(rand_source)?,
-            proof_share: Seed::from_rand_source(rand_source)?,
-            joint_rand_blind: Seed::from_rand_source(rand_source)?,
-        })
+    fn from_seeds(
+        measurement_share: [u8; SEED_SIZE],
+        proof_share: [u8; SEED_SIZE],
+        joint_rand_blind: Option<[u8; SEED_SIZE]>,
+    ) -> Self {
+        HelperShare {
+            measurement_share: Seed::from_bytes(measurement_share),
+            proof_share: Seed::from_bytes(proof_share),
+            joint_rand_blind: joint_rand_blind.map(Seed::from_bytes),
+        }
     }
 }
 
