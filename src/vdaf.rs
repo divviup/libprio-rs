@@ -252,7 +252,7 @@ pub trait Collector: Vdaf {
 }
 
 /// A state transition of an Aggregator during the Prepare process.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PrepareTransition<
     V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     const VERIFY_KEY_SIZE: usize,

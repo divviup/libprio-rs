@@ -1,6 +1,6 @@
 [package]
 name = "prio"
-version = "0.11.0"
+version = "0.11.1"
 authors = ["Josh Aas <jaas@kflag.net>", "Tim Geoghegan <timg@letsencrypt.org>", "Christopher Patton <cpatton@cloudflare.com", "Karl Tarbe <tarbe@apple.com>"]
 edition = "2021"
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
