@@ -328,7 +328,7 @@ where
     }
     let initial_keys: [Seed<SEED_SIZE>; 2] = [
         Seed::from_bytes(random[..SEED_SIZE].try_into().unwrap()),
-        Seed::from_bytes(random[SEED_SIZE..SEED_SIZE * 2].try_into().unwrap()),
+        Seed::from_bytes(random[SEED_SIZE..].try_into().unwrap()),
     ];
 
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
