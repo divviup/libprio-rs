@@ -409,6 +409,7 @@ where
         let encoded_measurement = self.typ.encode_measurement(measurement)?;
 
         // Generate the measurement shares and compute the joint randomness.
+        let helper_seed_stride = if self.typ.joint_rand_len() > 0 { 3 } else { 2 };
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
         let mut helper_joint_rand_parts = if self.typ.joint_rand_len() > 0 {
             Some(Vec::with_capacity(num_aggregators as usize - 1))
@@ -417,13 +418,14 @@ where
         };
         let mut leader_measurement_share = encoded_measurement.clone();
         for agg_id in 1..num_aggregators {
-            let measurement_share_seed_offset = (usize::from(agg_id) - 1) * SEED_SIZE;
+            let measurement_share_seed_offset =
+                (usize::from(agg_id) - 1) * helper_seed_stride * SEED_SIZE;
             let measurement_share_seed = random
                 [measurement_share_seed_offset..measurement_share_seed_offset + SEED_SIZE]
                 .try_into()
                 .unwrap();
             let proof_share_seed_offset =
-                (usize::from(num_aggregators) - 1 + usize::from(agg_id) - 1) * SEED_SIZE;
+                ((usize::from(agg_id) - 1) * helper_seed_stride + 1) * SEED_SIZE;
             let proof_share_seed = random
                 [proof_share_seed_offset..proof_share_seed_offset + SEED_SIZE]
                 .try_into()
@@ -436,7 +438,7 @@ where
             let joint_rand_blind =
                 if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
                     let joint_rand_blind_offset =
-                        (usize::from(num_aggregators) * 2 - 1 + usize::from(agg_id)) * SEED_SIZE;
+                        ((usize::from(agg_id) - 1) * helper_seed_stride + 2) * SEED_SIZE;
                     let joint_rand_blind = random
                         [joint_rand_blind_offset..joint_rand_blind_offset + SEED_SIZE]
                         .try_into()
@@ -477,7 +479,8 @@ where
             joint_rand_parts: helper_joint_rand_parts
                 .as_ref()
                 .map(|helper_joint_rand_parts| {
-                    let leader_blind_offset = (usize::from(num_aggregators) * 2 - 1) * SEED_SIZE;
+                    let leader_blind_offset =
+                        (usize::from(num_aggregators) - 1) * helper_seed_stride * SEED_SIZE;
                     let leader_blind_bytes = random
                         [leader_blind_offset..leader_blind_offset + SEED_SIZE]
                         .try_into()
@@ -519,7 +522,9 @@ where
             .unwrap_or_default();
 
         // Run the proof-generation algorithm.
-        let prove_rand_seed_offset = ((usize::from(num_aggregators) - 1) * 2) * SEED_SIZE;
+        let prove_rand_seed_offset = ((usize::from(num_aggregators) - 1) * helper_seed_stride
+            + usize::from(self.typ.joint_rand_len() > 0))
+            * SEED_SIZE;
         let prove_rand_seed = random[prove_rand_seed_offset..prove_rand_seed_offset + SEED_SIZE]
             .try_into()
             .unwrap();
