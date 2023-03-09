@@ -339,7 +339,6 @@ fn test_fft() {
     let mut points2 = vec![Field32::from(0); count];
 
     let points = (0..count)
-        .into_iter()
         .map(|_| Field32::from(random::<u32>()))
         .collect::<Vec<Field32>>();
 
