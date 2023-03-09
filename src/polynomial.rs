@@ -337,7 +337,6 @@ mod tests {
         let mut points2 = vec![FieldPrio2::from(0); count];
 
         let points = (0..count)
-            .into_iter()
             .map(|_| FieldPrio2::from(random::<u32>()))
             .collect::<Vec<FieldPrio2>>();
 
