@@ -429,12 +429,27 @@ impl Poplar1AggregationParam {
         }
 
         let len = prefixes[0].len();
+        let mut last_prefix = None;
         for prefix in prefixes.iter() {
             if prefix.len() != len {
                 return Err(VdafError::Uncategorized(
                     "all prefixes must have the same length".into(),
                 ));
             }
+            if let Some(last_prefix) = last_prefix {
+                if prefix <= last_prefix {
+                    if prefix == last_prefix {
+                        return Err(VdafError::Uncategorized(
+                            "prefixes must be nonrepeating".into(),
+                        ));
+                    } else {
+                        return Err(VdafError::Uncategorized(
+                            "prefixes must be in lexicographic order".into(),
+                        ));
+                    }
+                }
+            }
+            last_prefix = Some(prefix);
         }
 
         let level = u16::try_from(len - 1)
@@ -1513,5 +1528,15 @@ mod tests {
     fn agg_param_wrong_unused_bit() {
         let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 1, 2]).unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
+    }
+
+    #[test]
+    fn agg_param_ordering() {
+        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 1]).unwrap_err();
+        assert_matches!(err, CodecError::Other(_));
+        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 0]).unwrap_err();
+        assert_matches!(err, CodecError::Other(_));
+        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 3]).unwrap_err();
+        assert_matches!(err, CodecError::Other(_));
     }
 }
