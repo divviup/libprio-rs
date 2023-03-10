@@ -6,7 +6,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{merge_vector, Field255, Field64, FieldElement},
+    field::{decode_fieldvec, merge_vector, Field255, Field64, FieldElement},
     idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
@@ -340,10 +340,14 @@ impl<'a, P: Prg<SEED_SIZE>, const SEED_SIZE: usize>
     for Poplar1FieldVec
 {
     fn decode_with_param(
-        (_poplar1, _agg_param): &(&'a Poplar1<P, SEED_SIZE>, &'a Poplar1AggregationParam),
-        _bytes: &mut Cursor<&[u8]>,
+        (poplar1, agg_param): &(&'a Poplar1<P, SEED_SIZE>, &'a Poplar1AggregationParam),
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        if agg_param.level() == poplar1.bits - 1 {
+            decode_fieldvec(agg_param.prefixes().len(), bytes).map(Poplar1FieldVec::Leaf)
+        } else {
+            decode_fieldvec(agg_param.prefixes().len(), bytes).map(Poplar1FieldVec::Inner)
+        }
     }
 }
 
