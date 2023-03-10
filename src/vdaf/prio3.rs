@@ -405,11 +405,11 @@ where
                 "incorrect random input length".to_string(),
             ));
         }
+        let mut random_seeds = random.chunks_exact(SEED_SIZE);
         let num_aggregators = self.num_aggregators;
         let encoded_measurement = self.typ.encode_measurement(measurement)?;
 
         // Generate the measurement shares and compute the joint randomness.
-        let helper_seed_stride = if self.typ.joint_rand_len() > 0 { 3 } else { 2 };
         let mut helper_shares = Vec::with_capacity(num_aggregators as usize - 1);
         let mut helper_joint_rand_parts = if self.typ.joint_rand_len() > 0 {
             Some(Vec::with_capacity(num_aggregators as usize - 1))
@@ -418,18 +418,8 @@ where
         };
         let mut leader_measurement_share = encoded_measurement.clone();
         for agg_id in 1..num_aggregators {
-            let measurement_share_seed_offset =
-                (usize::from(agg_id) - 1) * helper_seed_stride * SEED_SIZE;
-            let measurement_share_seed = random
-                [measurement_share_seed_offset..measurement_share_seed_offset + SEED_SIZE]
-                .try_into()
-                .unwrap();
-            let proof_share_seed_offset =
-                ((usize::from(agg_id) - 1) * helper_seed_stride + 1) * SEED_SIZE;
-            let proof_share_seed = random
-                [proof_share_seed_offset..proof_share_seed_offset + SEED_SIZE]
-                .try_into()
-                .unwrap();
+            let measurement_share_seed = random_seeds.next().unwrap().try_into().unwrap();
+            let proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
                 &Seed(measurement_share_seed),
                 &Self::custom(DST_MEASUREMENT_SHARE),
@@ -437,13 +427,7 @@ where
             ));
             let joint_rand_blind =
                 if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
-                    let joint_rand_blind_offset =
-                        ((usize::from(agg_id) - 1) * helper_seed_stride + 2) * SEED_SIZE;
-                    let joint_rand_blind = random
-                        [joint_rand_blind_offset..joint_rand_blind_offset + SEED_SIZE]
-                        .try_into()
-                        .unwrap();
-
+                    let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
                     let mut joint_rand_part_prg =
                         P::init(&joint_rand_blind, &Self::custom(DST_JOINT_RAND_PART));
                     joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
@@ -479,12 +463,7 @@ where
             joint_rand_parts: helper_joint_rand_parts
                 .as_ref()
                 .map(|helper_joint_rand_parts| {
-                    let leader_blind_offset =
-                        (usize::from(num_aggregators) - 1) * helper_seed_stride * SEED_SIZE;
-                    let leader_blind_bytes = random
-                        [leader_blind_offset..leader_blind_offset + SEED_SIZE]
-                        .try_into()
-                        .unwrap();
+                    let leader_blind_bytes = random_seeds.next().unwrap().try_into().unwrap();
                     let leader_blind = Seed::from_bytes(leader_blind_bytes);
 
                     let mut joint_rand_part_prg =
@@ -522,12 +501,7 @@ where
             .unwrap_or_default();
 
         // Run the proof-generation algorithm.
-        let prove_rand_seed_offset = ((usize::from(num_aggregators) - 1) * helper_seed_stride
-            + usize::from(self.typ.joint_rand_len() > 0))
-            * SEED_SIZE;
-        let prove_rand_seed = random[prove_rand_seed_offset..prove_rand_seed_offset + SEED_SIZE]
-            .try_into()
-            .unwrap();
+        let prove_rand_seed = random_seeds.next().unwrap().try_into().unwrap();
         let prove_rand_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
             &Seed::from_bytes(prove_rand_seed),
             &Self::custom(DST_PROVE_RANDOMNESS),
