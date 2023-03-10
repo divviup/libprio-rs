@@ -1488,6 +1488,11 @@ mod tests {
                 ]),
                 [0, 9, 0, 0, 0, 2, 0x0b, 0x69, 0xb2].as_slice(),
             ),
+            // poplar.encode_agg_param(15, [0xcafe])
+            (
+                Vec::from([IdpfInput::from_bytes(b"\xca\xfe")]),
+                [0, 15, 0, 0, 0, 1, 0xca, 0xfe].as_slice(),
+            ),
         ] {
             let agg_param = Poplar1AggregationParam::try_from_prefixes(prefixes).unwrap();
             let encoded = agg_param.get_encoded();
