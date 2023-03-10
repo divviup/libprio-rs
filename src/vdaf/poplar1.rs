@@ -502,6 +502,12 @@ impl Decode for Poplar1AggregationParam {
         let packed_bit_count = (usize::from(level) + 1) * prefix_count;
         let mut packed = vec![0u8; (packed_bit_count + 7) / 8];
         bytes.read_exact(&mut packed)?;
+        if packed_bit_count % 8 != 0 {
+            let unused_bits = packed[0] >> (packed_bit_count % 8);
+            if unused_bits != 0 {
+                return Err(CodecError::UnexpectedValue);
+            }
+        }
         packed.reverse();
         let bits = BitVec::<u8, Lsb0>::from_vec(packed);
 
@@ -1154,6 +1160,7 @@ where
 mod tests {
     use super::*;
     use crate::vdaf::run_vdaf_prepare;
+    use assert_matches::assert_matches;
     use rand::prelude::*;
     use std::collections::HashSet;
 
@@ -1500,5 +1507,11 @@ mod tests {
             let decoded = Poplar1AggregationParam::get_decoded(reference_encoding).unwrap();
             assert_eq!(decoded, agg_param);
         }
+    }
+
+    #[test]
+    fn agg_param_wrong_unused_bit() {
+        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 1, 2]).unwrap_err();
+        assert_matches!(err, CodecError::UnexpectedValue);
     }
 }
