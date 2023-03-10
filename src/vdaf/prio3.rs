@@ -80,8 +80,8 @@ impl Prio3Count {
     }
 }
 
-/// The count-vector type. Each measurement is a vector of integers in `[0,2)` and the aggregate is
-/// the element-wise sum.
+/// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
+/// aggregate is the element-wise sum.
 #[cfg(feature = "crypto-dependencies")]
 pub type Prio3SumVec =
     Prio3<SumVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgSha3, 16>;
@@ -133,14 +133,14 @@ pub type Prio3Sum = Prio3<Sum<Field128>, PrgSha3, 16>;
 impl Prio3Sum {
     /// Construct an instance of Prio3Sum with the given number of aggregators and required bit
     /// length. The bit length must not exceed 64.
-    pub fn new_sum(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
+    pub fn new_sum(num_aggregators: u8, bits: usize) -> Result<Self, VdafError> {
         if bits > 64 {
             return Err(VdafError::Uncategorized(format!(
                 "bit length ({bits}) exceeds limit for aggregate type (64)"
             )));
         }
 
-        Prio3::new(num_aggregators, Sum::new(bits as usize)?)
+        Prio3::new(num_aggregators, Sum::new(bits)?)
     }
 }
 
@@ -248,7 +248,7 @@ pub type Prio3Average = Prio3<Average<Field128>, PrgSha3, 16>;
 impl Prio3Average {
     /// Construct an instance of Prio3Average with the given number of aggregators and required bit
     /// length. The bit length must not exceed 64.
-    pub fn new_average(num_aggregators: u8, bits: u32) -> Result<Self, VdafError> {
+    pub fn new_average(num_aggregators: u8, bits: usize) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
 
         if bits > 64 {
@@ -259,7 +259,7 @@ impl Prio3Average {
 
         Ok(Prio3 {
             num_aggregators,
-            typ: Average::new(bits as usize)?,
+            typ: Average::new(bits)?,
             phantom: PhantomData,
         })
     }
