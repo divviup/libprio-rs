@@ -400,7 +400,7 @@ impl Aggregatable for Poplar1FieldVec {
 // consider requring the prefixes to be in lexicographic order.
 #[derive(Clone, Debug)]
 pub struct Poplar1AggregationParam {
-    level: usize,
+    level: u16,
     prefixes: Vec<IdpfInput>,
 }
 
@@ -411,6 +411,7 @@ impl Poplar1AggregationParam {
     ///
     /// * The list of prefixes is empty.
     /// * The prefixes have different lengths (they must all be the same).
+    /// * The prefixes are longer than 2^16 bits.
     //
     // TODO spec: Ensure that prefixes don't repeat. To make this check easier, consider requiring
     // them to appear in alphabetical order.
@@ -431,15 +432,15 @@ impl Poplar1AggregationParam {
             }
         }
 
-        Ok(Self {
-            level: len - 1,
-            prefixes,
-        })
+        let level = u16::try_from(len - 1)
+            .map_err(|_| VdafError::Uncategorized("prefixes are too long".into()))?;
+
+        Ok(Self { level, prefixes })
     }
 
     /// Return the level of the IDPF tree.
     pub fn level(&self) -> usize {
-        self.level
+        usize::from(self.level)
     }
 
     /// Return the prefixes.
@@ -601,7 +602,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             }
         };
 
-        if agg_param.level < self.bits - 1 {
+        if usize::from(agg_param.level) < self.bits - 1 {
             let mut corr_prng = Self::init_prng::<_, _, Field64>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_INNER,
@@ -626,8 +627,8 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             Ok((
                 Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
                     sketch: SketchState::RoundOne {
-                        A_share: input_share.corr_inner[agg_param.level][0],
-                        B_share: input_share.corr_inner[agg_param.level][1],
+                        A_share: input_share.corr_inner[usize::from(agg_param.level)][0],
+                        B_share: input_share.corr_inner[usize::from(agg_param.level)][1],
                         is_leader,
                     },
                     output_share,
@@ -779,7 +780,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         output_shares: M,
     ) -> Result<Poplar1FieldVec, VdafError> {
         aggregate(
-            agg_param.level == self.bits - 1,
+            usize::from(agg_param.level) == self.bits - 1,
             agg_param.prefixes.len(),
             output_shares,
         )
@@ -794,7 +795,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Collector for Poplar1<P, SEED_SI
         _num_measurements: usize,
     ) -> Result<Vec<u64>, VdafError> {
         let result = aggregate(
-            agg_param.level == self.bits - 1,
+            usize::from(agg_param.level) == self.bits - 1,
             agg_param.prefixes.len(),
             agg_shares,
         )?;
@@ -874,15 +875,11 @@ where
     Poplar1IdpfValue<F>:
         From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
 {
-    let level = u16::try_from(agg_param.level)
-        .map_err(|_| VdafError::Uncategorized(format!("level too deep ({})", agg_param.level)))?
-        .to_be_bytes();
-
     // TODO(cjpatton) spec: Consider not encoding the prefixes here.
     let mut verify_prng = Poplar1::<P, SEED_SIZE>::init_prng(
         verify_key,
         DST_VERIFY_RANDOMNESS,
-        [nonce.as_slice(), level.as_slice()],
+        [nonce.as_slice(), agg_param.level.to_be_bytes().as_slice()],
     );
 
     let mut out_share = Vec::with_capacity(agg_param.prefixes.len());
@@ -1268,7 +1265,7 @@ mod tests {
                 &public_share,
                 &input_shares,
                 &Poplar1AggregationParam {
-                    level,
+                    level: level as u16,
                     prefixes: vec![input.prefix(level)],
                 },
                 vec![1],
