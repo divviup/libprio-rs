@@ -98,10 +98,10 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>>
     for Poplar1PublicShare<SEED_SIZE>
 {
     fn decode_with_param(
-        _poplar1: &Poplar1<P, SEED_SIZE>,
-        _bytes: &mut Cursor<&[u8]>,
+        poplar1: &Poplar1<P, SEED_SIZE>,
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        Self::decode_with_param(&poplar1.bits, bytes)
     }
 }
 
