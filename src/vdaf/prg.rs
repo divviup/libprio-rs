@@ -5,6 +5,11 @@
 //! [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 
 use crate::vdaf::{CodecError, Decode, Encode};
+#[cfg(feature = "experimental")]
+use aes::{
+    cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
+    Block,
+};
 #[cfg(feature = "crypto-dependencies")]
 use aes::{
     cipher::{KeyIvInit, StreamCipher},
@@ -142,7 +147,7 @@ impl Prg<16> for PrgAes128 {
     type SeedStream = SeedStreamAes128;
 
     fn init(seed_bytes: &[u8; 16], custom: &[u8]) -> Self {
-        let mut mac = Cmac::new_from_slice(seed_bytes).unwrap();
+        let mut mac = <Cmac<_> as Mac>::new_from_slice(seed_bytes).unwrap();
         let custom_len = u16::try_from(custom.len()).expect("customization string is too long");
         Mac::update(&mut mac, &custom_len.to_be_bytes());
         Mac::update(&mut mac, custom);
@@ -231,6 +236,112 @@ impl SeedStreamSha3 {
 impl SeedStream for SeedStreamSha3 {
     fn fill(&mut self, buf: &mut [u8]) {
         XofReader::read(&mut self.0, buf);
+    }
+}
+
+/// PrgFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-05]]. This PRG is NOT RECOMMENDED for
+/// general use; see Section 9 ("Security Considerations") for details.
+///
+/// This PRG combines SHA-3 and a fixed-key mode of operation for AES-128. The key is "fixed" in
+/// the sense that it is derived (using cSHAKE128) from the customization and binder strings, and
+/// depending on the application, these strings can be hard-coded. The seed is used to construct
+/// each block of input passed to a hash function built from AES-128.
+///
+/// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+#[derive(Clone, Debug)]
+#[cfg(feature = "experimental")]
+pub struct PrgFixedKeyAes128 {
+    fixed_key_deriver: CShake128,
+    base_block: Block,
+}
+
+#[cfg(feature = "experimental")]
+impl Prg<16> for PrgFixedKeyAes128 {
+    type SeedStream = SeedStreamFixedKeyAes128;
+
+    fn init(seed_bytes: &[u8; 16], custom: &[u8]) -> Self {
+        Self {
+            fixed_key_deriver: CShake128::from_core(CShake128Core::new(custom)),
+            base_block: (*seed_bytes).into(),
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        Update::update(&mut self.fixed_key_deriver, data);
+    }
+
+    fn into_seed_stream(self) -> SeedStreamFixedKeyAes128 {
+        let mut fixed_key = GenericArray::from([0; 16]);
+        XofReader::read(&mut self.fixed_key_deriver.finalize_xof(), &mut fixed_key);
+        SeedStreamFixedKeyAes128 {
+            base_block: self.base_block,
+            cipher: Aes128::new(&fixed_key),
+            length_consumed: 0,
+        }
+    }
+}
+
+/// Seed stream for [`PrgFixedKeyAes128`].
+#[cfg(feature = "experimental")]
+pub struct SeedStreamFixedKeyAes128 {
+    cipher: Aes128,
+    base_block: Block,
+    length_consumed: u64,
+}
+
+#[cfg(feature = "experimental")]
+impl SeedStream for SeedStreamFixedKeyAes128 {
+    fn fill(&mut self, buf: &mut [u8]) {
+        let next_length_consumed = self.length_consumed + u64::try_from(buf.len()).unwrap();
+        let mut offset = usize::try_from(self.length_consumed % 16).unwrap();
+        let mut index = 0;
+        let mut block = Block::from([0; 16]);
+
+        // NOTE(cjpatton) We might be able to speed this up by unrolling this loop and encrypting
+        // multiple blocks at the same time via `self.cipher.encrypt_blocks()`.
+        for block_counter in self.length_consumed / 16..(next_length_consumed + 15) / 16 {
+            block.clone_from(&self.base_block);
+            for (b, i) in block.iter_mut().zip(block_counter.to_le_bytes().iter()) {
+                *b ^= i;
+            }
+            self.hash_block(&mut block);
+            let read = std::cmp::min(16 - offset, buf.len() - index);
+            buf[index..index + read].copy_from_slice(&block[offset..offset + read]);
+            offset = 0;
+            index += read;
+        }
+
+        self.length_consumed = next_length_consumed;
+    }
+}
+
+#[cfg(feature = "experimental")]
+impl SeedStreamFixedKeyAes128 {
+    fn hash_block(&self, block: &mut Block) {
+        let sigma = Block::from([
+            // hi
+            block[8],
+            block[9],
+            block[10],
+            block[11],
+            block[12],
+            block[13],
+            block[14],
+            block[15],
+            // xor(hi, lo)
+            block[8] ^ block[0],
+            block[9] ^ block[1],
+            block[10] ^ block[2],
+            block[11] ^ block[3],
+            block[12] ^ block[4],
+            block[13] ^ block[5],
+            block[14] ^ block[6],
+            block[15] ^ block[7],
+        ]);
+        self.cipher.encrypt_block_b2b(&sigma, block);
+        for (b, s) in block.iter_mut().zip(sigma.iter()) {
+            *b ^= s;
+        }
     }
 }
 
@@ -348,5 +459,40 @@ mod tests {
         assert_eq!(got, want);
 
         test_prg::<PrgSha3, 16>();
+    }
+
+    #[cfg(feature = "experimental")]
+    #[test]
+    fn prg_fixed_key_aes128() {
+        let t: PrgTestVector =
+            serde_json::from_str(include_str!("test_vec/05/PrgFixedKeyAes128.json")).unwrap();
+        let mut prg = PrgFixedKeyAes128::init(&t.seed.try_into().unwrap(), &t.custom);
+        prg.update(&t.binder);
+
+        assert_eq!(
+            prg.clone().into_seed(),
+            Seed(t.derived_seed.try_into().unwrap())
+        );
+
+        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut want = Vec::with_capacity(t.length);
+        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
+            want.push(Field128::decode(&mut bytes).unwrap())
+        }
+        let got: Vec<Field128> = Prng::from_seed_stream(prg.clone().into_seed_stream())
+            .take(t.length)
+            .collect();
+        assert_eq!(got, want);
+
+        test_prg::<PrgFixedKeyAes128, 16>();
+    }
+
+    #[cfg(feature = "experimental")]
+    #[test]
+    fn prg_fixed_key_aes128_incomplete_block() {
+        let mut buf = [0; 15];
+        PrgFixedKeyAes128::seed_stream(&Seed::generate().unwrap(), b"custom", b"binder")
+            .fill(&mut buf);
+        assert_ne!(buf, [0; 15]);
     }
 }
