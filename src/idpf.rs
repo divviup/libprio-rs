@@ -79,7 +79,7 @@ impl IdpfInput {
     }
 
     /// Get an iterator over the bits that make up this input.
-    pub fn iter(&self) -> impl Iterator<Item = bool> + '_ {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = bool> + '_ {
         self.index.iter().by_vals()
     }
 

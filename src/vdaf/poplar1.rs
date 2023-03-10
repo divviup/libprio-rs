@@ -14,10 +14,11 @@ use crate::{
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
+use bitvec::{prelude::Lsb0, vec::BitVec};
 use std::{
     convert::TryFrom,
     fmt::Debug,
-    io::Cursor,
+    io::{Cursor, Read},
     marker::PhantomData,
     ops::{Add, AddAssign, Sub},
 };
@@ -398,7 +399,7 @@ impl Aggregatable for Poplar1FieldVec {
 //
 // TODO(cjpatton) spec: Make sure repeated prefixes are disallowed. To make this check easier,
 // consider requring the prefixes to be in lexicographic order.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Poplar1AggregationParam {
     level: u16,
     prefixes: Vec<IdpfInput>,
@@ -412,6 +413,7 @@ impl Poplar1AggregationParam {
     /// * The list of prefixes is empty.
     /// * The prefixes have different lengths (they must all be the same).
     /// * The prefixes are longer than 2^16 bits.
+    /// * There are more than 2^32 - 1 prefixes.
     //
     // TODO spec: Ensure that prefixes don't repeat. To make this check easier, consider requiring
     // them to appear in alphabetical order.
@@ -421,6 +423,9 @@ impl Poplar1AggregationParam {
             return Err(VdafError::Uncategorized(
                 "at least one prefix is required".into(),
             ));
+        }
+        if u32::try_from(prefixes.len()).is_err() {
+            return Err(VdafError::Uncategorized("too many prefixes".into()));
         }
 
         let len = prefixes[0].len();
@@ -450,14 +455,64 @@ impl Poplar1AggregationParam {
 }
 
 impl Encode for Poplar1AggregationParam {
-    fn encode(&self, _bytes: &mut Vec<u8>) {
-        todo!()
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        // Okay to unwrap because `try_from_prefixes()` checks this conversion succeeds.
+        let prefix_count = u32::try_from(self.prefixes.len()).unwrap();
+        self.level.encode(bytes);
+        prefix_count.encode(bytes);
+
+        // The encoding of the prefixes is defined by treating the IDPF indices as integers,
+        // shifting and ORing them together, and encoding the resulting arbitrary precision integer
+        // in big endian byte order. Thus, the first prefix will appear in the last encoded byte,
+        // aligned to its least significant bit. The last prefix will appear in the first encoded
+        // byte, not necessarily aligned to a byte boundary. If the highest bits in the first byte
+        // are unused, they will be set to zero.
+
+        // When an IPDF index is treated as an integer, the first bit is the integer's most
+        // significant bit, and bits are subsequently processed in order of decreasing significance.
+        // Thus, setting aside the order of bytes, bits within each byte are ordered with the
+        // [`Msb0`](bitvec::prelude::Msb0) convention, not [`Lsb0`](bitvec::prelude::Msb0). Yet,
+        // the entire integer is aligned to the least significant bit of the last byte, so we
+        // could not use `Msb0` directly without padding adjustments. Instead, we use `Lsb0`
+        // throughout and reverse the bit order of each prefix.
+
+        let mut packed = self
+            .prefixes
+            .iter()
+            .flat_map(|input| input.iter().rev())
+            .collect::<BitVec<u8, Lsb0>>();
+        packed.set_uninitialized(false);
+        let mut packed = packed.into_vec();
+        packed.reverse();
+        bytes.append(&mut packed);
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let packed_bit_count = (usize::from(self.level) + 1) * self.prefixes.len();
+        Some(6 + (packed_bit_count + 7) / 8)
     }
 }
 
 impl Decode for Poplar1AggregationParam {
-    fn decode(_bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        todo!()
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let level = u16::decode(bytes)?;
+        let prefix_count =
+            usize::try_from(u32::decode(bytes)?).map_err(|e| CodecError::Other(e.into()))?;
+
+        let packed_bit_count = (usize::from(level) + 1) * prefix_count;
+        let mut packed = vec![0u8; (packed_bit_count + 7) / 8];
+        bytes.read_exact(&mut packed)?;
+        packed.reverse();
+        let bits = BitVec::<u8, Lsb0>::from_vec(packed);
+
+        let prefixes = bits
+            .chunks_exact(usize::from(level) + 1)
+            .take(prefix_count)
+            .map(|chunk| IdpfInput::from(chunk.iter().rev().collect::<BitVec>()))
+            .collect::<Vec<IdpfInput>>();
+
+        Poplar1AggregationParam::try_from_prefixes(prefixes)
+            .map_err(|e| CodecError::Other(e.into()))
     }
 }
 
@@ -1344,5 +1399,101 @@ mod tests {
             field_vec.get_encoded().len(),
             field_vec.encoded_len().unwrap()
         );
+
+        // Aggregation parameter.
+        let agg_param = Poplar1AggregationParam::try_from_prefixes(Vec::from([
+            IdpfInput::from_bytes(b"ab"),
+            IdpfInput::from_bytes(b"cd"),
+        ]))
+        .unwrap();
+        assert_eq!(
+            agg_param.get_encoded().len(),
+            agg_param.encoded_len().unwrap()
+        );
+        let agg_param = Poplar1AggregationParam::try_from_prefixes(Vec::from([
+            IdpfInput::from_bools(&[false]),
+            IdpfInput::from_bools(&[true]),
+        ]))
+        .unwrap();
+        assert_eq!(
+            agg_param.get_encoded().len(),
+            agg_param.encoded_len().unwrap()
+        );
+    }
+
+    #[test]
+    fn round_trip_agg_param() {
+        // Sage statements used to generate these test cases are given in comments.
+        for (prefixes, reference_encoding) in [
+            // poplar.encode_agg_param(0, [0])
+            (
+                Vec::from([IdpfInput::from_bools(&[false])]),
+                [0, 0, 0, 0, 0, 1, 0].as_slice(),
+            ),
+            // poplar.encode_agg_param(0, [1])
+            (
+                Vec::from([IdpfInput::from_bools(&[true])]),
+                [0, 0, 0, 0, 0, 1, 1].as_slice(),
+            ),
+            // poplar.encode_agg_param(0, [0, 1])
+            (
+                Vec::from([
+                    IdpfInput::from_bools(&[false]),
+                    IdpfInput::from_bools(&[true]),
+                ]),
+                [0, 0, 0, 0, 0, 2, 2].as_slice(),
+            ),
+            // poplar.encode_agg_param(1, [0b00, 0b01, 0b10, 0b11])
+            (
+                Vec::from([
+                    IdpfInput::from_bools(&[false, false]),
+                    IdpfInput::from_bools(&[false, true]),
+                    IdpfInput::from_bools(&[true, false]),
+                    IdpfInput::from_bools(&[true, true]),
+                ]),
+                [0, 1, 0, 0, 0, 4, 0xe4].as_slice(),
+            ),
+            // poplar.encode_agg_param(1, [0b00, 0b10, 0b11])
+            (
+                Vec::from([
+                    IdpfInput::from_bools(&[false, false]),
+                    IdpfInput::from_bools(&[true, false]),
+                    IdpfInput::from_bools(&[true, true]),
+                ]),
+                [0, 1, 0, 0, 0, 3, 0x38].as_slice(),
+            ),
+            // poplar.encode_agg_param(2, [0b000, 0b001, 0b010, 0b011, 0b100, 0b101, 0b110, 0b111])
+            (
+                Vec::from([
+                    IdpfInput::from_bools(&[false, false, false]),
+                    IdpfInput::from_bools(&[false, false, true]),
+                    IdpfInput::from_bools(&[false, true, false]),
+                    IdpfInput::from_bools(&[false, true, true]),
+                    IdpfInput::from_bools(&[true, false, false]),
+                    IdpfInput::from_bools(&[true, false, true]),
+                    IdpfInput::from_bools(&[true, true, false]),
+                    IdpfInput::from_bools(&[true, true, true]),
+                ]),
+                [0, 2, 0, 0, 0, 8, 0xfa, 0xc6, 0x88].as_slice(),
+            ),
+            // poplar.encode_agg_param(9, [0b01_1011_0010, 0b10_1101_1010])
+            (
+                Vec::from([
+                    IdpfInput::from_bools(&[
+                        false, true, true, false, true, true, false, false, true, false,
+                    ]),
+                    IdpfInput::from_bools(&[
+                        true, false, true, true, false, true, true, false, true, false,
+                    ]),
+                ]),
+                [0, 9, 0, 0, 0, 2, 0x0b, 0x69, 0xb2].as_slice(),
+            ),
+        ] {
+            let agg_param = Poplar1AggregationParam::try_from_prefixes(prefixes).unwrap();
+            let encoded = agg_param.get_encoded();
+            assert_eq!(encoded, reference_encoding);
+            let decoded = Poplar1AggregationParam::get_decoded(reference_encoding).unwrap();
+            assert_eq!(decoded, agg_param);
+        }
     }
 }
