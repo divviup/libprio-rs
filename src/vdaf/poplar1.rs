@@ -396,9 +396,6 @@ impl Aggregatable for Poplar1FieldVec {
 ///
 /// This includes an indication of what level of the IDPF tree is being evaluated and the set of
 /// prefixes to evaluate at that level.
-//
-// TODO(cjpatton) spec: Make sure repeated prefixes are disallowed. To make this check easier,
-// consider requring the prefixes to be in lexicographic order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Poplar1AggregationParam {
     level: u16,
@@ -414,10 +411,6 @@ impl Poplar1AggregationParam {
     /// * The prefixes have different lengths (they must all be the same).
     /// * The prefixes are longer than 2^16 bits.
     /// * There are more than 2^32 - 1 prefixes.
-    //
-    // TODO spec: Ensure that prefixes don't repeat. To make this check easier, consider requiring
-    // them to appear in alphabetical order.
-    // https://github.com/cfrg/draft-irtf-cfrg-vdaf/issues/134
     pub fn try_from_prefixes(prefixes: Vec<IdpfInput>) -> Result<Self, VdafError> {
         if prefixes.is_empty() {
             return Err(VdafError::Uncategorized(
@@ -504,6 +497,8 @@ impl Encode for Poplar1AggregationParam {
 
     fn encoded_len(&self) -> Option<usize> {
         let packed_bit_count = (usize::from(self.level) + 1) * self.prefixes.len();
+        // 4 bytes for the number of prefixes, 2 bytes for the level, and a variable number of bytes
+        // for the packed prefixes themselves.
         Some(6 + (packed_bit_count + 7) / 8)
     }
 }
@@ -1445,7 +1440,9 @@ mod tests {
 
     #[test]
     fn round_trip_agg_param() {
-        // Sage statements used to generate these test cases are given in comments.
+        // These test cases were generated using the reference Sage implementation.
+        // (https://github.com/cfrg/draft-irtf-cfrg-vdaf/tree/main/poc) Sage statements used to
+        // generate each test case are given in comments.
         for (prefixes, reference_encoding) in [
             // poplar.encode_agg_param(0, [0])
             (
