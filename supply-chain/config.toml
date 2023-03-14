@@ -43,10 +43,6 @@ criteria = "safe-to-deploy"
 version = "0.10.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.anes]]
-version = "0.1.6"
-criteria = "safe-to-run"
-
 [[exemptions.ansi_term]]
 version = "0.12.1"
 criteria = "safe-to-run"
@@ -73,14 +69,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.cast]]
 version = "0.3.0"
-criteria = "safe-to-run"
-
-[[exemptions.ciborium]]
-version = "0.2.0"
-criteria = "safe-to-run"
-
-[[exemptions.ciborium-ll]]
-version = "0.2.0"
 criteria = "safe-to-run"
 
 [[exemptions.cipher]]
