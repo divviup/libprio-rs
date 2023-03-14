@@ -6,7 +6,7 @@ use iai::black_box;
 use prio::field::FieldElement;
 #[cfg(feature = "experimental")]
 use prio::{
-    codec::{Decode, ParameterizedDecode},
+    codec::{Decode, Encode, ParameterizedDecode},
     field::Field255,
     idpf::{self, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::{
@@ -248,6 +248,24 @@ fn idpf_poplar_eval_2048() {
     idpf_poplar_eval(&input, &public_share, &key);
 }
 
+#[cfg(feature = "experimental")]
+fn idpf_codec() {
+    let data = hex::decode(concat!(
+        "9a",
+        "0000000000000000000000000000000000000000000000",
+        "01eb3a1bd6b5fa4a4500000000000000000000000000000000",
+        "ffffffff0000000022522c3fd5a33cac00000000000000000000000000000000",
+        "ffffffff0000000069f41eee46542b6900000000000000000000000000000000",
+        "00000000000000000000000000000000000000000000000000000000000000",
+        "017d1fd6df94280145a0dcc933ceb706e9219d50e7c4f92fd8ca9a0ffb7d819646",
+    ))
+    .unwrap();
+    let bits = 4;
+    let public_share = IdpfPublicShare::<Poplar1IdpfValue<Field64>,Poplar1IdpfValue<Field255>,16>::get_decoded_with_param(&bits, &data).unwrap();
+    let encoded = public_share.get_encoded();
+    let _ = black_box(encoded.len());
+}
+
 macro_rules! main_base {
     ( $( $func_name:ident ),* $(,)* ) => {
         iai::main!(
@@ -311,6 +329,7 @@ macro_rules! main_add_multithreaded {
 macro_rules! main_add_experimental {
     ( $( $func_name:ident ),* $(,)* ) => {
         main_add_multithreaded!(
+            idpf_codec,
             idpf_poplar_gen_8,
             idpf_poplar_gen_128,
             idpf_poplar_gen_2048,

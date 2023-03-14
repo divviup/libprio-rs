@@ -19,7 +19,7 @@ use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 4;
+pub(crate) const VERSION: u8 = 5;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -117,6 +117,16 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
             Share::Helper(share_seed) => {
                 share_seed.encode(bytes);
             }
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        match self {
+            Share::Leader(share_data) => {
+                // Each element of the data vector has the same size.
+                Some(share_data.len() * F::ENCODED_SIZE)
+            }
+            Share::Helper(share_seed) => share_seed.encoded_len(),
         }
     }
 }
@@ -252,7 +262,7 @@ pub trait Collector: Vdaf {
 }
 
 /// A state transition of an Aggregator during the Prepare process.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PrepareTransition<
     V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     const VERIFY_KEY_SIZE: usize,
@@ -298,6 +308,10 @@ impl<F: FieldElement> Encode for OutputShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         encode_fieldvec(&self.0, bytes)
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(F::ENCODED_SIZE * self.0.len())
+    }
 }
 
 /// An aggregate share comprised of a vector of field elements.
@@ -342,6 +356,10 @@ impl<F: FieldElement> AggregateShare<F> {
 impl<F: FieldElement> Encode for AggregateShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         encode_fieldvec(&self.0, bytes)
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(F::ENCODED_SIZE * self.0.len())
     }
 }
 

@@ -64,6 +64,10 @@ impl<const SEED_SIZE: usize> Encode for Seed<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) {
         bytes.extend_from_slice(&self.0[..]);
     }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(SEED_SIZE)
+    }
 }
 
 impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {

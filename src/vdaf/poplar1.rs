@@ -128,8 +128,24 @@ pub struct Poplar1InputShare<const SEED_SIZE: usize> {
 }
 
 impl<const SEED_SIZE: usize> Encode for Poplar1InputShare<SEED_SIZE> {
-    fn encode(&self, _bytes: &mut Vec<u8>) {
-        todo!()
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        self.idpf_key.encode(bytes);
+        self.corr_seed.encode(bytes);
+        for corr in self.corr_inner.iter() {
+            corr[0].encode(bytes);
+            corr[1].encode(bytes);
+        }
+        self.corr_leaf[0].encode(bytes);
+        self.corr_leaf[1].encode(bytes);
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let mut len = 0;
+        len += SEED_SIZE; // idpf_key
+        len += SEED_SIZE; // corr_seed
+        len += self.corr_inner.len() * 2 * Field64::ENCODED_SIZE; // corr_inner
+        len += 2 * Field255::ENCODED_SIZE; // corr_leaf
+        Some(len)
     }
 }
 
@@ -137,10 +153,22 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     for Poplar1InputShare<SEED_SIZE>
 {
     fn decode_with_param(
-        (_poplar1, _agg_id): &(&'a Poplar1<P, SEED_SIZE>, usize),
-        _bytes: &mut Cursor<&[u8]>,
+        (poplar1, _agg_id): &(&'a Poplar1<P, SEED_SIZE>, usize),
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        let idpf_key = Seed::decode(bytes)?;
+        let corr_seed = Seed::decode(bytes)?;
+        let mut corr_inner = Vec::with_capacity(poplar1.bits - 1);
+        for _ in 0..poplar1.bits - 1 {
+            corr_inner.push([Field64::decode(bytes)?, Field64::decode(bytes)?]);
+        }
+        let corr_leaf = [Field255::decode(bytes)?, Field255::decode(bytes)?];
+        Ok(Self {
+            idpf_key,
+            corr_seed,
+            corr_inner,
+            corr_leaf,
+        })
     }
 }
 
@@ -171,6 +199,35 @@ enum SketchState<F> {
     RoundTwo,
 }
 
+impl<F: FieldElement> SketchState<F> {
+    fn decode_sketch_share(&self, bytes: &mut Cursor<&[u8]>) -> Result<Vec<F>, CodecError> {
+        match self {
+            // The sketch share is three field elements.
+            Self::RoundOne { .. } => Ok(vec![
+                F::decode(bytes)?,
+                F::decode(bytes)?,
+                F::decode(bytes)?,
+            ]),
+            // The sketch verifier share is one field element.
+            Self::RoundTwo => Ok(vec![F::decode(bytes)?]),
+        }
+    }
+
+    fn decode_sketch(&self, bytes: &mut Cursor<&[u8]>) -> Result<Option<[F; 3]>, CodecError> {
+        match self {
+            // The sketch is three field elements.
+            Self::RoundOne { .. } => Ok(Some([
+                F::decode(bytes)?,
+                F::decode(bytes)?,
+                F::decode(bytes)?,
+            ])),
+            // The sketch verifier should be zero if the sketch if valid. Instead of transmitting
+            // this zero over the wire, we just expect an empty message.
+            Self::RoundTwo => Ok(None),
+        }
+    }
+}
+
 /// Poplar1 preparation message.
 #[derive(Clone, Debug)]
 pub struct Poplar1PrepareMessage(PrepareMessageVariant);
@@ -183,17 +240,54 @@ enum PrepareMessageVariant {
 }
 
 impl Encode for Poplar1PrepareMessage {
-    fn encode(&self, _bytes: &mut Vec<u8>) {
-        todo!()
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self.0 {
+            PrepareMessageVariant::SketchInner(vec) => {
+                vec[0].encode(bytes);
+                vec[1].encode(bytes);
+                vec[2].encode(bytes);
+            }
+            PrepareMessageVariant::SketchLeaf(vec) => {
+                vec[0].encode(bytes);
+                vec[1].encode(bytes);
+                vec[2].encode(bytes);
+            }
+            PrepareMessageVariant::Done => (),
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        match self.0 {
+            PrepareMessageVariant::SketchInner(..) => Some(3 * Field64::ENCODED_SIZE),
+            PrepareMessageVariant::SketchLeaf(..) => Some(3 * Field255::ENCODED_SIZE),
+            PrepareMessageVariant::Done => Some(0),
+        }
     }
 }
 
 impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
     fn decode_with_param(
-        _state: &Poplar1PrepareState,
-        _bytes: &mut Cursor<&[u8]>,
+        state: &Poplar1PrepareState,
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        match state.0 {
+            PrepareStateVariant::Inner(ref state_variant) => Ok(Self(
+                state_variant
+                    .sketch
+                    .decode_sketch(bytes)?
+                    .map_or(PrepareMessageVariant::Done, |sketch| {
+                        PrepareMessageVariant::SketchInner(sketch)
+                    }),
+            )),
+            PrepareStateVariant::Leaf(ref state_variant) => Ok(Self(
+                state_variant
+                    .sketch
+                    .decode_sketch(bytes)?
+                    .map_or(PrepareMessageVariant::Done, |sketch| {
+                        PrepareMessageVariant::SketchLeaf(sketch)
+                    }),
+            )),
+        }
     }
 }
 
@@ -218,8 +312,26 @@ impl Poplar1FieldVec {
 }
 
 impl Encode for Poplar1FieldVec {
-    fn encode(&self, _bytes: &mut Vec<u8>) {
-        todo!()
+    fn encode(&self, bytes: &mut Vec<u8>) {
+        match self {
+            Self::Inner(ref data) => {
+                for elem in data {
+                    elem.encode(bytes);
+                }
+            }
+            Self::Leaf(ref data) => {
+                for elem in data {
+                    elem.encode(bytes);
+                }
+            }
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        match self {
+            Self::Inner(ref data) => Some(Field64::ENCODED_SIZE * data.len()),
+            Self::Leaf(ref data) => Some(Field255::ENCODED_SIZE * data.len()),
+        }
     }
 }
 
@@ -237,10 +349,17 @@ impl<'a, P: Prg<SEED_SIZE>, const SEED_SIZE: usize>
 
 impl ParameterizedDecode<Poplar1PrepareState> for Poplar1FieldVec {
     fn decode_with_param(
-        _state: &Poplar1PrepareState,
-        _bytes: &mut Cursor<&[u8]>,
+        state: &Poplar1PrepareState,
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        match state.0 {
+            PrepareStateVariant::Inner(ref state_variant) => Ok(Poplar1FieldVec::Inner(
+                state_variant.sketch.decode_sketch_share(bytes)?,
+            )),
+            PrepareStateVariant::Leaf(ref state_variant) => Ok(Poplar1FieldVec::Leaf(
+                state_variant.sketch.decode_sketch_share(bytes)?,
+            )),
+        }
     }
 }
 
@@ -920,11 +1039,15 @@ where
 
 impl<F> Encode for Poplar1IdpfValue<F>
 where
-    F: Encode,
+    F: FieldElement,
 {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.0[0].encode(bytes);
         self.0[1].encode(bytes);
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(F::ENCODED_SIZE * 2)
     }
 }
 
@@ -974,75 +1097,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::vdaf::run_vdaf_prepare;
     use rand::prelude::*;
     use std::collections::HashSet;
-
-    // Run preparation on the given report (i.e., public share and input shares). This is similar
-    // to `vdaf::run_vdaf_prepare`, but does not exercise serialization.
-    fn run_prepare<P: Prg<SEED_SIZE>, const SEED_SIZE: usize>(
-        vdaf: &Poplar1<P, SEED_SIZE>,
-        verify_key: &[u8; SEED_SIZE],
-        nonce: &[u8; 16],
-        public_share: &Poplar1PublicShare<SEED_SIZE>,
-        input_shares: &[Poplar1InputShare<SEED_SIZE>],
-        agg_param: &Poplar1AggregationParam,
-    ) -> (Poplar1FieldVec, Poplar1FieldVec) {
-        let (prep_state_0, prep_share_0) = vdaf
-            .prepare_init(
-                verify_key,
-                0,
-                agg_param,
-                nonce,
-                public_share,
-                &input_shares[0],
-            )
-            .unwrap();
-
-        let (prep_state_1, prep_share_1) = vdaf
-            .prepare_init(
-                verify_key,
-                1,
-                agg_param,
-                nonce,
-                public_share,
-                &input_shares[1],
-            )
-            .unwrap();
-
-        // Round one
-        let prep_msg_1 = vdaf
-            .prepare_preprocess([prep_share_0, prep_share_1])
-            .unwrap();
-
-        let (prep_state_0, prep_share_0) =
-            match vdaf.prepare_step(prep_state_0, prep_msg_1.clone()).unwrap() {
-                PrepareTransition::Continue(state, share) => (state, share),
-                _ => panic!("expected continue"),
-            };
-
-        let (prep_state_1, prep_share_1) =
-            match vdaf.prepare_step(prep_state_1, prep_msg_1).unwrap() {
-                PrepareTransition::Continue(state, share) => (state, share),
-                _ => panic!("expected continue"),
-            };
-
-        // Round two
-        let prep_msg_2 = vdaf
-            .prepare_preprocess([prep_share_0, prep_share_1])
-            .unwrap();
-
-        let out_share_0 = match vdaf.prepare_step(prep_state_0, prep_msg_2.clone()).unwrap() {
-            PrepareTransition::Finish(share) => share,
-            _ => panic!("expected finish"),
-        };
-
-        let out_share_1 = match vdaf.prepare_step(prep_state_1, prep_msg_2).unwrap() {
-            PrepareTransition::Finish(share) => share,
-            _ => panic!("expected finish"),
-        };
-
-        (out_share_0, out_share_1)
-    }
 
     fn test_prepare<P: Prg<SEED_SIZE>, const SEED_SIZE: usize>(
         vdaf: &Poplar1<P, SEED_SIZE>,
@@ -1053,18 +1110,19 @@ mod tests {
         agg_param: &Poplar1AggregationParam,
         expected_result: Vec<u64>,
     ) {
-        let (out_share_0, out_share_1) = run_prepare(
+        let out_shares = run_vdaf_prepare(
             vdaf,
             verify_key,
-            nonce,
-            public_share,
-            input_shares,
             agg_param,
-        );
+            nonce,
+            public_share.clone(),
+            input_shares.to_vec(),
+        )
+        .unwrap();
 
         // Convert aggregate shares and unshard.
-        let agg_share_0 = vdaf.aggregate(agg_param, [out_share_0]).unwrap();
-        let agg_share_1 = vdaf.aggregate(agg_param, [out_share_1]).unwrap();
+        let agg_share_0 = vdaf.aggregate(agg_param, [out_shares[0].clone()]).unwrap();
+        let agg_share_1 = vdaf.aggregate(agg_param, [out_shares[1].clone()]).unwrap();
         let result = vdaf
             .unshard(agg_param, [agg_share_0, agg_share_1], 1)
             .unwrap();
@@ -1115,16 +1173,18 @@ mod tests {
 
             // Preparation step
             for (nonce, public_share, input_shares) in reports.iter() {
-                let (out_share_0, out_share_1) = run_prepare(
+                let out_shares = run_vdaf_prepare(
                     vdaf,
                     verify_key,
-                    nonce,
-                    public_share,
-                    input_shares,
                     &agg_param,
-                );
-                out_shares_0.push(out_share_0);
-                out_shares_1.push(out_share_1);
+                    nonce,
+                    public_share.clone(),
+                    input_shares.to_vec(),
+                )
+                .unwrap();
+
+                out_shares_0.push(out_shares[0].clone());
+                out_shares_1.push(out_shares[1].clone());
             }
 
             // Aggregation step
@@ -1172,11 +1232,10 @@ mod tests {
     #[test]
     fn shard_prepare() {
         let mut rng = thread_rng();
-        let verify_key = rng.gen();
-        let nonce = rng.gen::<[u8; 16]>();
         let vdaf = Poplar1::new_sha3(64);
-
+        let verify_key = rng.gen();
         let input = IdpfInput::from_bytes(b"12341324");
+        let nonce = rng.gen();
         let (public_share, input_shares) = vdaf.shard(&input, &nonce).unwrap();
 
         test_prepare(
@@ -1227,6 +1286,62 @@ mod tests {
                 "a", "b", "c", "d", "e", "f", "g", "g", "h", "i", "i", "i", "j", "j", "k", "l",
             ], // measurements
             ["g", "i", "j"], // heavy hitters
+        );
+    }
+
+    #[test]
+    fn encoded_len() {
+        // Input share
+        let input_share = Poplar1InputShare {
+            idpf_key: Seed::<16>::generate().unwrap(),
+            corr_seed: Seed::<16>::generate().unwrap(),
+            corr_inner: vec![
+                [Field64::one(), Field64::zero()],
+                [Field64::one(), Field64::zero()],
+                [Field64::one(), Field64::zero()],
+            ],
+            corr_leaf: [Field255::one(), Field255::zero()],
+        };
+        assert_eq!(
+            input_share.get_encoded().len(),
+            input_share.encoded_len().unwrap()
+        );
+
+        // Prepaare message variants
+        let prep_msg = Poplar1PrepareMessage(PrepareMessageVariant::SketchInner([
+            Field64::one(),
+            Field64::one(),
+            Field64::one(),
+        ]));
+        assert_eq!(
+            prep_msg.get_encoded().len(),
+            prep_msg.encoded_len().unwrap()
+        );
+        let prep_msg = Poplar1PrepareMessage(PrepareMessageVariant::SketchLeaf([
+            Field255::one(),
+            Field255::one(),
+            Field255::one(),
+        ]));
+        assert_eq!(
+            prep_msg.get_encoded().len(),
+            prep_msg.encoded_len().unwrap()
+        );
+        let prep_msg = Poplar1PrepareMessage(PrepareMessageVariant::Done);
+        assert_eq!(
+            prep_msg.get_encoded().len(),
+            prep_msg.encoded_len().unwrap()
+        );
+
+        // Field vector variants.
+        let field_vec = Poplar1FieldVec::Inner(vec![Field64::one(); 23]);
+        assert_eq!(
+            field_vec.get_encoded().len(),
+            field_vec.encoded_len().unwrap()
+        );
+        let field_vec = Poplar1FieldVec::Leaf(vec![Field255::one(); 23]);
+        assert_eq!(
+            field_vec.get_encoded().len(),
+            field_vec.encoded_len().unwrap()
         );
     }
 }
