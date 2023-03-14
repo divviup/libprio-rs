@@ -778,7 +778,7 @@ mod tests {
             Field128,
             ParallelSum<Field128, PolyEval<Field128>>,
             ParallelSum<Field128, BlindPolyEval<Field128>>,
-        >>::new(30000000000)
+        >>::new(3000000000)
         .unwrap_err();
         // fixed point type has more than one int bit
         <FixedPointBoundedL2VecSum<
