@@ -423,6 +423,10 @@ where
         };
         let mut leader_measurement_share = encoded_measurement.clone();
         for agg_id in 1..num_aggregators {
+            // The Option from the ChunksExact iterator is okay to unwrap because we checked that
+            // the randomness slice is long enough for this VDAF. The slice-to-array conversion
+            // Result is okay to unwrap because the ChunksExact iterator always returns slices of
+            // the correct length.
             let measurement_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
