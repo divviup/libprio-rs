@@ -312,7 +312,7 @@ fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
-    random: &[u8],
+    random: &[[u8; SEED_SIZE]; 2],
 ) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
 where
     VI: IdpfValue,
@@ -321,15 +321,8 @@ where
 {
     let bits = input.len();
 
-    if random.len() != SEED_SIZE * 2 {
-        return Err(VdafError::Uncategorized(
-            "incorrect random input length".to_string(),
-        ));
-    }
-    let initial_keys: [Seed<SEED_SIZE>; 2] = [
-        Seed::from_bytes(random[..SEED_SIZE].try_into().unwrap()),
-        Seed::from_bytes(random[SEED_SIZE..].try_into().unwrap()),
-    ];
+    let initial_keys: [Seed<SEED_SIZE>; 2] =
+        [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
     let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -383,8 +376,10 @@ where
     if input.is_empty() {
         return Err(IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into());
     }
-    let mut random = vec![0u8; SEED_SIZE * 2];
-    getrandom::getrandom(&mut random)?;
+    let mut random = [[0u8; SEED_SIZE]; 2];
+    for random_seed in random.iter_mut() {
+        getrandom::getrandom(random_seed)?;
+    }
     gen_with_random::<_, _, _, P, SEED_SIZE>(input, inner_values, leaf_value, &random)
 }
 
@@ -1812,10 +1807,11 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let random = iter::repeat(0..=255)
-            .flatten()
-            .take(32)
-            .collect::<Vec<u8>>();
+        let random_iter = iter::repeat(0..=255u8).flatten();
+        let mut random = [[0u8; 16]; 2];
+        for (src, dest) in random_iter.zip(random.iter_mut().flat_map(|seed| seed.iter_mut())) {
+            *dest = src;
+        }
         let (public_share, keys) = idpf::gen_with_random::<_, _, _, PrgSha3, 16>(
             &test_vector.alpha,
             test_vector.beta_inner,
