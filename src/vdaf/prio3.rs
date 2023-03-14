@@ -379,11 +379,16 @@ where
         if self.typ.joint_rand_len() == 0 {
             // Two seeds per helper for measurement and proof shares, plus one seed for proving
             // randomness.
-            (usize::from(self.num_aggregators) * 2 - 1) * SEED_SIZE
+            (usize::from(self.num_aggregators - 1) * 2 + 1) * SEED_SIZE
         } else {
-            // Two seeds per helper for measurement and proof shares, plus one seed for proving
-            // randomness, plus one seed per aggregator for joint randomness blinds.
-            (usize::from(self.num_aggregators) * 3 - 1) * SEED_SIZE
+            (
+                // Two seeds per helper for measurement and proof shares
+                usize::from(self.num_aggregators - 1) * 2
+                // One seed for proving randomness
+                + 1
+                // One seed per aggregator for joint randomness blinds
+                + usize::from(self.num_aggregators)
+            ) * SEED_SIZE
         }
     }
 
