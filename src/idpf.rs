@@ -6,7 +6,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     vdaf::{
-        prg::{CoinToss, Prg, RandSource, Seed, SeedStream},
+        prg::{CoinToss, Prg, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -315,11 +315,11 @@ where
     out
 }
 
-fn gen_with_rand_source<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize>(
+fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
-    rand_source: RandSource,
+    random: &[[u8; SEED_SIZE]; 2],
 ) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
 where
     VI: IdpfValue,
@@ -328,10 +328,8 @@ where
 {
     let bits = input.len();
 
-    let initial_keys: [Seed<SEED_SIZE>; 2] = [
-        Seed::from_rand_source(rand_source)?,
-        Seed::from_rand_source(rand_source)?,
-    ];
+    let initial_keys: [Seed<SEED_SIZE>; 2] =
+        [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
     let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -385,12 +383,11 @@ where
     if input.is_empty() {
         return Err(IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into());
     }
-    gen_with_rand_source::<_, _, _, P, SEED_SIZE>(
-        input,
-        inner_values,
-        leaf_value,
-        getrandom::getrandom,
-    )
+    let mut random = [[0u8; SEED_SIZE]; 2];
+    for random_seed in random.iter_mut() {
+        getrandom::getrandom(random_seed)?;
+    }
+    gen_with_random::<_, _, _, P, SEED_SIZE>(input, inner_values, leaf_value, &random)
 }
 
 /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
@@ -855,6 +852,7 @@ mod tests {
         collections::HashMap,
         convert::{TryFrom, TryInto},
         io::Cursor,
+        iter,
         str::FromStr,
         sync::Mutex,
     };
@@ -1828,14 +1826,16 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let (public_share, keys) = idpf::gen_with_rand_source::<_, _, _, PrgSha3, 16>(
+        let random_iter = iter::repeat(0..=255u8).flatten();
+        let mut random = [[0u8; 16]; 2];
+        for (src, dest) in random_iter.zip(random.iter_mut().flat_map(|seed| seed.iter_mut())) {
+            *dest = src;
+        }
+        let (public_share, keys) = idpf::gen_with_random::<_, _, _, PrgSha3, 16>(
             &test_vector.alpha,
             test_vector.beta_inner,
             test_vector.beta_leaf,
-            |buf| {
-                buf.fill(1);
-                Ok(())
-            },
+            &random,
         )
         .unwrap();
 

@@ -32,11 +32,6 @@ use std::{
 };
 use subtle::{Choice, ConstantTimeEq};
 
-/// Function pointer to fill a buffer with random bytes. Under normal operation,
-/// `getrandom::getrandom()` will be used, but other implementations can be used to control
-/// randomness when generating or verifying test vectors.
-pub(crate) type RandSource = fn(&mut [u8]) -> Result<(), getrandom::Error>;
-
 /// Input of [`Prg`].
 #[derive(Clone, Debug, Eq)]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
@@ -44,13 +39,13 @@ pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
     /// Generate a uniform random seed.
     pub fn generate() -> Result<Self, getrandom::Error> {
-        Self::from_rand_source(getrandom::getrandom)
+        let mut seed = [0; SEED_SIZE];
+        getrandom::getrandom(&mut seed)?;
+        Ok(Self::from_bytes(seed))
     }
 
-    pub(crate) fn from_rand_source(rand_source: RandSource) -> Result<Self, getrandom::Error> {
-        let mut seed = [0; SEED_SIZE];
-        rand_source(&mut seed)?;
-        Ok(Self(seed))
+    pub(crate) fn from_bytes(seed: [u8; SEED_SIZE]) -> Self {
+        Self(seed)
     }
 }
 
