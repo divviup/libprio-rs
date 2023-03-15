@@ -476,7 +476,7 @@ impl Encode for Poplar1AggregationParam {
         // byte, not necessarily aligned to a byte boundary. If the highest bits in the first byte
         // are unused, they will be set to zero.
 
-        // When an IPDF index is treated as an integer, the first bit is the integer's most
+        // When an IDPF index is treated as an integer, the first bit is the integer's most
         // significant bit, and bits are subsequently processed in order of decreasing significance.
         // Thus, setting aside the order of bytes, bits within each byte are ordered with the
         // [`Msb0`](bitvec::prelude::Msb0) convention, not [`Lsb0`](bitvec::prelude::Msb0). Yet,
