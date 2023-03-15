@@ -25,6 +25,7 @@ use std::{
     fmt::Debug,
     io::{Cursor, Read},
 };
+use subtle::{Choice, ConstantTimeEq};
 
 /// Function pointer to fill a buffer with random bytes. Under normal operation,
 /// `getrandom::getrandom()` will be used, but other implementations can be used to control
@@ -54,14 +55,15 @@ impl<const SEED_SIZE: usize> AsRef<[u8; SEED_SIZE]> for Seed<SEED_SIZE> {
     }
 }
 
+impl<const SEED_SIZE: usize> ConstantTimeEq for Seed<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
+
 impl<const SEED_SIZE: usize> PartialEq for Seed<SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
-        // Do constant-time compare.
-        let mut r = 0;
-        for (x, y) in self.0[..].iter().zip(&other.0[..]) {
-            r |= x ^ y;
-        }
-        r == 0
+        self.ct_eq(other).into()
     }
 }
 
