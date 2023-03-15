@@ -10,7 +10,14 @@ use crate::{
         VdafError, VERSION,
     },
 };
-use bitvec::{bitvec, boxed::BitBox, prelude::Lsb0, slice::BitSlice, vec::BitVec, view::BitView};
+use bitvec::{
+    bitvec,
+    boxed::BitBox,
+    prelude::{Lsb0, Msb0},
+    slice::BitSlice,
+    vec::BitVec,
+    view::BitView,
+};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -32,7 +39,7 @@ pub enum IdpfError {
 }
 
 /// An index used as the input to an IDPF evaluation.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct IdpfInput {
     /// The index as a boxed bit slice.
     index: BitBox,
@@ -40,9 +47,9 @@ pub struct IdpfInput {
 
 impl IdpfInput {
     /// Convert a slice of bytes into an IDPF input, where the bits of each byte are processed in
-    /// LSB-to-MSB order. (Subsequent bytes are processed in their natural order.)
+    /// MSB-to-LSB order. (Subsequent bytes are processed in their natural order.)
     pub fn from_bytes(bytes: &[u8]) -> IdpfInput {
-        let bit_slice_u8_storage = bytes.view_bits::<Lsb0>();
+        let bit_slice_u8_storage = bytes.view_bits::<Msb0>();
         let mut bit_vec_usize_storage = bitvec![0; bit_slice_u8_storage.len()];
         bit_vec_usize_storage.clone_from_bitslice(bit_slice_u8_storage);
         IdpfInput {
@@ -79,14 +86,14 @@ impl IdpfInput {
     }
 
     /// Get an iterator over the bits that make up this input.
-    pub fn iter(&self) -> impl Iterator<Item = bool> + '_ {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = bool> + '_ {
         self.index.iter().by_vals()
     }
 
     /// Convert the IDPF into a byte slice. If the length of the underlying bit vector is not a
-    /// multiple of `8`, then the last byte is `0`-padded.
+    /// multiple of `8`, then the least significant bits of the last byte are `0`-padded.
     pub fn to_bytes(&self) -> Vec<u8> {
-        let mut vec = BitVec::<u8, Lsb0>::with_capacity(self.index.len());
+        let mut vec = BitVec::<u8, Msb0>::with_capacity(self.index.len());
         vec.extend_from_bitslice(&self.index);
         vec.set_uninitialized(false);
         vec.into_vec()
@@ -881,12 +888,12 @@ mod tests {
     #[test]
     fn idpf_input_conversion() {
         let input_1 = IdpfInput::from_bools(&[
-            true, false, false, false, false, false, true, false, false, true, false, false, false,
+            false, true, false, false, false, false, false, true, false, true, false, false, false,
             false, true, false,
         ]);
         let input_2 = IdpfInput::from_bytes(b"AB");
         assert_eq!(input_1, input_2);
-        let bits = bitbox![1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 1, 0];
+        let bits = bitbox![0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0];
         assert_eq!(input_1[..], bits);
     }
 
@@ -1874,8 +1881,8 @@ mod tests {
     #[test]
     fn idpf_input_from_bools_to_bytes() {
         let input = IdpfInput::from_bools(&[true; 7]);
-        assert_eq!(input.to_bytes(), &[127]);
+        assert_eq!(input.to_bytes(), &[254]);
         let input = IdpfInput::from_bools(&[true; 9]);
-        assert_eq!(input.to_bytes(), &[255, 1]);
+        assert_eq!(input.to_bytes(), &[255, 128]);
     }
 }
