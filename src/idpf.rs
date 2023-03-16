@@ -315,7 +315,7 @@ where
     out
 }
 
-fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>>(
+pub(crate) fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
