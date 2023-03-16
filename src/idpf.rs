@@ -183,13 +183,15 @@ where
     }
 }
 
-fn extend(seed: &[u8; 16]) -> ([[u8; 16]; 2], [Choice; 2]) {
+fn extend(seed: &[u8; 16], binder: &[u8]) -> ([[u8; 16]; 2], [Choice; 2]) {
     let custom = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 0, /* usage */
     ];
-    let mut seed_stream = PrgFixedKeyAes128::init(seed, &custom).into_seed_stream();
+    let mut prg = PrgFixedKeyAes128::init(seed, &custom);
+    prg.update(binder);
+    let mut seed_stream = prg.into_seed_stream();
 
     let mut seeds = [[0u8; 16], [0u8; 16]];
     seed_stream.fill(&mut seeds[0]);
@@ -202,7 +204,7 @@ fn extend(seed: &[u8; 16]) -> ([[u8; 16]; 2], [Choice; 2]) {
     (seeds, control_bits)
 }
 
-fn convert<V>(seed: &[u8; 16]) -> ([u8; 16], V)
+fn convert<V>(seed: &[u8; 16], binder: &[u8]) -> ([u8; 16], V)
 where
     V: IdpfValue,
 {
@@ -211,7 +213,9 @@ where
         0, 0, 0, 0, /* algorithm ID */
         0, 1, /* usage */
     ];
-    let mut seed_stream = PrgFixedKeyAes128::init(seed, &custom).into_seed_stream();
+    let mut prg = PrgFixedKeyAes128::init(seed, &custom);
+    prg.update(binder);
+    let mut seed_stream = prg.into_seed_stream();
 
     let mut next_seed = [0u8; 16];
     seed_stream.fill(&mut next_seed);
@@ -226,13 +230,14 @@ fn generate_correction_word<V>(
     value: V,
     keys: &mut [[u8; 16]; 2],
     control_bits: &mut [Choice; 2],
+    binder: &[u8],
 ) -> IdpfCorrectionWord<V>
 where
     V: IdpfValue,
 {
     // Expand both keys into two seeds and two control bits each.
-    let (seed_0, control_bits_0) = extend(&keys[0]);
-    let (seed_1, control_bits_1) = extend(&keys[1]);
+    let (seed_0, control_bits_0) = extend(&keys[0], binder);
+    let (seed_1, control_bits_1) = extend(&keys[1], binder);
 
     let (keep, lose) = (input_bit, !input_bit);
 
@@ -262,8 +267,8 @@ where
         conditional_xor_seeds(&seed_1_keep, &cw_seed, previous_control_bits[1]),
     ];
 
-    let (new_key_0, elements_0) = convert::<V>(&seeds_corrected[0]);
-    let (new_key_1, elements_1) = convert::<V>(&seeds_corrected[1]);
+    let (new_key_0, elements_0) = convert::<V>(&seeds_corrected[0], binder);
+    let (new_key_1, elements_1) = convert::<V>(&seeds_corrected[1], binder);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
@@ -286,11 +291,12 @@ fn eval_next<V>(
     control_bit: &mut Choice,
     correction_word: &IdpfCorrectionWord<V>,
     input_bit: Choice,
+    binder: &[u8],
 ) -> V
 where
     V: IdpfValue,
 {
-    let (mut seeds, mut control_bits) = extend(key);
+    let (mut seeds, mut control_bits) = extend(key, binder);
 
     seeds[0] = conditional_xor_seeds(&seeds[0], &correction_word.seed, *control_bit);
     control_bits[0] ^= correction_word.control_bits[0] & *control_bit;
@@ -300,7 +306,7 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<V>(&seed_corrected);
+    let (new_key, elements) = convert::<V>(&seed_corrected, binder);
     *key = new_key;
 
     let mut out =
@@ -313,6 +319,7 @@ fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
+    binder: &[u8],
     random: &[[u8; 16]; 2],
 ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
 where
@@ -338,6 +345,7 @@ where
             value,
             &mut keys,
             &mut control_bits,
+            binder,
         ));
     }
     if inner_correction_words.len() != bits - 1 {
@@ -348,6 +356,7 @@ where
         leaf_value,
         &mut keys,
         &mut control_bits,
+        binder,
     );
     let public_share = IdpfPublicShare {
         inner_correction_words,
@@ -365,6 +374,7 @@ pub fn gen<VI, VL, M>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
+    binder: &[u8],
 ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
 where
     VI: IdpfValue,
@@ -378,7 +388,7 @@ where
     for random_seed in random.iter_mut() {
         getrandom::getrandom(random_seed)?;
     }
-    gen_with_random(input, inner_values, leaf_value, &random)
+    gen_with_random(input, inner_values, leaf_value, binder, &random)
 }
 
 /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
@@ -391,6 +401,7 @@ fn eval_from_node<VI, VL>(
     mut key: [u8; 16],
     mut control_bit: Choice,
     prefix: &IdpfInput,
+    binder: &[u8],
     cache: &mut dyn IdpfCache,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
@@ -410,6 +421,7 @@ where
             &mut control_bit,
             correction_word,
             Choice::from(*input_bit as u8),
+            binder,
         ));
         let cache_key = &prefix[..=level];
         cache.insert(cache_key, &(key, control_bit.unwrap_u8()));
@@ -422,6 +434,7 @@ where
             &mut control_bit,
             &public_share.leaf_correction_word,
             Choice::from(prefix[bits - 1] as u8),
+            binder,
         );
         // Note: there's no point caching this node's key, because we will always run the
         // eval_next() call for the leaf level.
@@ -439,6 +452,7 @@ pub fn eval<VI, VL>(
     public_share: &IdpfPublicShare<VI, VL>,
     key: &Seed<16>,
     prefix: &IdpfInput,
+    binder: &[u8],
     cache: &mut dyn IdpfCache,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
@@ -482,6 +496,7 @@ where
                     key,
                     Choice::from(control_bit),
                     prefix,
+                    binder,
                     cache,
                 );
             }
@@ -496,6 +511,7 @@ where
         key.0,
         /* control_bit */ Choice::from((!is_leader) as u8),
         prefix,
+        binder,
         cache,
     )
 }
@@ -939,10 +955,12 @@ mod tests {
     #[test]
     fn test_idpf_poplar() {
         let input = bitbox![0, 1, 1, 0, 1].into();
+        let nonce: [u8; 16] = random();
         let (public_share, keys) = idpf::gen(
             &input,
             Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
             Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
+            &nonce,
         )
         .unwrap();
 
@@ -950,6 +968,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -958,6 +977,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![1].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -966,6 +986,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -974,6 +995,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 0].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -982,6 +1004,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![1, 0].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -990,6 +1013,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![1, 1].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -998,6 +1022,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 1, 1].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -1006,6 +1031,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::one(), Field64::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -1014,6 +1040,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 1].into(),
+            &nonce,
             &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::one(), Field255::one()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -1022,6 +1049,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 0].into(),
+            &nonce,
             &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::zero(), Field255::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -1030,6 +1058,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![1, 0, 1, 0, 0].into(),
+            &nonce,
             &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::zero(), Field255::zero()])),
             &mut NoCache::new(),
             &mut NoCache::new(),
@@ -1040,12 +1069,13 @@ mod tests {
         public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
         keys: &[Seed<16>; 2],
         prefix: &IdpfInput,
+        binder: &[u8],
         expected_output: &IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
         cache_0: &mut dyn IdpfCache,
         cache_1: &mut dyn IdpfCache,
     ) {
-        let share_0 = idpf::eval(0, public_share, &keys[0], prefix, cache_0).unwrap();
-        let share_1 = idpf::eval(1, public_share, &keys[1], prefix, cache_1).unwrap();
+        let share_0 = idpf::eval(0, public_share, &keys[0], prefix, binder, cache_0).unwrap();
+        let share_1 = idpf::eval(1, public_share, &keys[1], prefix, binder, cache_1).unwrap();
         let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
     }
@@ -1072,7 +1102,9 @@ mod tests {
         let leaf_values =
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
-        let (public_share, keys) = idpf::gen(&input, inner_values.clone(), leaf_values).unwrap();
+        let nonce: [u8; 16] = random();
+        let (public_share, keys) =
+            idpf::gen(&input, inner_values.clone(), leaf_values, &nonce).unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
 
@@ -1082,6 +1114,7 @@ mod tests {
                 &public_share,
                 &keys,
                 &prefix,
+                &nonce,
                 &IdpfOutputShare::Inner(*values),
                 &mut cache_0,
                 &mut cache_1,
@@ -1092,6 +1125,7 @@ mod tests {
                 &public_share,
                 &keys,
                 &prefix,
+                &nonce,
                 &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
                 &mut cache_0,
                 &mut cache_1,
@@ -1101,6 +1135,7 @@ mod tests {
             &public_share,
             &keys,
             &input,
+            &nonce,
             &IdpfOutputShare::Leaf(leaf_values),
             &mut cache_0,
             &mut cache_1,
@@ -1111,6 +1146,7 @@ mod tests {
             &public_share,
             &keys,
             &modified_bits.into(),
+            &nonce,
             &IdpfOutputShare::Leaf(Poplar1IdpfValue::new([Field255::zero(), Field255::zero()])),
             &mut cache_0,
             &mut cache_1,
@@ -1133,7 +1169,9 @@ mod tests {
         let leaf_values =
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
-        let (public_share, keys) = idpf::gen(&input, inner_values.clone(), leaf_values).unwrap();
+        let nonce: [u8; 16] = random();
+        let (public_share, keys) =
+            idpf::gen(&input, inner_values.clone(), leaf_values, &nonce).unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
 
@@ -1141,6 +1179,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![1, 1, 0, 0].into(),
+            &nonce,
             &IdpfOutputShare::Inner(Poplar1IdpfValue::new([Field64::zero(), Field64::zero()])),
             &mut cache_0,
             &mut cache_1,
@@ -1174,6 +1213,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0].into(),
+            &nonce,
             &IdpfOutputShare::Inner(inner_values[0]),
             &mut cache_0,
             &mut cache_1,
@@ -1202,6 +1242,7 @@ mod tests {
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
+            &nonce,
             &IdpfOutputShare::Inner(inner_values[1]),
             &mut cache_0,
             &mut cache_1,
@@ -1230,6 +1271,7 @@ mod tests {
             &public_share,
             &keys,
             &input,
+            &nonce,
             &IdpfOutputShare::Leaf(leaf_values),
             &mut cache_0,
             &mut cache_1,
@@ -1271,6 +1313,7 @@ mod tests {
             &public_share,
             &keys,
             &input,
+            &nonce,
             &IdpfOutputShare::Leaf(leaf_values),
             &mut cache_0,
             &mut cache_1,
@@ -1303,7 +1346,9 @@ mod tests {
         let leaf_values =
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
-        let (public_share, keys) = idpf::gen(&input, inner_values.clone(), leaf_values).unwrap();
+        let nonce: [u8; 16] = random();
+        let (public_share, keys) =
+            idpf::gen(&input, inner_values.clone(), leaf_values, &nonce).unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
 
@@ -1312,6 +1357,7 @@ mod tests {
                 &public_share,
                 &keys,
                 &input[..=level].to_owned().into(),
+                &nonce,
                 &IdpfOutputShare::Inner(*values),
                 &mut cache_0,
                 &mut cache_1,
@@ -1321,6 +1367,7 @@ mod tests {
             &public_share,
             &keys,
             &input,
+            &nonce,
             &IdpfOutputShare::Leaf(leaf_values),
             &mut cache_0,
             &mut cache_1,
@@ -1329,11 +1376,13 @@ mod tests {
 
     #[test]
     fn test_idpf_poplar_error_cases() {
+        let nonce: [u8; 16] = random();
         // Zero bits does not make sense.
         idpf::gen(
             &bitbox![].into(),
             Vec::<Poplar1IdpfValue<Field64>>::new(),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            &nonce,
         )
         .unwrap_err();
 
@@ -1341,6 +1390,7 @@ mod tests {
             &bitbox![0;10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            &nonce,
         )
         .unwrap();
 
@@ -1349,12 +1399,14 @@ mod tests {
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 8]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            &nonce,
         )
         .unwrap_err();
         idpf::gen(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 10]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            &nonce,
         )
         .unwrap_err();
 
@@ -1364,6 +1416,7 @@ mod tests {
             &public_share,
             &keys[0],
             &bitbox![].into(),
+            &nonce,
             &mut NoCache::new(),
         )
         .is_err());
@@ -1373,6 +1426,7 @@ mod tests {
             &public_share,
             &keys[0],
             &bitbox![0; 11].into(),
+            &nonce,
             &mut NoCache::new(),
         )
         .is_err());
@@ -1794,6 +1848,7 @@ mod tests {
             &test_vector.alpha,
             test_vector.beta_inner,
             test_vector.beta_leaf,
+            b"some nonce",
             &random,
         )
         .unwrap();

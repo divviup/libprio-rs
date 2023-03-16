@@ -175,7 +175,7 @@ fn idpf_poplar_gen(
     inner_values: Vec<Poplar1IdpfValue<Field64>>,
     leaf_value: Poplar1IdpfValue<Field255>,
 ) {
-    idpf::gen(input, inner_values, leaf_value).unwrap();
+    idpf::gen(input, inner_values, leaf_value, &[0; 16]).unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -218,7 +218,7 @@ fn idpf_poplar_eval(
     key: &Seed<16>,
 ) {
     let mut cache = RingBufferCache::new(1);
-    idpf::eval(0, public_share, key, input, &mut cache).unwrap();
+    idpf::eval(0, public_share, key, input, &[0; 16], &mut cache).unwrap();
 }
 
 #[cfg(feature = "experimental")]
