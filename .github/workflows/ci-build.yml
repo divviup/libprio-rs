@@ -74,7 +74,9 @@ jobs:
         toolchain: ${{ matrix.rust-toolchain }}
         components: clippy, rustfmt
     - name: Lint
-      run: cargo fmt --message-format human -- --check
+      run: |
+        cargo fmt --message-format human -- --check
+        bash -c '! git grep "[I][P][D][F]"'
     - name: Clippy
       run: cargo clippy --workspace --all-targets ${{ matrix.features }}
     - name: Build crate
