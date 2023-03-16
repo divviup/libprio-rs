@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-04]].
+//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-05]].
 //!
-//! **WARNING:** Neither this code nor the cryptographic construction it implements has undergone
-//! significant security analysis. Use at your own risk.
+//! **WARNING:** This code has not undergone significant security analysis. Use at your own risk.
 //!
 //! Prio3 is based on the Prio system desigend by Dan Boneh and Henry Corrigan-Gibbs and presented
 //! at NSDI 2017 [[CGB17]]. However, it incorporates a few techniques from Boneh et al., CRYPTO
 //! 2019 [[BBCG+19]], that lead to substantial improvements in terms of run time and communication
-//! cost.
+//! cost. The security of the construction was analyzed in [[DPRS23]].
 //!
-//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-04]] into
+//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-05]] into
 //! a VDAF. The base type, [`Prio3`], supports a wide variety of aggregation functions, some of
 //! which are instantiated here:
 //!
@@ -21,11 +20,12 @@
 //!
 //! Additional types can be constructed from [`Prio3`] as needed.
 //!
-//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-04]].
+//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-05]].
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
 //! [CGB17]: https://crypto.stanford.edu/prio/
-//! [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+//! [DPRS23]: https://ia.cr/2023/130
+//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
 #[cfg(feature = "crypto-dependencies")]
 use super::prg::PrgSha3;
