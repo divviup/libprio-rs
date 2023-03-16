@@ -855,6 +855,7 @@ mod tests {
         slice::BitSlice,
         vec::BitVec,
     };
+    use hex_literal::hex;
     use num_bigint::BigUint;
     use rand::random;
     use subtle::Choice;
@@ -1691,7 +1692,7 @@ mod tests {
     /// Load a test vector for Idpf key generation.
     fn load_idpfpoplar_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
-            serde_json::from_str(include_str!("vdaf/test_vec/03/IdpfPoplarAes128_0.json")).unwrap();
+            serde_json::from_str(include_str!("vdaf/test_vec/05/IdpfPoplar_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
 
         let bits = test_vec_obj
@@ -1765,22 +1766,11 @@ mod tests {
         }
     }
 
-    #[ignore] // TODO(issue #477)
     #[test]
     fn idpf_poplar_public_share_deserialize() {
-        // This encoded public share, and the expected struct below, are taken from the
-        // Poplar1 test vector.
-        let data = hex::decode(concat!(
-            "9a",
-            "0000000000000000000000000000000000000000000000",
-            "01eb3a1bd6b5fa4a4500000000000000000000000000000000",
-            "ffffffff0000000022522c3fd5a33cac00000000000000000000000000000000",
-            "ffffffff0000000069f41eee46542b6900000000000000000000000000000000",
-            "00000000000000000000000000000000000000000000000000000000000000",
-            "017d1fd6df94280145a0dcc933ceb706e9219d50e7c4f92fd8ca9a0ffb7d819646",
-        ))
-        .unwrap();
-        let bits = 4;
+        let test_vector = load_idpfpoplar_test_vector();
+        let data = test_vector.public_share;
+        let bits = test_vector.bits;
         let public_share = IdpfPublicShare::<
             Poplar1IdpfValue<Field64>,
             Poplar1IdpfValue<Field255>,
@@ -1790,42 +1780,90 @@ mod tests {
         let expected_public_share = IdpfPublicShare {
             inner_correction_words: Vec::from([
                 IdpfCorrectionWord {
-                    seed: [0; 16],
-                    control_bits: [Choice::from(0), Choice::from(1)],
+                    seed: hex!("5c9c365eb47694346f7e8dfdf5a2c68a"),
+                    control_bits: [Choice::from(1), Choice::from(1)],
                     value: Poplar1IdpfValue::new([
-                        Field64::from(1u64),
-                        Field64::from(16949890756552313413u64),
+                        Field64::from(10987699128695731696u64),
+                        Field64::from(7882672491030813488u64),
                     ]),
                 },
                 IdpfCorrectionWord {
-                    seed: [0; 16],
-                    control_bits: [Choice::from(0), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(18446744069414584320u64),
-                        Field64::from(2473087798058630316u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: [0; 16],
+                    seed: hex!("39956f720c0fac9746716e45df8acc41"),
                     control_bits: [Choice::from(1), Choice::from(0)],
                     value: Poplar1IdpfValue::new([
-                        Field64::from(18446744069414584320u64),
-                        Field64::from(7634761277030804329u64),
+                        Field64::from(7134742661878698919u64),
+                        Field64::from(1664298712439481531u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("3a25a9d03705d041ceb70f244cdfa670"),
+                    control_bits: [Choice::from(1), Choice::from(1)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(17513255427535164512u64),
+                        Field64::from(13488093545954052064u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("d3422e091d39482c4f15d6561f5d587b"),
+                    control_bits: [Choice::from(0), Choice::from(1)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(3820730669692388706u64),
+                        Field64::from(7621611875843993489u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("688885a16cb9e244593224cd6fc2ca61"),
+                    control_bits: [Choice::from(0), Choice::from(1)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(14735588265529308818u64),
+                        Field64::from(13808845800240844469u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("e44fa9899bf9f0e62569064609c6beef"),
+                    control_bits: [Choice::from(1), Choice::from(0)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(1515377433922245485u64),
+                        Field64::from(6673083777646964926u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("93fa72adfbc558a74be3876d88512447"),
+                    control_bits: [Choice::from(1), Choice::from(1)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(2323814403333375980u64),
+                        Field64::from(1933042105331055732u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("956055724e9794b6a0eb2c67f8398ee5"),
+                    control_bits: [Choice::from(1), Choice::from(0)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(15657578625572810526u64),
+                        Field64::from(3485179954322771792u64),
+                    ]),
+                },
+                IdpfCorrectionWord {
+                    seed: hex!("1a608ad10163fa06e26295f9e88a35dc"),
+                    control_bits: [Choice::from(0), Choice::from(1)],
+                    value: Poplar1IdpfValue::new([
+                        Field64::from(9408529722335226688u64),
+                        Field64::from(2144060244706691641u64),
                     ]),
                 },
             ]),
             leaf_correction_word: IdpfCorrectionWord {
-                seed: [0; 16],
+                seed: hex!("056e9c3ea587950ebe2c4e8e4bc8f6f7"),
                 control_bits: [Choice::from(0), Choice::from(1)],
                 value: Poplar1IdpfValue::new([
-                    Field255::one(),
                     Field255::try_from(
-                        [
-                            125u8, 31, 214, 223, 148, 40, 1, 69, 160, 220, 201, 51, 206, 183, 6,
-                            233, 33, 157, 80, 231, 196, 249, 47, 216, 202, 154, 15, 251, 125, 129,
-                            150, 70,
-                        ]
-                        .as_slice(),
+                        hex!("36bc460e3844de9a5227c1b0f6520c020f0135eb6a7705c63af9bfd2b8601015")
+                            .as_slice(),
+                    )
+                    .unwrap(),
+                    Field255::try_from(
+                        hex!("a4a8c898a9b7eb68c892e4444a8a1ffb3471707ec190c19e94a1e3ffc626a12a")
+                            .as_slice(),
                     )
                     .unwrap(),
                 ]),
@@ -1835,7 +1873,6 @@ mod tests {
         assert_eq!(public_share, expected_public_share);
     }
 
-    #[ignore]
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
@@ -1853,7 +1890,6 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(keys, [Seed([0x01; 16]), Seed([0x01; 16])]);
         assert_eq!(keys[0].0, test_vector.keys[0]);
         assert_eq!(keys[1].0, test_vector.keys[1]);
 
