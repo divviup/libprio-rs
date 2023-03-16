@@ -92,12 +92,10 @@ impl<P, const SEED_SIZE: usize> Clone for Poplar1<P, SEED_SIZE> {
 /// Poplar1 public share.
 ///
 /// This is comprised of the correction words generated for the IDPF.
-pub type Poplar1PublicShare<const SEED_SIZE: usize> =
-    IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, SEED_SIZE>;
+pub type Poplar1PublicShare =
+    IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>;
 
-impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>>
-    for Poplar1PublicShare<SEED_SIZE>
-{
+impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for Poplar1PublicShare {
     fn decode_with_param(
         poplar1: &Poplar1<P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
@@ -113,7 +111,7 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>>
 #[derive(Debug, Clone)]
 pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// IDPF key share.
-    idpf_key: Seed<SEED_SIZE>,
+    idpf_key: Seed<16>,
 
     /// Seed used to generate the Aggregator's share of the correlated randomness used in the first
     /// part of the sketch.
@@ -537,7 +535,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
     type Measurement = IdpfInput;
     type AggregateResult = Vec<u64>;
     type AggregationParam = Poplar1AggregationParam;
-    type PublicShare = Poplar1PublicShare<SEED_SIZE>;
+    type PublicShare = Poplar1PublicShare;
     type InputShare = Poplar1InputShare<SEED_SIZE>;
     type OutputShare = Poplar1FieldVec;
     type AggregateShare = Poplar1FieldVec;
@@ -576,7 +574,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
         let auth_leaf = prng.get();
 
         // Generate the IDPF shares.
-        let (public_share, [idpf_key_0, idpf_key_1]) = idpf::gen::<_, _, _, P, SEED_SIZE>(
+        let (public_share, [idpf_key_0, idpf_key_1]) = idpf::gen(
             input,
             auth_inner
                 .iter()
@@ -660,7 +658,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         agg_id: usize,
         agg_param: &Poplar1AggregationParam,
         nonce: &[u8; 16],
-        public_share: &Poplar1PublicShare<SEED_SIZE>,
+        public_share: &Poplar1PublicShare,
         input_share: &Poplar1InputShare<SEED_SIZE>,
     ) -> Result<(Poplar1PrepareState, Poplar1FieldVec), VdafError> {
         let is_leader = match agg_id {
@@ -936,8 +934,8 @@ fn eval_and_sketch<P, F, const SEED_SIZE: usize>(
     agg_id: usize,
     nonce: &[u8; 16],
     agg_param: &Poplar1AggregationParam,
-    public_share: &Poplar1PublicShare<SEED_SIZE>,
-    idpf_key: &Seed<SEED_SIZE>,
+    public_share: &Poplar1PublicShare,
+    idpf_key: &Seed<16>,
     corr_prng: &mut Prng<F, P::SeedStream>,
 ) -> Result<(Vec<F>, Vec<F>), VdafError>
 where
@@ -965,8 +963,6 @@ where
         let share = Poplar1IdpfValue::<F>::from(idpf::eval::<
             Poplar1IdpfValue<Field64>,
             Poplar1IdpfValue<Field255>,
-            P,
-            SEED_SIZE,
         >(
             agg_id,
             public_share,
@@ -1178,7 +1174,7 @@ mod tests {
         vdaf: &Poplar1<P, SEED_SIZE>,
         verify_key: &[u8; SEED_SIZE],
         nonce: &[u8; 16],
-        public_share: &Poplar1PublicShare<SEED_SIZE>,
+        public_share: &Poplar1PublicShare,
         input_shares: &[Poplar1InputShare<SEED_SIZE>],
         agg_param: &Poplar1AggregationParam,
         expected_result: Vec<u64>,
@@ -1218,7 +1214,7 @@ mod tests {
         // Sharding step
         let reports: Vec<(
             [u8; 16],
-            Poplar1PublicShare<SEED_SIZE>,
+            Poplar1PublicShare,
             Vec<Poplar1InputShare<SEED_SIZE>>,
         )> = measurements
             .into_iter()
