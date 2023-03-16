@@ -409,7 +409,7 @@ mod tests {
     #[allow(deprecated)]
     fn prg_aes128() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/04/PrgAes128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/05/PrgAes128.json")).unwrap();
         let mut prg = PrgAes128::init(&t.seed.try_into().unwrap(), &t.custom);
         prg.update(&t.binder);
 
@@ -434,7 +434,7 @@ mod tests {
     #[test]
     fn prg_sha3() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/04/PrgSha3.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/05/PrgSha3.json")).unwrap();
         let mut prg = PrgSha3::init(&t.seed.try_into().unwrap(), &t.custom);
         prg.update(&t.binder);
 
