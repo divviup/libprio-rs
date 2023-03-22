@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Work-in-progress implementation of Poplar1 as specified in [[draft-irtf-cfrg-vdaf-04]].
+//! Implementation of Poplar1 as specified in [[draft-irtf-cfrg-vdaf-05]].
 //!
-//! [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -31,9 +31,9 @@ const DST_VERIFY_RANDOMNESS: u16 = 4;
 
 impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     /// Create an instance of [`Poplar1`]. The caller provides the bit length of each
-    /// measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-04]]).
+    /// measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-05]]).
     ///
-    /// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+    /// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
     pub fn new(bits: usize) -> Self {
         Self {
             bits,
@@ -44,9 +44,9 @@ impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
 impl Poplar1<PrgSha3, 16> {
     /// Create an instance of [`Poplar1`] using [`PrgSha3`]. The caller provides the bit length of
-    /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-04]]).
+    /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-05]]).
     ///
-    /// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+    /// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
     pub fn new_sha3(bits: usize) -> Self {
         Poplar1::new(bits)
     }

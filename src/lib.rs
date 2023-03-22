@@ -16,7 +16,7 @@
 //! Aggregation Functions][vdaf], along with an experimental implementation of Poplar1.
 //!
 //! [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
-//! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+//! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
 pub mod benchmarked;
 #[cfg(feature = "prio2")]
