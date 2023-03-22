@@ -580,6 +580,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
                 .iter()
                 .map(|auth| Poplar1IdpfValue([Field64::one(), *auth])),
             Poplar1IdpfValue([Field255::one(), auth_leaf]),
+            nonce,
         )?;
 
         // Generate the correlated randomness for the inner nodes. This includes additive shares of
@@ -968,6 +969,7 @@ where
             public_share,
             idpf_key,
             prefix,
+            nonce,
             &mut idpf_eval_cache,
         )?);
 

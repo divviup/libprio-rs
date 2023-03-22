@@ -271,7 +271,7 @@ pub fn idpf(c: &mut Criterion) {
             let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1).unwrap()[0]]);
 
             b.iter(|| {
-                idpf::gen(&input, inner_values.clone(), leaf_value).unwrap();
+                idpf::gen(&input, inner_values.clone(), leaf_value, &[0; 16]).unwrap();
             });
         });
     }
@@ -291,7 +291,8 @@ pub fn idpf(c: &mut Criterion) {
                 .collect::<Vec<_>>();
             let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1).unwrap()[0]]);
 
-            let (public_share, keys) = idpf::gen(&input, inner_values, leaf_value).unwrap();
+            let (public_share, keys) =
+                idpf::gen(&input, inner_values, leaf_value, &[0; 16]).unwrap();
 
             b.iter(|| {
                 // This is an aggressively small cache, to minimize its impact on the benchmark.
@@ -302,7 +303,7 @@ pub fn idpf(c: &mut Criterion) {
 
                 for prefix_length in 1..=size {
                     let prefix = input[..prefix_length].to_owned().into();
-                    idpf::eval(0, &public_share, &keys[0], &prefix, &mut cache).unwrap();
+                    idpf::eval(0, &public_share, &keys[0], &prefix, &[0; 16], &mut cache).unwrap();
                 }
             });
         });
