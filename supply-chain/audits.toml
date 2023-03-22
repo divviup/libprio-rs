@@ -99,6 +99,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.5.0"
 
+[[audits.hex-literal]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.3.4"
+
 [[audits.keccak]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
