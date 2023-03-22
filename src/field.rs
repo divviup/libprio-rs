@@ -712,6 +712,10 @@ make_field!(
     8,
 );
 
+/// This nested module is an implementation detail to limit the scope of a module-wide
+/// `allow(deprecated)` attribute. [`Field96`] is marked as deprecated, and deprecation warnings
+/// must be silenced on multiple implementation blocks, and the macro invocation itself that
+/// defines the struct and its implementation.
 mod field96 {
     #![allow(deprecated)]
 
