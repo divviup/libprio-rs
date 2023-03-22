@@ -6,7 +6,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     vdaf::{
-        prg::{CoinToss, Prg, Seed, SeedStream},
+        prg::{CoinToss, Prg, PrgFixedKeyAes128, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -183,18 +183,15 @@ where
     }
 }
 
-fn extend<P, const SEED_SIZE: usize>(seed: &[u8; SEED_SIZE]) -> ([[u8; SEED_SIZE]; 2], [Choice; 2])
-where
-    P: Prg<SEED_SIZE>,
-{
+fn extend(seed: &[u8; 16]) -> ([[u8; 16]; 2], [Choice; 2]) {
     let custom = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 0, /* usage */
     ];
-    let mut seed_stream = P::init(seed, &custom).into_seed_stream();
+    let mut seed_stream = PrgFixedKeyAes128::init(seed, &custom).into_seed_stream();
 
-    let mut seeds = [[0u8; SEED_SIZE], [0u8; SEED_SIZE]];
+    let mut seeds = [[0u8; 16], [0u8; 16]];
     seed_stream.fill(&mut seeds[0]);
     seed_stream.fill(&mut seeds[1]);
 
@@ -205,19 +202,18 @@ where
     (seeds, control_bits)
 }
 
-fn convert<V, P, const SEED_SIZE: usize>(seed: &[u8; SEED_SIZE]) -> ([u8; SEED_SIZE], V)
+fn convert<V>(seed: &[u8; 16]) -> ([u8; 16], V)
 where
     V: IdpfValue,
-    P: Prg<SEED_SIZE>,
 {
     let custom = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 1, /* usage */
     ];
-    let mut seed_stream = P::init(seed, &custom).into_seed_stream();
+    let mut seed_stream = PrgFixedKeyAes128::init(seed, &custom).into_seed_stream();
 
-    let mut next_seed = [0u8; SEED_SIZE];
+    let mut next_seed = [0u8; 16];
     seed_stream.fill(&mut next_seed);
 
     (next_seed, V::sample(&mut seed_stream))
@@ -225,19 +221,18 @@ where
 
 /// Helper method to update seeds, update control bits, and output the correction word for one level
 /// of the IDPF key generation process.
-fn generate_correction_word<V, P, const SEED_SIZE: usize>(
+fn generate_correction_word<V>(
     input_bit: Choice,
     value: V,
-    keys: &mut [[u8; SEED_SIZE]; 2],
+    keys: &mut [[u8; 16]; 2],
     control_bits: &mut [Choice; 2],
-) -> IdpfCorrectionWord<V, SEED_SIZE>
+) -> IdpfCorrectionWord<V>
 where
     V: IdpfValue,
-    P: Prg<SEED_SIZE>,
 {
     // Expand both keys into two seeds and two control bits each.
-    let (seed_0, control_bits_0) = extend::<P, SEED_SIZE>(&keys[0]);
-    let (seed_1, control_bits_1) = extend::<P, SEED_SIZE>(&keys[1]);
+    let (seed_0, control_bits_0) = extend(&keys[0]);
+    let (seed_1, control_bits_1) = extend(&keys[1]);
 
     let (keep, lose) = (input_bit, !input_bit);
 
@@ -267,8 +262,8 @@ where
         conditional_xor_seeds(&seed_1_keep, &cw_seed, previous_control_bits[1]),
     ];
 
-    let (new_key_0, elements_0) = convert::<V, P, SEED_SIZE>(&seeds_corrected[0]);
-    let (new_key_1, elements_1) = convert::<V, P, SEED_SIZE>(&seeds_corrected[1]);
+    let (new_key_0, elements_0) = convert::<V>(&seeds_corrected[0]);
+    let (new_key_1, elements_1) = convert::<V>(&seeds_corrected[1]);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
@@ -285,18 +280,17 @@ where
 
 /// Helper function to evaluate one level of an IDPF. This updates the seed and control bit
 /// arguments that are passed in.
-fn eval_next<V, P, const SEED_SIZE: usize>(
+fn eval_next<V>(
     is_leader: bool,
-    key: &mut [u8; SEED_SIZE],
+    key: &mut [u8; 16],
     control_bit: &mut Choice,
-    correction_word: &IdpfCorrectionWord<V, SEED_SIZE>,
+    correction_word: &IdpfCorrectionWord<V>,
     input_bit: Choice,
 ) -> V
 where
     V: IdpfValue,
-    P: Prg<SEED_SIZE>,
 {
-    let (mut seeds, mut control_bits) = extend::<P, SEED_SIZE>(key);
+    let (mut seeds, mut control_bits) = extend(key);
 
     seeds[0] = conditional_xor_seeds(&seeds[0], &correction_word.seed, *control_bit);
     control_bits[0] ^= correction_word.control_bits[0] & *control_bit;
@@ -306,7 +300,7 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<V, P, SEED_SIZE>(&seed_corrected);
+    let (new_key, elements) = convert::<V>(&seed_corrected);
     *key = new_key;
 
     let mut out =
@@ -315,21 +309,19 @@ where
     out
 }
 
-fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>, P, const SEED_SIZE: usize>(
+fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
-    random: &[[u8; SEED_SIZE]; 2],
-) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
+    random: &[[u8; 16]; 2],
+) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
-    P: Prg<SEED_SIZE>,
 {
     let bits = input.len();
 
-    let initial_keys: [Seed<SEED_SIZE>; 2] =
-        [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
+    let initial_keys: [Seed<16>; 2] = [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
     let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -341,7 +333,7 @@ where
                 IdpfError::InvalidParameter("too many values were supplied".to_string()).into(),
             );
         }
-        inner_correction_words.push(generate_correction_word::<VI, P, SEED_SIZE>(
+        inner_correction_words.push(generate_correction_word::<VI>(
             Choice::from(input[level] as u8),
             value,
             &mut keys,
@@ -351,7 +343,7 @@ where
     if inner_correction_words.len() != bits - 1 {
         return Err(IdpfError::InvalidParameter("too few values were supplied".to_string()).into());
     }
-    let leaf_correction_word = generate_correction_word::<VL, P, SEED_SIZE>(
+    let leaf_correction_word = generate_correction_word::<VL>(
         Choice::from(input[bits - 1] as u8),
         leaf_value,
         &mut keys,
@@ -369,43 +361,41 @@ where
 ///
 /// Generate and return a sequence of IDPF shares for `input`. The parameters `inner_values`
 /// and `leaf_value` provide the output values for each successive level of the prefix tree.
-pub fn gen<VI, VL, M, P, const SEED_SIZE: usize>(
+pub fn gen<VI, VL, M>(
     input: &IdpfInput,
     inner_values: M,
     leaf_value: VL,
-) -> Result<(IdpfPublicShare<VI, VL, SEED_SIZE>, [Seed<SEED_SIZE>; 2]), VdafError>
+) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
     M: IntoIterator<Item = VI>,
-    P: Prg<SEED_SIZE>,
 {
     if input.is_empty() {
         return Err(IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into());
     }
-    let mut random = [[0u8; SEED_SIZE]; 2];
+    let mut random = [[0u8; 16]; 2];
     for random_seed in random.iter_mut() {
         getrandom::getrandom(random_seed)?;
     }
-    gen_with_random::<_, _, _, P, SEED_SIZE>(input, inner_values, leaf_value, &random)
+    gen_with_random(input, inner_values, leaf_value, &random)
 }
 
 /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
 /// intermediate values.
 #[allow(clippy::too_many_arguments)]
-fn eval_from_node<VI, VL, P, const SEED_SIZE: usize>(
+fn eval_from_node<VI, VL>(
     is_leader: bool,
-    public_share: &IdpfPublicShare<VI, VL, SEED_SIZE>,
+    public_share: &IdpfPublicShare<VI, VL>,
     start_level: usize,
-    mut key: [u8; SEED_SIZE],
+    mut key: [u8; 16],
     mut control_bit: Choice,
     prefix: &IdpfInput,
-    cache: &mut dyn IdpfCache<SEED_SIZE>,
+    cache: &mut dyn IdpfCache,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
-    P: Prg<SEED_SIZE>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
     let mut last_inner_output = None;
@@ -414,7 +404,7 @@ where
         .zip(prefix[start_level..].iter())
         .zip(start_level..)
     {
-        last_inner_output = Some(eval_next::<_, P, SEED_SIZE>(
+        last_inner_output = Some(eval_next(
             is_leader,
             &mut key,
             &mut control_bit,
@@ -426,7 +416,7 @@ where
     }
 
     if prefix.len() == bits {
-        let leaf_output = eval_next::<_, P, SEED_SIZE>(
+        let leaf_output = eval_next(
             is_leader,
             &mut key,
             &mut control_bit,
@@ -444,17 +434,16 @@ where
 /// The IDPF key evaluation algorithm.
 ///
 /// Evaluate an IDPF share on `prefix`.
-pub fn eval<VI, VL, P, const SEED_SIZE: usize>(
+pub fn eval<VI, VL>(
     agg_id: usize,
-    public_share: &IdpfPublicShare<VI, VL, SEED_SIZE>,
-    key: &Seed<SEED_SIZE>,
+    public_share: &IdpfPublicShare<VI, VL>,
+    key: &Seed<16>,
     prefix: &IdpfInput,
-    cache: &mut dyn IdpfCache<SEED_SIZE>,
+    cache: &mut dyn IdpfCache,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
     VI: IdpfValue,
     VL: IdpfValue,
-    P: Prg<SEED_SIZE>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
     if agg_id > 1 {
@@ -486,7 +475,7 @@ where
             if let Some((key, control_bit)) = cache.get(cache_key) {
                 // Evaluate the IDPF starting from the cached data at a previously-computed
                 // node, and return the result.
-                return eval_from_node::<VI, VL, P, SEED_SIZE>(
+                return eval_from_node::<VI, VL>(
                     is_leader,
                     public_share,
                     /* start_level */ cache_key.len(),
@@ -500,7 +489,7 @@ where
         }
     }
     // Evaluate starting from the root node.
-    eval_from_node::<VI, VL, P, SEED_SIZE>(
+    eval_from_node::<VI, VL>(
         is_leader,
         public_share,
         /* start_level */ 0,
@@ -514,14 +503,14 @@ where
 /// An IDPF public share. This contains the list of correction words used by all parties when
 /// evaluating the IDPF.
 #[derive(Debug, Clone)]
-pub struct IdpfPublicShare<VI, VL, const SEED_SIZE: usize> {
+pub struct IdpfPublicShare<VI, VL> {
     /// Correction words for each inner node level.
-    inner_correction_words: Vec<IdpfCorrectionWord<VI, SEED_SIZE>>,
+    inner_correction_words: Vec<IdpfCorrectionWord<VI>>,
     /// Correction word for the leaf node level.
-    leaf_correction_word: IdpfCorrectionWord<VL, SEED_SIZE>,
+    leaf_correction_word: IdpfCorrectionWord<VL>,
 }
 
-impl<VI, VL, const SEED_SIZE: usize> ConstantTimeEq for IdpfPublicShare<VI, VL, SEED_SIZE>
+impl<VI, VL> ConstantTimeEq for IdpfPublicShare<VI, VL>
 where
     VI: ConstantTimeEq,
     VL: ConstantTimeEq,
@@ -533,7 +522,7 @@ where
     }
 }
 
-impl<VI, VL, const SEED_SIZE: usize> PartialEq for IdpfPublicShare<VI, VL, SEED_SIZE>
+impl<VI, VL> PartialEq for IdpfPublicShare<VI, VL>
 where
     VI: ConstantTimeEq,
     VL: ConstantTimeEq,
@@ -543,14 +532,14 @@ where
     }
 }
 
-impl<VI, VL, const SEED_SIZE: usize> Eq for IdpfPublicShare<VI, VL, SEED_SIZE>
+impl<VI, VL> Eq for IdpfPublicShare<VI, VL>
 where
     VI: ConstantTimeEq,
     VL: ConstantTimeEq,
 {
 }
 
-impl<VI, VL, const SEED_SIZE: usize> Encode for IdpfPublicShare<VI, VL, SEED_SIZE>
+impl<VI, VL> Encode for IdpfPublicShare<VI, VL>
 where
     VI: Encode,
     VL: Encode,
@@ -585,8 +574,7 @@ where
 
     fn encoded_len(&self) -> Option<usize> {
         let control_bits_count = (self.inner_correction_words.len() + 1) * 2;
-        let mut len =
-            (control_bits_count + 7) / 8 + SEED_SIZE * (self.inner_correction_words.len() + 1);
+        let mut len = (control_bits_count + 7) / 8 + (self.inner_correction_words.len() + 1) * 16;
         for correction_words in self.inner_correction_words.iter() {
             len += correction_words.value.encoded_len()?;
         }
@@ -595,8 +583,7 @@ where
     }
 }
 
-impl<VI, VL, const SEED_SIZE: usize> ParameterizedDecode<usize>
-    for IdpfPublicShare<VI, VL, SEED_SIZE>
+impl<VI, VL> ParameterizedDecode<usize> for IdpfPublicShare<VI, VL>
 where
     VI: Decode + Copy,
     VL: Decode + Copy,
@@ -610,7 +597,7 @@ where
         let mut inner_correction_words = Vec::with_capacity(bits - 1);
         for chunk in unpacked_control_bits[0..(bits - 1) * 2].chunks(2) {
             let control_bits = [(chunk[0] as u8).into(), (chunk[1] as u8).into()];
-            let seed = Seed::<SEED_SIZE>::decode(bytes)?.0;
+            let seed = Seed::decode(bytes)?.0;
             let value = VI::decode(bytes)?;
             inner_correction_words.push(IdpfCorrectionWord {
                 seed,
@@ -623,7 +610,7 @@ where
             (unpacked_control_bits[(bits - 1) * 2] as u8).into(),
             (unpacked_control_bits[bits * 2 - 1] as u8).into(),
         ];
-        let seed = Seed::<SEED_SIZE>::decode(bytes)?.0;
+        let seed = Seed::decode(bytes)?.0;
         let value = VL::decode(bytes)?;
         let leaf_correction_word = IdpfCorrectionWord {
             seed,
@@ -644,13 +631,13 @@ where
 }
 
 #[derive(Debug, Clone)]
-struct IdpfCorrectionWord<V, const SEED_SIZE: usize> {
-    seed: [u8; SEED_SIZE],
+struct IdpfCorrectionWord<V> {
+    seed: [u8; 16],
     control_bits: [Choice; 2],
     value: V,
 }
 
-impl<V, const SEED_SIZE: usize> ConstantTimeEq for IdpfCorrectionWord<V, SEED_SIZE>
+impl<V> ConstantTimeEq for IdpfCorrectionWord<V>
 where
     V: ConstantTimeEq,
 {
@@ -661,7 +648,7 @@ where
     }
 }
 
-impl<V, const SEED_SIZE: usize> PartialEq for IdpfCorrectionWord<V, SEED_SIZE>
+impl<V> PartialEq for IdpfCorrectionWord<V>
 where
     V: ConstantTimeEq,
 {
@@ -670,35 +657,26 @@ where
     }
 }
 
-impl<V, const SEED_SIZE: usize> Eq for IdpfCorrectionWord<V, SEED_SIZE> where V: ConstantTimeEq {}
+impl<V> Eq for IdpfCorrectionWord<V> where V: ConstantTimeEq {}
 
-fn xor_seeds<const SEED_SIZE: usize>(
-    left: &[u8; SEED_SIZE],
-    right: &[u8; SEED_SIZE],
-) -> [u8; SEED_SIZE] {
-    let mut seed = [0u8; SEED_SIZE];
+fn xor_seeds(left: &[u8; 16], right: &[u8; 16]) -> [u8; 16] {
+    let mut seed = [0u8; 16];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a ^ b;
     }
     seed
 }
 
-fn and_seeds<const SEED_SIZE: usize>(
-    left: &[u8; SEED_SIZE],
-    right: &[u8; SEED_SIZE],
-) -> [u8; SEED_SIZE] {
-    let mut seed = [0u8; SEED_SIZE];
+fn and_seeds(left: &[u8; 16], right: &[u8; 16]) -> [u8; 16] {
+    let mut seed = [0u8; 16];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a & b;
     }
     seed
 }
 
-fn or_seeds<const SEED_SIZE: usize>(
-    left: &[u8; SEED_SIZE],
-    right: &[u8; SEED_SIZE],
-) -> [u8; SEED_SIZE] {
-    let mut seed = [0u8; SEED_SIZE];
+fn or_seeds(left: &[u8; 16], right: &[u8; 16]) -> [u8; 16] {
+    let mut seed = [0u8; 16];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a | b;
     }
@@ -708,18 +686,18 @@ fn or_seeds<const SEED_SIZE: usize>(
 /// Take a control bit, and fan it out into a byte array that can be used as a mask for PRG seeds,
 /// without branching. If the control bit input is 0, all bytes will be equal to 0, and if the
 /// control bit input is 1, all bytes will be equal to 255.
-fn control_bit_to_seed_mask<const SEED_SIZE: usize>(control: Choice) -> [u8; SEED_SIZE] {
+fn control_bit_to_seed_mask(control: Choice) -> [u8; 16] {
     let mask = -(control.unwrap_u8() as i8) as u8;
-    [mask; SEED_SIZE]
+    [mask; 16]
 }
 
 /// Take two seeds and a control bit, and return the first seed if the control bit is zero, or the
 /// XOR of the two seeds if the control bit is one. This does not branch on the control bit.
-fn conditional_xor_seeds<const SEED_SIZE: usize>(
-    normal_input: &[u8; SEED_SIZE],
-    switched_input: &[u8; SEED_SIZE],
+fn conditional_xor_seeds(
+    normal_input: &[u8; 16],
+    switched_input: &[u8; 16],
     control: Choice,
-) -> [u8; SEED_SIZE] {
+) -> [u8; 16] {
     xor_seeds(
         normal_input,
         &and_seeds(switched_input, &control_bit_to_seed_mask(control)),
@@ -728,10 +706,7 @@ fn conditional_xor_seeds<const SEED_SIZE: usize>(
 
 /// Returns one of two seeds, depending on the value of a selector bit. Does not branch on the
 /// selector input or make selector-dependent memory accesses.
-fn conditional_select_seed<const SEED_SIZE: usize>(
-    select: Choice,
-    seeds: &[[u8; SEED_SIZE]; 2],
-) -> [u8; SEED_SIZE] {
+fn conditional_select_seed(select: Choice, seeds: &[[u8; 16]; 2]) -> [u8; 16] {
     or_seeds(
         &and_seeds(&control_bit_to_seed_mask(!select), &seeds[0]),
         &and_seeds(&control_bit_to_seed_mask(select), &seeds[1]),
@@ -749,12 +724,12 @@ fn conditional_select_seed<const SEED_SIZE: usize>(
 /// values from nodes further up in the tree may be cached and reused in evaluations of subsequent
 /// longer inputs. If one IDPF input is a prefix of another input, then the first input's path down
 /// the tree is a prefix of the other input's path.
-pub trait IdpfCache<const SEED_SIZE: usize> {
+pub trait IdpfCache {
     /// Fetch cached values for the node identified by the IDPF input.
-    fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)>;
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)>;
 
     /// Store values corresponding to the node identified by the IDPF input.
-    fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8));
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8));
 }
 
 /// A no-op [`IdpfCache`] implementation that always reports a cache miss.
@@ -768,41 +743,41 @@ impl NoCache {
     }
 }
 
-impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for NoCache {
-    fn get(&self, _: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
+impl IdpfCache for NoCache {
+    fn get(&self, _: &BitSlice) -> Option<([u8; 16], u8)> {
         None
     }
 
-    fn insert(&mut self, _: &BitSlice, _: &([u8; SEED_SIZE], u8)) {}
+    fn insert(&mut self, _: &BitSlice, _: &([u8; 16], u8)) {}
 }
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in an in-memory hash map,
 /// with no eviction.
 #[derive(Default)]
-pub struct HashMapCache<const SEED_SIZE: usize> {
-    map: HashMap<BitBox, ([u8; SEED_SIZE], u8)>,
+pub struct HashMapCache {
+    map: HashMap<BitBox, ([u8; 16], u8)>,
 }
 
-impl<const SEED_SIZE: usize> HashMapCache<SEED_SIZE> {
+impl HashMapCache {
     /// Create a new unpopulated `HashMapCache`.
-    pub fn new() -> HashMapCache<SEED_SIZE> {
+    pub fn new() -> HashMapCache {
         HashMapCache::default()
     }
 
     /// Create a new unpopulated `HashMapCache`, with a set pre-allocated capacity.
-    pub fn with_capacity(capacity: usize) -> HashMapCache<SEED_SIZE> {
+    pub fn with_capacity(capacity: usize) -> HashMapCache {
         Self {
             map: HashMap::with_capacity(capacity),
         }
     }
 }
 
-impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for HashMapCache<SEED_SIZE> {
-    fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
+impl IdpfCache for HashMapCache {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
         self.map.get(input).cloned()
     }
 
-    fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
         if !self.map.contains_key(input) {
             self.map
                 .insert(input.to_owned().into_boxed_bitslice(), *values);
@@ -811,22 +786,22 @@ impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for HashMapCache<SEED_SIZE> {
 }
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in memory, with
-/// least-recently-used eviction, and lookups via linear probing.
-pub struct RingBufferCache<const SEED_SIZE: usize> {
-    ring: VecDeque<(BitBox, [u8; SEED_SIZE], u8)>,
+/// first-in-first-out eviction, and lookups via linear probing.
+pub struct RingBufferCache {
+    ring: VecDeque<(BitBox, [u8; 16], u8)>,
 }
 
-impl<const SEED_SIZE: usize> RingBufferCache<SEED_SIZE> {
+impl RingBufferCache {
     /// Create a new unpopulated `RingBufferCache`.
-    pub fn new(capacity: usize) -> RingBufferCache<SEED_SIZE> {
+    pub fn new(capacity: usize) -> RingBufferCache {
         Self {
             ring: VecDeque::with_capacity(std::cmp::max(capacity, 1)),
         }
     }
 }
 
-impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for RingBufferCache<SEED_SIZE> {
-    fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
+impl IdpfCache for RingBufferCache {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
         // iterate back-to-front, so that we check the most recently pushed entry first.
         for entry in self.ring.iter().rev() {
             if input == entry.0 {
@@ -836,7 +811,7 @@ impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for RingBufferCache<SEED_SIZE>
         None
     }
 
-    fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
         // evict first (to avoid growing the storage)
         if self.ring.len() == self.ring.capacity() {
             self.ring.pop_front();
@@ -877,10 +852,7 @@ mod tests {
         field::{Field255, Field64, FieldElement},
         idpf,
         prng::Prng,
-        vdaf::{
-            poplar1::Poplar1IdpfValue,
-            prg::{Prg, PrgSha3, Seed},
-        },
+        vdaf::{poplar1::Poplar1IdpfValue, prg::Seed},
     };
 
     #[test]
@@ -897,19 +869,19 @@ mod tests {
 
     /// A lossy IDPF cache, for testing purposes, that randomly returns cache misses.
     #[derive(Default)]
-    struct LossyCache<const SEED_SIZE: usize> {
-        map: HashMap<BitBox, ([u8; SEED_SIZE], u8)>,
+    struct LossyCache {
+        map: HashMap<BitBox, ([u8; 16], u8)>,
     }
 
-    impl<const SEED_SIZE: usize> LossyCache<SEED_SIZE> {
+    impl LossyCache {
         /// Create a new unpopulated `LossyCache`.
-        fn new() -> LossyCache<SEED_SIZE> {
+        fn new() -> LossyCache {
             LossyCache::default()
         }
     }
 
-    impl<const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for LossyCache<SEED_SIZE> {
-        fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
+    impl IdpfCache for LossyCache {
+        fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
             if random() {
                 self.map.get(input).cloned()
             } else {
@@ -917,7 +889,7 @@ mod tests {
             }
         }
 
-        fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
+        fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
             if !self.map.contains_key(input) {
                 self.map
                     .insert(input.to_owned().into_boxed_bitslice(), *values);
@@ -926,14 +898,14 @@ mod tests {
     }
 
     /// A wrapper [`IdpfCache`] implementation that records `get()` calls, for testing purposes.
-    struct SnoopingCache<T, const SEED_SIZE: usize> {
+    struct SnoopingCache<T> {
         inner: T,
         get_calls: Mutex<Vec<BitBox>>,
-        insert_calls: Mutex<Vec<(BitBox, [u8; SEED_SIZE], u8)>>,
+        insert_calls: Mutex<Vec<(BitBox, [u8; 16], u8)>>,
     }
 
-    impl<T, const SEED_SIZE: usize> SnoopingCache<T, SEED_SIZE> {
-        fn new(inner: T) -> SnoopingCache<T, SEED_SIZE> {
+    impl<T> SnoopingCache<T> {
+        fn new(inner: T) -> SnoopingCache<T> {
             SnoopingCache {
                 inner,
                 get_calls: Mutex::new(Vec::new()),
@@ -942,11 +914,11 @@ mod tests {
         }
     }
 
-    impl<T, const SEED_SIZE: usize> IdpfCache<SEED_SIZE> for SnoopingCache<T, SEED_SIZE>
+    impl<T> IdpfCache for SnoopingCache<T>
     where
-        T: IdpfCache<SEED_SIZE>,
+        T: IdpfCache,
     {
-        fn get(&self, input: &BitSlice) -> Option<([u8; SEED_SIZE], u8)> {
+        fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
             self.get_calls
                 .lock()
                 .unwrap()
@@ -954,7 +926,7 @@ mod tests {
             self.inner.get(input)
         }
 
-        fn insert(&mut self, input: &BitSlice, values: &([u8; SEED_SIZE], u8)) {
+        fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
             self.insert_calls.lock().unwrap().push((
                 input.to_owned().into_boxed_bitslice(),
                 values.0,
@@ -967,14 +939,14 @@ mod tests {
     #[test]
     fn test_idpf_poplar() {
         let input = bitbox![0, 1, 1, 0, 1].into();
-        let (public_share, keys) = idpf::gen::<_, _, _, PrgSha3, 16>(
+        let (public_share, keys) = idpf::gen(
             &input,
             Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
             Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
         )
         .unwrap();
 
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0].into(),
@@ -982,7 +954,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![1].into(),
@@ -990,7 +962,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
@@ -998,7 +970,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 0].into(),
@@ -1006,7 +978,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![1, 0].into(),
@@ -1014,7 +986,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![1, 1].into(),
@@ -1022,7 +994,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 1, 1].into(),
@@ -1030,7 +1002,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0].into(),
@@ -1038,7 +1010,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 1].into(),
@@ -1046,7 +1018,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 1, 1, 0, 0].into(),
@@ -1054,7 +1026,7 @@ mod tests {
             &mut NoCache::new(),
             &mut NoCache::new(),
         );
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![1, 0, 1, 0, 0].into(),
@@ -1064,24 +1036,16 @@ mod tests {
         );
     }
 
-    fn check_idpf_poplar_evaluation<P, const SEED_SIZE: usize>(
-        public_share: &IdpfPublicShare<
-            Poplar1IdpfValue<Field64>,
-            Poplar1IdpfValue<Field255>,
-            SEED_SIZE,
-        >,
-        keys: &[Seed<SEED_SIZE>; 2],
+    fn check_idpf_poplar_evaluation(
+        public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
+        keys: &[Seed<16>; 2],
         prefix: &IdpfInput,
         expected_output: &IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
-        cache_0: &mut dyn IdpfCache<SEED_SIZE>,
-        cache_1: &mut dyn IdpfCache<SEED_SIZE>,
-    ) where
-        P: Prg<SEED_SIZE>,
-    {
-        let share_0 =
-            idpf::eval::<_, _, P, SEED_SIZE>(0, public_share, &keys[0], prefix, cache_0).unwrap();
-        let share_1 =
-            idpf::eval::<_, _, P, SEED_SIZE>(1, public_share, &keys[1], prefix, cache_1).unwrap();
+        cache_0: &mut dyn IdpfCache,
+        cache_1: &mut dyn IdpfCache,
+    ) {
+        let share_0 = idpf::eval(0, public_share, &keys[0], prefix, cache_0).unwrap();
+        let share_1 = idpf::eval(1, public_share, &keys[1], prefix, cache_1).unwrap();
         let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
     }
@@ -1108,14 +1072,13 @@ mod tests {
         let leaf_values =
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
-        let (public_share, keys) =
-            idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_values).unwrap();
+        let (public_share, keys) = idpf::gen(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
 
         for (level, values) in inner_values.iter().enumerate() {
             let mut prefix = BitBox::from_bitslice(&bits[..=level]).into();
-            check_idpf_poplar_evaluation::<PrgSha3, 16>(
+            check_idpf_poplar_evaluation(
                 &public_share,
                 &keys,
                 &prefix,
@@ -1125,7 +1088,7 @@ mod tests {
             );
             let flipped_bit = !prefix[level];
             prefix.index.set(level, flipped_bit);
-            check_idpf_poplar_evaluation::<PrgSha3, 16>(
+            check_idpf_poplar_evaluation(
                 &public_share,
                 &keys,
                 &prefix,
@@ -1134,7 +1097,7 @@ mod tests {
                 &mut cache_1,
             );
         }
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &input,
@@ -1144,7 +1107,7 @@ mod tests {
         );
         let mut modified_bits = bits.clone();
         modified_bits.set(INPUT_LEN - 1, !bits[INPUT_LEN - 1]);
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &modified_bits.into(),
@@ -1170,12 +1133,11 @@ mod tests {
         let leaf_values =
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
-        let (public_share, keys) =
-            idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_values).unwrap();
+        let (public_share, keys) = idpf::gen(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
 
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![1, 1, 0, 0].into(),
@@ -1208,7 +1170,7 @@ mod tests {
             ],
         );
 
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0].into(),
@@ -1236,7 +1198,7 @@ mod tests {
             vec![bitbox![0]],
         );
 
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &bitbox![0, 1].into(),
@@ -1264,7 +1226,7 @@ mod tests {
             vec![bitbox![0, 1]],
         );
 
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &input,
@@ -1305,7 +1267,7 @@ mod tests {
             ],
         );
 
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &input,
@@ -1341,13 +1303,12 @@ mod tests {
         let leaf_values =
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
-        let (public_share, keys) =
-            idpf::gen::<_, _, _, PrgSha3, 16>(&input, inner_values.clone(), leaf_values).unwrap();
+        let (public_share, keys) = idpf::gen(&input, inner_values.clone(), leaf_values).unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
 
         for (level, values) in inner_values.iter().enumerate() {
-            check_idpf_poplar_evaluation::<PrgSha3, 16>(
+            check_idpf_poplar_evaluation(
                 &public_share,
                 &keys,
                 &input[..=level].to_owned().into(),
@@ -1356,7 +1317,7 @@ mod tests {
                 &mut cache_1,
             );
         }
-        check_idpf_poplar_evaluation::<PrgSha3, 16>(
+        check_idpf_poplar_evaluation(
             &public_share,
             &keys,
             &input,
@@ -1369,14 +1330,14 @@ mod tests {
     #[test]
     fn test_idpf_poplar_error_cases() {
         // Zero bits does not make sense.
-        idpf::gen::<_, _, _, PrgSha3, 16>(
+        idpf::gen(
             &bitbox![].into(),
             Vec::<Poplar1IdpfValue<Field64>>::new(),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap_err();
 
-        let (public_share, keys) = idpf::gen::<_, _, _, PrgSha3, 16>(
+        let (public_share, keys) = idpf::gen(
             &bitbox![0;10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
@@ -1384,13 +1345,13 @@ mod tests {
         .unwrap();
 
         // Wrong number of values.
-        idpf::gen::<_, _, _, PrgSha3, 16>(
+        idpf::gen(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 8]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
         )
         .unwrap_err();
-        idpf::gen::<_, _, _, PrgSha3, 16>(
+        idpf::gen(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 10]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
@@ -1398,7 +1359,7 @@ mod tests {
         .unwrap_err();
 
         // Evaluating with empty prefix.
-        assert!(idpf::eval::<_, _, PrgSha3, 16>(
+        assert!(idpf::eval(
             0,
             &public_share,
             &keys[0],
@@ -1407,7 +1368,7 @@ mod tests {
         )
         .is_err());
         // Evaluating with too-long prefix.
-        assert!(idpf::eval::<_, _, PrgSha3, 16>(
+        assert!(idpf::eval(
             0,
             &public_share,
             &keys[0],
@@ -1589,7 +1550,6 @@ mod tests {
             let public_share = IdpfPublicShare::<
                 Poplar1IdpfValue<Field64>,
                 Poplar1IdpfValue<Field255>,
-                16,
             > {
                 inner_correction_words: control_bits[..control_bits.len() - 2]
                     .chunks(2)
@@ -1634,26 +1594,26 @@ mod tests {
 
         buf[0] = 1 << 2;
         let err =
-            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&1, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&1, &mut Cursor::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 4;
         let err =
-            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&2, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&2, &mut Cursor::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 6;
         let err =
-            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&3, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&3, &mut Cursor::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 0;
         buf[1] = 1 << 2;
         let err =
-            IdpfPublicShare::<Field64, Field255, 16>::decode_with_param(&5, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&5, &mut Cursor::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
     }
@@ -1770,7 +1730,6 @@ mod tests {
         let public_share = IdpfPublicShare::<
             Poplar1IdpfValue<Field64>,
             Poplar1IdpfValue<Field255>,
-            16,
         >::get_decoded_with_param(&bits, &data)
         .unwrap();
 
@@ -1831,7 +1790,7 @@ mod tests {
         for (src, dest) in random_iter.zip(random.iter_mut().flat_map(|seed| seed.iter_mut())) {
             *dest = src;
         }
-        let (public_share, keys) = idpf::gen_with_random::<_, _, _, PrgSha3, 16>(
+        let (public_share, keys) = idpf::gen_with_random(
             &test_vector.alpha,
             test_vector.beta_inner,
             test_vector.beta_leaf,
