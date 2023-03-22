@@ -11,7 +11,7 @@
 use crate::prng::{Prng, PrngError};
 use crate::{
     codec::{CodecError, Decode, Encode},
-    fp::{FP128, FP32, FP64, FP96},
+    fp::{FP128, FP32, FP64},
     vdaf::prg::{CoinToss, SeedStream},
 };
 use serde::{
@@ -712,13 +712,46 @@ make_field!(
     8,
 );
 
-make_field!(
-    /// `GF(79228148845226978974766202881)`, a 96-bit field.
-    Field96,
-    u128,
-    FP96,
-    12,
-);
+/// This nested module is an implementation detail to limit the scope of a module-wide
+/// `allow(deprecated)` attribute. [`Field96`] is marked as deprecated, and deprecation warnings
+/// must be silenced on multiple implementation blocks, and the macro invocation itself that
+/// defines the struct and its implementation.
+mod field96 {
+    #![allow(deprecated)]
+
+    use super::{
+        FftFriendlyFieldElement, FieldElement, FieldElementVisitor, FieldElementWithInteger,
+        FieldError,
+    };
+    use crate::{
+        codec::{CodecError, Decode, Encode},
+        fp::FP96,
+    };
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+    use std::{
+        cmp::min,
+        fmt::{Debug, Display, Formatter},
+        hash::{Hash, Hasher},
+        io::{Cursor, Read},
+        marker::PhantomData,
+        ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+    };
+    use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
+
+    make_field!(
+        #[deprecated]
+        /// `GF(79228148845226978974766202881)`, a 96-bit field.
+        ///
+        /// This is deprecated because it is not currently used by either Prio v2 or any VDAF.
+        Field96,
+        u128,
+        FP96,
+        12,
+    );
+}
+
+#[allow(deprecated)]
+pub use field96::Field96;
 
 make_field!(
     /// `GF(340282366920938462946865773367900766209)`, a 128-bit field.
@@ -1174,6 +1207,7 @@ mod tests {
 
     #[test]
     fn test_field96() {
+        #[allow(deprecated)]
         field_element_test::<Field96>();
     }
 
