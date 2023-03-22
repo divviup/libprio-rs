@@ -137,7 +137,7 @@ mod tests {
     use super::*;
     use crate::{
         codec::Decode,
-        field::{Field64, Field96, FieldPrio2},
+        field::{Field64, FieldPrio2},
         vdaf::prg::{CoinToss, Prg, PrgSha3, Seed, SeedStreamSha3},
     };
     #[cfg(feature = "prio2")]
@@ -247,11 +247,11 @@ mod tests {
     fn left_over_buffer_back_fill() {
         let seed = Seed::generate().unwrap();
 
-        let mut prng: Prng<Field96, SeedStreamSha3> =
+        let mut prng: Prng<Field64, SeedStreamSha3> =
             Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
 
         // Construct a `Prng` with a longer-than-usual buffer.
-        let mut prng_weird_buffer_size: Prng<Field96, SeedStreamSha3> =
+        let mut prng_weird_buffer_size: Prng<Field64, SeedStreamSha3> =
             Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
         let mut extra = [0; 7];
         prng_weird_buffer_size.seed_stream.fill(&mut extra);
@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn into_new_field() {
         let seed = Seed::generate().unwrap();
-        let want: Prng<Field96, SeedStreamSha3> =
+        let want: Prng<Field64, SeedStreamSha3> =
             Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
         let want_buffer = want.buffer.clone();
 

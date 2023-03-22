@@ -7,6 +7,8 @@
 //! [`FftFriendlyFieldElement`], and have an associated element called the "generator" that
 //! generates a multiplicative subgroup of order `2^n` for some `n`.
 
+#![allow(deprecated)] // for Field96
+
 #[cfg(feature = "crypto-dependencies")]
 use crate::prng::{Prng, PrngError};
 use crate::{
@@ -713,6 +715,7 @@ make_field!(
 );
 
 make_field!(
+    #[deprecated]
     /// `GF(79228148845226978974766202881)`, a 96-bit field.
     Field96,
     u128,

@@ -585,7 +585,7 @@ mod tests {
 
     #[cfg(feature = "multithreaded")]
     use crate::field::FieldElement;
-    use crate::field::{random_vector, Field96 as TestField};
+    use crate::field::{random_vector, Field64 as TestField};
     use crate::prng::Prng;
 
     #[test]
