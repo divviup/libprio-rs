@@ -6,7 +6,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     vdaf::{
-        prg::{CoinToss, Prg, PrgFixedKeyAes128, Seed, SeedStream},
+        prg::{CoinToss, PrgFixedKeyAes128Key, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -183,15 +183,8 @@ where
     }
 }
 
-fn extend(seed: &[u8; 16], binder: &[u8]) -> ([[u8; 16]; 2], [Choice; 2]) {
-    let custom = [
-        VERSION, 1, /* algorithm class */
-        0, 0, 0, 0, /* algorithm ID */
-        0, 0, /* usage */
-    ];
-    let mut prg = PrgFixedKeyAes128::init(seed, &custom);
-    prg.update(binder);
-    let mut seed_stream = prg.into_seed_stream();
+fn extend(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([[u8; 16]; 2], [Choice; 2]) {
+    let mut seed_stream = prg_fixed_key.with_seed(seed);
 
     let mut seeds = [[0u8; 16], [0u8; 16]];
     seed_stream.fill(&mut seeds[0]);
@@ -204,18 +197,11 @@ fn extend(seed: &[u8; 16], binder: &[u8]) -> ([[u8; 16]; 2], [Choice; 2]) {
     (seeds, control_bits)
 }
 
-fn convert<V>(seed: &[u8; 16], binder: &[u8]) -> ([u8; 16], V)
+fn convert<V>(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([u8; 16], V)
 where
     V: IdpfValue,
 {
-    let custom = [
-        VERSION, 1, /* algorithm class */
-        0, 0, 0, 0, /* algorithm ID */
-        0, 1, /* usage */
-    ];
-    let mut prg = PrgFixedKeyAes128::init(seed, &custom);
-    prg.update(binder);
-    let mut seed_stream = prg.into_seed_stream();
+    let mut seed_stream = prg_fixed_key.with_seed(seed);
 
     let mut next_seed = [0u8; 16];
     seed_stream.fill(&mut next_seed);
@@ -230,14 +216,15 @@ fn generate_correction_word<V>(
     value: V,
     keys: &mut [[u8; 16]; 2],
     control_bits: &mut [Choice; 2],
-    binder: &[u8],
+    extend_prg_fixed_key: &PrgFixedKeyAes128Key,
+    convert_prg_fixed_key: &PrgFixedKeyAes128Key,
 ) -> IdpfCorrectionWord<V>
 where
     V: IdpfValue,
 {
     // Expand both keys into two seeds and two control bits each.
-    let (seed_0, control_bits_0) = extend(&keys[0], binder);
-    let (seed_1, control_bits_1) = extend(&keys[1], binder);
+    let (seed_0, control_bits_0) = extend(&keys[0], extend_prg_fixed_key);
+    let (seed_1, control_bits_1) = extend(&keys[1], extend_prg_fixed_key);
 
     let (keep, lose) = (input_bit, !input_bit);
 
@@ -267,8 +254,8 @@ where
         conditional_xor_seeds(&seed_1_keep, &cw_seed, previous_control_bits[1]),
     ];
 
-    let (new_key_0, elements_0) = convert::<V>(&seeds_corrected[0], binder);
-    let (new_key_1, elements_1) = convert::<V>(&seeds_corrected[1], binder);
+    let (new_key_0, elements_0) = convert::<V>(&seeds_corrected[0], convert_prg_fixed_key);
+    let (new_key_1, elements_1) = convert::<V>(&seeds_corrected[1], convert_prg_fixed_key);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
@@ -291,12 +278,13 @@ fn eval_next<V>(
     control_bit: &mut Choice,
     correction_word: &IdpfCorrectionWord<V>,
     input_bit: Choice,
-    binder: &[u8],
+    extend_prg_fixed_key: &PrgFixedKeyAes128Key,
+    convert_prg_fixed_key: &PrgFixedKeyAes128Key,
 ) -> V
 where
     V: IdpfValue,
 {
-    let (mut seeds, mut control_bits) = extend(key, binder);
+    let (mut seeds, mut control_bits) = extend(key, extend_prg_fixed_key);
 
     seeds[0] = conditional_xor_seeds(&seeds[0], &correction_word.seed, *control_bit);
     control_bits[0] ^= correction_word.control_bits[0] & *control_bit;
@@ -306,7 +294,7 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<V>(&seed_corrected, binder);
+    let (new_key, elements) = convert::<V>(&seed_corrected, convert_prg_fixed_key);
     *key = new_key;
 
     let mut out =
@@ -330,6 +318,19 @@ where
 
     let initial_keys: [Seed<16>; 2] = [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
+    let extend_custom = [
+        VERSION, 1, /* algorithm class */
+        0, 0, 0, 0, /* algorithm ID */
+        0, 0, /* usage */
+    ];
+    let convert_custom = [
+        VERSION, 1, /* algorithm class */
+        0, 0, 0, 0, /* algorithm ID */
+        0, 1, /* usage */
+    ];
+    let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_custom, binder);
+    let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_custom, binder);
+
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
     let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
     let mut inner_correction_words = Vec::with_capacity(bits - 1);
@@ -345,7 +346,8 @@ where
             value,
             &mut keys,
             &mut control_bits,
-            binder,
+            &extend_prg_fixed_key,
+            &convert_prg_fixed_key,
         ));
     }
     if inner_correction_words.len() != bits - 1 {
@@ -356,7 +358,8 @@ where
         leaf_value,
         &mut keys,
         &mut control_bits,
-        binder,
+        &extend_prg_fixed_key,
+        &convert_prg_fixed_key,
     );
     let public_share = IdpfPublicShare {
         inner_correction_words,
@@ -409,6 +412,20 @@ where
     VL: IdpfValue,
 {
     let bits = public_share.inner_correction_words.len() + 1;
+
+    let extend_custom = [
+        VERSION, 1, /* algorithm class */
+        0, 0, 0, 0, /* algorithm ID */
+        0, 0, /* usage */
+    ];
+    let convert_custom = [
+        VERSION, 1, /* algorithm class */
+        0, 0, 0, 0, /* algorithm ID */
+        0, 1, /* usage */
+    ];
+    let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_custom, binder);
+    let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_custom, binder);
+
     let mut last_inner_output = None;
     for ((correction_word, input_bit), level) in public_share.inner_correction_words[start_level..]
         .iter()
@@ -421,7 +438,8 @@ where
             &mut control_bit,
             correction_word,
             Choice::from(*input_bit as u8),
-            binder,
+            &extend_prg_fixed_key,
+            &convert_prg_fixed_key,
         ));
         let cache_key = &prefix[..=level];
         cache.insert(cache_key, &(key, control_bit.unwrap_u8()));
@@ -434,7 +452,8 @@ where
             &mut control_bit,
             &public_share.leaf_correction_word,
             Choice::from(prefix[bits - 1] as u8),
-            binder,
+            &extend_prg_fixed_key,
+            &convert_prg_fixed_key,
         );
         // Note: there's no point caching this node's key, because we will always run the
         // eval_next() call for the leaf level.
