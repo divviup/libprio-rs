@@ -166,7 +166,7 @@ pub struct SeedStreamAes128(Ctr64BE<Aes128>);
 #[cfg(feature = "crypto-dependencies")]
 impl SeedStreamAes128 {
     pub(crate) fn new(key: &[u8], iv: &[u8]) -> Self {
-        SeedStreamAes128(Ctr64BE::<Aes128>::new(key.into(), iv.into()))
+        SeedStreamAes128(<Ctr64BE<Aes128> as KeyIvInit>::new(key.into(), iv.into()))
     }
 }
 
