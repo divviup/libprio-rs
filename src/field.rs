@@ -717,6 +717,8 @@ make_field!(
 make_field!(
     #[deprecated]
     /// `GF(79228148845226978974766202881)`, a 96-bit field.
+    ///
+    /// This is deprecated because it is not currently used by either Prio v2 or any VDAF.
     Field96,
     u128,
     FP96,
