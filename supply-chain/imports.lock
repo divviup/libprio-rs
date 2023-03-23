@@ -83,6 +83,11 @@ who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 version = "2.34.0"
 
+[[audits.chromeos.audits.clap]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "3.2.22"
+
 [[audits.chromeos.audits.clap_lex]]
 who = "ChromeOS"
 criteria = "safe-to-run"
@@ -117,6 +122,11 @@ version = "1.0.6"
 who = "Android Legacy"
 criteria = "safe-to-run"
 version = "0.11.0"
+
+[[audits.chromeos.audits.textwrap]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "0.15.2"
 
 [[audits.chromeos.audits.tracing]]
 who = "ChromeOS"
