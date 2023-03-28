@@ -1,8 +1,14 @@
 
 # cargo-vet config file
 
+[cargo-vet]
+version = "0.6"
+
 [imports.bytecode-alliance]
 url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
+
+[imports.chromeos]
+url = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/main/cargo-vet/audits.toml?format=TEXT"
 
 [imports.divviup]
 url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
@@ -43,10 +49,6 @@ criteria = "safe-to-deploy"
 version = "0.10.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.ansi_term]]
-version = "0.12.1"
-criteria = "safe-to-run"
-
 [[exemptions.az]]
 version = "1.2.1"
 criteria = "safe-to-deploy"
@@ -54,10 +56,6 @@ criteria = "safe-to-deploy"
 [[exemptions.bitflags]]
 version = "1.3.2"
 criteria = "safe-to-run"
-
-[[exemptions.bumpalo]]
-version = "3.11.0"
-criteria = "safe-to-deploy"
 
 [[exemptions.bytemuck]]
 version = "1.12.1"
@@ -76,15 +74,7 @@ version = "0.4.3"
 criteria = "safe-to-deploy"
 
 [[exemptions.clap]]
-version = "2.34.0"
-criteria = "safe-to-run"
-
-[[exemptions.clap]]
 version = "3.2.21"
-criteria = "safe-to-run"
-
-[[exemptions.clap_lex]]
-version = "0.2.4"
 criteria = "safe-to-run"
 
 [[exemptions.color-eyre]]
@@ -179,10 +169,6 @@ criteria = "safe-to-run"
 version = "1.9.1"
 criteria = "safe-to-run"
 
-[[exemptions.itertools]]
-version = "0.10.5"
-criteria = "safe-to-run"
-
 [[exemptions.itoa]]
 version = "1.0.3"
 criteria = "safe-to-deploy"
@@ -190,10 +176,6 @@ criteria = "safe-to-deploy"
 [[exemptions.js-sys]]
 version = "0.3.60"
 criteria = "safe-to-deploy"
-
-[[exemptions.lazy_static]]
-version = "1.4.0"
-criteria = "safe-to-run"
 
 [[exemptions.libc]]
 version = "0.2.132"
@@ -227,20 +209,12 @@ criteria = "safe-to-deploy"
 version = "11.1.3"
 criteria = "safe-to-run"
 
-[[exemptions.os_str_bytes]]
-version = "6.3.0"
-criteria = "safe-to-run"
-
 [[exemptions.owo-colors]]
 version = "3.5.0"
 criteria = "safe-to-run"
 
 [[exemptions.paste]]
 version = "1.0.9"
-criteria = "safe-to-run"
-
-[[exemptions.pin-project-lite]]
-version = "0.2.9"
 criteria = "safe-to-run"
 
 [[exemptions.plotters]]
@@ -295,10 +269,6 @@ criteria = "safe-to-deploy"
 version = "1.0.11"
 criteria = "safe-to-deploy"
 
-[[exemptions.same-file]]
-version = "1.0.6"
-criteria = "safe-to-run"
-
 [[exemptions.scopeguard]]
 version = "1.1.0"
 criteria = "safe-to-deploy"
@@ -348,10 +318,6 @@ version = "1.0.104"
 criteria = "safe-to-deploy"
 
 [[exemptions.textwrap]]
-version = "0.11.0"
-criteria = "safe-to-run"
-
-[[exemptions.textwrap]]
 version = "0.15.0"
 criteria = "safe-to-run"
 
@@ -371,14 +337,6 @@ criteria = "safe-to-run"
 version = "1.2.1"
 criteria = "safe-to-run"
 
-[[exemptions.tracing]]
-version = "0.1.36"
-criteria = "safe-to-run"
-
-[[exemptions.tracing-core]]
-version = "0.1.29"
-criteria = "safe-to-run"
-
 [[exemptions.tracing-error]]
 version = "0.2.0"
 criteria = "safe-to-run"
@@ -395,24 +353,12 @@ criteria = "safe-to-deploy"
 version = "1.9.0"
 criteria = "safe-to-run"
 
-[[exemptions.unicode-width]]
-version = "0.1.9"
-criteria = "safe-to-run"
-
 [[exemptions.valuable]]
 version = "0.1.0"
 criteria = "safe-to-run"
 
 [[exemptions.vec_map]]
 version = "0.8.2"
-criteria = "safe-to-run"
-
-[[exemptions.version_check]]
-version = "0.9.4"
-criteria = "safe-to-deploy"
-
-[[exemptions.walkdir]]
-version = "2.3.2"
 criteria = "safe-to-run"
 
 [[exemptions.wasi]]
@@ -454,4 +400,3 @@ criteria = "safe-to-run"
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
 criteria = "safe-to-deploy"
-
