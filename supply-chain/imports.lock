@@ -271,6 +271,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.93 -> 1.0.94"
 
+[[audits.divviup.audits.serde_json]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.94 -> 1.0.95"
+
 [[audits.divviup.audits.thiserror]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
