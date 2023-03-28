@@ -84,6 +84,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.22.1 -> 1.23.0"
 
+[[audits.fixed]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.23.0 -> 1.23.1"
+
 [[audits.fixed-macro]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -249,4 +254,3 @@ version = "0.2.83"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "7.0.0"
-
