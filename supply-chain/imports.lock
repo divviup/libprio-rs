@@ -69,6 +69,71 @@ criteria = "safe-to-deploy"
 version = "0.1.21"
 notes = "I am the author of this crate."
 
+[[audits.chromeos.audits.ansi_term]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "0.12.1"
+
+[[audits.chromeos.audits.bitflags]]
+who = "Android Legacy"
+criteria = "safe-to-run"
+version = "1.2.1"
+
+[[audits.chromeos.audits.clap]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "2.34.0"
+
+[[audits.chromeos.audits.clap_lex]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "0.2.4"
+
+[[audits.chromeos.audits.itertools]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "0.10.5"
+
+[[audits.chromeos.audits.memchr]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "2.4.1"
+
+[[audits.chromeos.audits.num-traits]]
+who = "Android Legacy"
+criteria = "safe-to-run"
+version = "0.2.14"
+
+[[audits.chromeos.audits.os_str_bytes]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "6.3.0"
+
+[[audits.chromeos.audits.same-file]]
+who = "Android Legacy"
+criteria = "safe-to-run"
+version = "1.0.6"
+
+[[audits.chromeos.audits.textwrap]]
+who = "Android Legacy"
+criteria = "safe-to-run"
+version = "0.11.0"
+
+[[audits.chromeos.audits.unicode-segmentation]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "1.8.0"
+
+[[audits.chromeos.audits.unicode-width]]
+who = "Android Legacy"
+criteria = "safe-to-run"
+version = "0.1.8"
+
+[[audits.chromeos.audits.walkdir]]
+who = "Android Legacy"
+criteria = "safe-to-run"
+version = "2.3.2"
+
 [[audits.divviup.audits.assert_matches]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
