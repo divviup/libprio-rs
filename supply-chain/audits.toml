@@ -6,3 +6,7 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.22.1 -> 1.23.0"
 
+[[audits.syn]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "2.0.11 -> 2.0.3"
