@@ -156,6 +156,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.49 -> 1.0.47"
 
+[[audits.proc-macro2]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.52 -> 1.0.53"
+
 [[audits.rayon]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
@@ -227,7 +232,22 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.10.6"
 
+[[audits.syn]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.104 -> 2.0.8"
+
 [[audits.thiserror]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.39"
+
+[[audits.thiserror]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.39 -> 1.0.40"
+
+[[audits.thiserror-impl]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.38 -> 1.0.39"
@@ -235,7 +255,7 @@ delta = "1.0.38 -> 1.0.39"
 [[audits.thiserror-impl]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
-delta = "1.0.38 -> 1.0.39"
+delta = "1.0.39 -> 1.0.40"
 
 [[audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
