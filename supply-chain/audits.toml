@@ -1,6 +1,16 @@
 
 # cargo-vet audits file
 
+[[audits.serde]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.159 -> 1.0.158"
+
+[[audits.serde_derive]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.159 -> 1.0.158"
+
 [[audits.serde_json]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"

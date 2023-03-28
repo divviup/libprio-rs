@@ -154,6 +154,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.7.1"
 
+[[audits.divviup.audits.cmac]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.7.1 -> 0.7.2"
+
 [[audits.divviup.audits.dbl]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -204,6 +209,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.154 -> 1.0.155"
 
+[[audits.divviup.audits.serde]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.156 -> 1.0.159"
+
 [[audits.divviup.audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -218,6 +228,11 @@ delta = "1.0.153 -> 1.0.154"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.154 -> 1.0.155"
+
+[[audits.divviup.audits.serde_derive]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.156 -> 1.0.159"
 
 [[audits.divviup.audits.serde_json]]
 who = "Brandon Pitman <bran@bran.land>"
@@ -391,4 +406,16 @@ aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/suppl
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "1.0.23 -> 1.0.26"
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
+[[audits.zcash.audits.serde]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.155 -> 1.0.156"
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
+[[audits.zcash.audits.serde_derive]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.155 -> 1.0.156"
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
