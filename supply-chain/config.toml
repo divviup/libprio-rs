@@ -1,6 +1,9 @@
 
 # cargo-vet config file
 
+[cargo-vet]
+version = "0.6"
+
 [imports.bytecode-alliance]
 url = "https://raw.githubusercontent.com/bytecodealliance/wasmtime/main/supply-chain/audits.toml"
 
@@ -62,10 +65,6 @@ criteria = "safe-to-run"
 [[exemptions.bitflags]]
 version = "1.2.1"
 criteria = "safe-to-run"
-
-[[exemptions.bumpalo]]
-version = "3.6.1"
-criteria = "safe-to-deploy"
 
 [[exemptions.byteorder]]
 version = "1.4.3"
@@ -482,4 +481,3 @@ criteria = "safe-to-run"
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
 criteria = "safe-to-deploy"
-
