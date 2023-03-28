@@ -14,18 +14,6 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    target-branch: release/0.8
-
-  - package-ecosystem: "github-actions"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    target-branch: release/0.8
-
-  - package-ecosystem: "cargo"
-    directory: "/"
-    schedule:
-      interval: "weekly"
     target-branch: release/0.10
 
   - package-ecosystem: "github-actions"
