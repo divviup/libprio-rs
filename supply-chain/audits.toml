@@ -26,6 +26,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.7.1"
 
+[[audits.cmac]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.7.1 -> 0.7.2"
+
 [[audits.crunchy]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -244,4 +249,3 @@ version = "0.2.83"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "7.0.0"
-
