@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-04]].
+//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-05]].
 //!
-//! [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
 use crate::vdaf::{CodecError, Decode, Encode};
 #[cfg(feature = "experimental")]
@@ -91,9 +91,9 @@ pub trait SeedStream {
     fn fill(&mut self, buf: &mut [u8]);
 }
 
-/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-04]].
+/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-05]].
 ///
-/// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+/// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 pub trait Prg<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this PRG.
     type SeedStream: SeedStream;
@@ -190,9 +190,9 @@ impl Debug for SeedStreamAes128 {
     }
 }
 
-/// The PRG based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-04]].
+/// The PRG based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-05]].
 ///
-/// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
+/// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 #[derive(Clone, Debug)]
 #[cfg(feature = "crypto-dependencies")]
 pub struct PrgSha3(CShake128);
@@ -231,6 +231,36 @@ impl SeedStreamSha3 {
 impl SeedStream for SeedStreamSha3 {
     fn fill(&mut self, buf: &mut [u8]) {
         XofReader::read(&mut self.0, buf);
+    }
+}
+
+/// Factory to produce multiple [`PrgFixedKeyAes128`] instances with the same fixed key and
+/// different seeds.
+#[cfg(feature = "experimental")]
+pub struct PrgFixedKeyAes128Key {
+    cipher: Aes128,
+}
+
+#[cfg(feature = "experimental")]
+impl PrgFixedKeyAes128Key {
+    /// Derive a fixed key from the customization string and binder string.
+    pub fn new(custom: &[u8], binder: &[u8]) -> Self {
+        let mut deriver = CShake128::from_core(CShake128Core::new(custom));
+        deriver.update(binder);
+        let mut key = GenericArray::from([0; 16]);
+        XofReader::read(&mut deriver.finalize_xof(), &mut key);
+        Self {
+            cipher: Aes128::new(&key),
+        }
+    }
+
+    /// Combine a fixed key with a seed to produce a new stream of pseudorandom bytes.
+    pub fn with_seed(&self, seed: &[u8; 16]) -> SeedStreamFixedKeyAes128 {
+        SeedStreamFixedKeyAes128 {
+            cipher: self.cipher.clone(),
+            base_block: (*seed).into(),
+            length_consumed: 0,
+        }
     }
 }
 
@@ -485,9 +515,41 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn prg_fixed_key_aes128_incomplete_block() {
-        let mut buf = [0; 15];
-        PrgFixedKeyAes128::seed_stream(&Seed::generate().unwrap(), b"custom", b"binder")
-            .fill(&mut buf);
-        assert_ne!(buf, [0; 15]);
+        let seed = Seed::generate().unwrap();
+        let mut expected = [0; 32];
+        PrgFixedKeyAes128::seed_stream(&seed, b"custom", b"binder").fill(&mut expected);
+
+        for len in 0..=32 {
+            let mut buf = vec![0; len];
+            PrgFixedKeyAes128::seed_stream(&seed, b"custom", b"binder").fill(&mut buf);
+            assert_eq!(buf, &expected[..len]);
+        }
+    }
+
+    #[cfg(feature = "experimental")]
+    #[test]
+    fn prg_fixed_key_aes128_alternate_apis() {
+        let custom = b"customization string";
+        let binder = b"AAAAAAAAAAAAAAAAAAAAAAAA";
+        let seed_1 = Seed::generate().unwrap();
+        let seed_2 = Seed::generate().unwrap();
+
+        let mut stream_1_trait_api = PrgFixedKeyAes128::seed_stream(&seed_1, custom, binder);
+        let mut output_1_trait_api = [0u8; 32];
+        stream_1_trait_api.fill(&mut output_1_trait_api);
+        let mut stream_2_trait_api = PrgFixedKeyAes128::seed_stream(&seed_2, custom, binder);
+        let mut output_2_trait_api = [0u8; 32];
+        stream_2_trait_api.fill(&mut output_2_trait_api);
+
+        let fixed_key = PrgFixedKeyAes128Key::new(custom, binder);
+        let mut stream_1_alternate_api = fixed_key.with_seed(seed_1.as_ref());
+        let mut output_1_alternate_api = [0u8; 32];
+        stream_1_alternate_api.fill(&mut output_1_alternate_api);
+        let mut stream_2_alternate_api = fixed_key.with_seed(seed_2.as_ref());
+        let mut output_2_alternate_api = [0u8; 32];
+        stream_2_alternate_api.fill(&mut output_2_alternate_api);
+
+        assert_eq!(output_1_trait_api, output_1_alternate_api);
+        assert_eq!(output_2_trait_api, output_2_alternate_api);
     }
 }
