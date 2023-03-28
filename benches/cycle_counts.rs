@@ -9,10 +9,7 @@ use prio::{
     codec::{Decode, Encode, ParameterizedDecode},
     field::Field255,
     idpf::{self, IdpfInput, IdpfPublicShare, RingBufferCache},
-    vdaf::{
-        poplar1::Poplar1IdpfValue,
-        prg::{PrgSha3, Seed},
-    },
+    vdaf::{poplar1::Poplar1IdpfValue, prg::Seed},
 };
 #[cfg(feature = "prio2")]
 use prio::{field::FieldPrio2, server::VerificationMessage};
@@ -178,7 +175,7 @@ fn idpf_poplar_gen(
     inner_values: Vec<Poplar1IdpfValue<Field64>>,
     leaf_value: Poplar1IdpfValue<Field255>,
 ) {
-    idpf::gen::<_, _, _, PrgSha3, 16>(input, inner_values, leaf_value).unwrap();
+    idpf::gen(input, inner_values, leaf_value, &[0; 16]).unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -217,11 +214,11 @@ fn idpf_poplar_gen_2048() {
 #[cfg(feature = "experimental")]
 fn idpf_poplar_eval(
     input: &IdpfInput,
-    public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>, 16>,
+    public_share: &IdpfPublicShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>,
     key: &Seed<16>,
 ) {
     let mut cache = RingBufferCache::new(1);
-    idpf::eval::<_, _, PrgSha3, 16>(0, public_share, key, input, &mut cache).unwrap();
+    idpf::eval(0, public_share, key, input, &[0; 16], &mut cache).unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -261,7 +258,7 @@ fn idpf_codec() {
     ))
     .unwrap();
     let bits = 4;
-    let public_share = IdpfPublicShare::<Poplar1IdpfValue<Field64>,Poplar1IdpfValue<Field255>,16>::get_decoded_with_param(&bits, &data).unwrap();
+    let public_share = IdpfPublicShare::<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>::get_decoded_with_param(&bits, &data).unwrap();
     let encoded = public_share.get_encoded();
     let _ = black_box(encoded.len());
 }

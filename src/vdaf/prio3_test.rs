@@ -132,11 +132,10 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
     }
 }
 
-#[ignore] // TODO(issue #477)
 #[test]
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("test_vec/04/Prio3Count_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/05/Prio3Count_0.json")).unwrap();
     let prio3 = Prio3::new_count(2).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -145,11 +144,10 @@ fn test_vec_prio3_count() {
     }
 }
 
-#[ignore] // TODO(issue #477)
 #[test]
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/04/Prio3Sum_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/05/Prio3Sum_0.json")).unwrap();
     let prio3 = Prio3::new_sum(2, 8).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -158,11 +156,10 @@ fn test_vec_prio3_sum() {
     }
 }
 
-#[ignore] // TODO(issue #477)
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/04/Prio3Histogram_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/05/Prio3Histogram_0.json")).unwrap();
     let prio3 = Prio3::new_histogram(2, &[1, 10, 100]).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
