@@ -253,10 +253,6 @@ criteria = "safe-to-deploy"
 version = "1.0.4"
 criteria = "safe-to-run"
 
-[[exemptions.quote]]
-version = "1.0.9"
-criteria = "safe-to-deploy"
-
 [[exemptions.rand]]
 version = "0.8.5"
 criteria = "safe-to-deploy"
