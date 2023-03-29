@@ -191,6 +191,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.21.0 -> 1.22.1"
 
+[[audits.divviup.audits.fixed]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.23.0 -> 1.23.1"
+
 [[audits.divviup.audits.fixed-macro]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -220,11 +225,6 @@ version = "0.3.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "1.0.4"
-
-[[audits.divviup.audits.proc-macro2]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.49 -> 1.0.47"
 
 [[audits.divviup.audits.rayon]]
 who = "Brandon Pitman <bran@bran.land>"
@@ -276,7 +276,22 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.94 -> 1.0.95"
 
+[[audits.divviup.audits.syn]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.104 -> 2.0.11"
+
 [[audits.divviup.audits.thiserror]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.38 -> 1.0.39"
+
+[[audits.divviup.audits.thiserror]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.39 -> 1.0.40"
+
+[[audits.divviup.audits.thiserror-impl]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.38 -> 1.0.39"
@@ -284,7 +299,7 @@ delta = "1.0.38 -> 1.0.39"
 [[audits.divviup.audits.thiserror-impl]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
-delta = "1.0.38 -> 1.0.39"
+delta = "1.0.39 -> 1.0.40"
 
 [[audits.divviup.audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
@@ -417,6 +432,11 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.43 -> 1.0.49"
 
+[[audits.firefox.audits.proc-macro2]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.49 -> 1.0.51"
+
 [[audits.firefox.audits.quote]]
 who = "Nika Layzell <nika@thelayzells.com>"
 criteria = "safe-to-deploy"
@@ -436,6 +456,11 @@ formatter, and runtime logic.
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.18 -> 1.0.21"
+
+[[audits.firefox.audits.quote]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.21 -> 1.0.23"
 
 [[audits.firefox.audits.rayon]]
 who = "Josh Stone <jistone@redhat.com>"
@@ -479,6 +504,18 @@ who = "Daira Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 version = "0.1.3"
 notes = "Reviewed in full."
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
+[[audits.zcash.audits.proc-macro2]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.51 -> 1.0.52"
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
+
+[[audits.zcash.audits.quote]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "1.0.23 -> 1.0.26"
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.unicode-ident]]
