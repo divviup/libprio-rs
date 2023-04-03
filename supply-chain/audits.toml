@@ -81,6 +81,11 @@ This release renames many items and adds a new module. The code in the new
 module is entirely composed of arithmetic and array accesses.
 """
 
+[[audits.fiat-crypto]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.19 -> 0.1.20"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
