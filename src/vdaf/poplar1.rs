@@ -1738,6 +1738,7 @@ mod tests {
             ),
         ] {
             let encoded_prep_state = prep_state.get_encoded();
+            assert_eq!(prep_state.encoded_len(), Some(encoded_prep_state.len()));
             let decoded_prep_state =
                 Poplar1PrepareState::get_decoded_with_param(&(&vdaf, agg_id), &encoded_prep_state)
                     .unwrap();
