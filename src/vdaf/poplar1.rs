@@ -407,8 +407,10 @@ impl Poplar1AggregationParam {
     ///
     /// * The list of prefixes is empty.
     /// * The prefixes have different lengths (they must all be the same).
-    /// * The prefixes are longer than 2^16 bits.
+    /// * The prefixes have length 0, or length longer than 2^16 bits.
     /// * There are more than 2^32 - 1 prefixes.
+    /// * The prefixes are not unique.
+    /// * The prefixes are not in lexicographic order.
     pub fn try_from_prefixes(prefixes: Vec<IdpfInput>) -> Result<Self, VdafError> {
         if prefixes.is_empty() {
             return Err(VdafError::Uncategorized(
@@ -443,7 +445,10 @@ impl Poplar1AggregationParam {
             last_prefix = Some(prefix);
         }
 
-        let level = u16::try_from(len - 1)
+        let level = len
+            .checked_sub(1)
+            .ok_or_else(|| VdafError::Uncategorized("prefixes are too short".into()))?;
+        let level = u16::try_from(level)
             .map_err(|_| VdafError::Uncategorized("prefixes are too long".into()))?;
 
         Ok(Self { level, prefixes })
