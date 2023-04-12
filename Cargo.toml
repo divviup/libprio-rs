@@ -59,7 +59,7 @@ default = ["crypto-dependencies"]
 experimental = ["bitvec", "fiat-crypto", "fixed"]
 test-util = ["rand", "serde_json"]
 multithreaded = ["rayon"]
-prio2 = ["aes-gcm", "ring"]
+prio2 = ["crypto-dependencies", "aes-gcm", "ring"]
 crypto-dependencies = ["aes", "ctr", "cmac", "sha3"]
 
 [workspace]

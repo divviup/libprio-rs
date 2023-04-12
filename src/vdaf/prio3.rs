@@ -33,7 +33,7 @@ use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
 use crate::field::{decode_fieldvec, FftFriendlyFieldElement, FieldElement};
 #[cfg(feature = "crypto-dependencies")]
 use crate::field::{Field128, Field64};
-#[cfg(feature = "multithreaded")]
+#[cfg(all(feature = "crypto-dependencies", feature = "multithreaded"))]
 use crate::flp::gadgets::ParallelSumMultithreaded;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::flp::gadgets::PolyEval;

@@ -5,7 +5,7 @@
 //!
 //! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
-#[cfg(feature = "experimental")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -49,7 +49,7 @@ pub enum VdafError {
     GetRandom(#[from] getrandom::Error),
 
     /// IDPF error.
-    #[cfg(feature = "experimental")]
+    #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("idpf error: {0}")]
     Idpf(#[from] IdpfError),
 }

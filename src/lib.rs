@@ -31,7 +31,7 @@ mod fft;
 pub mod field;
 pub mod flp;
 mod fp;
-#[cfg(feature = "experimental")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 pub mod idpf;
 mod polynomial;
 mod prng;
