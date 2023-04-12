@@ -84,4 +84,4 @@ jobs:
     - name: Run tests
       run: cargo test --verbose ${{ matrix.features }}
     - name: Build benchmarks
-      run: cargo bench --no-run ${{ matrix.features }}
+      run: cargo bench --no-run ${{ matrix.features }} --profile=dev
