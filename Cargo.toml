@@ -85,3 +85,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "backward_compatibility"
 path = "tests/backward_compatibility.rs"
 required-features = ["prio2"]
+
+[package.metadata.cargo-all-features]
+skip_optional_dependencies = true
