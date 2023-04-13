@@ -60,7 +60,7 @@ default = ["crypto-dependencies"]
 experimental = ["bitvec", "fiat-crypto", "fixed"]
 test-util = ["rand", "serde_json"]
 multithreaded = ["rayon"]
-prio2 = ["aes-gcm", "ring"]
+prio2 = ["crypto-dependencies", "aes-gcm", "ring"]
 crypto-dependencies = ["aes", "ctr", "cmac", "sha3"]
 
 [workspace]
@@ -86,3 +86,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 name = "backward_compatibility"
 path = "tests/backward_compatibility.rs"
 required-features = ["prio2"]
+
+[package.metadata.cargo-all-features]
+skip_optional_dependencies = true
