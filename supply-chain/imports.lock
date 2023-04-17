@@ -207,6 +207,16 @@ who = "Simon Friedberger <simon@mozilla.com>"
 criteria = "safe-to-deploy"
 version = "0.4.3"
 
+[[audits.firefox.audits.libc]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.132 -> 0.2.138"
+
+[[audits.firefox.audits.libc]]
+who = "Mike Hommey <mh+mozilla@glandium.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.138 -> 0.2.139"
+
 [[audits.firefox.audits.log]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -342,6 +352,50 @@ criteria = "safe-to-run"
 delta = "0.1.35 -> 0.1.36"
 
 [audits.isrg.audits]
+
+[[audits.zcash.audits.getrandom]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.2.8 -> 0.2.9"
+notes = """
+The new `getrandom_uninit` method is introduced by retrofitting every system
+implementation to take `&mut [MaybeUninit<u8>]` instead of `&mut [u8]`.
+
+Most implementations are only altered to update their signature, and to
+internally cast the slice back to `*mut u8` when writing to it. All of these
+backends appear to write bytes to the full length of the slice, so it should be
+fully initialized afterwards, upholding the invariants of the new `unsafe` code
+in the public APIs.
+
+- I did not check the behaviour of each implementation's system method to ensure
+  they never write uninitialized bytes; the code prior to this change already
+  needed to uphold that invariant as it was writing into `&mut [u8]`.
+
+The following system implementations have additional `unsafe` code modifications:
+
+- `custom`: The slice is zero-filled to ensure the `MaybeUninit<u8>` doesn't
+  escape into a system implementation that might not write initialized bytes
+  into the entire slice. The internal API between registration and usage is also
+  switched from C ABI to Rust ABI, to guard against potential panics.
+
+- `emscripten`: New backend, implementation looks reasonable.
+
+- `hermit`: New backend, writes incrementally to the slice, but ensures that the
+  entire slice has been written to before returning `Ok(())`. I note that it is
+  possible for the implementation to loop indefinitely if `sys_read_entropy`
+  were to always return 0 for some reason.
+
+- `js`: Adds chunking to limit each write to less than 2^31 (but that seems like
+  a bugfix). The safety requirements for `Uint8Array::view_mut_raw` appear to be
+  satisfied.
+
+- `rdrand`: Code changes to better handle CPU families with broken RDRAND.
+
+- `solaris_illumos`: Now uses `GRND_RANDOM`.
+
+- `windows`: Added `RtlGenRandom` fallback for non-UWP Windows.
+"""
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.inout]]
 who = "Daira Hopwood <daira@jacaranda.org>"
