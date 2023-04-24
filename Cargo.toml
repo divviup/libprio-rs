@@ -19,9 +19,9 @@ base64 = "0.21.0"
 byteorder = "1.4.3"
 fiat-crypto = { version = "0.1.20", optional = true }
 fixed = { version = "1.23", optional = true }
-getrandom = { version = "0.2.8", features = ["std"] }
+getrandom = { version = "0.2.9", features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
-sha3 = "0.10.6"
+sha3 = "0.10.7"
 static_assertions = "1.1.0"
 subtle = "2.4.1"
 thiserror = "1.0"
