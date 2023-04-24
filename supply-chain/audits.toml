@@ -146,6 +146,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.1.2 -> 0.1.3"
 
+[[audits.libc]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.2.139 -> 0.2.141"
+
 [[audits.modinverse]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
