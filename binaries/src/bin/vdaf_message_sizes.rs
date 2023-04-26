@@ -11,7 +11,7 @@ use prio::{
         Type,
     },
     vdaf::{
-        prio3::{Prio3, Prio3InputShare},
+        prio3::{Prio3, Prio3InputShare, Prio3PublicShare},
         Client,
     },
 };
@@ -24,7 +24,7 @@ fn main() {
     let measurement = 1;
     println!(
         "prio3 count share size = {}",
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let buckets: Vec<u64> = (1..10).collect();
@@ -33,7 +33,7 @@ fn main() {
     println!(
         "prio3 histogram ({} buckets) share size = {}",
         buckets.len() + 1,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let bits = 32;
@@ -42,7 +42,7 @@ fn main() {
     println!(
         "prio3 sum ({} bits) share size = {}",
         bits,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let len = 1000;
@@ -51,14 +51,14 @@ fn main() {
     println!(
         "prio3 countvec ({} len) share size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let prio3 = Prio3::new_sum_vec_multithreaded(num_shares, 1, len).unwrap();
     println!(
         "prio3 countvec multithreaded ({} len) share size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let len = 1000;
@@ -68,14 +68,14 @@ fn main() {
     println!(
         "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(num_shares, len).unwrap();
     println!(
         "prio3 fixedpoint16 boundedl2 vec multithreaded ({} entries) size = {}",
         len,
-        prio3_input_share_size(&prio3.shard(&measurement, &nonce).unwrap().1)
+        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     println!();
@@ -109,10 +109,13 @@ fn main() {
 }
 
 fn prio3_input_share_size<F: FftFriendlyFieldElement, const SEED_SIZE: usize>(
-    input_shares: &[Prio3InputShare<F, SEED_SIZE>],
+    shares: (
+        Prio3PublicShare<SEED_SIZE>,
+        Vec<Prio3InputShare<F, SEED_SIZE>>,
+    ),
 ) -> usize {
-    let mut size = 0;
-    for input_share in input_shares {
+    let mut size = shares.0.get_encoded().len();
+    for input_share in shares.1 {
         size += input_share.get_encoded().len();
     }
 
