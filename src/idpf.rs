@@ -620,8 +620,8 @@ where
 
 impl<VI, VL> ParameterizedDecode<usize> for IdpfPublicShare<VI, VL>
 where
-    VI: Decode + Copy,
-    VL: Decode + Copy,
+    VI: Decode,
+    VL: Decode,
 {
     fn decode_with_param(bits: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let packed_control_len = (bits + 3) / 4;
