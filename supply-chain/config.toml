@@ -149,10 +149,6 @@ criteria = "safe-to-run"
 version = "2.1.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.heck]]
-version = "0.3.3"
-criteria = "safe-to-run"
-
 [[exemptions.hermit-abi]]
 version = "0.1.19"
 criteria = "safe-to-deploy"
@@ -188,10 +184,6 @@ criteria = "safe-to-run"
 [[exemptions.memoffset]]
 version = "0.6.5"
 criteria = "safe-to-deploy"
-
-[[exemptions.miniz_oxide]]
-version = "0.5.4"
-criteria = "safe-to-run"
 
 [[exemptions.num_cpus]]
 version = "1.13.1"
@@ -348,10 +340,6 @@ criteria = "safe-to-run"
 [[exemptions.typenum]]
 version = "1.15.0"
 criteria = "safe-to-deploy"
-
-[[exemptions.unicode-segmentation]]
-version = "1.9.0"
-criteria = "safe-to-run"
 
 [[exemptions.valuable]]
 version = "0.1.0"
