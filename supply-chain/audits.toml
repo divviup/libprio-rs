@@ -231,6 +231,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.156 -> 1.0.159"
 
+[[audits.serde]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.160 -> 1.0.162"
+
 [[audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -250,6 +255,11 @@ delta = "1.0.154 -> 1.0.155"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.156 -> 1.0.159"
+
+[[audits.serde_derive]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.160 -> 1.0.162"
 
 [[audits.serde_json]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
