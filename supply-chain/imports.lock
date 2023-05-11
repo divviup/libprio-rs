@@ -8,6 +8,13 @@ user-id = 696
 user-login = "fitzgen"
 user-name = "Nick Fitzgerald"
 
+[[publisher.unicode-segmentation]]
+version = "1.9.0"
+when = "2022-02-07"
+user-id = 1139
+user-login = "Manishearth"
+user-name = "Manish Goregaokar"
+
 [[audits.bytecode-alliance.wildcard-audits.bumpalo]]
 who = "Nick Fitzgerald <fitzgen@gmail.com>"
 criteria = "safe-to-deploy"
@@ -75,6 +82,12 @@ who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
 version = "0.1.3"
 
+[[audits.bytecode-alliance.audits.heck]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+version = "0.4.0"
+notes = "Contains `forbid_unsafe` and only uses `std::fmt` from the standard library. Otherwise only contains string manipulation."
+
 [[audits.bytecode-alliance.audits.rustc-demangle]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
@@ -96,6 +109,11 @@ who = "ChromeOS"
 criteria = "safe-to-run"
 version = "0.2.4"
 
+[[audits.chromeos.audits.heck]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+delta = "0.4.0 -> 0.3.3"
+
 [[audits.chromeos.audits.itertools]]
 who = "ChromeOS"
 criteria = "safe-to-run"
@@ -105,6 +123,16 @@ version = "0.10.5"
 who = "Android Legacy"
 criteria = "safe-to-run"
 version = "1.4.0"
+
+[[audits.chromeos.audits.miniz_oxide]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "0.6.2"
+
+[[audits.chromeos.audits.miniz_oxide]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+delta = "0.6.2 -> 0.5.4"
 
 [[audits.chromeos.audits.os_str_bytes]]
 who = "ChromeOS"
@@ -271,6 +299,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.156 -> 1.0.159"
 
+[[audits.divviup.audits.serde]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.160 -> 1.0.162"
+
 [[audits.divviup.audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -290,6 +323,11 @@ delta = "1.0.154 -> 1.0.155"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.156 -> 1.0.159"
+
+[[audits.divviup.audits.serde_derive]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.160 -> 1.0.162"
 
 [[audits.divviup.audits.serde_json]]
 who = "Brandon Pitman <bran@bran.land>"
@@ -347,6 +385,14 @@ criteria = "safe-to-deploy"
 version = "0.2.83"
 
 [audits.embark-studios.audits]
+
+[[audits.firefox.wildcard-audits.unicode-segmentation]]
+who = "Manish Goregaokar <manishsmail@gmail.com>"
+criteria = "safe-to-deploy"
+user-id = 1139
+start = "2019-05-15"
+end = "2024-05-03"
+notes = "All code written or reviewed by Manish"
 
 [[audits.firefox.audits.autocfg]]
 who = "Josh Stone <jistone@redhat.com>"
