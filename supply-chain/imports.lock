@@ -304,6 +304,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.160 -> 1.0.162"
 
+[[audits.divviup.audits.serde]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.162 -> 1.0.163"
+
 [[audits.divviup.audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -328,6 +333,11 @@ delta = "1.0.156 -> 1.0.159"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.160 -> 1.0.162"
+
+[[audits.divviup.audits.serde_derive]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.162 -> 1.0.163"
 
 [[audits.divviup.audits.serde_json]]
 who = "Brandon Pitman <bran@bran.land>"
