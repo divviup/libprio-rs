@@ -8,6 +8,11 @@ user-id = 101233
 start = "2020-09-28"
 end = "2024-03-23"
 
+[[audits.aes-gcm]]
+who = "Tim Geoghegan <timg@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.10.1 -> 0.10.2"
+
 [[audits.assert_matches]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -17,6 +22,11 @@ version = "1.5.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.20.0 -> 0.21.0"
+
+[[audits.base64]]
+who = "Tim Geoghegan <timg@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.21.0 -> 0.21.1"
 
 [[audits.block-buffer]]
 who = "David Cook <dcook@divviup.org>"
