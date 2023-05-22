@@ -179,10 +179,20 @@ who = "Android Legacy"
 criteria = "safe-to-run"
 version = "2.3.2"
 
+[[audits.divviup.audits.aes-gcm]]
+who = "Tim Geoghegan <timg@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.10.1 -> 0.10.2"
+
 [[audits.divviup.audits.assert_matches]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "1.5.0"
+
+[[audits.divviup.audits.base64]]
+who = "Tim Geoghegan <timg@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.21.0 -> 0.21.1"
 
 [[audits.divviup.audits.block-buffer]]
 who = "David Cook <dcook@divviup.org>"
