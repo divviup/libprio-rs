@@ -16,4 +16,4 @@ jobs:
         override: true
     - run: cargo publish
       env:
-        CARGO_REGISTRY_TOKEN: ${{ secrets.LE_AUTOMATON_CRATES_IO_API_TOKEN }}
+        CARGO_REGISTRY_TOKEN: ${{ secrets.DIVVIUP_GITHUB_AUTOMATION_CRATES_IO_API_TOKEN }}
