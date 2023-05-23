@@ -16,6 +16,9 @@ url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audit
 [imports.firefox]
 url = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
+[imports.google]
+url = "https://raw.githubusercontent.com/google/supply-chain/main/audits.toml"
+
 [imports.isrg]
 url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/audits.toml"
 

@@ -392,6 +392,8 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-run"
 delta = "0.1.35 -> 0.1.36"
 
+[audits.google.audits]
+
 [audits.isrg.audits]
 
 [[audits.zcash.audits.getrandom]]
