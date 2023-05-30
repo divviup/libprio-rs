@@ -40,6 +40,11 @@ who = "Tim Geoghegan <timg@letsencrypt.org>"
 criteria = "safe-to-deploy"
 delta = "0.21.0 -> 0.21.1"
 
+[[audits.base64]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.21.1 -> 0.21.2"
+
 [[audits.block-buffer]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
