@@ -157,10 +157,6 @@ criteria = "safe-to-run"
 version = "0.3.3"
 criteria = "safe-to-run"
 
-[[exemptions.indexmap]]
-version = "1.9.1"
-criteria = "safe-to-run"
-
 [[exemptions.itoa]]
 version = "1.0.3"
 criteria = "safe-to-deploy"
@@ -303,18 +299,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.syn]]
 version = "1.0.104"
-criteria = "safe-to-deploy"
-
-[[exemptions.textwrap]]
-version = "0.15.0"
-criteria = "safe-to-run"
-
-[[exemptions.thiserror]]
-version = "1.0.38"
-criteria = "safe-to-deploy"
-
-[[exemptions.thiserror-impl]]
-version = "1.0.38"
 criteria = "safe-to-deploy"
 
 [[exemptions.thread_local]]

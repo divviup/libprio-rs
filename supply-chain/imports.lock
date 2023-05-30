@@ -211,11 +211,6 @@ This was a diff audit between clap 4.0.32 sources, and sources in clap_builder
 """
 
 [[audits.chromeos.audits.clap_lex]]
-who = "ChromeOS"
-criteria = "safe-to-run"
-version = "0.2.4"
-
-[[audits.chromeos.audits.clap_lex]]
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 version = "0.4.1"
@@ -249,11 +244,6 @@ version = "0.6.2"
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 delta = "0.6.2 -> 0.5.4"
-
-[[audits.chromeos.audits.os_str_bytes]]
-who = "ChromeOS"
-criteria = "safe-to-run"
-version = "6.3.0"
 
 [[audits.chromeos.audits.pin-project-lite]]
 who = "ChromeOS"
@@ -480,26 +470,6 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.104 -> 2.0.11"
 
-[[audits.divviup.audits.thiserror]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.38 -> 1.0.39"
-
-[[audits.divviup.audits.thiserror]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.39 -> 1.0.40"
-
-[[audits.divviup.audits.thiserror-impl]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.38 -> 1.0.39"
-
-[[audits.divviup.audits.thiserror-impl]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.39 -> 1.0.40"
-
 [[audits.divviup.audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -525,6 +495,18 @@ who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
 violation = "<0.20.0"
 notes = "Specified crate license does not include licenses of embedded fonts if using default features or the `default_fonts` feature. Tracked in: https://github.com/emilk/egui/issues/2321"
+
+[[audits.embark-studios.audits.thiserror]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "1.0.40"
+notes = "Wrapper over implementation crate, found no unsafe or ambient capabilities used"
+
+[[audits.embark-studios.audits.thiserror-impl]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "1.0.40"
+notes = "Found no unsafe or ambient capabilities used"
 
 [[audits.firefox.wildcard-audits.unicode-segmentation]]
 who = "Manish Goregaokar <manishsmail@gmail.com>"
@@ -569,12 +551,6 @@ This crate contains unsafe code for bitwise casts to/from binary16 floating-poin
 format. I've reviewed these and found no issues. There are no uses of ambient
 capabilities.
 """
-
-[[audits.firefox.audits.hashbrown]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-version = "0.12.3"
-notes = "This version is used in rust's libstd, so effectively we're already trusting it"
 
 [[audits.firefox.audits.hermit-abi]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
