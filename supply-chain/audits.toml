@@ -31,6 +31,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 version = "0.1.2"
 
+[[audits.base64]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.21.1 -> 0.21.2"
+
 [[audits.fixed]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
