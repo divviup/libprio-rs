@@ -73,10 +73,6 @@ criteria = "safe-to-run"
 version = "0.4.3"
 criteria = "safe-to-deploy"
 
-[[exemptions.clap]]
-version = "3.2.21"
-criteria = "safe-to-run"
-
 [[exemptions.color-eyre]]
 version = "0.6.2"
 criteria = "safe-to-run"
