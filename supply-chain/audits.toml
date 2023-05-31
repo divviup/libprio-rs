@@ -1,15 +1,60 @@
 
 # cargo-vet audits file
 
+[[audits.anstyle]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+version = "1.0.0"
+
 [[audits.base64]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.21.1 -> 0.21.2"
 
+[[audits.clap]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "4.1.14 -> 4.3.0"
+
+[[audits.clap_builder]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "4.1.14 -> 4.3.0"
+
+[[audits.clap_lex]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.4.1 -> 0.5.0"
+
+[[audits.criterion]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.4.0 -> 0.5.1"
+
+[[audits.errno-dragonfly]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+version = "0.1.2"
+
 [[audits.fixed]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.22.1 -> 1.23.0"
+
+[[audits.hermit-abi]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.2.6 -> 0.3.1"
+
+[[audits.io-lifetimes]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "1.0.10 -> 1.0.11"
+
+[[audits.linux-raw-sys]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.3.3 -> 0.3.8"
 
 [[audits.syn]]
 who = "Brandon Pitman <bran@bran.land>"
