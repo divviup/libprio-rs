@@ -177,10 +177,6 @@ criteria = "safe-to-run"
 version = "0.3.3"
 criteria = "safe-to-run"
 
-[[exemptions.indexmap]]
-version = "1.9.1"
-criteria = "safe-to-run"
-
 [[exemptions.itoa]]
 version = "1.0.3"
 criteria = "safe-to-deploy"
@@ -342,18 +338,6 @@ notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" feature
 
 [[exemptions.syn]]
 version = "1.0.104"
-criteria = "safe-to-deploy"
-
-[[exemptions.tap]]
-version = "1.0.1"
-criteria = "safe-to-deploy"
-
-[[exemptions.thiserror]]
-version = "1.0.38"
-criteria = "safe-to-deploy"
-
-[[exemptions.thiserror-impl]]
-version = "1.0.38"
 criteria = "safe-to-deploy"
 
 [[exemptions.thread_local]]

@@ -74,11 +74,38 @@ who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
 version = "0.1.3"
 
+[[audits.bytecode-alliance.audits.errno]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.3.0"
+notes = "This crate uses libc and windows-sys APIs to get and set the raw OS error value."
+
+[[audits.bytecode-alliance.audits.errno]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+delta = "0.3.0 -> 0.3.1"
+notes = "Just a dependency version bump and a bug fix for redox"
+
 [[audits.bytecode-alliance.audits.heck]]
 who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
 version = "0.4.0"
 notes = "Contains `forbid_unsafe` and only uses `std::fmt` from the standard library. Otherwise only contains string manipulation."
+
+[[audits.bytecode-alliance.audits.is-terminal]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.4.7"
+notes = """
+The is-terminal implementation code is now sync'd up with the prototype
+implementation in the Rust standard library.
+"""
+
+[[audits.bytecode-alliance.audits.linux-raw-sys]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.3.3"
+notes = "I am the author of this crate."
 
 [[audits.bytecode-alliance.audits.rustc-demangle]]
 who = "Alex Crichton <alex@alexcrichton.com>"
@@ -86,11 +113,89 @@ criteria = "safe-to-deploy"
 version = "0.1.21"
 notes = "I am the author of this crate."
 
+[[audits.bytecode-alliance.audits.rustix]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.37.13"
+notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecode-alliance.audits.windows-sys]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows-targets]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves. It just provides the import libs needed by windows-sys."
+
+[[audits.bytecode-alliance.audits.windows_aarch64_gnullvm]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows_aarch64_msvc]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows_i686_gnu]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows_i686_msvc]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows_x86_64_gnu]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows_x86_64_gnullvm]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
+[[audits.bytecode-alliance.audits.windows_x86_64_msvc]]
+who = "Dan Gohman <dev@sunfishcode.online>"
+criteria = "safe-to-deploy"
+version = "0.48.0"
+notes = "This is a Windows API bindings library maintained by Microsoft themselves."
+
 [[audits.embark-studios.audits.epaint]]
 who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
 violation = "<0.20.0"
 notes = "Specified crate license does not include licenses of embedded fonts if using default features or the `default_fonts` feature. Tracked in: https://github.com/emilk/egui/issues/2321"
+
+[[audits.embark-studios.audits.tap]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "1.0.1"
+notes = "No unsafe usage or ambient capabilities"
+
+[[audits.embark-studios.audits.thiserror]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "1.0.40"
+notes = "Wrapper over implementation crate, found no unsafe or ambient capabilities used"
+
+[[audits.embark-studios.audits.thiserror-impl]]
+who = "Johan Andersson <opensource@embark-studios.com>"
+criteria = "safe-to-deploy"
+version = "1.0.40"
+notes = "Found no unsafe or ambient capabilities used"
 
 [[audits.firefox.wildcard-audits.unicode-segmentation]]
 who = "Manish Goregaokar <manishsmail@gmail.com>"
@@ -141,11 +246,10 @@ format. I've reviewed these and found no issues. There are no uses of ambient
 capabilities.
 """
 
-[[audits.firefox.audits.hashbrown]]
+[[audits.firefox.audits.hermit-abi]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
-version = "0.12.3"
-notes = "This version is used in rust's libstd, so effectively we're already trusting it"
+delta = "0.1.19 -> 0.2.6"
 
 [[audits.firefox.audits.hex]]
 who = "Simon Friedberger <simon@mozilla.com>"
@@ -314,21 +418,43 @@ version = "2.34.0"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.clap]]
-who = "ChromeOS"
+who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
-version = "3.2.22"
+version = "4.0.32"
+aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+
+[[audits.google.audits.clap]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+delta = "4.0.32 -> 4.1.14"
+aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+
+[[audits.google.audits.clap_builder]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "4.1.14"
+notes = """
+This was a diff audit between clap 4.0.32 sources, and sources in clap_builder
+4.1.14. clap_builder is primarily stuff refactored out of `clap`.
+"""
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.clap_lex]]
-who = "ChromeOS"
+who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
-version = "0.2.4"
+version = "0.4.1"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.heck]]
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 delta = "0.4.0 -> 0.3.3"
+aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+
+[[audits.google.audits.io-lifetimes]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "1.0.10"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.itertools]]
@@ -355,12 +481,6 @@ criteria = "safe-to-run"
 delta = "0.6.2 -> 0.5.4"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
-[[audits.google.audits.os_str_bytes]]
-who = "ChromeOS"
-criteria = "safe-to-run"
-version = "6.3.0"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
 [[audits.google.audits.pin-project-lite]]
 who = "ChromeOS"
 criteria = "safe-to-run"
@@ -377,12 +497,6 @@ aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust
 who = "Android Legacy"
 criteria = "safe-to-run"
 version = "0.11.0"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
-[[audits.google.audits.textwrap]]
-who = "ChromeOS"
-criteria = "safe-to-run"
-version = "0.15.2"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.tracing]]
