@@ -59,7 +59,6 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
 ) where
     T: Type<Measurement = M>,
     P: Prg<SEED_SIZE>,
-    M: From<<T as Type>::Field> + Debug + PartialEq,
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let (public_share, input_shares) = prio3
@@ -158,9 +157,9 @@ fn test_vec_prio3_sum() {
 
 #[test]
 fn test_vec_prio3_histogram() {
-    let t: TPrio3<u128> =
+    let t: TPrio3<usize> =
         serde_json::from_str(include_str!("test_vec/05/Prio3Histogram_0.json")).unwrap();
-    let prio3 = Prio3::new_histogram(2, &[1, 10, 100]).unwrap();
+    let prio3 = Prio3::new_histogram(2, 4).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {

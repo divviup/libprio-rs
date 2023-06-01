@@ -182,10 +182,10 @@ pub fn prio3_client(c: &mut Criterion) {
         })
     });
 
-    let buckets: Vec<u64> = (1..10).collect();
-    let prio3 = Prio3::new_histogram(num_shares, &buckets).unwrap();
-    let measurement = 17;
-    group.bench_function(BenchmarkId::new("histogram", buckets.len() + 1), |b| {
+    let length = 10;
+    let prio3 = Prio3::new_histogram(num_shares, 10).unwrap();
+    let measurement = 9;
+    group.bench_function(BenchmarkId::new("histogram", length), |b| {
         b.iter(|| {
             prio3.shard(&measurement, &nonce).unwrap();
         })

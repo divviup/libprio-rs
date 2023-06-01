@@ -201,17 +201,15 @@ impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3FixedPointBoundedL2VecSumMultit
     }
 }
 
-/// The histogram type. Each measurement is an unsigned integer and the result is a histogram
-/// representation of the distribution. The bucket boundaries are fixed in advance.
+/// The histogram type. Each measurement is an integer in `[0, length)` `and the result is a
+/// histogram counting the number of occurrences of each measurement.
 pub type Prio3Histogram = Prio3<Histogram<Field128>, PrgSha3, 16>;
 
 impl Prio3Histogram {
     /// Constructs an instance of Prio3Histogram with the given number of aggregators and
-    /// desired histogram bucket boundaries.
-    pub fn new_histogram(num_aggregators: u8, buckets: &[u64]) -> Result<Self, VdafError> {
-        let buckets = buckets.iter().map(|bucket| *bucket as u128).collect();
-
-        Prio3::new(num_aggregators, Histogram::new(buckets)?)
+    /// number of buckets.
+    pub fn new_histogram(num_aggregators: u8, length: usize) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, Histogram::new(length)?)
     }
 }
 
@@ -1536,19 +1534,17 @@ mod tests {
 
     #[test]
     fn test_prio3_histogram() {
-        let prio3 = Prio3::new_histogram(2, &[0, 10, 20]).unwrap();
+        let prio3 = Prio3::new_histogram(2, 4).unwrap();
 
         assert_eq!(
-            run_vdaf(&prio3, &(), [0, 10, 20, 9999]).unwrap(),
+            run_vdaf(&prio3, &(), [0, 1, 2, 3]).unwrap(),
             vec![1, 1, 1, 1]
         );
         assert_eq!(run_vdaf(&prio3, &(), [0]).unwrap(), vec![1, 0, 0, 0]);
-        assert_eq!(run_vdaf(&prio3, &(), [5]).unwrap(), vec![0, 1, 0, 0]);
-        assert_eq!(run_vdaf(&prio3, &(), [10]).unwrap(), vec![0, 1, 0, 0]);
-        assert_eq!(run_vdaf(&prio3, &(), [15]).unwrap(), vec![0, 0, 1, 0]);
-        assert_eq!(run_vdaf(&prio3, &(), [20]).unwrap(), vec![0, 0, 1, 0]);
-        assert_eq!(run_vdaf(&prio3, &(), [25]).unwrap(), vec![0, 0, 0, 1]);
-        test_serialization(&prio3, &23, &[0; 16]).unwrap();
+        assert_eq!(run_vdaf(&prio3, &(), [1]).unwrap(), vec![0, 1, 0, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [2]).unwrap(), vec![0, 0, 1, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [3]).unwrap(), vec![0, 0, 0, 1]);
+        test_serialization(&prio3, &3, &[0; 16]).unwrap();
     }
 
     #[test]
@@ -1681,7 +1677,7 @@ mod tests {
         let vdaf = Prio3::new_sum(2, 17).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, OutputShare<Field128>>(&vdaf, &(), 1);
 
-        let vdaf = Prio3::new_histogram(2, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap();
+        let vdaf = Prio3::new_histogram(2, 12).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Histogram, OutputShare<Field128>>(&vdaf, &(), 12);
     }
 
@@ -1693,7 +1689,7 @@ mod tests {
         let vdaf = Prio3::new_sum(2, 17).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, AggregateShare<Field128>>(&vdaf, &(), 1);
 
-        let vdaf = Prio3::new_histogram(2, &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]).unwrap();
+        let vdaf = Prio3::new_histogram(2, 12).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Histogram, AggregateShare<Field128>>(
             &vdaf,
             &(),
