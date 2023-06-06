@@ -360,14 +360,6 @@ criteria = "safe-to-run"
 version = "1.15.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.valuable]]
-version = "0.1.0"
-criteria = "safe-to-run"
-
-[[exemptions.vec_map]]
-version = "0.8.2"
-criteria = "safe-to-run"
-
 [[exemptions.wasi]]
 version = "0.11.0+wasi-snapshot-preview1"
 criteria = "safe-to-deploy"
