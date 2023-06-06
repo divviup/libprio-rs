@@ -29,10 +29,6 @@ criteria = "safe-to-deploy"
 [policy.prio-binaries]
 criteria = "safe-to-run"
 
-[[exemptions.addr2line]]
-version = "0.17.0"
-criteria = "safe-to-run"
-
 [[exemptions.adler]]
 version = "1.0.2"
 criteria = "safe-to-run"
@@ -157,10 +153,6 @@ notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" feature
 version = "0.2.8"
 criteria = "safe-to-deploy"
 
-[[exemptions.gimli]]
-version = "0.26.2"
-criteria = "safe-to-run"
-
 [[exemptions.half]]
 version = "2.1.0"
 criteria = "safe-to-deploy"
@@ -204,10 +196,6 @@ notes = "This is only used when the \"multithreaded\" feature is enabled."
 version = "1.13.1"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"multithreaded\" feature is enabled."
-
-[[exemptions.object]]
-version = "0.29.0"
-criteria = "safe-to-run"
 
 [[exemptions.once_cell]]
 version = "1.14.0"
