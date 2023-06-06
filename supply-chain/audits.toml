@@ -95,6 +95,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.3.2"
 
+[[audits.digest]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.10.6 -> 0.10.7"
+
 [[audits.either]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -384,6 +389,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.10.7 -> 0.10.8"
 
+[[audits.subtle]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "2.4.1 -> 2.5.0"
+
 [[audits.syn]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
@@ -418,6 +428,11 @@ delta = "1.0.2 -> 1.0.3"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.4.1"
+
+[[audits.universal-hash]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.5.0 -> 0.5.1"
 
 [[audits.untrusted]]
 who = "David Cook <dcook@divviup.org>"
