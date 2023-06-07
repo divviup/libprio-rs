@@ -201,12 +201,12 @@ pub struct FixedPointBoundedL2VecSum<
     gadget1_chunk_len: usize,
 }
 
-impl<
-        T: Fixed,
-        F: FftFriendlyFieldElement,
-        SPoly: ParallelSumGadget<F, PolyEval<F>> + Clone,
-        SBlindPoly: ParallelSumGadget<F, BlindPolyEval<F>> + Clone,
-    > Debug for FixedPointBoundedL2VecSum<T, F, SPoly, SBlindPoly>
+impl<T, F, SPoly, SBlindPoly> Debug for FixedPointBoundedL2VecSum<T, F, SPoly, SBlindPoly>
+where
+    T: Fixed,
+    F: FftFriendlyFieldElement,
+    SPoly: ParallelSumGadget<F, PolyEval<F>> + Clone,
+    SBlindPoly: ParallelSumGadget<F, BlindPolyEval<F>> + Clone,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FixedPointBoundedL2VecSum")
