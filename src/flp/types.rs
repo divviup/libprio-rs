@@ -7,11 +7,18 @@ use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
+use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Count<F> {
     range_checker: Vec<F>,
+}
+
+impl<F> Debug for Count<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Count").finish()
+    }
 }
 
 impl<F: FftFriendlyFieldElement> Count<F> {
@@ -103,10 +110,16 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
 /// The validity circuit is based on the SIMD circuit construction of [[BBCG+19], Theorem 5.3].
 ///
 /// [BBCG+19]: https://ia.cr/2019/188
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Sum<F: FftFriendlyFieldElement> {
     bits: usize,
     range_checker: Vec<F>,
+}
+
+impl<F: FftFriendlyFieldElement> Debug for Sum<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Sum").field("bits", &self.bits).finish()
+    }
 }
 
 impl<F: FftFriendlyFieldElement> Sum<F> {
@@ -196,10 +209,16 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the arithmetic average.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Average<F: FftFriendlyFieldElement> {
     bits: usize,
     range_checker: Vec<F>,
+}
+
+impl<F: FftFriendlyFieldElement> Debug for Average<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Average").field("bits", &self.bits).finish()
+    }
 }
 
 impl<F: FftFriendlyFieldElement> Average<F> {
@@ -295,10 +314,21 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
 
 /// The histogram type. Each measurement is a non-negative integer and the aggregate is a histogram
 /// approximating the distribution of the measurements.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Histogram<F: FftFriendlyFieldElement> {
     buckets: Vec<F::Integer>,
     range_checker: Vec<F>,
+}
+
+impl<F: FftFriendlyFieldElement> Debug for Histogram<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Histogram")
+            .field(
+                "buckets",
+                &format_args!("[{} buckets]", self.buckets.len() + 1),
+            )
+            .finish()
+    }
 }
 
 impl<F: FftFriendlyFieldElement> Histogram<F> {
@@ -421,7 +451,7 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
 /// Corollary 4.9] to reduce the proof size to roughly the square root of the input size.
 ///
 /// [BBCG+19]: https://eprint.iacr.org/2019/188
-#[derive(Debug, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub struct SumVec<F: FftFriendlyFieldElement, S> {
     range_checker: Vec<F>,
     len: usize,
@@ -431,6 +461,15 @@ pub struct SumVec<F: FftFriendlyFieldElement, S> {
     chunk_len: usize,
     gadget_calls: usize,
     phantom: PhantomData<S>,
+}
+
+impl<F: FftFriendlyFieldElement, S> Debug for SumVec<F, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SumVec")
+            .field("len", &self.len)
+            .field("bits", &self.bits)
+            .finish()
+    }
 }
 
 impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> SumVec<F, S> {
