@@ -64,10 +64,6 @@ criteria = "safe-to-deploy"
 version = "1.12.1"
 criteria = "safe-to-deploy"
 
-[[exemptions.byteorder]]
-version = "1.4.3"
-criteria = "safe-to-deploy"
-
 [[exemptions.cast]]
 version = "0.3.0"
 criteria = "safe-to-run"
@@ -169,31 +165,8 @@ criteria = "safe-to-run"
 version = "0.3.3"
 criteria = "safe-to-run"
 
-[[exemptions.itoa]]
-version = "1.0.3"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
-
-[[exemptions.js-sys]]
-version = "0.3.60"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled, and only on WASM targets."
-
-[[exemptions.libc]]
-version = "0.2.132"
-criteria = "safe-to-deploy"
-
-[[exemptions.memchr]]
-version = "2.5.0"
-criteria = "safe-to-run"
-
 [[exemptions.memoffset]]
 version = "0.6.5"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"multithreaded\" feature is enabled."
-
-[[exemptions.num_cpus]]
-version = "1.13.1"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"multithreaded\" feature is enabled."
 
@@ -207,10 +180,6 @@ criteria = "safe-to-run"
 
 [[exemptions.owo-colors]]
 version = "3.5.0"
-criteria = "safe-to-run"
-
-[[exemptions.paste]]
-version = "1.0.9"
 criteria = "safe-to-run"
 
 [[exemptions.plotters]]
@@ -258,41 +227,10 @@ version = "0.6.3"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"test-util\" feature is enabled."
 
-[[exemptions.regex]]
-version = "1.6.0"
-criteria = "safe-to-run"
-
-[[exemptions.regex-syntax]]
-version = "0.6.27"
-criteria = "safe-to-run"
-
 [[exemptions.ring]]
 version = "0.16.20"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"prio2\" feature is enabled."
-
-[[exemptions.ryu]]
-version = "1.0.11"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
-
-[[exemptions.scopeguard]]
-version = "1.1.0"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"multithreaded\" feature is enabled."
-
-[[exemptions.serde]]
-version = "1.0.151"
-criteria = "safe-to-deploy"
-
-[[exemptions.serde_derive]]
-version = "1.0.151"
-criteria = "safe-to-deploy"
-
-[[exemptions.serde_json]]
-version = "1.0.91"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
 
 [[exemptions.sharded-slab]]
 version = "0.1.4"
@@ -324,14 +262,6 @@ version = "2.4.1"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" features are enabled."
 
-[[exemptions.syn]]
-version = "1.0.104"
-criteria = "safe-to-deploy"
-
-[[exemptions.thread_local]]
-version = "1.1.4"
-criteria = "safe-to-run"
-
 [[exemptions.tinytemplate]]
 version = "1.2.1"
 criteria = "safe-to-run"
@@ -348,36 +278,6 @@ criteria = "safe-to-run"
 version = "1.15.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.wasi]]
-version = "0.11.0+wasi-snapshot-preview1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the target OS is WASI."
-
-[[exemptions.wasm-bindgen]]
-version = "0.2.83"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled, and only on WASM targets."
-
-[[exemptions.wasm-bindgen-backend]]
-version = "0.2.83"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled, and only on WASM targets."
-
-[[exemptions.wasm-bindgen-macro]]
-version = "0.2.83"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled, and only on WASM targets."
-
-[[exemptions.wasm-bindgen-macro-support]]
-version = "0.2.83"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled, and only on WASM targets."
-
-[[exemptions.web-sys]]
-version = "0.3.60"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled, and only on WASM targets."
-
 [[exemptions.winapi]]
 version = "0.3.9"
 criteria = "safe-to-deploy"
@@ -385,10 +285,6 @@ criteria = "safe-to-deploy"
 [[exemptions.winapi-i686-pc-windows-gnu]]
 version = "0.4.0"
 criteria = "safe-to-deploy"
-
-[[exemptions.winapi-util]]
-version = "0.1.5"
-criteria = "safe-to-run"
 
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
