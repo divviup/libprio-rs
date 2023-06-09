@@ -16,6 +16,9 @@ url = "https://raw.githubusercontent.com/divviup/libprio-rs/main/supply-chain/au
 [imports.embark-studios]
 url = "https://raw.githubusercontent.com/EmbarkStudios/rust-ecosystem/main/audits.toml"
 
+[imports.fermyon]
+url = "https://raw.githubusercontent.com/fermyon/spin/main/supply-chain/audits.toml"
+
 [imports.firefox]
 url = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
@@ -189,10 +192,6 @@ criteria = "safe-to-run"
 version = "1.14.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.oorandom]]
-version = "11.1.3"
-criteria = "safe-to-run"
-
 [[exemptions.owo-colors]]
 version = "3.5.0"
 criteria = "safe-to-run"
@@ -207,10 +206,6 @@ criteria = "safe-to-run"
 
 [[exemptions.plotters-backend]]
 version = "0.3.4"
-criteria = "safe-to-run"
-
-[[exemptions.plotters-svg]]
-version = "0.3.3"
 criteria = "safe-to-run"
 
 [[exemptions.polyval]]
@@ -320,14 +315,6 @@ criteria = "safe-to-run"
 [[exemptions.typenum]]
 version = "1.15.0"
 criteria = "safe-to-deploy"
-
-[[exemptions.valuable]]
-version = "0.1.0"
-criteria = "safe-to-run"
-
-[[exemptions.vec_map]]
-version = "0.8.2"
-criteria = "safe-to-run"
 
 [[exemptions.wasi]]
 version = "0.11.0+wasi-snapshot-preview1"
