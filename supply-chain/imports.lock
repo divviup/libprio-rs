@@ -563,81 +563,6 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.10.2 -> 1.11.0"
 
-[[audits.divviup.audits.serde]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.152 -> 1.0.153"
-
-[[audits.divviup.audits.serde]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.153 -> 1.0.154"
-
-[[audits.divviup.audits.serde]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.154 -> 1.0.155"
-
-[[audits.divviup.audits.serde]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.156 -> 1.0.159"
-
-[[audits.divviup.audits.serde]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.160 -> 1.0.162"
-
-[[audits.divviup.audits.serde]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.162 -> 1.0.163"
-
-[[audits.divviup.audits.serde_derive]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.152 -> 1.0.153"
-
-[[audits.divviup.audits.serde_derive]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.153 -> 1.0.154"
-
-[[audits.divviup.audits.serde_derive]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.154 -> 1.0.155"
-
-[[audits.divviup.audits.serde_derive]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.156 -> 1.0.159"
-
-[[audits.divviup.audits.serde_derive]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.160 -> 1.0.162"
-
-[[audits.divviup.audits.serde_derive]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.162 -> 1.0.163"
-
-[[audits.divviup.audits.serde_json]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.93 -> 1.0.94"
-
-[[audits.divviup.audits.serde_json]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.94 -> 1.0.95"
-
-[[audits.divviup.audits.syn]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-deploy"
-delta = "1.0.104 -> 2.0.11"
-
 [[audits.divviup.audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -881,11 +806,6 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.10.1 -> 1.10.2"
 
-[[audits.firefox.audits.serde_json]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.91 -> 1.0.93"
-
 [[audits.firefox.audits.tracing]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-run"
@@ -952,36 +872,6 @@ aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/suppl
 who = "Jack Grigg <jack@electriccoin.co>"
 criteria = "safe-to-deploy"
 delta = "1.0.23 -> 1.0.26"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.serde]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "1.0.155 -> 1.0.156"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.serde]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "1.0.159 -> 1.0.160"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.serde_derive]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "1.0.155 -> 1.0.156"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.serde_derive]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "1.0.159 -> 1.0.160"
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.serde_json]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "1.0.95 -> 1.0.96"
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.unicode-ident]]
