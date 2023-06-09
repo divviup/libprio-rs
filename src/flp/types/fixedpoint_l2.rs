@@ -176,7 +176,7 @@ use std::{convert::TryFrom, convert::TryInto, fmt::Debug, marker::PhantomData};
 /// to be chosen for `F`. For a `n`-bit fixed point type and a `d`-dimensional vector, the field
 /// modulus needs to be larger than `d * 2^(2n-2)` so there are no overflows during norm validity
 /// computation.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct FixedPointBoundedL2VecSum<
     T: Fixed,
     F: FieldElement,
@@ -200,6 +200,21 @@ pub struct FixedPointBoundedL2VecSum<
     gadget0_chunk_len: usize,
     gadget1_calls: usize,
     gadget1_chunk_len: usize,
+}
+
+impl<T, F, SPoly, SBlindPoly> Debug for FixedPointBoundedL2VecSum<T, F, SPoly, SBlindPoly>
+where
+    T: Fixed,
+    F: FieldElement,
+    SPoly: ParallelSumGadget<F, PolyEval<F>> + Clone,
+    SBlindPoly: ParallelSumGadget<F, BlindPolyEval<F>> + Clone,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("FixedPointBoundedL2VecSum")
+            .field("bits_per_entry", &self.bits_per_entry)
+            .field("entries", &self.entries)
+            .finish()
+    }
 }
 
 impl<T, F, SPoly, SBlindPoly> FixedPointBoundedL2VecSum<T, F, SPoly, SBlindPoly>
