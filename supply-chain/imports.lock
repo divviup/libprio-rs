@@ -335,6 +335,8 @@ criteria = "safe-to-deploy"
 version = "0.48.0"
 notes = "This is a Windows API bindings library maintained by Microsoft themselves."
 
+[audits.divviup.audits]
+
 [[audits.embark-studios.audits.epaint]]
 who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
