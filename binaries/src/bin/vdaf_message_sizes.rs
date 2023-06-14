@@ -27,12 +27,12 @@ fn main() {
         prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 
-    let buckets: Vec<u64> = (1..10).collect();
-    let prio3 = Prio3::new_histogram(num_shares, &buckets).unwrap();
-    let measurement = 17;
+    let length = 10;
+    let prio3 = Prio3::new_histogram(num_shares, length).unwrap();
+    let measurement = 9;
     println!(
         "prio3 histogram ({} buckets) share size = {}",
-        buckets.len() + 1,
+        length,
         prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
     );
 

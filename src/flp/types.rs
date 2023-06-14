@@ -312,46 +312,33 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
     }
 }
 
-/// The histogram type. Each measurement is a non-negative integer and the aggregate is a histogram
-/// approximating the distribution of the measurements.
+/// The histogram type. Each measurement is an integer in `[0, length)` and the aggregate is a
+/// histogram counting the number of occurrences of each measurement.
 #[derive(Clone, PartialEq, Eq)]
 pub struct Histogram<F: FftFriendlyFieldElement> {
-    buckets: Vec<F::Integer>,
+    length: usize,
     range_checker: Vec<F>,
 }
 
 impl<F: FftFriendlyFieldElement> Debug for Histogram<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Histogram")
-            .field(
-                "buckets",
-                &format_args!("[{} buckets]", self.buckets.len() + 1),
-            )
+            .field("length", &self.length)
             .finish()
     }
 }
 
 impl<F: FftFriendlyFieldElement> Histogram<F> {
-    /// Return a new [`Histogram`] type with the given buckets.
-    pub fn new(buckets: Vec<F::Integer>) -> Result<Self, FlpError> {
-        if buckets.len() >= u32::MAX as usize {
+    /// Return a new [`Histogram`] type with the given number of buckets.
+    pub fn new(length: usize) -> Result<Self, FlpError> {
+        if length >= u32::MAX as usize {
             return Err(FlpError::Encode(
-                "invalid buckets: number of buckets exceeds maximum permitted".to_string(),
+                "invalid length: number of buckets exceeds maximum permitted".to_string(),
             ));
         }
 
-        if !buckets.is_empty() {
-            for i in 0..buckets.len() - 1 {
-                if buckets[i + 1] <= buckets[i] {
-                    return Err(FlpError::Encode(
-                        "invalid buckets: out-of-order boundary".to_string(),
-                    ));
-                }
-            }
-        }
-
         Ok(Self {
-            buckets,
+            length,
             range_checker: poly_range_check(0, 2),
         })
     }
@@ -359,19 +346,14 @@ impl<F: FftFriendlyFieldElement> Histogram<F> {
 
 impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     const ID: u32 = 0x00000002;
-    type Measurement = F::Integer;
+    type Measurement = usize;
     type AggregateResult = Vec<F::Integer>;
     type Field = F;
 
-    fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let mut data = vec![F::zero(); self.buckets.len() + 1];
+    fn encode_measurement(&self, measurement: &usize) -> Result<Vec<F>, FlpError> {
+        let mut data = vec![F::zero(); self.length];
 
-        let bucket = match self.buckets.binary_search(measurement) {
-            Ok(i) => i,  // on a bucket boundary
-            Err(i) => i, // smaller than the i-th bucket boundary
-        };
-
-        data[bucket] = F::one();
+        data[*measurement] = F::one();
         Ok(data)
     }
 
@@ -380,7 +362,7 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
         data: &[F],
         _num_measurements: usize,
     ) -> Result<Vec<F::Integer>, FlpError> {
-        decode_result_vec(data, self.buckets.len() + 1)
+        decode_result_vec(data, self.length)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
@@ -419,7 +401,7 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     }
 
     fn input_len(&self) -> usize {
-        self.buckets.len() + 1
+        self.length
     }
 
     fn proof_len(&self) -> usize {
@@ -902,32 +884,24 @@ mod tests {
 
     #[test]
     fn test_histogram() {
-        let hist = Histogram::new(vec![10, 20]).unwrap();
+        let hist = Histogram::new(3).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
 
-        assert_eq!(&hist.encode_measurement(&7).unwrap(), &[one, zero, zero]);
-        assert_eq!(&hist.encode_measurement(&10).unwrap(), &[one, zero, zero]);
-        assert_eq!(&hist.encode_measurement(&17).unwrap(), &[zero, one, zero]);
-        assert_eq!(&hist.encode_measurement(&20).unwrap(), &[zero, one, zero]);
-        assert_eq!(&hist.encode_measurement(&27).unwrap(), &[zero, zero, one]);
+        assert_eq!(&hist.encode_measurement(&0).unwrap(), &[one, zero, zero]);
+        assert_eq!(&hist.encode_measurement(&1).unwrap(), &[zero, one, zero]);
+        assert_eq!(&hist.encode_measurement(&2).unwrap(), &[zero, zero, one]);
 
         // Round trip
         assert_eq!(
             hist.decode_result(
-                &hist
-                    .truncate(hist.encode_measurement(&27).unwrap())
-                    .unwrap(),
+                &hist.truncate(hist.encode_measurement(&2).unwrap()).unwrap(),
                 1
             )
             .unwrap(),
             [0, 0, 1]
         );
-
-        // Invalid bucket boundaries.
-        Histogram::<TestField>::new(vec![10, 0]).unwrap_err();
-        Histogram::<TestField>::new(vec![10, 10]).unwrap_err();
 
         // Test valid inputs.
         flp_validity_test(
@@ -943,7 +917,7 @@ mod tests {
 
         flp_validity_test(
             &hist,
-            &hist.encode_measurement(&17).unwrap(),
+            &hist.encode_measurement(&1).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, one, zero]),
@@ -954,7 +928,7 @@ mod tests {
 
         flp_validity_test(
             &hist,
-            &hist.encode_measurement(&1337).unwrap(),
+            &hist.encode_measurement(&2).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero, zero, one]),
