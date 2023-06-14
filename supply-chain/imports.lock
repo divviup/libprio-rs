@@ -29,6 +29,13 @@ user-id = 2915
 user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
+[[publisher.libc]]
+version = "0.2.146"
+when = "2023-06-06"
+user-id = 2915
+user-login = "Amanieu"
+user-name = "Amanieu d'Antras"
+
 [[publisher.memchr]]
 version = "2.5.0"
 when = "2022-04-30"
@@ -85,9 +92,23 @@ user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
+[[publisher.serde]]
+version = "1.0.164"
+when = "2023-06-08"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
+
 [[publisher.serde_derive]]
 version = "1.0.163"
 when = "2023-05-10"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
+
+[[publisher.serde_derive]]
+version = "1.0.164"
+when = "2023-06-08"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
