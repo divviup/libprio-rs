@@ -70,7 +70,6 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
         Prio3PublicShare::get_decoded_with_param(prio3, t.public_share.as_ref())
             .unwrap_or_else(|e| err!(test_num, e, "decode test vector (public share)")),
     );
-    assert_eq!(2, t.input_shares.len(), "#{test_num}");
     for (agg_id, want) in t.input_shares.iter().enumerate() {
         assert_eq!(
             input_shares[agg_id],
@@ -134,8 +133,17 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
 #[test]
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("test_vec/05/Prio3Count_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/06/Prio3Count_0.json")).unwrap();
     let prio3 = Prio3::new_count(2).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+
+    let t: TPrio3<u64> =
+        serde_json::from_str(include_str!("test_vec/06/Prio3Count_1.json")).unwrap();
+    let prio3 = Prio3::new_count(3).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -146,8 +154,17 @@ fn test_vec_prio3_count() {
 #[test]
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/05/Prio3Sum_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/06/Prio3Sum_0.json")).unwrap();
     let prio3 = Prio3::new_sum(2, 8).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+
+    let t: TPrio3<u128> =
+        serde_json::from_str(include_str!("test_vec/06/Prio3Sum_1.json")).unwrap();
+    let prio3 = Prio3::new_sum(3, 8).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -158,8 +175,17 @@ fn test_vec_prio3_sum() {
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<usize> =
-        serde_json::from_str(include_str!("test_vec/05/Prio3Histogram_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/06/Prio3Histogram_0.json")).unwrap();
     let prio3 = Prio3::new_histogram(2, 4).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+
+    let t: TPrio3<usize> =
+        serde_json::from_str(include_str!("test_vec/06/Prio3Histogram_1.json")).unwrap();
+    let prio3 = Prio3::new_histogram(3, 4).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {

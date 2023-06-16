@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Verifiable Distributed Aggregation Functions (VDAFs) as described in
-//! [[draft-irtf-cfrg-vdaf-05]].
+//! [[draft-irtf-cfrg-vdaf-06]].
 //!
-//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
@@ -19,7 +19,7 @@ use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 5;
+pub(crate) const VERSION: u8 = 6;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -169,15 +169,15 @@ pub trait Vdaf: Clone + Debug {
     /// Aggregators.
     fn num_aggregators(&self) -> usize;
 
-    /// Generate the customization string for this VDAF. The output is used for domain separation
+    /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the PRG.
-    fn custom(usage: u16) -> [u8; 8] {
-        let mut custom = [0_u8; 8];
-        custom[0] = VERSION;
-        custom[1] = 0; // algorithm class
-        custom[2..6].copy_from_slice(&(Self::ID).to_be_bytes());
-        custom[6..8].copy_from_slice(&usage.to_be_bytes());
-        custom
+    fn domain_separation_tag(usage: u16) -> [u8; 8] {
+        let mut dst = [0_u8; 8];
+        dst[0] = VERSION;
+        dst[1] = 0; // algorithm class
+        dst[2..6].copy_from_slice(&(Self::ID).to_be_bytes());
+        dst[6..8].copy_from_slice(&usage.to_be_bytes());
+        dst
     }
 }
 
