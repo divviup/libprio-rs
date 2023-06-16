@@ -169,15 +169,15 @@ pub trait Vdaf: Clone + Debug {
     /// Aggregators.
     fn num_aggregators(&self) -> usize;
 
-    /// Generate the customization string for this VDAF. The output is used for domain separation
+    /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the PRG.
-    fn custom(usage: u16) -> [u8; 8] {
-        let mut custom = [0_u8; 8];
-        custom[0] = VERSION;
-        custom[1] = 0; // algorithm class
-        custom[2..6].copy_from_slice(&(Self::ID).to_be_bytes());
-        custom[6..8].copy_from_slice(&usage.to_be_bytes());
-        custom
+    fn domain_separation_tag(usage: u16) -> [u8; 8] {
+        let mut dst = [0_u8; 8];
+        dst[0] = VERSION;
+        dst[1] = 0; // algorithm class
+        dst[2..6].copy_from_slice(&(Self::ID).to_be_bytes());
+        dst[6..8].copy_from_slice(&usage.to_be_bytes());
+        dst
     }
 }
 

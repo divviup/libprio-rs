@@ -318,18 +318,18 @@ where
 
     let initial_keys: [Seed<16>; 2] = [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
-    let extend_custom = [
+    let extend_dst = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 0, /* usage */
     ];
-    let convert_custom = [
+    let convert_dst = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 1, /* usage */
     ];
-    let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_custom, binder);
-    let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_custom, binder);
+    let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_dst, binder);
+    let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_dst, binder);
 
     let mut keys = [initial_keys[0].0, initial_keys[1].0];
     let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -413,18 +413,18 @@ where
 {
     let bits = public_share.inner_correction_words.len() + 1;
 
-    let extend_custom = [
+    let extend_dst = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 0, /* usage */
     ];
-    let convert_custom = [
+    let convert_dst = [
         VERSION, 1, /* algorithm class */
         0, 0, 0, 0, /* algorithm ID */
         0, 1, /* usage */
     ];
-    let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_custom, binder);
-    let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_custom, binder);
+    let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_dst, binder);
+    let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_dst, binder);
 
     let mut last_inner_output = None;
     for ((correction_word, input_bit), level) in public_share.inner_correction_words[start_level..]

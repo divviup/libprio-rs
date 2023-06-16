@@ -74,7 +74,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         P: Prg<SEED_SIZE>,
         F: FieldElement,
     {
-        let mut prg = P::init(seed, &Self::custom(usage));
+        let mut prg = P::init(seed, &Self::domain_separation_tag(usage));
         for binder_chunk in binder_chunks.into_iter() {
             prg.update(binder_chunk.as_ref());
         }
