@@ -51,3 +51,6 @@ pub mod test_vector;
 #[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
 pub mod util;
 pub mod vdaf;
+
+#[cfg(feature = "experimental")]
+pub mod dp;
