@@ -1,7 +1,7 @@
 //! This module implements the incremental distributed point function (IDPF) described in
-//! [[draft-irtf-cfrg-vdaf-05]].
+//! [[draft-irtf-cfrg-vdaf-06]].
 //!
-//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -874,7 +874,6 @@ mod tests {
         slice::BitSlice,
         vec::BitVec,
     };
-    use hex_literal::hex;
     use num_bigint::BigUint;
     use rand::random;
     use subtle::Choice;
@@ -1711,7 +1710,7 @@ mod tests {
     /// Load a test vector for Idpf key generation.
     fn load_idpfpoplar_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
-            serde_json::from_str(include_str!("vdaf/test_vec/05/IdpfPoplar_0.json")).unwrap();
+            serde_json::from_str(include_str!("vdaf/test_vec/06/IdpfPoplar_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
 
         let bits = test_vec_obj
@@ -1783,113 +1782,6 @@ mod tests {
             keys,
             public_share,
         }
-    }
-
-    #[test]
-    fn idpf_poplar_public_share_deserialize() {
-        let test_vector = load_idpfpoplar_test_vector();
-        let data = test_vector.public_share;
-        let bits = test_vector.bits;
-        let public_share = IdpfPublicShare::<
-            Poplar1IdpfValue<Field64>,
-            Poplar1IdpfValue<Field255>,
-        >::get_decoded_with_param(&bits, &data)
-        .unwrap();
-
-        let expected_public_share = IdpfPublicShare {
-            inner_correction_words: Vec::from([
-                IdpfCorrectionWord {
-                    seed: hex!("5c9c365eb47694346f7e8dfdf5a2c68a"),
-                    control_bits: [Choice::from(1), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(10987699128695731696u64),
-                        Field64::from(7882672491030813488u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("39956f720c0fac9746716e45df8acc41"),
-                    control_bits: [Choice::from(1), Choice::from(0)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(7134742661878698919u64),
-                        Field64::from(1664298712439481531u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("3a25a9d03705d041ceb70f244cdfa670"),
-                    control_bits: [Choice::from(1), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(17513255427535164512u64),
-                        Field64::from(13488093545954052064u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("d3422e091d39482c4f15d6561f5d587b"),
-                    control_bits: [Choice::from(0), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(3820730669692388706u64),
-                        Field64::from(7621611875843993489u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("688885a16cb9e244593224cd6fc2ca61"),
-                    control_bits: [Choice::from(0), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(14735588265529308818u64),
-                        Field64::from(13808845800240844469u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("e44fa9899bf9f0e62569064609c6beef"),
-                    control_bits: [Choice::from(1), Choice::from(0)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(1515377433922245485u64),
-                        Field64::from(6673083777646964926u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("93fa72adfbc558a74be3876d88512447"),
-                    control_bits: [Choice::from(1), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(2323814403333375980u64),
-                        Field64::from(1933042105331055732u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("956055724e9794b6a0eb2c67f8398ee5"),
-                    control_bits: [Choice::from(1), Choice::from(0)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(15657578625572810526u64),
-                        Field64::from(3485179954322771792u64),
-                    ]),
-                },
-                IdpfCorrectionWord {
-                    seed: hex!("1a608ad10163fa06e26295f9e88a35dc"),
-                    control_bits: [Choice::from(0), Choice::from(1)],
-                    value: Poplar1IdpfValue::new([
-                        Field64::from(9408529722335226688u64),
-                        Field64::from(2144060244706691641u64),
-                    ]),
-                },
-            ]),
-            leaf_correction_word: IdpfCorrectionWord {
-                seed: hex!("056e9c3ea587950ebe2c4e8e4bc8f6f7"),
-                control_bits: [Choice::from(0), Choice::from(1)],
-                value: Poplar1IdpfValue::new([
-                    Field255::try_from(
-                        hex!("36bc460e3844de9a5227c1b0f6520c020f0135eb6a7705c63af9bfd2b8601015")
-                            .as_slice(),
-                    )
-                    .unwrap(),
-                    Field255::try_from(
-                        hex!("a4a8c898a9b7eb68c892e4444a8a1ffb3471707ec190c19e94a1e3ffc626a12a")
-                            .as_slice(),
-                    )
-                    .unwrap(),
-                ]),
-            },
-        };
-
-        assert_eq!(public_share, expected_public_share);
     }
 
     #[test]

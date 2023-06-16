@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Verifiable Distributed Aggregation Functions (VDAFs) as described in
-//! [[draft-irtf-cfrg-vdaf-05]].
+//! [[draft-irtf-cfrg-vdaf-06]].
 //!
-//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
@@ -19,7 +19,7 @@ use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 5;
+pub(crate) const VERSION: u8 = 6;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]

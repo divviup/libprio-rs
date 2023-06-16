@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-05]].
+//! Implementation of the Prio3 VDAF [[draft-irtf-cfrg-vdaf-06]].
 //!
 //! **WARNING:** This code has not undergone significant security analysis. Use at your own risk.
 //!
@@ -9,7 +9,7 @@
 //! 2019 [[BBCG+19]], that lead to substantial improvements in terms of run time and communication
 //! cost. The security of the construction was analyzed in [[DPRS23]].
 //!
-//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-05]] into
+//! Prio3 is a transformation of a Fully Linear Proof (FLP) system [[draft-irtf-cfrg-vdaf-06]] into
 //! a VDAF. The base type, [`Prio3`], supports a wide variety of aggregation functions, some of
 //! which are instantiated here:
 //!
@@ -20,12 +20,12 @@
 //!
 //! Additional types can be constructed from [`Prio3`] as needed.
 //!
-//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-05]].
+//! (*) denotes that the type is specified in [[draft-irtf-cfrg-vdaf-06]].
 //!
 //! [BBCG+19]: https://ia.cr/2019/188
 //! [CGB17]: https://crypto.stanford.edu/prio/
 //! [DPRS23]: https://ia.cr/2023/130
-//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
 use super::prg::PrgSha3;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};

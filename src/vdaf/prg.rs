@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-05]].
+//! Implementations of PRGs specified in [[draft-irtf-cfrg-vdaf-06]].
 //!
-//! [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
 use crate::vdaf::{CodecError, Decode, Encode};
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -90,9 +90,9 @@ pub trait SeedStream {
     fn fill(&mut self, buf: &mut [u8]);
 }
 
-/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-05]].
+/// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-06]].
 ///
-/// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+/// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 pub trait Prg<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this PRG.
     type SeedStream: SeedStream;
@@ -191,9 +191,9 @@ impl Debug for SeedStreamAes128 {
     }
 }
 
-/// The PRG based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-05]].
+/// The PRG based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-06]].
 ///
-/// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+/// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 #[derive(Clone, Debug)]
 pub struct PrgSha3(CShake128);
 
@@ -264,7 +264,7 @@ impl PrgFixedKeyAes128Key {
     }
 }
 
-/// PrgFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-05]]. This PRG is NOT RECOMMENDED for
+/// PrgFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-06]]. This PRG is NOT RECOMMENDED for
 /// general use; see Section 9 ("Security Considerations") for details.
 ///
 /// This PRG combines SHA-3 and a fixed-key mode of operation for AES-128. The key is "fixed" in
@@ -272,7 +272,7 @@ impl PrgFixedKeyAes128Key {
 /// depending on the application, these strings can be hard-coded. The seed is used to construct
 /// each block of input passed to a hash function built from AES-128.
 ///
-/// [draft-irtf-cfrg-vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+/// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 #[derive(Clone, Debug)]
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(
@@ -409,7 +409,7 @@ mod tests {
         #[serde(with = "hex")]
         seed: Vec<u8>,
         #[serde(with = "hex")]
-        custom: Vec<u8>,
+        dst: Vec<u8>,
         #[serde(with = "hex")]
         binder: Vec<u8>,
         length: usize,
@@ -447,8 +447,8 @@ mod tests {
     #[allow(deprecated)]
     fn prg_aes128() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/05/PrgAes128.json")).unwrap();
-        let mut prg = PrgAes128::init(&t.seed.try_into().unwrap(), &t.custom);
+            serde_json::from_str(include_str!("test_vec/06/PrgAes128.json")).unwrap();
+        let mut prg = PrgAes128::init(&t.seed.try_into().unwrap(), &t.dst);
         prg.update(&t.binder);
 
         assert_eq!(
@@ -472,8 +472,8 @@ mod tests {
     #[test]
     fn prg_sha3() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/05/PrgSha3.json")).unwrap();
-        let mut prg = PrgSha3::init(&t.seed.try_into().unwrap(), &t.custom);
+            serde_json::from_str(include_str!("test_vec/06/PrgSha3.json")).unwrap();
+        let mut prg = PrgSha3::init(&t.seed.try_into().unwrap(), &t.dst);
         prg.update(&t.binder);
 
         assert_eq!(
@@ -498,8 +498,8 @@ mod tests {
     #[test]
     fn prg_fixed_key_aes128() {
         let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/05/PrgFixedKeyAes128.json")).unwrap();
-        let mut prg = PrgFixedKeyAes128::init(&t.seed.try_into().unwrap(), &t.custom);
+            serde_json::from_str(include_str!("test_vec/06/PrgFixedKeyAes128.json")).unwrap();
+        let mut prg = PrgFixedKeyAes128::init(&t.seed.try_into().unwrap(), &t.dst);
         prg.update(&t.binder);
 
         assert_eq!(
