@@ -15,6 +15,11 @@ user-id = 213776
 start = "2020-09-28"
 end = "2024-03-23"
 
+[[audits.aes]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.8.2 -> 0.8.3"
+
 [[audits.aes-gcm]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
 criteria = "safe-to-deploy"
