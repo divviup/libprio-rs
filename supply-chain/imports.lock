@@ -344,7 +344,10 @@ criteria = "safe-to-deploy"
 version = "0.37.13"
 notes = "The Bytecode Alliance is the author of this crate."
 
-[audits.divviup.audits]
+[[audits.divviup.audits.aes]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.8.2 -> 0.8.3"
 
 [[audits.embark-studios.audits.epaint]]
 who = "Johan Andersson <opensource@embark-studios.com>"
