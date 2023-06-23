@@ -7,7 +7,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, merge_vector, Field255, Field64, FieldElement},
-    idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
+    idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
         prg::{Prg, PrgSha3, Seed, SeedStream},
@@ -737,7 +737,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         let auth_leaf = prng.get();
 
         // Generate the IDPF shares.
-        let (public_share, [idpf_key_0, idpf_key_1]) = idpf::gen_with_random(
+        let (public_share, [idpf_key_0, idpf_key_1]) = Idpf::gen_with_random(
             input,
             auth_inner
                 .iter()
@@ -1165,10 +1165,10 @@ where
 
     let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
     for prefix in agg_param.prefixes.iter() {
-        let share = Poplar1IdpfValue::<F>::from(idpf::eval::<
+        let share = Poplar1IdpfValue::<F>::from(Idpf::<
             Poplar1IdpfValue<Field64>,
             Poplar1IdpfValue<Field255>,
-        >(
+        >::eval(
             agg_id,
             public_share,
             idpf_key,

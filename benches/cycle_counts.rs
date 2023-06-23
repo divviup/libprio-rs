@@ -8,7 +8,7 @@ use prio::field::FieldElement;
 use prio::{
     codec::{Decode, Encode, ParameterizedDecode},
     field::Field255,
-    idpf::{self, IdpfInput, IdpfPublicShare, RingBufferCache},
+    idpf::{Idpf, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::{poplar1::Poplar1IdpfValue, prg::Seed},
 };
 #[cfg(feature = "prio2")]
@@ -174,7 +174,7 @@ fn idpf_poplar_gen(
     inner_values: Vec<Poplar1IdpfValue<Field64>>,
     leaf_value: Poplar1IdpfValue<Field255>,
 ) {
-    idpf::gen(input, inner_values, leaf_value, &[0; 16]).unwrap();
+    Idpf::gen(input, inner_values, leaf_value, &[0; 16]).unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -217,7 +217,7 @@ fn idpf_poplar_eval(
     key: &Seed<16>,
 ) {
     let mut cache = RingBufferCache::new(1);
-    idpf::eval(0, public_share, key, input, &[0; 16], &mut cache).unwrap();
+    Idpf::eval(0, public_share, key, input, &[0; 16], &mut cache).unwrap();
 }
 
 #[cfg(feature = "experimental")]
