@@ -143,7 +143,6 @@ pub trait IdpfValue:
     Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
-    + ConditionallySelectable
     + ConditionallyNegatable
     + Encode
     + Decode
@@ -160,6 +159,11 @@ pub trait IdpfValue:
 
     /// Returns the additive identity.
     fn zero() -> Self;
+
+    /// Conditionally select between two values in constant time.
+    ///
+    /// This is the same as in [`subtle::ConditionallySelectable`], but without the [`Copy`] bound.
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self;
 }
 
 impl<F> IdpfValue for F
@@ -191,6 +195,10 @@ where
 
     fn zero() -> Self {
         <Self as FieldElement>::zero()
+    }
+
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        <F as ConditionallySelectable>::conditional_select(a, b, choice)
     }
 }
 

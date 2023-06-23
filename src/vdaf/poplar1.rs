@@ -1264,6 +1264,10 @@ where
     fn generate<S: SeedStream>(seed_stream: &mut S, _: &()) -> Self {
         Self([F::generate(seed_stream, &()), F::generate(seed_stream, &())])
     }
+
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        ConditionallySelectable::conditional_select(a, b, choice)
+    }
 }
 
 impl<F> Add for Poplar1IdpfValue<F>
