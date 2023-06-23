@@ -1257,7 +1257,7 @@ where
 {
     type Parameters = ();
 
-    fn zero() -> Self {
+    fn zero(_: &()) -> Self {
         Self([F::zero(); 2])
     }
 

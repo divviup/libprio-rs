@@ -148,7 +148,7 @@ pub trait IdpfValue:
     + Decode
     + Sized
 {
-    /// Any run-time parameters needed to pseudorandomly generate a value.
+    /// Any run-time parameters needed to produce a value.
     type Parameters;
 
     /// Generate a value from PRG output. This must have a uniform probability distribution over
@@ -158,7 +158,7 @@ pub trait IdpfValue:
         S: SeedStream;
 
     /// Returns the additive identity.
-    fn zero() -> Self;
+    fn zero(parameters: &Self::Parameters) -> Self;
 
     /// Conditionally select between two values in constant time.
     ///
@@ -193,7 +193,7 @@ where
         }
     }
 
-    fn zero() -> Self {
+    fn zero(_: &()) -> Self {
         <Self as FieldElement>::zero()
     }
 
@@ -355,8 +355,8 @@ where
     let (new_key, elements) = convert::<V>(&seed_corrected, convert_prg_fixed_key, parameters);
     *key = new_key;
 
-    let mut out =
-        elements + V::conditional_select(&V::zero(), &correction_word.value, *control_bit);
+    let mut out = elements
+        + V::conditional_select(&V::zero(parameters), &correction_word.value, *control_bit);
     out.conditional_negate(Choice::from((!is_leader) as u8));
     out
 }
