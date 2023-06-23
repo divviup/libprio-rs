@@ -33,6 +33,7 @@ pub(crate) struct FieldParameters {
 
 impl FieldParameters {
     /// Addition. The result will be in [0, p), so long as both x and y are as well.
+    #[inline(always)]
     pub fn add(&self, x: u128, y: u128) -> u128 {
         //   0,x
         // + 0,y
@@ -52,6 +53,7 @@ impl FieldParameters {
     }
 
     /// Subtraction. The result will be in [0, p), so long as both x and y are as well.
+    #[inline(always)]
     pub fn sub(&self, x: u128, y: u128) -> u128 {
         //     0, x
         // -   0, y
@@ -78,6 +80,7 @@ impl FieldParameters {
     /// ```text
     /// assert_eq!(fp.residue(fp.mul(fp.montgomery(23), fp.montgomery(2))), 46);
     /// ```
+    #[inline(always)]
     pub fn mul(&self, x: u128, y: u128) -> u128 {
         let x = [lo64(x), hi64(x)];
         let y = [lo64(y), hi64(y)];
@@ -224,11 +227,13 @@ impl FieldParameters {
 
     /// Modular inversion, i.e., x^-1 (mod p) where `p` is the modulus. Note that the runtime of
     /// this algorithm is linear in the bit length of `p`.
+    #[inline(always)]
     pub fn inv(&self, x: u128) -> u128 {
         self.pow(x, self.p - 2)
     }
 
     /// Negation, i.e., `-x (mod p)` where `p` is the modulus.
+    #[inline(always)]
     pub fn neg(&self, x: u128) -> u128 {
         self.sub(0, x)
     }
@@ -242,6 +247,7 @@ impl FieldParameters {
     /// let elem = fp.montgomery(integer); // Internal representation in the Montgomery domain
     /// assert_eq!(elem, 2564090464);
     /// ```
+    #[inline(always)]
     pub fn montgomery(&self, x: u128) -> u128 {
         modp(self.mul(x, self.r2), self.p)
     }
@@ -261,6 +267,7 @@ impl FieldParameters {
     /// let integer = fp.residue(elem); // Standard integer representation
     /// assert_eq!(integer, 1);
     /// ```
+    #[inline(always)]
     pub fn residue(&self, x: u128) -> u128 {
         modp(self.mul(x, 1), self.p)
     }
@@ -318,14 +325,17 @@ impl FieldParameters {
     }
 }
 
+#[inline(always)]
 fn lo64(x: u128) -> u128 {
     x & ((1 << 64) - 1)
 }
 
+#[inline(always)]
 fn hi64(x: u128) -> u128 {
     x >> 64
 }
 
+#[inline(always)]
 fn modp(x: u128, p: u128) -> u128 {
     let (z, carry) = x.overflowing_sub(p);
     let m = 0u128.wrapping_sub(carry as u128);
