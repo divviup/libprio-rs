@@ -5,8 +5,9 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    field::{FieldElement, FieldError},
     vdaf::{
-        prg::{CoinToss, PrgFixedKeyAes128Key, Seed, SeedStream},
+        prg::{PrgFixedKeyAes128Key, Seed, SeedStream},
         VdafError, VERSION,
     },
 };
@@ -135,22 +136,62 @@ where
 /// Trait for values to be programmed into an IDPF.
 ///
 /// Values must form an Abelian group, so that they can be secret-shared, and the group operation
-/// must be represented by [`Add`]. An implementation of [`CoinToss`] must be provided to randomly
-/// select a value using PRG output. Values must be encodable and decodable, without need for a
-/// decoding parameter.
+/// must be represented by [`Add`]. Values must be encodable and decodable, without need for a
+/// decoding parameter. Values can be pseudorandomly generated, with a uniform probability
+/// distribution, from PRG output.
 pub trait IdpfValue:
     Add<Output = Self>
     + AddAssign
     + Sub<Output = Self>
     + ConditionallySelectable
     + ConditionallyNegatable
-    + CoinToss
     + Encode
     + Decode
     + Sized
 {
+    /// Any run-time parameters needed to pseudorandomly generate a value.
+    type Parameters;
+
+    /// Generate a value from PRG output. This must have a uniform probability distribution over
+    /// the PRG output.
+    fn generate<S>(seed_stream: &mut S, parameters: &Self::Parameters) -> Self
+    where
+        S: SeedStream;
+
     /// Returns the additive identity.
     fn zero() -> Self;
+}
+
+impl<F> IdpfValue for F
+where
+    F: FieldElement,
+{
+    type Parameters = ();
+
+    fn generate<S>(seed_stream: &mut S, _: &()) -> Self
+    where
+        S: SeedStream,
+    {
+        // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
+        // `SeedStream` output.
+        let mut buffer = [0u8; 64];
+        assert!(
+            buffer.len() >= F::ENCODED_SIZE,
+            "field is too big for buffer"
+        );
+        loop {
+            seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
+            match Self::try_from_random(&buffer[..F::ENCODED_SIZE]) {
+                Ok(x) => return x,
+                Err(FieldError::ModulusOverflow) => continue,
+                Err(err) => panic!("unexpected error: {err}"),
+            }
+        }
+    }
+
+    fn zero() -> Self {
+        <Self as FieldElement>::zero()
+    }
 }
 
 /// An output from evaluation of an IDPF at some level and index.
@@ -199,14 +240,14 @@ fn extend(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([[u8; 16]; 
 
 fn convert<V>(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([u8; 16], V)
 where
-    V: IdpfValue,
+    V: IdpfValue<Parameters = ()>,
 {
     let mut seed_stream = prg_fixed_key.with_seed(seed);
 
     let mut next_seed = [0u8; 16];
     seed_stream.fill(&mut next_seed);
 
-    (next_seed, V::sample(&mut seed_stream))
+    (next_seed, V::generate(&mut seed_stream, &()))
 }
 
 /// Helper method to update seeds, update control bits, and output the correction word for one level
@@ -220,7 +261,7 @@ fn generate_correction_word<V>(
     convert_prg_fixed_key: &PrgFixedKeyAes128Key,
 ) -> IdpfCorrectionWord<V>
 where
-    V: IdpfValue,
+    V: IdpfValue<Parameters = ()>,
 {
     // Expand both keys into two seeds and two control bits each.
     let (seed_0, control_bits_0) = extend(&keys[0], extend_prg_fixed_key);
@@ -282,7 +323,7 @@ fn eval_next<V>(
     convert_prg_fixed_key: &PrgFixedKeyAes128Key,
 ) -> V
 where
-    V: IdpfValue,
+    V: IdpfValue<Parameters = ()>,
 {
     let (mut seeds, mut control_bits) = extend(key, extend_prg_fixed_key);
 
@@ -311,8 +352,8 @@ pub(crate) fn gen_with_random<VI, VL, M: IntoIterator<Item = VI>>(
     random: &[[u8; 16]; 2],
 ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
 where
-    VI: IdpfValue,
-    VL: IdpfValue,
+    VI: IdpfValue<Parameters = ()>,
+    VL: IdpfValue<Parameters = ()>,
 {
     let bits = input.len();
 
@@ -380,8 +421,8 @@ pub fn gen<VI, VL, M>(
     binder: &[u8],
 ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
 where
-    VI: IdpfValue,
-    VL: IdpfValue,
+    VI: IdpfValue<Parameters = ()>,
+    VL: IdpfValue<Parameters = ()>,
     M: IntoIterator<Item = VI>,
 {
     if input.is_empty() {
@@ -408,8 +449,8 @@ fn eval_from_node<VI, VL>(
     cache: &mut dyn IdpfCache,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
-    VI: IdpfValue,
-    VL: IdpfValue,
+    VI: IdpfValue<Parameters = ()>,
+    VL: IdpfValue<Parameters = ()>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
 
@@ -475,8 +516,8 @@ pub fn eval<VI, VL>(
     cache: &mut dyn IdpfCache,
 ) -> Result<IdpfOutputShare<VI, VL>, IdpfError>
 where
-    VI: IdpfValue,
-    VL: IdpfValue,
+    VI: IdpfValue<Parameters = ()>,
+    VL: IdpfValue<Parameters = ()>,
 {
     let bits = public_share.inner_correction_words.len() + 1;
     if agg_id > 1 {

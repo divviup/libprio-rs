@@ -138,7 +138,7 @@ mod tests {
     use crate::{
         codec::Decode,
         field::{Field64, FieldPrio2},
-        vdaf::prg::{CoinToss, Prg, PrgSha3, Seed, SeedStreamSha3},
+        vdaf::prg::{Prg, PrgSha3, Seed, SeedStreamSha3},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
@@ -233,12 +233,15 @@ mod tests {
         let actual = prng.nth(4).unwrap();
         assert_eq!(actual, expected);
 
-        let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
-        let mut actual = Field64::zero();
-        for _ in 0..=4 {
-            actual = <Field64 as CoinToss>::sample(&mut seed_stream);
+        #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+        {
+            let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
+            let mut actual = <Field64 as FieldElement>::zero();
+            for _ in 0..=4 {
+                actual = <Field64 as crate::idpf::IdpfValue>::generate(&mut seed_stream, &());
+            }
+            assert_eq!(actual, expected);
         }
-        assert_eq!(actual, expected);
     }
 
     // Test that the `Prng`'s internal buffer properly copies the end of the buffer to the front

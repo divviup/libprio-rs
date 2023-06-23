@@ -10,7 +10,7 @@ use crate::{
     idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        prg::{CoinToss, Prg, PrgSha3, Seed, SeedStream},
+        prg::{Prg, PrgSha3, Seed, SeedStream},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
@@ -462,9 +462,9 @@ pub enum Poplar1FieldVec {
 impl Poplar1FieldVec {
     fn zero(is_leaf: bool, len: usize) -> Self {
         if is_leaf {
-            Self::Leaf(vec![Field255::zero(); len])
+            Self::Leaf(vec![<Field255 as FieldElement>::zero(); len])
         } else {
-            Self::Inner(vec![Field64::zero(); len])
+            Self::Inner(vec![<Field64 as FieldElement>::zero(); len])
         }
     }
 }
@@ -1256,8 +1256,14 @@ impl<F> IdpfValue for Poplar1IdpfValue<F>
 where
     F: FieldElement,
 {
+    type Parameters = ();
+
     fn zero() -> Self {
         Self([F::zero(); 2])
+    }
+
+    fn generate<S: SeedStream>(seed_stream: &mut S, _: &()) -> Self {
+        Self([F::generate(seed_stream, &()), F::generate(seed_stream, &())])
     }
 }
 
@@ -1331,18 +1337,6 @@ where
 {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(Self([F::decode(bytes)?, F::decode(bytes)?]))
-    }
-}
-
-impl<F> CoinToss for Poplar1IdpfValue<F>
-where
-    F: CoinToss,
-{
-    fn sample<S>(seed_stream: &mut S) -> Self
-    where
-        S: SeedStream,
-    {
-        Self([F::sample(seed_stream), F::sample(seed_stream)])
     }
 }
 
@@ -1572,11 +1566,11 @@ mod tests {
             idpf_key: Seed::<16>::generate().unwrap(),
             corr_seed: Seed::<16>::generate().unwrap(),
             corr_inner: vec![
-                [Field64::one(), Field64::zero()],
-                [Field64::one(), Field64::zero()],
-                [Field64::one(), Field64::zero()],
+                [Field64::one(), <Field64 as FieldElement>::zero()],
+                [Field64::one(), <Field64 as FieldElement>::zero()],
+                [Field64::one(), <Field64 as FieldElement>::zero()],
             ],
-            corr_leaf: [Field255::one(), Field255::zero()],
+            corr_leaf: [Field255::one(), <Field255 as FieldElement>::zero()],
         };
         assert_eq!(
             input_share.get_encoded().len(),
