@@ -364,7 +364,20 @@ where
     VI: IdpfValue<Parameters = ()>,
     VL: IdpfValue<Parameters = ()>,
 {
+    /// Construct an [`Idpf`] instance with the given run-time parameters needed for inner and leaf
+    /// values.
+    pub fn new(
+        inner_node_value_parameters: VI::Parameters,
+        leaf_node_value_parameters: VL::Parameters,
+    ) -> Self {
+        Self {
+            inner_node_value_parameters,
+            leaf_node_value_parameters,
+        }
+    }
+
     pub(crate) fn gen_with_random<M: IntoIterator<Item = VI>>(
+        &self,
         input: &IdpfInput,
         inner_values: M,
         leaf_value: VL,
@@ -435,6 +448,7 @@ where
     /// Generate and return a sequence of IDPF shares for `input`. The parameters `inner_values`
     /// and `leaf_value` provide the output values for each successive level of the prefix tree.
     pub fn gen<M>(
+        &self,
         input: &IdpfInput,
         inner_values: M,
         leaf_value: VL,
@@ -452,13 +466,14 @@ where
         for random_seed in random.iter_mut() {
             getrandom::getrandom(random_seed)?;
         }
-        Self::gen_with_random(input, inner_values, leaf_value, binder, &random)
+        self.gen_with_random(input, inner_values, leaf_value, binder, &random)
     }
 
     /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
     /// intermediate values.
     #[allow(clippy::too_many_arguments)]
     fn eval_from_node(
+        &self,
         is_leader: bool,
         public_share: &IdpfPublicShare<VI, VL>,
         start_level: usize,
@@ -525,6 +540,7 @@ where
     ///
     /// Evaluate an IDPF share on `prefix`.
     pub fn eval(
+        &self,
         agg_id: usize,
         public_share: &IdpfPublicShare<VI, VL>,
         key: &Seed<16>,
@@ -562,7 +578,7 @@ where
                 if let Some((key, control_bit)) = cache.get(cache_key) {
                     // Evaluate the IDPF starting from the cached data at a previously-computed
                     // node, and return the result.
-                    return Self::eval_from_node(
+                    return self.eval_from_node(
                         is_leader,
                         public_share,
                         /* start_level */ cache_key.len(),
@@ -577,7 +593,7 @@ where
             }
         }
         // Evaluate starting from the root node.
-        Self::eval_from_node(
+        self.eval_from_node(
             is_leader,
             public_share,
             /* start_level */ 0,
@@ -1029,13 +1045,15 @@ mod tests {
     fn test_idpf_poplar() {
         let input = bitbox![0, 1, 1, 0, 1].into();
         let nonce: [u8; 16] = random();
-        let (public_share, keys) = Idpf::gen(
-            &input,
-            Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
-            Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
-            &nonce,
-        )
-        .unwrap();
+        let idpf = Idpf::new((), ());
+        let (public_share, keys) = idpf
+            .gen(
+                &input,
+                Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
+                Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
+                &nonce,
+            )
+            .unwrap();
 
         check_idpf_poplar_evaluation(
             &public_share,
@@ -1147,8 +1165,13 @@ mod tests {
         cache_0: &mut dyn IdpfCache,
         cache_1: &mut dyn IdpfCache,
     ) {
-        let share_0 = Idpf::eval(0, public_share, &keys[0], prefix, binder, cache_0).unwrap();
-        let share_1 = Idpf::eval(1, public_share, &keys[1], prefix, binder, cache_1).unwrap();
+        let idpf = Idpf::new((), ());
+        let share_0 = idpf
+            .eval(0, public_share, &keys[0], prefix, binder, cache_0)
+            .unwrap();
+        let share_1 = idpf
+            .eval(1, public_share, &keys[1], prefix, binder, cache_1)
+            .unwrap();
         let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
     }
@@ -1176,8 +1199,10 @@ mod tests {
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let nonce: [u8; 16] = random();
-        let (public_share, keys) =
-            Idpf::gen(&input, inner_values.clone(), leaf_values, &nonce).unwrap();
+        let idpf = Idpf::new((), ());
+        let (public_share, keys) = idpf
+            .gen(&input, inner_values.clone(), leaf_values, &nonce)
+            .unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
 
@@ -1243,8 +1268,10 @@ mod tests {
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let nonce: [u8; 16] = random();
-        let (public_share, keys) =
-            Idpf::gen(&input, inner_values.clone(), leaf_values, &nonce).unwrap();
+        let idpf = Idpf::new((), ());
+        let (public_share, keys) = idpf
+            .gen(&input, inner_values.clone(), leaf_values, &nonce)
+            .unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
 
@@ -1420,8 +1447,10 @@ mod tests {
             Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
 
         let nonce: [u8; 16] = random();
-        let (public_share, keys) =
-            Idpf::gen(&input, inner_values.clone(), leaf_values, &nonce).unwrap();
+        let idpf = Idpf::new((), ());
+        let (public_share, keys) = idpf
+            .gen(&input, inner_values.clone(), leaf_values, &nonce)
+            .unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
 
@@ -1450,8 +1479,9 @@ mod tests {
     #[test]
     fn test_idpf_poplar_error_cases() {
         let nonce: [u8; 16] = random();
+        let idpf = Idpf::new((), ());
         // Zero bits does not make sense.
-        Idpf::gen(
+        idpf.gen(
             &bitbox![].into(),
             Vec::<Poplar1IdpfValue<Field64>>::new(),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
@@ -1459,23 +1489,24 @@ mod tests {
         )
         .unwrap_err();
 
-        let (public_share, keys) = Idpf::gen(
-            &bitbox![0;10].into(),
-            Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
-            Poplar1IdpfValue::new([Field255::zero(); 2]),
-            &nonce,
-        )
-        .unwrap();
+        let (public_share, keys) = idpf
+            .gen(
+                &bitbox![0;10].into(),
+                Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
+                Poplar1IdpfValue::new([Field255::zero(); 2]),
+                &nonce,
+            )
+            .unwrap();
 
         // Wrong number of values.
-        Idpf::gen(
+        idpf.gen(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 8]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
             &nonce,
         )
         .unwrap_err();
-        Idpf::gen(
+        idpf.gen(
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 10]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
@@ -1484,25 +1515,27 @@ mod tests {
         .unwrap_err();
 
         // Evaluating with empty prefix.
-        assert!(Idpf::eval(
-            0,
-            &public_share,
-            &keys[0],
-            &bitbox![].into(),
-            &nonce,
-            &mut NoCache::new(),
-        )
-        .is_err());
+        assert!(idpf
+            .eval(
+                0,
+                &public_share,
+                &keys[0],
+                &bitbox![].into(),
+                &nonce,
+                &mut NoCache::new(),
+            )
+            .is_err());
         // Evaluating with too-long prefix.
-        assert!(Idpf::eval(
-            0,
-            &public_share,
-            &keys[0],
-            &bitbox![0; 11].into(),
-            &nonce,
-            &mut NoCache::new(),
-        )
-        .is_err());
+        assert!(idpf
+            .eval(
+                0,
+                &public_share,
+                &keys[0],
+                &bitbox![0; 11].into(),
+                &nonce,
+                &mut NoCache::new(),
+            )
+            .is_err());
     }
 
     #[test]
@@ -1846,14 +1879,16 @@ mod tests {
         for (src, dest) in random_iter.zip(random.iter_mut().flat_map(|seed| seed.iter_mut())) {
             *dest = src;
         }
-        let (public_share, keys) = Idpf::gen_with_random(
-            &test_vector.alpha,
-            test_vector.beta_inner,
-            test_vector.beta_leaf,
-            b"some nonce",
-            &random,
-        )
-        .unwrap();
+        let idpf = Idpf::new((), ());
+        let (public_share, keys) = idpf
+            .gen_with_random(
+                &test_vector.alpha,
+                test_vector.beta_inner,
+                test_vector.beta_leaf,
+                b"some nonce",
+                &random,
+            )
+            .unwrap();
 
         assert_eq!(keys[0].0, test_vector.keys[0]);
         assert_eq!(keys[1].0, test_vector.keys[1]);
