@@ -66,6 +66,9 @@ crypto-dependencies = ["aes", "ctr", "cmac"]
 [workspace]
 members = [".", "binaries"]
 
+[lib]
+bench = false
+
 [[bench]]
 name = "speed_tests"
 harness = false
