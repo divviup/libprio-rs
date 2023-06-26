@@ -93,13 +93,6 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.97"
-when = "2023-06-16"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.serde_json]]
 version = "1.0.99"
 when = "2023-06-24"
 user-id = 3618
@@ -361,12 +354,6 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.10.5 -> 0.11.0"
 
-[[audits.embark-studios.audits.epaint]]
-who = "Johan Andersson <opensource@embark-studios.com>"
-criteria = "safe-to-deploy"
-violation = "<0.20.0"
-notes = "Specified crate license does not include licenses of embedded fonts if using default features or the `default_fonts` feature. Tracked in: https://github.com/emilk/egui/issues/2321"
-
 [[audits.embark-studios.audits.tap]]
 who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
@@ -589,6 +576,12 @@ delta = "1.9.3 -> 1.10.1"
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.10.1 -> 1.10.2"
+
+[[audits.firefox.audits.subtle]]
+who = "Simon Friedberger <simon@mozilla.com>"
+criteria = "safe-to-deploy"
+version = "2.5.0"
+notes = "The goal is to provide some constant-time correctness for cryptographic implementations. The approach is reasonable, it is known to be insufficient but this is pointed out in the documentation."
 
 [[audits.firefox.audits.tracing]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
