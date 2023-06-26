@@ -23,13 +23,6 @@ user-login = "alexcrichton"
 user-name = "Alex Crichton"
 
 [[publisher.libc]]
-version = "0.2.132"
-when = "2022-08-16"
-user-id = 2915
-user-login = "Amanieu"
-user-name = "Amanieu d'Antras"
-
-[[publisher.libc]]
 version = "0.2.146"
 when = "2023-06-06"
 user-id = 2915
@@ -86,13 +79,6 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.163"
-when = "2023-05-11"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.serde]]
 version = "1.0.164"
 when = "2023-06-08"
 user-id = 3618
@@ -100,29 +86,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.163"
-when = "2023-05-10"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.serde_derive]]
 version = "1.0.164"
 when = "2023-06-08"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.serde_json]]
-version = "1.0.96"
-when = "2023-04-12"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.serde_json]]
-version = "1.0.97"
-when = "2023-06-16"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -484,16 +449,6 @@ who = "Simon Friedberger <simon@mozilla.com>"
 criteria = "safe-to-deploy"
 version = "0.4.3"
 
-[[audits.firefox.audits.libc]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-delta = "0.2.132 -> 0.2.138"
-
-[[audits.firefox.audits.libc]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-delta = "0.2.138 -> 0.2.139"
-
 [[audits.firefox.audits.log]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -612,6 +567,12 @@ delta = "1.9.3 -> 1.10.1"
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.10.1 -> 1.10.2"
+
+[[audits.firefox.audits.subtle]]
+who = "Simon Friedberger <simon@mozilla.com>"
+criteria = "safe-to-deploy"
+version = "2.5.0"
+notes = "The goal is to provide some constant-time correctness for cryptographic implementations. The approach is reasonable, it is known to be insufficient but this is pointed out in the documentation."
 
 [[audits.firefox.audits.tracing]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"

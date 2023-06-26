@@ -252,11 +252,6 @@ criteria = "safe-to-run"
 version = "0.4.18"
 criteria = "safe-to-run"
 
-[[exemptions.subtle]]
-version = "2.4.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" features are enabled."
-
 [[exemptions.tinytemplate]]
 version = "1.2.1"
 criteria = "safe-to-run"
