@@ -5,6 +5,8 @@
 //!
 //! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
+#[cfg(feature = "experimental")]
+use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 use crate::{
@@ -248,6 +250,25 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         agg_param: &Self::AggregationParam,
         output_shares: M,
     ) -> Result<Self::AggregateShare, VdafError>;
+}
+
+/// Aggregator that implements differential privacy with Aggregator-side noise addition.
+#[cfg(feature = "experimental")]
+pub trait AggregatorWithNoise<
+    const VERIFY_KEY_SIZE: usize,
+    const NONCE_SIZE: usize,
+    DPStrategy: DifferentialPrivacyStrategy,
+>: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>
+{
+    /// Adds noise to an aggregate share such that the aggregate result is differentially private
+    /// as long as one Aggregator is honest.
+    fn add_noise_to_agg_share(
+        &self,
+        dp_strategy: &DPStrategy,
+        agg_param: &Self::AggregationParam,
+        agg_share: &mut Self::AggregateShare,
+        num_measurements: usize,
+    ) -> Result<(), VdafError>;
 }
 
 /// The Collector's role in the execution of a VDAF.
