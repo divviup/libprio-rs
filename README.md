@@ -13,13 +13,13 @@ and Scalable Computation of Aggregate Statistics.
 
 ## Exposure Notifications Private Analytics
 
-This crate is used in the [Exposure Notifications Private Analytics][enpa] system. This is supported
+This crate was used in the [Exposure Notifications Private Analytics][enpa] system. This is supported
 by the interfaces in modules `server` and `client` and is referred to in various places as Prio v2.
 See [`prio-server`][prio-server] or the [ENPA whitepaper][enpa-whitepaper] for more details.
 
 ## Verifiable Distributed Aggregation Function
 
-Crate `prio` also implements a [Verifiable Distributed Aggregation Function
+This crate also implements a [Verifiable Distributed Aggregation Function
 (VDAF)][vdaf] called "Prio3", implemented in the `vdaf` module, allowing Prio to
 be used in the [Distributed Aggregation Protocol][dap] protocol being developed
 in the PPM working group at the IETF. This support is still evolving along with
