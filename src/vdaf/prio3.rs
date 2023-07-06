@@ -201,7 +201,7 @@ impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3FixedPointBoundedL2VecSumMultit
     }
 }
 
-/// The histogram type. Each measurement is an integer in `[0, length)` `and the result is a
+/// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
 pub type Prio3Histogram = Prio3<Histogram<Field128>, PrgSha3, 16>;
 
