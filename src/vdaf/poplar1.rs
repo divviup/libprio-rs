@@ -1255,7 +1255,7 @@ impl<F> IdpfValue for Poplar1IdpfValue<F>
 where
     F: FieldElement,
 {
-    type Parameters = ();
+    type ValueParameter = ();
 
     fn zero(_: &()) -> Self {
         Self([F::zero(); 2])

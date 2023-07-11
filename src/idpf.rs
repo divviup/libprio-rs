@@ -149,16 +149,16 @@ pub trait IdpfValue:
     + Sized
 {
     /// Any run-time parameters needed to produce a value.
-    type Parameters;
+    type ValueParameter;
 
     /// Generate a value from PRG output. This must have a uniform probability distribution over
     /// the PRG output.
-    fn generate<S>(seed_stream: &mut S, parameters: &Self::Parameters) -> Self
+    fn generate<S>(seed_stream: &mut S, parameter: &Self::ValueParameter) -> Self
     where
         S: SeedStream;
 
     /// Returns the additive identity.
-    fn zero(parameters: &Self::Parameters) -> Self;
+    fn zero(parameter: &Self::ValueParameter) -> Self;
 
     /// Conditionally select between two values in constant time.
     ///
@@ -170,7 +170,7 @@ impl<F> IdpfValue for F
 where
     F: FieldElement,
 {
-    type Parameters = ();
+    type ValueParameter = ();
 
     fn generate<S>(seed_stream: &mut S, _: &()) -> Self
     where
@@ -249,7 +249,7 @@ fn extend(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([[u8; 16]; 
 fn convert<V>(
     seed: &[u8; 16],
     prg_fixed_key: &PrgFixedKeyAes128Key,
-    parameters: &V::Parameters,
+    parameter: &V::ValueParameter,
 ) -> ([u8; 16], V)
 where
     V: IdpfValue,
@@ -259,7 +259,7 @@ where
     let mut next_seed = [0u8; 16];
     seed_stream.fill(&mut next_seed);
 
-    (next_seed, V::generate(&mut seed_stream, parameters))
+    (next_seed, V::generate(&mut seed_stream, parameter))
 }
 
 /// Helper method to update seeds, update control bits, and output the correction word for one level
@@ -267,7 +267,7 @@ where
 fn generate_correction_word<V>(
     input_bit: Choice,
     value: V,
-    parameters: &V::Parameters,
+    parameter: &V::ValueParameter,
     keys: &mut [[u8; 16]; 2],
     control_bits: &mut [Choice; 2],
     extend_prg_fixed_key: &PrgFixedKeyAes128Key,
@@ -309,9 +309,9 @@ where
     ];
 
     let (new_key_0, elements_0) =
-        convert::<V>(&seeds_corrected[0], convert_prg_fixed_key, parameters);
+        convert::<V>(&seeds_corrected[0], convert_prg_fixed_key, parameter);
     let (new_key_1, elements_1) =
-        convert::<V>(&seeds_corrected[1], convert_prg_fixed_key, parameters);
+        convert::<V>(&seeds_corrected[1], convert_prg_fixed_key, parameter);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
@@ -331,7 +331,7 @@ where
 #[allow(clippy::too_many_arguments)]
 fn eval_next<V>(
     is_leader: bool,
-    parameters: &V::Parameters,
+    parameter: &V::ValueParameter,
     key: &mut [u8; 16],
     control_bit: &mut Choice,
     correction_word: &IdpfCorrectionWord<V>,
@@ -352,11 +352,11 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<V>(&seed_corrected, convert_prg_fixed_key, parameters);
+    let (new_key, elements) = convert::<V>(&seed_corrected, convert_prg_fixed_key, parameter);
     *key = new_key;
 
-    let mut out = elements
-        + V::conditional_select(&V::zero(parameters), &correction_word.value, *control_bit);
+    let mut out =
+        elements + V::conditional_select(&V::zero(parameter), &correction_word.value, *control_bit);
     out.conditional_negate(Choice::from((!is_leader) as u8));
     out
 }
@@ -371,8 +371,8 @@ where
     VI: IdpfValue,
     VL: IdpfValue,
 {
-    inner_node_value_parameters: VI::Parameters,
-    leaf_node_value_parameters: VL::Parameters,
+    inner_node_value_parameter: VI::ValueParameter,
+    leaf_node_value_parameter: VL::ValueParameter,
 }
 
 impl<VI, VL> Idpf<VI, VL>
@@ -383,12 +383,12 @@ where
     /// Construct an [`Idpf`] instance with the given run-time parameters needed for inner and leaf
     /// values.
     pub fn new(
-        inner_node_value_parameters: VI::Parameters,
-        leaf_node_value_parameters: VL::Parameters,
+        inner_node_value_parameter: VI::ValueParameter,
+        leaf_node_value_parameter: VL::ValueParameter,
     ) -> Self {
         Self {
-            inner_node_value_parameters,
-            leaf_node_value_parameters,
+            inner_node_value_parameter,
+            leaf_node_value_parameter,
         }
     }
 
@@ -432,7 +432,7 @@ where
             inner_correction_words.push(generate_correction_word::<VI>(
                 Choice::from(input[level] as u8),
                 value,
-                &self.inner_node_value_parameters,
+                &self.inner_node_value_parameter,
                 &mut keys,
                 &mut control_bits,
                 &extend_prg_fixed_key,
@@ -447,7 +447,7 @@ where
         let leaf_correction_word = generate_correction_word::<VL>(
             Choice::from(input[bits - 1] as u8),
             leaf_value,
-            &self.leaf_node_value_parameters,
+            &self.leaf_node_value_parameter,
             &mut keys,
             &mut control_bits,
             &extend_prg_fixed_key,
@@ -525,7 +525,7 @@ where
         {
             last_inner_output = Some(eval_next(
                 is_leader,
-                &self.inner_node_value_parameters,
+                &self.inner_node_value_parameter,
                 &mut key,
                 &mut control_bit,
                 correction_word,
@@ -540,7 +540,7 @@ where
         if prefix.len() == bits {
             let leaf_output = eval_next(
                 is_leader,
-                &self.leaf_node_value_parameters,
+                &self.leaf_node_value_parameter,
                 &mut key,
                 &mut control_bit,
                 &public_share.leaf_correction_word,
@@ -1969,9 +1969,9 @@ mod tests {
         struct MyUnit;
 
         impl IdpfValue for MyUnit {
-            type Parameters = ();
+            type ValueParameter = ();
 
-            fn generate<S>(_: &mut S, _: &Self::Parameters) -> Self
+            fn generate<S>(_: &mut S, _: &Self::ValueParameter) -> Self
             where
                 S: crate::vdaf::prg::SeedStream,
             {
@@ -2034,9 +2034,9 @@ mod tests {
         struct MyVector(Vec<Field128>);
 
         impl IdpfValue for MyVector {
-            type Parameters = usize;
+            type ValueParameter = usize;
 
-            fn generate<S>(seed_stream: &mut S, length: &Self::Parameters) -> Self
+            fn generate<S>(seed_stream: &mut S, length: &Self::ValueParameter) -> Self
             where
                 S: crate::vdaf::prg::SeedStream,
             {
