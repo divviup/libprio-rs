@@ -5,7 +5,7 @@
 //!
 //! NOTE: The public API for this module is a work in progress.
 
-use crate::field::{FieldElement, FieldError};
+use crate::field::{FieldElement, FieldElementExt};
 use crate::vdaf::prg::SeedStream;
 #[cfg(feature = "crypto-dependencies")]
 use crate::vdaf::prg::SeedStreamAes128;
@@ -13,6 +13,7 @@ use crate::vdaf::prg::SeedStreamAes128;
 use getrandom::getrandom;
 
 use std::marker::PhantomData;
+use std::ops::ControlFlow;
 
 const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
 
@@ -81,12 +82,9 @@ where
 
                 self.buffer_index = j;
 
-                if let Some(x) = match F::try_from_random(&self.buffer[i..j]) {
-                    Ok(x) => Some(x),
-                    Err(FieldError::ModulusOverflow) => None, // reject this sample
-                    Err(err) => panic!("unexpected error: {err}"),
-                } {
-                    return x;
+                match F::from_random_rejection(&self.buffer[i..j]) {
+                    ControlFlow::Break(x) => return x,
+                    ControlFlow::Continue(()) => continue, // reject this sample
                 }
             }
 

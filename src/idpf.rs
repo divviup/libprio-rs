@@ -5,7 +5,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{FieldElement, FieldError},
+    field::{FieldElement, FieldElementExt},
     vdaf::{
         prg::{PrgFixedKeyAes128Key, Seed, SeedStream},
         VdafError, VERSION,
@@ -23,7 +23,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     io::{Cursor, Read},
-    ops::{Add, AddAssign, Index, Sub},
+    ops::{Add, AddAssign, ControlFlow, Index, Sub},
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
@@ -185,10 +185,9 @@ where
         );
         loop {
             seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
-            match Self::try_from_random(&buffer[..F::ENCODED_SIZE]) {
-                Ok(x) => return x,
-                Err(FieldError::ModulusOverflow) => continue,
-                Err(err) => panic!("unexpected error: {err}"),
+            match F::from_random_rejection(&buffer[..F::ENCODED_SIZE]) {
+                ControlFlow::Break(x) => return x,
+                ControlFlow::Continue(()) => continue,
             }
         }
     }

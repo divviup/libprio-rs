@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`](crate::flp::Type) implementations.
 
-use crate::field::{FftFriendlyFieldElement, FieldElementExt};
+use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
