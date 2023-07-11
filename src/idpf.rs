@@ -151,8 +151,7 @@ pub trait IdpfValue:
     /// Any run-time parameters needed to produce a value.
     type ValueParameter;
 
-    /// Generate a value from PRG output. This must have a uniform probability distribution over
-    /// the PRG output.
+    /// Generate a pseudorandom value from a seed stream.
     fn generate<S>(seed_stream: &mut S, parameter: &Self::ValueParameter) -> Self
     where
         S: SeedStream;
@@ -160,7 +159,8 @@ pub trait IdpfValue:
     /// Returns the additive identity.
     fn zero(parameter: &Self::ValueParameter) -> Self;
 
-    /// Conditionally select between two values in constant time.
+    /// Conditionally select between two values. Implementations must perform this operation in
+    /// constant time.
     ///
     /// This is the same as in [`subtle::ConditionallySelectable`], but without the [`Copy`] bound.
     fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self;
