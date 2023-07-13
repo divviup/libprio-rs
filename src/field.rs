@@ -12,7 +12,6 @@ use crate::prng::{Prng, PrngError};
 use crate::{
     codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64},
-    vdaf::prg::{CoinToss, SeedStream},
 };
 use serde::{
     de::{DeserializeOwned, Visitor},
@@ -25,7 +24,10 @@ use std::{
     hash::{Hash, Hasher},
     io::{Cursor, Read},
     marker::PhantomData,
-    ops::{Add, AddAssign, BitAnd, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub, SubAssign},
+    ops::{
+        Add, AddAssign, BitAnd, ControlFlow, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub,
+        SubAssign,
+    },
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
@@ -195,7 +197,7 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
 }
 
 /// Methods common to all `FieldElementWithInteger` implementations that are private to the crate.
-pub(crate) trait FieldElementExt: FieldElementWithInteger {
+pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
     /// Encode `input` as bitvector of elements of `Self`. Output is written into the `output` slice.
     /// If `output.len()` is smaller than the number of bits required to respresent `input`,
     /// an error is returned.
@@ -290,7 +292,28 @@ pub(crate) trait FieldElementExt: FieldElementWithInteger {
     }
 }
 
-impl<F: FieldElementWithInteger> FieldElementExt for F {}
+impl<F: FieldElementWithInteger> FieldElementWithIntegerExt for F {}
+
+/// Methods common to all `FieldElement` implementations that are private to the crate.
+pub(crate) trait FieldElementExt: FieldElement {
+    /// Try to interpret a slice of [`Self::ENCODED_SIZE`] random bytes as an element in the field. If
+    /// the input represents an integer greater than or equal to the field modulus, then
+    /// [`ControlFlow::Continue`] is returned instead, to indicate that an enclosing rejection sampling
+    /// loop should try again with different random bytes.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `bytes` is not of length [`Self::ENCODED_SIZE`].
+    fn from_random_rejection(bytes: &[u8]) -> ControlFlow<Self, ()> {
+        match Self::try_from_random(bytes) {
+            Ok(x) => ControlFlow::Break(x),
+            Err(FieldError::ModulusOverflow) => ControlFlow::Continue(()),
+            Err(err) => panic!("unexpected error: {err}"),
+        }
+    }
+}
+
+impl<F: FieldElement> FieldElementExt for F {}
 
 /// serde Visitor implementation used to generically deserialize `FieldElement`
 /// values from byte arrays.
@@ -838,32 +861,6 @@ pub(crate) fn decode_fieldvec<F: FieldElement>(
         );
     }
     Ok(vec)
-}
-
-impl<F> CoinToss for F
-where
-    F: FieldElement,
-{
-    fn sample<S>(seed_stream: &mut S) -> Self
-    where
-        S: SeedStream,
-    {
-        // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
-        // `SeedStream` output.
-        let mut buffer = [0u8; 64];
-        assert!(
-            buffer.len() >= F::ENCODED_SIZE,
-            "field is too big for buffer"
-        );
-        loop {
-            seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
-            match Self::try_from_random(&buffer[..F::ENCODED_SIZE]) {
-                Ok(x) => return x,
-                Err(FieldError::ModulusOverflow) => continue,
-                Err(err) => panic!("unexpected error: {err}"),
-            }
-        }
-    }
 }
 
 #[cfg(test)]

@@ -154,7 +154,7 @@
 
 pub mod compatible_float;
 
-use crate::field::{FftFriendlyFieldElement, FieldElementExt, FieldElementWithInteger};
+use crate::field::{FftFriendlyFieldElement, FieldElementWithInteger, FieldElementWithIntegerExt};
 use crate::flp::gadgets::{BlindPolyEval, ParallelSumGadget, PolyEval};
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::{FlpError, Gadget, Type};

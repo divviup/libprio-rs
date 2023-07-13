@@ -7,10 +7,10 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, merge_vector, Field255, Field64, FieldElement},
-    idpf::{self, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
+    idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        prg::{CoinToss, Prg, PrgSha3, Seed, SeedStream},
+        prg::{Prg, PrgSha3, Seed, SeedStream},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
@@ -462,9 +462,9 @@ pub enum Poplar1FieldVec {
 impl Poplar1FieldVec {
     fn zero(is_leaf: bool, len: usize) -> Self {
         if is_leaf {
-            Self::Leaf(vec![Field255::zero(); len])
+            Self::Leaf(vec![<Field255 as FieldElement>::zero(); len])
         } else {
-            Self::Inner(vec![Field64::zero(); len])
+            Self::Inner(vec![<Field64 as FieldElement>::zero(); len])
         }
     }
 }
@@ -737,7 +737,8 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         let auth_leaf = prng.get();
 
         // Generate the IDPF shares.
-        let (public_share, [idpf_key_0, idpf_key_1]) = idpf::gen_with_random(
+        let idpf = Idpf::new((), ());
+        let (public_share, [idpf_key_0, idpf_key_1]) = idpf.gen_with_random(
             input,
             auth_inner
                 .iter()
@@ -1164,11 +1165,9 @@ where
     ];
 
     let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
+    let idpf = Idpf::<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>::new((), ());
     for prefix in agg_param.prefixes.iter() {
-        let share = Poplar1IdpfValue::<F>::from(idpf::eval::<
-            Poplar1IdpfValue<Field64>,
-            Poplar1IdpfValue<Field255>,
-        >(
+        let share = Poplar1IdpfValue::<F>::from(idpf.eval(
             agg_id,
             public_share,
             idpf_key,
@@ -1256,8 +1255,18 @@ impl<F> IdpfValue for Poplar1IdpfValue<F>
 where
     F: FieldElement,
 {
-    fn zero() -> Self {
+    type ValueParameter = ();
+
+    fn zero(_: &()) -> Self {
         Self([F::zero(); 2])
+    }
+
+    fn generate<S: SeedStream>(seed_stream: &mut S, _: &()) -> Self {
+        Self([F::generate(seed_stream, &()), F::generate(seed_stream, &())])
+    }
+
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        ConditionallySelectable::conditional_select(a, b, choice)
     }
 }
 
@@ -1331,18 +1340,6 @@ where
 {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(Self([F::decode(bytes)?, F::decode(bytes)?]))
-    }
-}
-
-impl<F> CoinToss for Poplar1IdpfValue<F>
-where
-    F: CoinToss,
-{
-    fn sample<S>(seed_stream: &mut S) -> Self
-    where
-        S: SeedStream,
-    {
-        Self([F::sample(seed_stream), F::sample(seed_stream)])
     }
 }
 
@@ -1572,11 +1569,11 @@ mod tests {
             idpf_key: Seed::<16>::generate().unwrap(),
             corr_seed: Seed::<16>::generate().unwrap(),
             corr_inner: vec![
-                [Field64::one(), Field64::zero()],
-                [Field64::one(), Field64::zero()],
-                [Field64::one(), Field64::zero()],
+                [Field64::one(), <Field64 as FieldElement>::zero()],
+                [Field64::one(), <Field64 as FieldElement>::zero()],
+                [Field64::one(), <Field64 as FieldElement>::zero()],
             ],
-            corr_leaf: [Field255::one(), Field255::zero()],
+            corr_leaf: [Field255::one(), <Field255 as FieldElement>::zero()],
         };
         assert_eq!(
             input_share.get_encoded().len(),

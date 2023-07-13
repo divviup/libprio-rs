@@ -5,7 +5,7 @@
 //!
 //! NOTE: The public API for this module is a work in progress.
 
-use crate::field::{FieldElement, FieldError};
+use crate::field::{FieldElement, FieldElementExt};
 use crate::vdaf::prg::SeedStream;
 #[cfg(feature = "crypto-dependencies")]
 use crate::vdaf::prg::SeedStreamAes128;
@@ -13,6 +13,7 @@ use crate::vdaf::prg::SeedStreamAes128;
 use getrandom::getrandom;
 
 use std::marker::PhantomData;
+use std::ops::ControlFlow;
 
 const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
 
@@ -81,12 +82,9 @@ where
 
                 self.buffer_index = j;
 
-                if let Some(x) = match F::try_from_random(&self.buffer[i..j]) {
-                    Ok(x) => Some(x),
-                    Err(FieldError::ModulusOverflow) => None, // reject this sample
-                    Err(err) => panic!("unexpected error: {err}"),
-                } {
-                    return x;
+                match F::from_random_rejection(&self.buffer[i..j]) {
+                    ControlFlow::Break(x) => return x,
+                    ControlFlow::Continue(()) => continue, // reject this sample
                 }
             }
 
@@ -138,7 +136,7 @@ mod tests {
     use crate::{
         codec::Decode,
         field::{Field64, FieldPrio2},
-        vdaf::prg::{CoinToss, Prg, PrgSha3, Seed, SeedStreamSha3},
+        vdaf::prg::{Prg, PrgSha3, Seed, SeedStreamSha3},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
@@ -233,12 +231,15 @@ mod tests {
         let actual = prng.nth(4).unwrap();
         assert_eq!(actual, expected);
 
-        let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
-        let mut actual = Field64::zero();
-        for _ in 0..=4 {
-            actual = <Field64 as CoinToss>::sample(&mut seed_stream);
+        #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+        {
+            let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
+            let mut actual = <Field64 as FieldElement>::zero();
+            for _ in 0..=4 {
+                actual = <Field64 as crate::idpf::IdpfValue>::generate(&mut seed_stream, &());
+            }
+            assert_eq!(actual, expected);
         }
-        assert_eq!(actual, expected);
     }
 
     // Test that the `Prng`'s internal buffer properly copies the end of the buffer to the front
