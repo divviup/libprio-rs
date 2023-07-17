@@ -120,6 +120,13 @@ user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
+[[publisher.serde_json]]
+version = "1.0.103"
+when = "2023-07-15"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
+
 [[publisher.syn]]
 version = "1.0.104"
 when = "2022-11-28"
