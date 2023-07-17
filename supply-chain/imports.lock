@@ -114,8 +114,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.99"
-when = "2023-06-24"
+version = "1.0.103"
+when = "2023-07-15"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -266,6 +266,12 @@ criteria = "safe-to-deploy"
 user-id = 696 # Nick Fitzgerald (fitzgen)
 start = "2019-03-16"
 end = "2024-03-10"
+
+[[audits.bytecode-alliance.audits.adler]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+version = "1.0.2"
+notes = "This is a small crate which forbids unsafe code and is a straightforward implementation of the adler hashing algorithm."
 
 [[audits.bytecode-alliance.audits.anes]]
 who = "Pat Hickey <phickey@fastly.com>"
