@@ -36,10 +36,6 @@ criteria = "safe-to-run"
 version = "0.17.0"
 criteria = "safe-to-run"
 
-[[exemptions.adler]]
-version = "1.0.2"
-criteria = "safe-to-run"
-
 [[exemptions.aead]]
 version = "0.5.1"
 criteria = "safe-to-deploy"
