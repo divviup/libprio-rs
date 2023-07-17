@@ -100,15 +100,15 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.165"
-when = "2023-07-03"
+version = "1.0.171"
+when = "2023-07-10"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.165"
-when = "2023-07-03"
+version = "1.0.171"
+when = "2023-07-10"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -128,8 +128,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.syn]]
-version = "2.0.23"
-when = "2023-07-02"
+version = "2.0.25"
+when = "2023-07-09"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
