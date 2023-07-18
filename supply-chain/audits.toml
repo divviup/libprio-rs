@@ -25,6 +25,11 @@ who = "Tim Geoghegan <timg@letsencrypt.org>"
 criteria = "safe-to-deploy"
 delta = "0.10.1 -> 0.10.2"
 
+[[audits.alga]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.9.3"
+
 [[audits.anstyle]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -178,6 +183,16 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "1.2.0"
 
+[[audits.generic-array]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.14.6 -> 0.13.3"
+
+[[audits.getrandom]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.2.2 -> 0.1.16"
+
 [[audits.getrandom]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
 criteria = "safe-to-deploy"
@@ -299,6 +314,26 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.52 -> 1.0.54"
 
+[[audits.rand_chacha]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.3.0 -> 0.2.2"
+
+[[audits.rand_core]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.6.1 -> 0.5.1"
+
+[[audits.rand_hc]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.2.0"
+
+[[audits.rawpointer]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.2.1"
+
 [[audits.rayon]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
@@ -410,6 +445,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.10.7 -> 0.10.8"
 
+[[audits.statest]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.2.2"
+
 [[audits.subtle]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -470,6 +510,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.7.1"
 
+[[audits.wasi]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.10.0+wasi-snapshot-preview1 -> 0.9.0+wasi-snapshot-preview1"
+
 [[audits.wasm-bindgen-shared]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -504,11 +549,29 @@ user-id = 2915 # Amanieu d'Antras (Amanieu)
 start = "2021-01-27"
 end = "2024-06-08"
 
+[[trusted.libm]]
+criteria = "safe-to-deploy"
+user-id = 2915 # Amanieu d'Antras (Amanieu)
+start = "2022-02-06"
+end = "2024-07-13"
+
 [[trusted.memchr]]
 criteria = "safe-to-deploy"
 user-id = 189 # Andrew Gallant (BurntSushi)
 start = "2019-07-07"
 end = "2024-06-08"
+
+[[trusted.num-complex]]
+criteria = "safe-to-run"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-06-10"
+end = "2024-07-13"
+
+[[trusted.num-rational]]
+criteria = "safe-to-run"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-06-11"
+end = "2024-07-13"
 
 [[trusted.num_cpus]]
 criteria = "safe-to-deploy"
