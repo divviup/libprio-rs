@@ -5,7 +5,7 @@
 use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FftFriendlyFieldElement, FieldError},
-    polynomial::{poly_interpret_eval, PolyAuxMemory},
+    polynomial::poly_interpret_eval,
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
     vdaf::prg::SeedStreamAes128,
@@ -36,30 +36,6 @@ pub enum ServerError {
     Prng(#[from] PrngError),
 }
 
-/// Auxiliary memory for constructing a
-/// [`VerificationMessage`](struct.VerificationMessage.html)
-#[derive(Debug)]
-pub struct ValidationMemory<F> {
-    points_f: Vec<F>,
-    points_g: Vec<F>,
-    points_h: Vec<F>,
-    poly_mem: PolyAuxMemory<F>,
-}
-
-impl<F: FftFriendlyFieldElement> ValidationMemory<F> {
-    /// Construct a new ValidationMemory object for validating proof shares of
-    /// length `dimension`.
-    pub fn new(dimension: usize) -> Self {
-        let n: usize = (dimension + 1).next_power_of_two();
-        ValidationMemory {
-            points_f: vec![F::zero(); n],
-            points_g: vec![F::zero(); n],
-            points_h: vec![F::zero(); 2 * n],
-            poly_mem: PolyAuxMemory::new(n),
-        }
-    }
-}
-
 /// Main workhorse of the server.
 #[derive(Debug)]
 pub struct Server<F> {
@@ -67,7 +43,6 @@ pub struct Server<F> {
     dimension: usize,
     is_first_server: bool,
     accumulator: Vec<F>,
-    validation_mem: ValidationMemory<F>,
     private_key: PrivateKey,
 }
 
@@ -88,7 +63,6 @@ impl<F: FftFriendlyFieldElement> Server<F> {
             dimension,
             is_first_server,
             accumulator: vec![F::zero(); dimension],
-            validation_mem: ValidationMemory::new(dimension),
             private_key,
         })
     }
@@ -122,13 +96,7 @@ impl<F: FftFriendlyFieldElement> Server<F> {
         share: &[u8],
     ) -> Result<VerificationMessage<F>, ServerError> {
         let share_field = self.deserialize_share(share)?;
-        generate_verification_message(
-            self.dimension,
-            eval_at,
-            &share_field,
-            self.is_first_server,
-            &mut self.validation_mem,
-        )
+        generate_verification_message(self.dimension, eval_at, &share_field, self.is_first_server)
     }
 
     /// Add the content of the encrypted share into the accumulator
@@ -178,9 +146,15 @@ impl<F: FftFriendlyFieldElement> Server<F> {
     /// The point returned is not one of the roots used for polynomial
     /// evaluation.
     pub fn choose_eval_at(&mut self) -> F {
+        let n: usize = (self.dimension + 1).next_power_of_two();
+        let proof_length = 2 * n;
         loop {
             let eval_at = self.prng.get();
-            if !self.validation_mem.poly_mem.roots_2n.contains(&eval_at) {
+
+            // Make sure the query randomness isn't a root of unity. Evaluating the proof at any
+            // any of these points would be a privacy violation, since these points were used by
+            // the prover to construct the wire polynomials.
+            if eval_at.pow(F::Integer::try_from(proof_length).unwrap()) != F::one() {
                 break eval_at;
             }
         }
@@ -205,59 +179,38 @@ pub fn generate_verification_message<F: FftFriendlyFieldElement>(
     eval_at: F,
     proof: &[F],
     is_first_server: bool,
-    mem: &mut ValidationMemory<F>,
 ) -> Result<VerificationMessage<F>, ServerError> {
     let unpacked = unpack_proof(proof, dimension)?;
-    let proof_length = 2 * (dimension + 1).next_power_of_two();
+    let n: usize = (dimension + 1).next_power_of_two();
+    let proof_length = 2 * n;
+    let mut fft_in = vec![F::zero(); proof_length];
+    let mut fft_mem = vec![F::zero(); proof_length];
 
-    // set zero terms
-    mem.points_f[0] = *unpacked.f0;
-    mem.points_g[0] = *unpacked.g0;
-    mem.points_h[0] = *unpacked.h0;
+    // construct and evaluate polynomial f at the random point
+    fft_in[0] = *unpacked.f0;
+    fft_in[1..unpacked.data.len() + 1].copy_from_slice(unpacked.data);
+    let f_r = poly_interpret_eval(&fft_in[..n], eval_at, &mut fft_mem);
 
-    // set points_f and points_g
-    for (i, x) in unpacked.data.iter().enumerate() {
-        mem.points_f[i + 1] = *x;
-
-        if is_first_server {
-            // only one server needs to subtract one for point_g
-            mem.points_g[i + 1] = *x - F::one();
-        } else {
-            mem.points_g[i + 1] = *x;
+    // construct and evaluate polynomial g at the random point
+    fft_in[0] = *unpacked.g0;
+    if is_first_server {
+        for x in fft_in[1..unpacked.data.len() + 1].iter_mut() {
+            *x -= F::one();
         }
     }
+    let g_r = poly_interpret_eval(&fft_in[..n], eval_at, &mut fft_mem);
 
-    // set points_h, skipping over elements that should be zero
-    let mut i = 1;
-    let mut j = 0;
-    while i < proof_length {
-        mem.points_h[i] = unpacked.points_h_packed[j];
-        j += 1;
-        i += 2;
+    // construct and evaluate polynomial h at the random point
+    fft_in[0] = *unpacked.h0;
+    fft_in[1] = unpacked.points_h_packed[0];
+    for (x, chunk) in unpacked.points_h_packed[1..]
+        .iter()
+        .zip(fft_in[2..proof_length].chunks_exact_mut(2))
+    {
+        chunk[0] = F::zero();
+        chunk[1] = *x;
     }
-
-    // evaluate polynomials at random point
-    let f_r = poly_interpret_eval(
-        &mem.points_f,
-        &mem.poly_mem.roots_n_inverted,
-        eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
-    );
-    let g_r = poly_interpret_eval(
-        &mem.points_g,
-        &mem.poly_mem.roots_n_inverted,
-        eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
-    );
-    let h_r = poly_interpret_eval(
-        &mem.points_h,
-        &mem.poly_mem.roots_2n_inverted,
-        eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
-    );
+    let h_r = poly_interpret_eval(&fft_in, eval_at, &mut fft_mem);
 
     Ok(VerificationMessage { f_r, g_r, h_r })
 }
@@ -299,12 +252,8 @@ mod tests {
         let share2 = util::tests::secret_share(&mut proof);
         let eval_at = FieldPrio2::from(12313);
 
-        let mut validation_mem = ValidationMemory::new(dim);
-
-        let v1 =
-            generate_verification_message(dim, eval_at, &proof, true, &mut validation_mem).unwrap();
-        let v2 = generate_verification_message(dim, eval_at, &share2, false, &mut validation_mem)
-            .unwrap();
+        let v1 = generate_verification_message(dim, eval_at, &proof, true).unwrap();
+        let v2 = generate_verification_message(dim, eval_at, &share2, false).unwrap();
         assert!(is_valid_share(&v1, &v2));
     }
 
@@ -321,12 +270,8 @@ mod tests {
         let share2 = util::tests::secret_share(&mut proof);
         let eval_at = FieldPrio2::from(12313);
 
-        let mut validation_mem = ValidationMemory::new(dim);
-
-        let v1 =
-            generate_verification_message(dim, eval_at, &proof, true, &mut validation_mem).unwrap();
-        let v2 = generate_verification_message(dim, eval_at, &share2, false, &mut validation_mem)
-            .unwrap();
+        let v1 = generate_verification_message(dim, eval_at, &proof, true).unwrap();
+        let v2 = generate_verification_message(dim, eval_at, &share2, false).unwrap();
 
         // serialize and deserialize the first verification message
         let serialized = serde_json::to_string(&v1).unwrap();

@@ -3,6 +3,8 @@
 
 //! Functions for polynomial interpolation and evaluation
 
+#[cfg(feature = "prio2")]
+use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
 use crate::field::FftFriendlyFieldElement;
 
 use std::convert::TryFrom;
@@ -204,14 +206,15 @@ pub fn poly_mul<F: FftFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F> {
 }
 
 #[cfg(feature = "prio2")]
+#[inline]
 pub fn poly_interpret_eval<F: FftFriendlyFieldElement>(
     points: &[F],
-    roots: &[F],
     eval_at: F,
     tmp_coeffs: &mut [F],
-    fft_memory: &mut PolyFFTTempMemory<F>,
 ) -> F {
-    poly_fft(tmp_coeffs, points, roots, points.len(), true, fft_memory);
+    let size_inv = F::from(F::Integer::try_from(points.len()).unwrap()).inv();
+    discrete_fourier_transform(tmp_coeffs, points, points.len()).unwrap();
+    discrete_fourier_transform_inv_finish(tmp_coeffs, points.len(), size_inv);
     poly_eval(&tmp_coeffs[..points.len()], eval_at)
 }
 
