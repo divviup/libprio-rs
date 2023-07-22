@@ -237,27 +237,9 @@ pub fn generate_verification_message<F: FftFriendlyFieldElement>(
     }
 
     // evaluate polynomials at random point
-    let f_r = poly_interpret_eval(
-        &mem.points_f,
-        &mem.poly_mem.roots_n_inverted,
-        eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
-    );
-    let g_r = poly_interpret_eval(
-        &mem.points_g,
-        &mem.poly_mem.roots_n_inverted,
-        eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
-    );
-    let h_r = poly_interpret_eval(
-        &mem.points_h,
-        &mem.poly_mem.roots_2n_inverted,
-        eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
-    );
+    let f_r = poly_interpret_eval(&mem.points_f, &mem.poly_mem.roots_n, eval_at);
+    let g_r = poly_interpret_eval(&mem.points_g, &mem.poly_mem.roots_n, eval_at);
+    let h_r = poly_interpret_eval(&mem.points_h, &mem.poly_mem.roots_2n, eval_at);
 
     Ok(VerificationMessage { f_r, g_r, h_r })
 }

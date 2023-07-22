@@ -204,15 +204,20 @@ pub fn poly_mul<F: FftFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F> {
 }
 
 #[cfg(feature = "prio2")]
-pub fn poly_interpret_eval<F: FftFriendlyFieldElement>(
-    points: &[F],
-    roots: &[F],
-    eval_at: F,
-    tmp_coeffs: &mut [F],
-    fft_memory: &mut PolyFFTTempMemory<F>,
-) -> F {
-    poly_fft(tmp_coeffs, points, roots, points.len(), true, fft_memory);
-    poly_eval(&tmp_coeffs[..points.len()], eval_at)
+/// Given the evaluations of a polynomial at all roots of unity of some power, evaluates the
+/// polynomial defined by those evaluations at one point.
+pub fn poly_interpret_eval<F: FftFriendlyFieldElement>(points: &[F], roots: &[F], eval_at: F) -> F {
+    // Barycentric formula: (from https://hackmd.io/@vbuterin/barycentric_evaluation)
+    // P(x) = (x^N-1)/N * sum((y_i * omega^i) / (x - omega^i))
+    let num_roots = F::Integer::try_from(points.len()).unwrap();
+    let num_roots_inverse = F::from(num_roots).inv();
+    let mut sum = F::zero();
+    assert_eq!(points.len(), roots.len());
+    for (point, root) in points.iter().zip(roots.iter()) {
+        sum += *point * *root / (eval_at - *root);
+    }
+    let eval_at_power = eval_at.pow(num_roots);
+    (eval_at_power - F::one()) * num_roots_inverse * sum
 }
 
 // Returns a polynomial that evaluates to `0` if the input is in range `[start, end)`. Otherwise,
