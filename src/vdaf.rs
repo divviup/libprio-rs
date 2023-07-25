@@ -244,7 +244,7 @@ where
 }
 
 /// A state transition of an Aggregator during the Prepare process.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum PrepareTransition<V: Aggregator<L>, const L: usize>
 where
     for<'a> &'a V::AggregateShare: Into<Vec<u8>>,
