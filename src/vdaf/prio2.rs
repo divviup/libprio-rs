@@ -74,13 +74,11 @@ impl Prio2 {
             Share::Helper(_) => expanded_data.as_ref().unwrap(),
         };
 
-        let mut mem = v2_server::ValidationMemory::new(self.input_len);
         let verifier_share = v2_server::generate_verification_message(
             self.input_len,
             query_rand,
             data, // Combined input and proof shares
             is_leader,
-            &mut mem,
         )
         .map_err(|e| VdafError::Uncategorized(e.to_string()))?;
 

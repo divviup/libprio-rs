@@ -77,10 +77,8 @@ fn prio2_prove_1000() -> Vec<FieldPrio2> {
 #[cfg(feature = "prio2")]
 fn prio2_prove_and_verify(size: usize) -> VerificationMessage<FieldPrio2> {
     use prio::{
-        benchmarked::benchmarked_v2_prove,
-        client::Client,
-        encrypt::PublicKey,
-        server::{generate_verification_message, ValidationMemory},
+        benchmarked::benchmarked_v2_prove, client::Client, encrypt::PublicKey,
+        server::generate_verification_message,
     };
 
     let input = vec![FieldPrio2::zero(); size];
@@ -88,16 +86,8 @@ fn prio2_prove_and_verify(size: usize) -> VerificationMessage<FieldPrio2> {
     let pk2 = PublicKey::from_base64(PRIO2_PUBKEY2).unwrap();
     let mut client: Client<FieldPrio2> = Client::new(input.len(), pk1, pk2).unwrap();
     let input_and_proof = benchmarked_v2_prove(&input, &mut client);
-    let mut validator = ValidationMemory::new(input.len());
     let eval_at = random_vector(1).unwrap()[0];
-    generate_verification_message(
-        input.len(),
-        eval_at,
-        &black_box(input_and_proof),
-        true,
-        &mut validator,
-    )
-    .unwrap()
+    generate_verification_message(input.len(), eval_at, &black_box(input_and_proof), true).unwrap()
 }
 
 #[cfg(feature = "prio2")]
