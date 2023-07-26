@@ -537,10 +537,9 @@ where
 
     /// Shard measurement with constant randomness of repeated bytes.
     /// This method is not secure. It is used for running test vectors for Prio3.
-    #[cfg(feature = "test-util")]
-    #[doc(hidden)]
     #[allow(clippy::type_complexity)]
-    pub fn test_vec_shard<const N: usize>(
+    #[cfg(test)]
+    pub(crate) fn test_vec_shard<const N: usize>(
         &self,
         measurement: &T::Measurement,
         nonce: &[u8; N],

@@ -32,20 +32,10 @@ criteria = "safe-to-deploy"
 [policy.prio-binaries]
 criteria = "safe-to-run"
 
-[[exemptions.aead]]
-version = "0.5.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled."
-
 [[exemptions.aes]]
 version = "0.8.2"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"crypto-dependencies\" feature is enabled."
-
-[[exemptions.aes-gcm]]
-version = "0.10.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled."
 
 [[exemptions.approx]]
 version = "0.3.2"
@@ -79,14 +69,6 @@ criteria = "safe-to-run"
 version = "0.4.3"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" features are enabled."
-
-[[exemptions.color-eyre]]
-version = "0.6.2"
-criteria = "safe-to-run"
-
-[[exemptions.color-spantrace]]
-version = "0.2.0"
-criteria = "safe-to-run"
 
 [[exemptions.cpufeatures]]
 version = "0.2.5"
@@ -131,10 +113,6 @@ version = "0.10.3"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"crypto-dependencies\" feature is enabled."
 
-[[exemptions.eyre]]
-version = "0.6.8"
-criteria = "safe-to-run"
-
 [[exemptions.fixed]]
 version = "1.20.0"
 criteria = "safe-to-deploy"
@@ -166,10 +144,6 @@ criteria = "safe-to-deploy"
 
 [[exemptions.iai]]
 version = "0.1.1"
-criteria = "safe-to-run"
-
-[[exemptions.indenter]]
-version = "0.3.3"
 criteria = "safe-to-run"
 
 [[exemptions.matrixmultiply]]
@@ -205,10 +179,6 @@ criteria = "safe-to-run"
 version = "1.14.0"
 criteria = "safe-to-deploy"
 
-[[exemptions.owo-colors]]
-version = "3.5.0"
-criteria = "safe-to-run"
-
 [[exemptions.plotters]]
 version = "0.3.4"
 criteria = "safe-to-run"
@@ -217,15 +187,9 @@ criteria = "safe-to-run"
 version = "0.3.4"
 criteria = "safe-to-run"
 
-[[exemptions.polyval]]
-version = "0.6.0"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled."
-
 [[exemptions.ppv-lite86]]
 version = "0.2.16"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
+criteria = "safe-to-run"
 
 [[exemptions.proc-macro-error]]
 version = "1.0.4"
@@ -241,18 +205,11 @@ criteria = "safe-to-run"
 
 [[exemptions.rand]]
 version = "0.8.5"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
-
-[[exemptions.rand_chacha]]
-version = "0.3.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
+criteria = "safe-to-run"
 
 [[exemptions.rand_core]]
 version = "0.6.3"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
+criteria = "safe-to-run"
 
 [[exemptions.rand_distr]]
 version = "0.2.2"
@@ -262,31 +219,13 @@ criteria = "safe-to-run"
 version = "0.4.3"
 criteria = "safe-to-run"
 
-[[exemptions.ring]]
-version = "0.16.20"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled."
-
 [[exemptions.safe_arch]]
 version = "0.7.0"
-criteria = "safe-to-run"
-
-[[exemptions.sharded-slab]]
-version = "0.1.4"
 criteria = "safe-to-run"
 
 [[exemptions.simba]]
 version = "0.6.0"
 criteria = "safe-to-run"
-
-[[exemptions.spin]]
-version = "0.5.2"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"prio2\" feature is enabled."
-
-[[exemptions.static_assertions]]
-version = "1.1.0"
-criteria = "safe-to-deploy"
 
 [[exemptions.statrs]]
 version = "0.13.0"
@@ -296,28 +235,8 @@ criteria = "safe-to-run"
 version = "0.16.0"
 criteria = "safe-to-run"
 
-[[exemptions.strsim]]
-version = "0.8.0"
-criteria = "safe-to-run"
-
-[[exemptions.structopt]]
-version = "0.3.26"
-criteria = "safe-to-run"
-
-[[exemptions.structopt-derive]]
-version = "0.4.18"
-criteria = "safe-to-run"
-
 [[exemptions.tinytemplate]]
 version = "1.2.1"
-criteria = "safe-to-run"
-
-[[exemptions.tracing-error]]
-version = "0.2.0"
-criteria = "safe-to-run"
-
-[[exemptions.tracing-subscriber]]
-version = "0.3.15"
 criteria = "safe-to-run"
 
 [[exemptions.typenum]]
@@ -330,15 +249,15 @@ criteria = "safe-to-run"
 
 [[exemptions.winapi]]
 version = "0.3.9"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.winapi-i686-pc-windows-gnu]]
 version = "0.4.0"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.wyz]]
 version = "0.5.1"

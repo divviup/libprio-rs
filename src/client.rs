@@ -1,99 +1,40 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The Prio v2 client. Only 0 / 1 vectors are supported for now.
+//! Primitives for the Prio2 client.
 
 use crate::{
-    encrypt::{encrypt_share, EncryptError, PublicKey},
-    field::FftFriendlyFieldElement,
+    field::{FftFriendlyFieldElement, FieldError},
     polynomial::{poly_fft, PolyAuxMemory},
     prng::{Prng, PrngError},
-    util::{proof_length, unpack_proof_mut},
     vdaf::{prg::SeedStreamAes128, VdafError},
 };
 
 use std::convert::TryFrom;
 
-/// The main object that can be used to create Prio shares
-///
-/// Client is used to create Prio shares.
-#[derive(Debug)]
-pub struct Client<F: FftFriendlyFieldElement> {
-    dimension: usize,
-    mem: ClientMemory<F>,
-    public_key1: PublicKey,
-    public_key2: PublicKey,
-}
-
 /// Errors that might be emitted by the client.
 #[derive(Debug, thiserror::Error)]
-pub enum ClientError {
-    /// Encryption/decryption error
-    #[error("encryption/decryption error")]
-    Encrypt(#[from] EncryptError),
+pub(crate) enum ClientError {
     /// PRNG error
     #[error("prng error: {0}")]
     Prng(#[from] PrngError),
     /// VDAF error
     #[error("vdaf error: {0}")]
     Vdaf(#[from] VdafError),
+    /// failure when calling getrandom().
+    #[error("getrandom: {0}")]
+    GetRandom(#[from] getrandom::Error),
 }
 
-impl<F: FftFriendlyFieldElement> Client<F> {
-    /// Construct a new Prio client
-    pub fn new(
-        dimension: usize,
-        public_key1: PublicKey,
-        public_key2: PublicKey,
-    ) -> Result<Self, ClientError> {
-        Ok(Client {
-            dimension,
-            mem: ClientMemory::new(dimension)?,
-            public_key1,
-            public_key2,
-        })
-    }
-
-    /// Construct a pair of encrypted shares based on the input data.
-    pub fn encode_simple(&mut self, data: &[F]) -> Result<(Vec<u8>, Vec<u8>), ClientError> {
-        let copy_data = |share_data: &mut [F]| {
-            share_data[..].clone_from_slice(data);
-        };
-        Ok(self.encode_with(copy_data)?)
-    }
-
-    /// Construct a pair of encrypted shares using a initilization function.
-    ///
-    /// This might be slightly more efficient on large vectors, because one can
-    /// avoid copying the input data.
-    pub fn encode_with<G>(&mut self, init_function: G) -> Result<(Vec<u8>, Vec<u8>), EncryptError>
-    where
-        G: FnOnce(&mut [F]),
-    {
-        let mut proof = self.mem.prove_with(self.dimension, init_function);
-
-        // use prng to share the proof: share2 is the PRNG seed, and proof is mutated
-        // in-place
-        let mut share2 = [0; 32];
-        getrandom::getrandom(&mut share2)?;
-        let share2_prng = Prng::from_prio2_seed(&share2);
-        for (s1, d) in proof.iter_mut().zip(share2_prng.into_iter()) {
-            *s1 -= d;
-        }
-        let share1 = F::slice_into_byte_vec(&proof);
-        // encrypt shares with respective keys
-        let encrypted_share1 = encrypt_share(&share1, &self.public_key1)?;
-        let encrypted_share2 = encrypt_share(&share2, &self.public_key2)?;
-        Ok((encrypted_share1, encrypted_share2))
-    }
-
-    /// Generate a proof of the input's validity. The output is the encoded input and proof.
-    pub(crate) fn gen_proof(&mut self, input: &[F]) -> Vec<F> {
-        let copy_data = |share_data: &mut [F]| {
-            share_data[..].clone_from_slice(input);
-        };
-        self.mem.prove_with(self.dimension, copy_data)
-    }
+/// Serialization errors
+#[derive(Debug, thiserror::Error)]
+pub enum SerializeError {
+    /// Emitted by `unpack_proof[_mut]` if the serialized share+proof has the wrong length
+    #[error("serialized input has wrong length")]
+    UnpackInputSizeMismatch,
+    /// Finite field operation error.
+    #[error("finite field operation error")]
+    Field(#[from] FieldError),
 }
 
 #[derive(Debug)]
@@ -157,16 +98,93 @@ impl<F: FftFriendlyFieldElement> ClientMemory<F> {
     }
 }
 
-/// Convenience function if one does not want to reuse
-/// [`Client`](struct.Client.html).
-pub fn encode_simple<F: FftFriendlyFieldElement>(
-    data: &[F],
-    public_key1: PublicKey,
-    public_key2: PublicKey,
-) -> Result<(Vec<u8>, Vec<u8>), ClientError> {
-    let dimension = data.len();
-    let mut client_memory = Client::new(dimension, public_key1, public_key2)?;
-    client_memory.encode_simple(data)
+/// Returns the number of field elements in the proof for given dimension of
+/// data elements
+///
+/// Proof is a vector, where the first `dimension` elements are the data
+/// elements, the next 3 elements are the zero terms for polynomials f, g and h
+/// and the remaining elements are non-zero points of h(x).
+pub(crate) fn proof_length(dimension: usize) -> usize {
+    // number of data items + number of zero terms + N
+    dimension + 3 + (dimension + 1).next_power_of_two()
+}
+
+/// Unpacked proof with subcomponents
+#[derive(Debug)]
+pub(crate) struct UnpackedProof<'a, F: FftFriendlyFieldElement> {
+    /// Data
+    pub data: &'a [F],
+    /// Zeroth coefficient of polynomial f
+    pub f0: &'a F,
+    /// Zeroth coefficient of polynomial g
+    pub g0: &'a F,
+    /// Zeroth coefficient of polynomial h
+    pub h0: &'a F,
+    /// Non-zero points of polynomial h
+    pub points_h_packed: &'a [F],
+}
+
+/// Unpacked proof with mutable subcomponents
+#[derive(Debug)]
+pub(crate) struct UnpackedProofMut<'a, F: FftFriendlyFieldElement> {
+    /// Data
+    pub data: &'a mut [F],
+    /// Zeroth coefficient of polynomial f
+    pub f0: &'a mut F,
+    /// Zeroth coefficient of polynomial g
+    pub g0: &'a mut F,
+    /// Zeroth coefficient of polynomial h
+    pub h0: &'a mut F,
+    /// Non-zero points of polynomial h
+    pub points_h_packed: &'a mut [F],
+}
+
+/// Unpacks the proof vector into subcomponents
+pub(crate) fn unpack_proof<F: FftFriendlyFieldElement>(
+    proof: &[F],
+    dimension: usize,
+) -> Result<UnpackedProof<F>, SerializeError> {
+    // check the proof length
+    if proof.len() != proof_length(dimension) {
+        return Err(SerializeError::UnpackInputSizeMismatch);
+    }
+    // split share into components
+    let (data, rest) = proof.split_at(dimension);
+    if let ([f0, g0, h0], points_h_packed) = rest.split_at(3) {
+        Ok(UnpackedProof {
+            data,
+            f0,
+            g0,
+            h0,
+            points_h_packed,
+        })
+    } else {
+        Err(SerializeError::UnpackInputSizeMismatch)
+    }
+}
+
+/// Unpacks a mutable proof vector into mutable subcomponents
+pub(crate) fn unpack_proof_mut<F: FftFriendlyFieldElement>(
+    proof: &mut [F],
+    dimension: usize,
+) -> Result<UnpackedProofMut<F>, SerializeError> {
+    // check the share length
+    if proof.len() != proof_length(dimension) {
+        return Err(SerializeError::UnpackInputSizeMismatch);
+    }
+    // split share into components
+    let (data, rest) = proof.split_at_mut(dimension);
+    if let ([f0, g0, h0], points_h_packed) = rest.split_at_mut(3) {
+        Ok(UnpackedProofMut {
+            data,
+            f0,
+            g0,
+            h0,
+            points_h_packed,
+        })
+    } else {
+        Err(SerializeError::UnpackInputSizeMismatch)
+    }
 }
 
 fn interpolate_and_evaluate_at_2n<F: FftFriendlyFieldElement>(
@@ -242,23 +260,44 @@ fn construct_proof<F: FftFriendlyFieldElement>(
     }
 }
 
-#[test]
-fn test_encode() {
-    use crate::field::FieldPrio2;
-    let pub_key1 = PublicKey::from_base64(
-        "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=",
-    )
-    .unwrap();
-    let pub_key2 = PublicKey::from_base64(
-        "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=",
-    )
-    .unwrap();
+#[cfg(test)]
+mod tests {
+    use assert_matches::assert_matches;
 
-    let data_u32 = [0u32, 1, 0, 1, 1, 0, 0, 0, 1];
-    let data = data_u32
-        .iter()
-        .map(|x| FieldPrio2::from(*x))
-        .collect::<Vec<FieldPrio2>>();
-    let encoded_shares = encode_simple(&data, pub_key1, pub_key2);
-    assert!(encoded_shares.is_ok());
+    use crate::{
+        client::{proof_length, unpack_proof, unpack_proof_mut, SerializeError},
+        field::{Field64, FieldPrio2},
+    };
+
+    #[test]
+    fn test_unpack_share_mut() {
+        let dim = 15;
+        let len = proof_length(dim);
+
+        let mut share = vec![FieldPrio2::from(0); len];
+        let unpacked = unpack_proof_mut(&mut share, dim).unwrap();
+        *unpacked.f0 = FieldPrio2::from(12);
+        assert_eq!(share[dim], 12);
+
+        let mut short_share = vec![FieldPrio2::from(0); len - 1];
+        assert_matches!(
+            unpack_proof_mut(&mut short_share, dim),
+            Err(SerializeError::UnpackInputSizeMismatch)
+        );
+    }
+
+    #[test]
+    fn test_unpack_share() {
+        let dim = 15;
+        let len = proof_length(dim);
+
+        let share = vec![Field64::from(0); len];
+        unpack_proof(&share, dim).unwrap();
+
+        let short_share = vec![Field64::from(0); len - 1];
+        assert_matches!(
+            unpack_proof(&short_share, dim),
+            Err(SerializeError::UnpackInputSizeMismatch)
+        );
+    }
 }

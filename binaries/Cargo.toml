@@ -8,16 +8,6 @@ repository = "https://github.com/divviup/libprio-rs"
 
 [dependencies]
 base64 = "0.21.2"
-color-eyre = { version = "^0.6" }
+fixed = "1.23"
 fixed-macro = "1.2.0"
-prio = { path = "..", features = ["test-util", "prio2", "experimental", "multithreaded"] }
-serde_json = { version = "1.0" }
-structopt = { version = "0.3.26" }
-
-[[bin]]
-name = "generate-test-vector"
-path = "src/bin/generate_test_vector.rs"
-
-[[bin]]
-name = "crypt"
-path = "src/bin/crypt.rs"
+prio = { path = "..", features = ["prio2", "experimental"] }

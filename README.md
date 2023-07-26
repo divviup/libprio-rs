@@ -13,9 +13,10 @@ and Scalable Computation of Aggregate Statistics.
 
 ## Exposure Notifications Private Analytics
 
-This crate was used in the [Exposure Notifications Private Analytics][enpa] system. This is supported
-by the interfaces in modules `server` and `client` and is referred to in various places as Prio v2.
-See [`prio-server`][prio-server] or the [ENPA whitepaper][enpa-whitepaper] for more details.
+This crate was used in the [Exposure Notifications Private Analytics][enpa]
+system. This is referred to in various places as Prio v2. See
+[`prio-server`][prio-server] or the [ENPA whitepaper][enpa-whitepaper] for more
+details.
 
 ## Verifiable Distributed Aggregation Function
 
@@ -68,4 +69,3 @@ This crate defines the following feature flags:
 |`experimental`|No|Certain experimental APIs are guarded by this feature. They may undergo breaking changes in future patch releases, as an exception to semantic versioning.|
 |`multithreaded`|No|Enables certain Prio3 VDAF implementations that use `rayon` for parallelization of gadget evaluations.|
 |`prio2`|No|Enables the Prio v2 API, and a VDAF based on the Prio2 system.|
-|`test-util`|No|For internal use only, to support the test suite and test vectors.|

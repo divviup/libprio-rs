@@ -224,6 +224,11 @@ who = "Tim Geoghegan <timg@letsencrypt.org>"
 criteria = "safe-to-run"
 delta = "0.4.0 -> 0.4.1"
 
+[[audits.hmac]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.12.1"
+
 [[audits.io-lifetimes]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -429,6 +434,11 @@ delta = "1.0.93 -> 1.0.94"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.94 -> 1.0.95"
+
+[[audits.sha2]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.10.2"
 
 [[audits.sha3]]
 who = "David Cook <dcook@divviup.org>"

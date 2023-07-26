@@ -1,18 +1,14 @@
+use fixed::{types::extra::U15, FixedI16};
 use fixed_macro::fixed;
 use prio::{
-    benchmarked::benchmarked_v2_prove,
-    client::Client as Prio2Client,
     codec::Encode,
-    encrypt::PublicKey,
-    field::{random_vector, FftFriendlyFieldElement, Field128, FieldElement},
-    flp::{
-        gadgets::{BlindPolyEval, ParallelSum},
-        types::SumVec,
-        Type,
-    },
     vdaf::{
-        prio3::{Prio3, Prio3InputShare, Prio3PublicShare},
-        Client,
+        prio2::Prio2,
+        prio3::{
+            Prio3, Prio3Count, Prio3FixedPointBoundedL2VecSum, Prio3Histogram, Prio3Sum,
+            Prio3SumVec,
+        },
+        Client, Vdaf,
     },
 };
 
@@ -24,7 +20,7 @@ fn main() {
     let measurement = 1;
     println!(
         "prio3 count share size = {}",
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3Count, 16>(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let length = 10;
@@ -33,7 +29,7 @@ fn main() {
     println!(
         "prio3 histogram ({} buckets) share size = {}",
         length,
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3Histogram, 16>(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let bits = 32;
@@ -42,23 +38,16 @@ fn main() {
     println!(
         "prio3 sum ({} bits) share size = {}",
         bits,
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3Sum, 16>(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let len = 1000;
     let prio3 = Prio3::new_sum_vec(num_shares, 1, len).unwrap();
     let measurement = vec![0; len];
     println!(
-        "prio3 countvec ({} len) share size = {}",
+        "prio3 sumvec ({} len) share size = {}",
         len,
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
-    );
-
-    let prio3 = Prio3::new_sum_vec_multithreaded(num_shares, 1, len).unwrap();
-    println!(
-        "prio3 countvec multithreaded ({} len) share size = {}",
-        len,
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3SumVec, 16>(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let len = 1000;
@@ -68,51 +57,36 @@ fn main() {
     println!(
         "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
         len,
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
-    );
-
-    let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(num_shares, len).unwrap();
-    println!(
-        "prio3 fixedpoint16 boundedl2 vec multithreaded ({} entries) size = {}",
-        len,
-        prio3_input_share_size(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3FixedPointBoundedL2VecSum<FixedI16<U15>>, 16>(
+            prio3.shard(&measurement, &nonce).unwrap()
+        )
     );
 
     println!();
 
     for size in [10, 100, 1_000] {
         // Prio2
-        // Public keys used to instantiate the v2 client.
-        const PUBKEY1: &str =
-        "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=";
-        const PUBKEY2: &str =
-        "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=";
-        let pk1 = PublicKey::from_base64(PUBKEY1).unwrap();
-        let pk2 = PublicKey::from_base64(PUBKEY2).unwrap();
-        let input = vec![Field128::zero(); size];
-        let mut client: Prio2Client<Field128> =
-            Prio2Client::new(input.len(), pk1.clone(), pk2.clone()).unwrap();
+        let measurement = vec![0u32; size];
+        let prio2 = Prio2::new(size).unwrap();
         println!(
-            "prio2 ({} len) proof size={}",
+            "prio2 ({} entries) size = {}",
             size,
-            benchmarked_v2_prove(&input, &mut client).len()
+            vdaf_input_share_size::<Prio2, 16>(prio2.shard(&measurement, &nonce).unwrap())
         );
 
         // Prio3
-        let count_vec: SumVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>> =
-            SumVec::new(1, size).unwrap();
-        let joint_rand = random_vector(count_vec.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(count_vec.prove_rand_len()).unwrap();
-        let proof = count_vec.prove(&input, &prove_rand, &joint_rand).unwrap();
-        println!("prio3 countvec ({} len) proof size={}", size, proof.len());
+        let measurement = vec![0u128; size];
+        let prio3 = Prio3::new_sum_vec(2, 1, size).unwrap();
+        println!(
+            "prio3 sumvec ({} entries) size = {}",
+            size,
+            vdaf_input_share_size::<Prio3SumVec, 16>(prio3.shard(&measurement, &nonce).unwrap())
+        );
     }
 }
 
-fn prio3_input_share_size<F: FftFriendlyFieldElement, const SEED_SIZE: usize>(
-    shares: (
-        Prio3PublicShare<SEED_SIZE>,
-        Vec<Prio3InputShare<F, SEED_SIZE>>,
-    ),
+fn vdaf_input_share_size<V: Vdaf, const SEED_SIZE: usize>(
+    shares: (V::PublicShare, Vec<V::InputShare>),
 ) -> usize {
     let mut size = shares.0.get_encoded().len();
     for input_share in shares.1 {
