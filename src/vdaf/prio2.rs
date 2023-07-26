@@ -3,11 +3,13 @@
 //! Port of the ENPA Prio system to a VDAF. It is backwards compatible with
 //! [`Client`](crate::client::Client) and [`Server`](crate::server::Server).
 
-use super::{AggregateShare, OutputShare};
+use super::{prg::SeedStream, AggregateShare, OutputShare};
 use crate::{
     client as v2_client,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldPrio2},
+    field::{
+        decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldElementWithInteger, FieldPrio2,
+    },
     prng::Prng,
     server as v2_server,
     util::proof_length,
@@ -86,6 +88,27 @@ impl Prio2 {
             Prio2PrepareState(input_share.truncated(self.input_len)),
             Prio2PrepareShare(verifier_share),
         ))
+    }
+
+    /// Choose a random point for polynomial evaluation.
+    ///
+    /// The point returned is not one of the roots used for polynomial interpolation.
+    fn choose_eval_at<S>(&self, prng: &mut Prng<FieldPrio2, S>) -> FieldPrio2
+    where
+        S: SeedStream,
+    {
+        // Make sure the query randomness isn't a root of unity. Evaluating the proof at any of
+        // these points would be a privacy violation, since these points were used by the prover to
+        // construct the wire polynomials.
+        let n = (self.input_len + 1).next_power_of_two();
+        let proof_length = 2 * n;
+        loop {
+            let eval_at: FieldPrio2 = prng.get();
+            // Unwrap safety: the constructor checks that this conversion succeeds.
+            if eval_at.pow(u32::try_from(proof_length).unwrap()) != FieldPrio2::one() {
+                return eval_at;
+            }
+        }
     }
 }
 
@@ -218,9 +241,8 @@ impl Aggregator<32, 16> for Prio2 {
         // query using HMAC-SHA256 evaluated over the nonce.
         let hmac_key = hmac::Key::new(hmac::HMAC_SHA256, agg_key);
         let hmac_tag = hmac::sign(&hmac_key, nonce);
-        let query_rand = Prng::from_prio2_seed(hmac_tag.as_ref().try_into().unwrap())
-            .next()
-            .unwrap();
+        let mut prng = Prng::from_prio2_seed(hmac_tag.as_ref().try_into().unwrap());
+        let query_rand = self.choose_eval_at(&mut prng);
 
         self.prepare_init_with_query_rand(query_rand, input_share, is_leader)
     }
