@@ -2,7 +2,7 @@
 
 //! Test vectors of serialized Prio inputs, enabling backward compatibility testing.
 
-use crate::{client::ClientError, field::FieldPrio2};
+use crate::{field::FieldPrio2, vdaf::prio2::client::ClientError};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 

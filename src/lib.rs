@@ -15,14 +15,9 @@
 //! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
 pub mod benchmarked;
-#[cfg(feature = "prio2")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
-pub(crate) mod client;
-#[cfg(feature = "prio2")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
-pub(crate) mod server;
-
 pub mod codec;
+#[cfg(feature = "experimental")]
+pub mod dp;
 mod fft;
 pub mod field;
 pub mod flp;
@@ -35,10 +30,4 @@ mod fp;
 pub mod idpf;
 mod polynomial;
 mod prng;
-#[cfg(all(test, feature = "prio2"))]
-#[doc(hidden)]
-pub mod test_vector;
 pub mod vdaf;
-
-#[cfg(feature = "experimental")]
-pub mod dp;

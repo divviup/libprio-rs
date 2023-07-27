@@ -4,21 +4,29 @@
 
 use super::{prg::SeedStream, AggregateShare, OutputShare};
 use crate::{
-    client::{self as v2_client, proof_length},
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{
         decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldElementWithInteger, FieldPrio2,
     },
     prng::Prng,
-    server as v2_server,
     vdaf::{
-        prg::Seed, Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share,
+        prg::Seed,
+        prio2::{
+            client::{self as v2_client, proof_length},
+            server as v2_server,
+        },
+        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share,
         ShareDecodingParameter, Vdaf, VdafError,
     },
 };
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
+
+mod client;
+mod server;
+#[cfg(test)]
+mod test_vector;
 
 /// The Prio2 VDAF. It supports the same measurement type as
 /// [`Prio3SumVec`](crate::vdaf::prio3::Prio3SumVec) with `bits == 1` but uses the proof system and
@@ -363,10 +371,7 @@ fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        test_vector::Priov2TestVector,
-        vdaf::{fieldvec_roundtrip_test, run_vdaf},
-    };
+    use crate::vdaf::{fieldvec_roundtrip_test, prio2::test_vector::Priov2TestVector, run_vdaf};
     use assert_matches::assert_matches;
     use rand::prelude::*;
 

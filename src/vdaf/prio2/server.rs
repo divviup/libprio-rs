@@ -3,10 +3,10 @@
 
 //! Primitives for the Prio2 server.
 use crate::{
-    client::{unpack_proof, SerializeError},
     field::{FftFriendlyFieldElement, FieldError},
     polynomial::poly_interpret_eval,
     prng::PrngError,
+    vdaf::prio2::client::{unpack_proof, SerializeError},
 };
 use serde::{Deserialize, Serialize};
 
@@ -101,9 +101,9 @@ pub(crate) fn is_valid_share<F: FftFriendlyFieldElement>(
 #[cfg(test)]
 mod test_util {
     use crate::{
-        client::proof_length,
         field::{merge_vector, FftFriendlyFieldElement},
         prng::Prng,
+        vdaf::prio2::client::proof_length,
     };
 
     use super::{generate_verification_message, is_valid_share, ServerError, VerificationMessage};
@@ -194,12 +194,13 @@ mod test_util {
 mod tests {
     use super::*;
     use crate::{
-        client::unpack_proof_mut,
         codec::Encode,
         field::{FieldElement, FieldPrio2},
         prng::Prng,
-        server::test_util::Server,
-        vdaf::{prio2::Prio2, Client},
+        vdaf::{
+            prio2::{client::unpack_proof_mut, server::test_util::Server, Prio2},
+            Client,
+        },
     };
     use rand::{random, Rng};
 

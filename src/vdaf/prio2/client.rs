@@ -265,8 +265,8 @@ mod tests {
     use assert_matches::assert_matches;
 
     use crate::{
-        client::{proof_length, unpack_proof, unpack_proof_mut, SerializeError},
         field::{Field64, FieldPrio2},
+        vdaf::prio2::client::{proof_length, unpack_proof, unpack_proof_mut, SerializeError},
     };
 
     #[test]
