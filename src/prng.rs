@@ -140,6 +140,8 @@ mod tests {
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
+    #[cfg(feature = "prio2")]
+    use sha2::{Digest, Sha256};
     use std::convert::TryInto;
 
     #[test]
@@ -171,7 +173,9 @@ mod tests {
 
         let random_bytes = FieldPrio2::slice_into_byte_vec(&random_data);
 
-        let digest = ring::digest::digest(&ring::digest::SHA256, &random_bytes);
+        let mut hasher = Sha256::new();
+        hasher.update(&random_bytes);
+        let digest = hasher.finalize();
         assert_eq!(BASE64_STANDARD.encode(digest), hash_base64);
     }
 

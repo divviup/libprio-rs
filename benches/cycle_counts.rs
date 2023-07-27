@@ -2,17 +2,21 @@
 
 use cfg_if::cfg_if;
 use iai::black_box;
-#[cfg(any(feature = "prio2", feature = "experimental"))]
-use prio::field::FieldElement;
 #[cfg(feature = "experimental")]
 use prio::{
     codec::{Decode, Encode, ParameterizedDecode},
-    field::Field255,
+    field::{Field255, FieldElement},
     idpf::{Idpf, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::{poplar1::Poplar1IdpfValue, prg::Seed},
 };
 #[cfg(feature = "prio2")]
-use prio::{field::FieldPrio2, server::VerificationMessage};
+use prio::{
+    field::FieldPrio2,
+    vdaf::{
+        prio2::{Prio2, Prio2PrepareShare},
+        Aggregator, Share,
+    },
+};
 use prio::{
     field::{random_vector, Field128, Field64},
     vdaf::{
@@ -42,67 +46,53 @@ fn prng_4096() -> Vec<Field128> {
 }
 
 #[cfg(feature = "prio2")]
-const PRIO2_PUBKEY1: &str =
-    "BIl6j+J6dYttxALdjISDv6ZI4/VWVEhUzaS05LgrsfswmbLOgNt9HUC2E0w+9RqZx3XMkdEHBHfNuCSMpOwofVQ=";
-#[cfg(feature = "prio2")]
-const PRIO2_PUBKEY2: &str =
-    "BNNOqoU54GPo+1gTPv+hCgA9U2ZCKd76yOMrWa1xTWgeb4LhFLMQIQoRwDVaW64g/WTdcxT4rDULoycUNFB60LE=";
-
-#[cfg(feature = "prio2")]
-fn prio2_prove(size: usize) -> Vec<FieldPrio2> {
-    use prio::{benchmarked::benchmarked_v2_prove, client::Client, encrypt::PublicKey};
-
-    let input = vec![FieldPrio2::zero(); size];
-    let pk1 = PublicKey::from_base64(PRIO2_PUBKEY1).unwrap();
-    let pk2 = PublicKey::from_base64(PRIO2_PUBKEY2).unwrap();
-    let mut client: Client<FieldPrio2> = Client::new(input.len(), pk1, pk2).unwrap();
-    benchmarked_v2_prove(&black_box(input), &mut client)
+fn prio2_client(size: usize) -> Vec<Share<FieldPrio2, 32>> {
+    let prio2 = Prio2::new(size).unwrap();
+    let input = vec![0u32; size];
+    let nonce = [0; 16];
+    prio2.shard(&black_box(input), &black_box(nonce)).unwrap().1
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_10() -> Vec<FieldPrio2> {
-    prio2_prove(10)
+fn prio2_client_10() -> Vec<Share<FieldPrio2, 32>> {
+    prio2_client(10)
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_100() -> Vec<FieldPrio2> {
-    prio2_prove(100)
+fn prio2_client_100() -> Vec<Share<FieldPrio2, 32>> {
+    prio2_client(100)
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_1000() -> Vec<FieldPrio2> {
-    prio2_prove(1_000)
+fn prio2_client_1000() -> Vec<Share<FieldPrio2, 32>> {
+    prio2_client(1000)
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_and_verify(size: usize) -> VerificationMessage<FieldPrio2> {
-    use prio::{
-        benchmarked::benchmarked_v2_prove, client::Client, encrypt::PublicKey,
-        server::generate_verification_message,
-    };
-
-    let input = vec![FieldPrio2::zero(); size];
-    let pk1 = PublicKey::from_base64(PRIO2_PUBKEY1).unwrap();
-    let pk2 = PublicKey::from_base64(PRIO2_PUBKEY2).unwrap();
-    let mut client: Client<FieldPrio2> = Client::new(input.len(), pk1, pk2).unwrap();
-    let input_and_proof = benchmarked_v2_prove(&input, &mut client);
-    let eval_at = random_vector(1).unwrap()[0];
-    generate_verification_message(input.len(), eval_at, &black_box(input_and_proof), true).unwrap()
+fn prio2_shard_and_prepare(size: usize) -> Prio2PrepareShare {
+    let prio2 = Prio2::new(size).unwrap();
+    let input = vec![0u32; size];
+    let nonce = [0; 16];
+    let (public_share, input_shares) = prio2.shard(&black_box(input), &black_box(nonce)).unwrap();
+    prio2
+        .prepare_init(&[0; 32], 0, &(), &nonce, &public_share, &input_shares[0])
+        .unwrap()
+        .1
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_and_verify_10() -> VerificationMessage<FieldPrio2> {
-    prio2_prove_and_verify(10)
+fn prio2_shard_and_prepare_10() -> Prio2PrepareShare {
+    prio2_shard_and_prepare(10)
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_and_verify_100() -> VerificationMessage<FieldPrio2> {
-    prio2_prove_and_verify(100)
+fn prio2_shard_and_prepare_100() -> Prio2PrepareShare {
+    prio2_shard_and_prepare(100)
 }
 
 #[cfg(feature = "prio2")]
-fn prio2_prove_and_verify_1000() -> VerificationMessage<FieldPrio2> {
-    prio2_prove_and_verify(1_000)
+fn prio2_shard_and_prepare_1000() -> Prio2PrepareShare {
+    prio2_shard_and_prepare(1000)
 }
 
 fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 16>> {
@@ -275,12 +265,12 @@ macro_rules! main_base {
 macro_rules! main_add_prio2 {
     ( $( $func_name:ident ),* $(,)* ) => {
         main_base!(
-            prio2_prove_10,
-            prio2_prove_100,
-            prio2_prove_1000,
-            prio2_prove_and_verify_10,
-            prio2_prove_and_verify_100,
-            prio2_prove_and_verify_1000,
+            prio2_client_10,
+            prio2_client_100,
+            prio2_client_1000,
+            prio2_shard_and_prepare_10,
+            prio2_shard_and_prepare_100,
+            prio2_shard_and_prepare_1000,
             $( $func_name, )*
         );
     };

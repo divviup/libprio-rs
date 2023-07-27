@@ -1,27 +1,22 @@
 // Copyright (c) 2020 Apple Inc.
 // SPDX-License-Identifier: MPL-2.0
 
-//! The Prio v2 server. Only 0 / 1 vectors are supported for now.
+//! Primitives for the Prio2 server.
 use crate::{
-    encrypt::{decrypt_share, EncryptError, PrivateKey},
-    field::{merge_vector, FftFriendlyFieldElement, FieldError},
+    field::{FftFriendlyFieldElement, FieldError},
     polynomial::poly_interpret_eval,
-    prng::{Prng, PrngError},
-    util::{proof_length, unpack_proof, SerializeError},
-    vdaf::prg::SeedStreamAes128,
+    prng::PrngError,
+    vdaf::prio2::client::{unpack_proof, SerializeError},
 };
 use serde::{Deserialize, Serialize};
-use std::convert::TryInto;
 
 /// Possible errors from server operations
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
     /// Unexpected Share Length
+    #[allow(unused)]
     #[error("unexpected share length")]
     ShareLength,
-    /// Encryption/decryption error
-    #[error("encryption/decryption error")]
-    Encrypt(#[from] EncryptError),
     /// Finite field operation error
     #[error("finite field operation error")]
     Field(#[from] FieldError),
@@ -34,131 +29,6 @@ pub enum ServerError {
     /// PRNG error.
     #[error("prng error: {0}")]
     Prng(#[from] PrngError),
-}
-
-/// Main workhorse of the server.
-#[derive(Debug)]
-pub struct Server<F> {
-    prng: Prng<F, SeedStreamAes128>,
-    dimension: usize,
-    is_first_server: bool,
-    accumulator: Vec<F>,
-    private_key: PrivateKey,
-}
-
-impl<F: FftFriendlyFieldElement> Server<F> {
-    /// Construct a new server instance
-    ///
-    /// Params:
-    ///  * `dimension`: the number of elements in the aggregation vector.
-    ///  * `is_first_server`: only one of the servers should have this true.
-    ///  * `private_key`: the private key for decrypting the share of the proof.
-    pub fn new(
-        dimension: usize,
-        is_first_server: bool,
-        private_key: PrivateKey,
-    ) -> Result<Server<F>, ServerError> {
-        Ok(Server {
-            prng: Prng::new()?,
-            dimension,
-            is_first_server,
-            accumulator: vec![F::zero(); dimension],
-            private_key,
-        })
-    }
-
-    /// Decrypt and deserialize
-    fn deserialize_share(&self, encrypted_share: &[u8]) -> Result<Vec<F>, ServerError> {
-        let len = proof_length(self.dimension);
-        let share = decrypt_share(encrypted_share, &self.private_key)?;
-        Ok(if self.is_first_server {
-            F::byte_slice_into_vec(&share)?
-        } else {
-            if share.len() != 32 {
-                return Err(ServerError::ShareLength);
-            }
-
-            Prng::from_prio2_seed(&share.try_into().unwrap())
-                .take(len)
-                .collect()
-        })
-    }
-
-    /// Generate verification message from an encrypted share
-    ///
-    /// This decrypts the share of the proof and constructs the
-    /// [`VerificationMessage`](struct.VerificationMessage.html).
-    /// The `eval_at` field should be generate by
-    /// [choose_eval_at](#method.choose_eval_at).
-    pub fn generate_verification_message(
-        &mut self,
-        eval_at: F,
-        share: &[u8],
-    ) -> Result<VerificationMessage<F>, ServerError> {
-        let share_field = self.deserialize_share(share)?;
-        generate_verification_message(self.dimension, eval_at, &share_field, self.is_first_server)
-    }
-
-    /// Add the content of the encrypted share into the accumulator
-    ///
-    /// This only changes the accumulator if the verification messages `v1` and
-    /// `v2` indicate that the share passed validation.
-    pub fn aggregate(
-        &mut self,
-        share: &[u8],
-        v1: &VerificationMessage<F>,
-        v2: &VerificationMessage<F>,
-    ) -> Result<bool, ServerError> {
-        let share_field = self.deserialize_share(share)?;
-        let is_valid = is_valid_share(v1, v2);
-        if is_valid {
-            // Add to the accumulator. share_field also includes the proof
-            // encoding, so we slice off the first dimension fields, which are
-            // the actual data share.
-            merge_vector(&mut self.accumulator, &share_field[..self.dimension])?;
-        }
-
-        Ok(is_valid)
-    }
-
-    /// Return the current accumulated shares.
-    ///
-    /// These can be merged together using
-    /// [`reconstruct_shares`](../util/fn.reconstruct_shares.html).
-    pub fn total_shares(&self) -> &[F] {
-        &self.accumulator
-    }
-
-    /// Merge shares from another server.
-    ///
-    /// This modifies the current accumulator.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if `other_total_shares.len()` is not equal to this
-    //// server's `dimension`.
-    pub fn merge_total_shares(&mut self, other_total_shares: &[F]) -> Result<(), ServerError> {
-        Ok(merge_vector(&mut self.accumulator, other_total_shares)?)
-    }
-
-    /// Choose a random point for polynomial evaluation
-    ///
-    /// The point returned is not one of the roots used for polynomial
-    /// evaluation.
-    pub fn choose_eval_at(&mut self) -> F {
-        let n: usize = (self.dimension + 1).next_power_of_two();
-        let proof_length = 2 * n;
-        loop {
-            let eval_at = self.prng.get();
-
-            // Make sure the query randomness isn't a root of unity. Evaluating the proof at any
-            // any of these points would be a privacy violation, since these points were used by
-            // the prover to construct the wire polynomials.
-            if eval_at.pow(F::Integer::try_from(proof_length).unwrap()) != F::one() {
-                break eval_at;
-            }
-        }
-    }
 }
 
 /// Verification message for proof validation
@@ -174,7 +44,7 @@ pub struct VerificationMessage<F> {
 
 /// Given a proof and evaluation point, this constructs the verification
 /// message.
-pub fn generate_verification_message<F: FftFriendlyFieldElement>(
+pub(crate) fn generate_verification_message<F: FftFriendlyFieldElement>(
     dimension: usize,
     eval_at: F,
     proof: &[F],
@@ -216,7 +86,7 @@ pub fn generate_verification_message<F: FftFriendlyFieldElement>(
 }
 
 /// Decides if the distributed proof is valid
-pub fn is_valid_share<F: FftFriendlyFieldElement>(
+pub(crate) fn is_valid_share<F: FftFriendlyFieldElement>(
     v1: &VerificationMessage<F>,
     v2: &VerificationMessage<F>,
 ) -> bool {
@@ -229,15 +99,121 @@ pub fn is_valid_share<F: FftFriendlyFieldElement>(
 }
 
 #[cfg(test)]
+mod test_util {
+    use crate::{
+        field::{merge_vector, FftFriendlyFieldElement},
+        prng::Prng,
+        vdaf::prio2::client::proof_length,
+    };
+
+    use super::{generate_verification_message, is_valid_share, ServerError, VerificationMessage};
+
+    /// Main workhorse of the server.
+    #[derive(Debug)]
+    pub(crate) struct Server<F> {
+        dimension: usize,
+        is_first_server: bool,
+        accumulator: Vec<F>,
+    }
+
+    impl<F: FftFriendlyFieldElement> Server<F> {
+        /// Construct a new server instance
+        ///
+        /// Params:
+        ///  * `dimension`: the number of elements in the aggregation vector.
+        ///  * `is_first_server`: only one of the servers should have this true.
+        pub fn new(dimension: usize, is_first_server: bool) -> Result<Server<F>, ServerError> {
+            Ok(Server {
+                dimension,
+                is_first_server,
+                accumulator: vec![F::zero(); dimension],
+            })
+        }
+
+        /// Deserialize
+        fn deserialize_share(&self, share: &[u8]) -> Result<Vec<F>, ServerError> {
+            let len = proof_length(self.dimension);
+            Ok(if self.is_first_server {
+                F::byte_slice_into_vec(share)?
+            } else {
+                if share.len() != 32 {
+                    return Err(ServerError::ShareLength);
+                }
+
+                Prng::from_prio2_seed(&share.try_into().unwrap())
+                    .take(len)
+                    .collect()
+            })
+        }
+
+        /// Generate verification message from an encrypted share
+        ///
+        /// This decrypts the share of the proof and constructs the
+        /// [`VerificationMessage`](struct.VerificationMessage.html).
+        /// The `eval_at` field should be generate by
+        /// [choose_eval_at](#method.choose_eval_at).
+        pub fn generate_verification_message(
+            &mut self,
+            eval_at: F,
+            share: &[u8],
+        ) -> Result<VerificationMessage<F>, ServerError> {
+            let share_field = self.deserialize_share(share)?;
+            generate_verification_message(
+                self.dimension,
+                eval_at,
+                &share_field,
+                self.is_first_server,
+            )
+        }
+
+        /// Add the content of the encrypted share into the accumulator
+        ///
+        /// This only changes the accumulator if the verification messages `v1` and
+        /// `v2` indicate that the share passed validation.
+        pub fn aggregate(
+            &mut self,
+            share: &[u8],
+            v1: &VerificationMessage<F>,
+            v2: &VerificationMessage<F>,
+        ) -> Result<bool, ServerError> {
+            let share_field = self.deserialize_share(share)?;
+            let is_valid = is_valid_share(v1, v2);
+            if is_valid {
+                // Add to the accumulator. share_field also includes the proof
+                // encoding, so we slice off the first dimension fields, which are
+                // the actual data share.
+                merge_vector(&mut self.accumulator, &share_field[..self.dimension])?;
+            }
+
+            Ok(is_valid)
+        }
+    }
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        encrypt::{encrypt_share, PublicKey},
+        codec::Encode,
         field::{FieldElement, FieldPrio2},
-        test_vector::Priov2TestVector,
-        util::{self, unpack_proof_mut},
+        prng::Prng,
+        vdaf::{
+            prio2::{client::unpack_proof_mut, server::test_util::Server, Prio2},
+            Client,
+        },
     };
-    use serde_json;
+    use rand::{random, Rng};
+
+    fn secret_share(share: &mut [FieldPrio2]) -> Vec<FieldPrio2> {
+        let mut rng = rand::thread_rng();
+        let mut share2 = vec![FieldPrio2::zero(); share.len()];
+        for (f1, f2) in share.iter_mut().zip(share2.iter_mut()) {
+            let f = FieldPrio2::from(rng.gen::<u32>());
+            *f2 = f;
+            *f1 -= f;
+        }
+        share2
+    }
 
     #[test]
     fn test_validation() {
@@ -249,7 +225,7 @@ mod tests {
         ];
 
         let mut proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
-        let share2 = util::tests::secret_share(&mut proof);
+        let share2 = secret_share(&mut proof);
         let eval_at = FieldPrio2::from(12313);
 
         let v1 = generate_verification_message(dim, eval_at, &proof, true).unwrap();
@@ -267,7 +243,7 @@ mod tests {
         ];
 
         let mut proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
-        let share2 = util::tests::secret_share(&mut proof);
+        let share2 = secret_share(&mut proof);
         let eval_at = FieldPrio2::from(12313);
 
         let v1 = generate_verification_message(dim, eval_at, &proof, true).unwrap();
@@ -298,24 +274,22 @@ mod tests {
     fn tweaks(tweak: Tweak) {
         let dim = 123;
 
-        // We generate a test vector just to get a `Client` and `Server`s with
-        // encryption keys but construct and tweak inputs below.
-        let test_vector = Priov2TestVector::new(dim, 0).unwrap();
-        let mut server1 = test_vector.server_1().unwrap();
-        let mut server2 = test_vector.server_2().unwrap();
-        let mut client = test_vector.client().unwrap();
+        let mut server1 = Server::<FieldPrio2>::new(dim, true).unwrap();
+        let mut server2 = Server::new(dim, false).unwrap();
 
         // all zero data
-        let mut data = vec![FieldPrio2::zero(); dim];
+        let mut data = vec![0; dim];
 
         if let Tweak::WrongInput = tweak {
-            data[0] = FieldPrio2::from(2);
+            data[0] = 2;
         }
 
-        let (share1_original, share2) = client.encode_simple(&data).unwrap();
+        let vdaf = Prio2::new(dim).unwrap();
+        let (_, shares) = vdaf.shard(&data, &[0; 16]).unwrap();
+        let share1_original = shares[0].get_encoded();
+        let share2 = shares[1].get_encoded();
 
-        let decrypted_share1 = decrypt_share(&share1_original, &server1.private_key).unwrap();
-        let mut share1_field = FieldPrio2::byte_slice_into_vec(&decrypted_share1).unwrap();
+        let mut share1_field = FieldPrio2::byte_slice_into_vec(&share1_original).unwrap();
         let unpacked_share1 = unpack_proof_mut(&mut share1_field, dim).unwrap();
 
         let one = FieldPrio2::from(1);
@@ -330,13 +304,10 @@ mod tests {
         };
 
         // reserialize altered share1
-        let share1_modified = encrypt_share(
-            &FieldPrio2::slice_into_byte_vec(&share1_field),
-            &PublicKey::from(&server1.private_key),
-        )
-        .unwrap();
+        let share1_modified = FieldPrio2::slice_into_byte_vec(&share1_field);
 
-        let eval_at = server1.choose_eval_at();
+        let mut prng = Prng::from_prio2_seed(&random());
+        let eval_at = vdaf.choose_eval_at(&mut prng);
 
         let mut v1 = server1
             .generate_verification_message(eval_at, &share1_modified)
