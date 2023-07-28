@@ -52,21 +52,9 @@ impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
     }
 }
 
-impl<const SEED_SIZE: usize> Default for Seed<SEED_SIZE> {
-    fn default() -> Self {
-        Self([0u8; SEED_SIZE])
-    }
-}
-
 impl<const SEED_SIZE: usize> AsRef<[u8; SEED_SIZE]> for Seed<SEED_SIZE> {
     fn as_ref(&self) -> &[u8; SEED_SIZE] {
         &self.0
-    }
-}
-
-impl<const SEED_SIZE: usize> AsMut<[u8]> for Seed<SEED_SIZE> {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.0.as_mut()
     }
 }
 
@@ -268,10 +256,10 @@ impl RngCore for SeedStreamSha3 {
 /// A `rand`-compatible interface to construct PrgSha3 seed streams, with the domain separation tag
 /// and binder string both fixed as the empty string.
 impl SeedableRng for SeedStreamSha3 {
-    type Seed = Seed<16>;
+    type Seed = [u8; 16];
 
     fn from_seed(seed: Self::Seed) -> Self {
-        PrgSha3::init(&seed.0, b"").into_seed_stream()
+        PrgSha3::init(&seed, b"").into_seed_stream()
     }
 }
 
