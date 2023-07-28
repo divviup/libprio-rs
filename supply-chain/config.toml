@@ -207,10 +207,6 @@ criteria = "safe-to-run"
 version = "0.8.5"
 criteria = "safe-to-run"
 
-[[exemptions.rand_core]]
-version = "0.6.3"
-criteria = "safe-to-run"
-
 [[exemptions.rand_distr]]
 version = "0.2.2"
 criteria = "safe-to-run"
