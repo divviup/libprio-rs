@@ -326,6 +326,11 @@ delta = "0.3.0 -> 0.2.2"
 
 [[audits.rand_core]]
 who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.6.3"
+
+[[audits.rand_core]]
+who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.6.1 -> 0.5.1"
 

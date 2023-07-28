@@ -19,6 +19,10 @@ use aes::{
 use cmac::{Cmac, Mac};
 #[cfg(feature = "crypto-dependencies")]
 use ctr::Ctr64BE;
+use rand_core::{
+    impls::{next_u32_via_fill, next_u64_via_fill},
+    RngCore, SeedableRng,
+};
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     CShake128, CShake128Core, CShake128Reader,
@@ -230,6 +234,35 @@ impl SeedStream for SeedStreamSha3 {
     }
 }
 
+impl RngCore for SeedStreamSha3 {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.fill(dest);
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill(dest);
+        Ok(())
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        next_u64_via_fill(self)
+    }
+}
+
+/// A `rand`-compatible interface to construct PrgSha3 seed streams, with the domain separation tag
+/// and binder string both fixed as the empty string.
+impl SeedableRng for SeedStreamSha3 {
+    type Seed = [u8; 16];
+
+    fn from_seed(seed: Self::Seed) -> Self {
+        PrgSha3::init(&seed, b"").into_seed_stream()
+    }
+}
+
 /// Factory to produce multiple [`PrgFixedKeyAes128`] instances with the same fixed key and
 /// different seeds.
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -248,7 +281,7 @@ impl PrgFixedKeyAes128Key {
         let mut deriver = CShake128::from_core(CShake128Core::new(dst));
         deriver.update(binder);
         let mut key = GenericArray::from([0; 16]);
-        XofReader::read(&mut deriver.finalize_xof(), &mut key);
+        XofReader::read(&mut deriver.finalize_xof(), key.as_mut());
         Self {
             cipher: Aes128::new(&key),
         }
@@ -301,7 +334,10 @@ impl Prg<16> for PrgFixedKeyAes128 {
 
     fn into_seed_stream(self) -> SeedStreamFixedKeyAes128 {
         let mut fixed_key = GenericArray::from([0; 16]);
-        XofReader::read(&mut self.fixed_key_deriver.finalize_xof(), &mut fixed_key);
+        XofReader::read(
+            &mut self.fixed_key_deriver.finalize_xof(),
+            fixed_key.as_mut(),
+        );
         SeedStreamFixedKeyAes128 {
             base_block: self.base_block,
             cipher: Aes128::new(&fixed_key),
