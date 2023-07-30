@@ -2,7 +2,10 @@
 
 //! A collection of gadgets.
 
-use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
+use crate::fft::{
+    discrete_fourier_transform, discrete_fourier_transform_inv_finish,
+    multi_discrete_fourier_transform,
+};
 use crate::field::FftFriendlyFieldElement;
 use crate::flp::{gadget_poly_len, wire_poly_len, FlpError, Gadget};
 use crate::polynomial::{poly_deg, poly_eval, poly_mul};
@@ -59,8 +62,7 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
-        discrete_fourier_transform(&mut buf, &inp[0], n)?;
-        discrete_fourier_transform(outp, &inp[1], n)?;
+        multi_discrete_fourier_transform(&mut [buf.as_mut(), outp], &[&inp[0], &inp[1]], n)?;
 
         for i in 0..n {
             buf[i] *= outp[i];
@@ -266,10 +268,8 @@ impl<F: FftFriendlyFieldElement> BlindPolyEval<F> {
         let y = &inp[1];
 
         let mut x_vals = vec![F::zero(); n];
-        discrete_fourier_transform(&mut x_vals, x, n)?;
-
         let mut z_vals = vec![F::zero(); n];
-        discrete_fourier_transform(&mut z_vals, y, n)?;
+        multi_discrete_fourier_transform(&mut [&mut x_vals, &mut z_vals], &[x, y], n)?;
 
         let mut z = vec![F::zero(); n];
         let mut z_len = y.len();

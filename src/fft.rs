@@ -33,11 +33,28 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
     inp: &[F],
     size: usize,
 ) -> Result<(), FftError> {
-    let d = usize::try_from(log2(size as u128)).map_err(|_| FftError::SizeTooLarge)?;
+    multi_discrete_fourier_transform(&mut [outp], &[inp], size)
+}
 
-    if size > outp.len() {
-        return Err(FftError::OutputTooSmall);
-    }
+/// For each `i in 0..inp.len()`, set `outp[i]` to the DFT of `inp[i]`.
+///
+/// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
+/// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `2^size`-th principal root of
+/// unity.
+///
+/// Assumpes that `outp.len() == inp.len()` and, for each `i in 0..inp.len()`, `outp[i].len() ==
+/// inp[i].len()`.
+#[allow(clippy::many_single_char_names)]
+pub fn multi_discrete_fourier_transform<
+    F: FftFriendlyFieldElement,
+    In: AsRef<[F]>,
+    Out: AsMut<[F]>,
+>(
+    outp: &mut [Out],
+    inp: &[In],
+    size: usize,
+) -> Result<(), FftError> {
+    let d = usize::try_from(log2(size as u128)).map_err(|_| FftError::SizeTooLarge)?;
 
     if size > 1 << MAX_ROOTS {
         return Err(FftError::SizeTooLarge);
@@ -50,7 +67,13 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
     #[allow(clippy::needless_range_loop)]
     for i in 0..size {
         let j = bitrev(d, i);
-        outp[i] = if j < inp.len() { inp[j] } else { F::zero() }
+        for (inp, outp) in inp
+            .iter()
+            .map(AsRef::as_ref)
+            .zip(outp.iter_mut().map(AsMut::as_mut))
+        {
+            outp[i] = if j < inp.len() { inp[j] } else { F::zero() }
+        }
     }
 
     let mut w: F;
@@ -61,10 +84,12 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
         for i in 0..y {
             for j in 0..(size / y) >> 1 {
                 let x = (1 << l) * j + i;
-                let u = outp[x];
-                let v = w * outp[x + y];
-                outp[x] = u + v;
-                outp[x + y] = u - v;
+                for outp in outp.iter_mut().map(AsMut::as_mut) {
+                    let u = outp[x];
+                    let v = w * outp[x + y];
+                    outp[x] = u + v;
+                    outp[x + y] = u - v;
+                }
             }
             w *= r;
         }

@@ -46,7 +46,10 @@
 //!
 //! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
-use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
+use crate::fft::{
+    discrete_fourier_transform, discrete_fourier_transform_inv_finish,
+    multi_discrete_fourier_transform, FftError,
+};
 use crate::field::{FftFriendlyFieldElement, FieldElement, FieldElementWithInteger, FieldError};
 use crate::fp::log2;
 use crate::polynomial::poly_eval;
@@ -315,8 +318,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
             )
             .inv();
             let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
+            multi_discrete_fourier_transform(&mut f, &gadget.f_vals, m)?;
             for wire in 0..gadget.arity() {
-                discrete_fourier_transform(&mut f[wire], &gadget.f_vals[wire], m)?;
                 discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
 
                 // The first point on each wire polynomial is a random value chosen by the prover. This
@@ -456,11 +459,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 <Self::Field as FieldElementWithInteger>::Integer::try_from(m).unwrap(),
             )
             .inv();
-            let mut f = vec![Self::Field::zero(); m];
+            let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
+            multi_discrete_fourier_transform(&mut f, &gadget.f_vals, m)?;
             for wire in 0..gadget.arity() {
-                discrete_fourier_transform(&mut f, &gadget.f_vals[wire], m)?;
-                discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
-                verifier.push(poly_eval(&f, r));
+                discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
+                verifier.push(poly_eval(&f[wire], r));
             }
 
             // Add the value of the gadget polynomial evaluated at `r`.
