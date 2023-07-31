@@ -13,7 +13,7 @@ use prio::{
     benchmarked::*,
     field::{random_vector, Field128 as F, FieldElement},
     flp::{
-        gadgets::{BlindPolyEval, Mul, ParallelSum},
+        gadgets::{Mul, ParallelSum},
         types::SumVec,
         Type,
     },
@@ -116,7 +116,7 @@ pub fn count_vec(c: &mut Criterion) {
 
         // Prio3
         let input = vec![F::zero(); size];
-        let sum_vec: SumVec<F, ParallelSum<F, BlindPolyEval<F>>> = SumVec::new(1, size).unwrap();
+        let sum_vec: SumVec<F, ParallelSum<F, _>> = SumVec::new(1, size).unwrap();
         let joint_rand = random_vector(sum_vec.joint_rand_len()).unwrap();
         let prove_rand = random_vector(sum_vec.prove_rand_len()).unwrap();
         let proof = sum_vec.prove(&input, &prove_rand, &joint_rand).unwrap();
@@ -139,8 +139,7 @@ pub fn count_vec(c: &mut Criterion) {
 
         #[cfg(feature = "multithreaded")]
         {
-            let sum_vec: SumVec<F, ParallelSumMultithreaded<F, BlindPolyEval<F>>> =
-                SumVec::new(1, size).unwrap();
+            let sum_vec: SumVec<F, ParallelSumMultithreaded<F, _>> = SumVec::new(1, size).unwrap();
 
             group.bench_function(
                 BenchmarkId::new("prio3_countvec_multithreaded_prove", size),

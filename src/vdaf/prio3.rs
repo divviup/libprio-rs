@@ -34,8 +34,8 @@ use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
 #[cfg(feature = "experimental")]
-use crate::flp::gadgets::PolyEval;
-use crate::flp::gadgets::{BlindPolyEval, ParallelSum};
+use crate::flp::gadgets::{BlindPolyEval, PolyEval};
+use crate::flp::gadgets::{Mul, ParallelSum};
 #[cfg(feature = "experimental")]
 use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
@@ -76,8 +76,7 @@ impl Prio3Count {
 
 /// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
 /// aggregate is the element-wise sum.
-pub type Prio3SumVec =
-    Prio3<SumVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgSha3, 16>;
+pub type Prio3SumVec = Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, PrgSha3, 16>;
 
 impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
@@ -93,11 +92,8 @@ impl Prio3SumVec {
 /// up. (Your system's mileage may vary.)
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
-pub type Prio3SumVecMultithreaded = Prio3<
-    SumVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
-    PrgSha3,
-    16,
->;
+pub type Prio3SumVecMultithreaded =
+    Prio3<SumVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>, PrgSha3, 16>;
 
 #[cfg(feature = "multithreaded")]
 impl Prio3SumVecMultithreaded {

@@ -3,7 +3,7 @@
 //! A collection of [`Type`](crate::flp::Type) implementations.
 
 use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
-use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
+use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
@@ -435,7 +435,6 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
 /// [BBCG+19]: https://eprint.iacr.org/2019/188
 #[derive(PartialEq, Eq)]
 pub struct SumVec<F: FftFriendlyFieldElement, S> {
-    range_checker: Vec<F>,
     len: usize,
     bits: usize,
     flattened_len: usize,
@@ -454,7 +453,7 @@ impl<F: FftFriendlyFieldElement, S> Debug for SumVec<F, S> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> SumVec<F, S> {
+impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
     /// Returns a new [`SumVec`] with the desired bit width and vector length.
     ///
     /// # Errors
@@ -492,7 +491,6 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> SumV
         }
 
         Ok(Self {
-            range_checker: poly_range_check(0, 2),
             len,
             bits,
             flattened_len,
@@ -507,7 +505,6 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, BlindPolyEval<F>>> SumV
 impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
     fn clone(&self) -> Self {
         Self {
-            range_checker: self.range_checker.clone(),
             len: self.len,
             bits: self.bits,
             flattened_len: self.flattened_len,
@@ -522,7 +519,7 @@ impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
 impl<F, S> Type for SumVec<F, S>
 where
     F: FftFriendlyFieldElement,
-    S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
     const ID: u32 = 0xFFFF0000;
     type Measurement = Vec<F::Integer>;
@@ -564,7 +561,7 @@ where
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
         vec![Box::new(S::new(
-            BlindPolyEval::new(self.range_checker.clone(), self.gadget_calls),
+            Mul::new(self.gadget_calls),
             self.chunk_len,
         ))]
     }
@@ -586,13 +583,14 @@ where
             let d = chunk.len();
             for i in 0..self.chunk_len {
                 if i < d {
-                    padded_chunk[2 * i] = chunk[i];
+                    padded_chunk[2 * i] = r * chunk[i];
+                    padded_chunk[2 * i + 1] = chunk[i] - s;
                 } else {
                     // If the chunk is smaller than the chunk length, then copy the last element of
                     // the chunk into the remaining slots.
-                    padded_chunk[2 * i] = chunk[d - 1];
+                    padded_chunk[2 * i] = r * chunk[d - 1];
+                    padded_chunk[2 * i + 1] = chunk[d - 1] - s;
                 }
-                padded_chunk[2 * i + 1] = r * s;
                 r *= joint_rand[0];
             }
 
@@ -616,7 +614,7 @@ where
     }
 
     fn proof_len(&self) -> usize {
-        (self.chunk_len * 2) + 3 * ((1 + self.gadget_calls).next_power_of_two() - 1) + 1
+        (self.chunk_len * 2) + 2 * ((1 + self.gadget_calls).next_power_of_two() - 1) + 1
     }
 
     fn verifier_len(&self) -> usize {
@@ -986,7 +984,7 @@ mod tests {
     fn test_sum_vec<F, S>(f: F)
     where
         F: Fn(usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
-        S: 'static + ParallelSumGadget<TestField, BlindPolyEval<TestField>> + Eq,
+        S: 'static + ParallelSumGadget<TestField, Mul<TestField>> + Eq,
     {
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -1077,21 +1075,18 @@ mod tests {
 
     #[test]
     fn test_sum_vec_serial() {
-        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>>::new)
+        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, Mul<TestField>>>::new)
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_sum_vec_parallel() {
-        test_sum_vec(
-            SumVec::<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>>::new,
-        )
+        test_sum_vec(SumVec::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new)
     }
 
     #[test]
     fn sum_vec_serial_long() {
-        let typ: SumVec<TestField, ParallelSum<TestField, BlindPolyEval<TestField>>> =
-            SumVec::new(1, 1000).unwrap();
+        let typ: SumVec<TestField, ParallelSum<TestField, _>> = SumVec::new(1, 1000).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
         let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
@@ -1108,7 +1103,7 @@ mod tests {
     #[test]
     #[cfg(feature = "multithreaded")]
     fn sum_vec_parallel_long() {
-        let typ: SumVec<TestField, ParallelSumMultithreaded<TestField, BlindPolyEval<TestField>>> =
+        let typ: SumVec<TestField, ParallelSumMultithreaded<TestField, _>> =
             SumVec::new(1, 1000).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
