@@ -521,7 +521,7 @@ where
     F: FftFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
-    const ID: u32 = 0xFFFF0000;
+    const ID: u32 = 0x00000003;
     type Measurement = Vec<F::Integer>;
     type AggregateResult = Vec<F::Integer>;
     type Field = F;
