@@ -25,7 +25,7 @@ fn main() {
     );
 
     let length = 10;
-    let prio3 = Prio3::new_histogram(num_shares, length).unwrap();
+    let prio3 = Prio3::new_histogram(num_shares, length, 3).unwrap();
     let measurement = 9;
     println!(
         "prio3 histogram ({} buckets) share size = {}",
@@ -43,7 +43,7 @@ fn main() {
     );
 
     let len = 1000;
-    let prio3 = Prio3::new_sum_vec(num_shares, 1, len).unwrap();
+    let prio3 = Prio3::new_sum_vec(num_shares, 1, len, 31).unwrap();
     let measurement = vec![0; len];
     println!(
         "prio3 sumvec ({} len) share size = {}",
@@ -65,7 +65,7 @@ fn main() {
 
     println!();
 
-    for size in [10, 100, 1_000] {
+    for (size, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
         // Prio2
         let measurement = vec![0u32; size];
         let prio2 = Prio2::new(size).unwrap();
@@ -77,7 +77,7 @@ fn main() {
 
         // Prio3
         let measurement = vec![0u128; size];
-        let prio3 = Prio3::new_sum_vec(2, 1, size).unwrap();
+        let prio3 = Prio3::new_sum_vec(2, 1, size, chunk_length).unwrap();
         println!(
             "prio3 sumvec ({} entries) size = {}",
             size,
