@@ -331,14 +331,15 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for BlindPolyEval<F> {
     }
 }
 
-/// Marker trait for abstracting over [`ParallelSum`].
+/// Trait for abstracting over [`ParallelSum`].
 pub trait ParallelSumGadget<F: FftFriendlyFieldElement, G>: Gadget<F> + Debug {
-    /// Wraps `inner` into a sum gadget with `chunks` chunks
+    /// Wraps `inner` into a sum gadget that calls it `chunks` many times, and adds the reuslts.
     fn new(inner: G, chunks: usize) -> Self;
 }
 
 /// A wrapper gadget that applies the inner gadget to chunks of input and returns the sum of the
-/// outputs. The arity is equal to the arity of the inner gadget times the number of chunks.
+/// outputs. The arity is equal to the arity of the inner gadget times the number of times it is
+/// called.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ParallelSum<F: FftFriendlyFieldElement, G: Gadget<F>> {
     inner: G,
