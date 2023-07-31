@@ -586,10 +586,10 @@ where
                     padded_chunk[2 * i] = r * chunk[i];
                     padded_chunk[2 * i + 1] = chunk[i] - s;
                 } else {
-                    // If the chunk is smaller than the chunk length, then copy the last element of
-                    // the chunk into the remaining slots.
-                    padded_chunk[2 * i] = r * chunk[d - 1];
-                    padded_chunk[2 * i + 1] = chunk[d - 1] - s;
+                    // If the chunk is smaller than the chunk length, then use zeros instead of
+                    // measurement inputs for the remaining calls.
+                    padded_chunk[2 * i] = F::zero();
+                    padded_chunk[2 * i + 1] = -s;
                 }
                 r *= joint_rand[0];
             }
