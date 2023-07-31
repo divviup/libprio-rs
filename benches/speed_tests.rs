@@ -62,7 +62,7 @@ fn poly_mul(c: &mut Criterion) {
             let m = (size + 1).next_power_of_two();
             let mut g: Mul<F> = Mul::new(*size);
             let mut outp = vec![F::zero(); 2 * m];
-            let inp = vec![random_vector(m).unwrap(); 2];
+            let inp = random_vector(2 * m).unwrap();
 
             b.iter(|| {
                 benchmarked_gadget_mul_call_poly_fft(&mut g, &mut outp, &inp).unwrap();
@@ -73,7 +73,7 @@ fn poly_mul(c: &mut Criterion) {
             let m = (size + 1).next_power_of_two();
             let mut g: Mul<F> = Mul::new(*size);
             let mut outp = vec![F::zero(); 2 * m];
-            let inp = vec![random_vector(m).unwrap(); 2];
+            let inp = random_vector(2 * m).unwrap();
 
             b.iter(|| {
                 benchmarked_gadget_mul_call_poly_direct(&mut g, &mut outp, &inp).unwrap();
@@ -176,8 +176,10 @@ fn prio3(c: &mut Criterion) {
     }
     group.finish();
 
+    let input_lens = [10, 100, 1_000, 10_000, 100_000];
+
     let mut group = c.benchmark_group("prio3sumvec_shard");
-    for input_len in [10, 100, 1_000] {
+    for input_len in input_lens {
         group.bench_with_input(
             BenchmarkId::new("serial", input_len),
             &input_len,
@@ -194,7 +196,7 @@ fn prio3(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        for input_len in [10, 100, 1_000] {
+        for input_len in input_lens {
             group.bench_with_input(
                 BenchmarkId::new("parallel", input_len),
                 &input_len,
@@ -212,7 +214,7 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3sumvec_prepare_init");
-    for input_len in [10, 100, 1_000] {
+    for input_len in input_lens {
         group.bench_with_input(
             BenchmarkId::new("serial", input_len),
             &input_len,
@@ -234,7 +236,7 @@ fn prio3(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        for input_len in [10, 100, 1_000] {
+        for input_len in input_lens {
             group.bench_with_input(
                 BenchmarkId::new("parallel", input_len),
                 &input_len,
@@ -264,7 +266,7 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3histogram_shard");
-    for input_len in [10, 100, 1_000, 10_000, 100_000] {
+    for input_len in input_lens {
         if input_len >= 100_000 {
             group.measurement_time(Duration::from_secs(15));
         }
@@ -282,7 +284,7 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3histogram_prepare_init");
-    for input_len in [10, 100, 1_000, 10_000, 100_000] {
+    for input_len in input_lens {
         if input_len >= 100_000 {
             group.measurement_time(Duration::from_secs(15));
         }

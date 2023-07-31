@@ -47,22 +47,21 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
     }
 
     // Multiply input polynomials directly.
-    pub(crate) fn call_poly_direct(
-        &mut self,
-        outp: &mut [F],
-        inp: &[Vec<F>],
-    ) -> Result<(), FlpError> {
-        let v = poly_mul(&inp[0], &inp[1]);
+    pub(crate) fn call_poly_direct(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        let m = inp.len() / self.arity();
+        let v = poly_mul(&inp[..m], &inp[m..]);
         outp[..v.len()].clone_from_slice(&v);
         Ok(())
     }
 
     // Multiply input polynomials using FFT.
-    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        let m = inp.len() / 2;
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
-        multi_discrete_fourier_transform(&mut [buf.as_mut(), outp], &[&inp[0], &inp[1]], n)?;
+        discrete_fourier_transform(&mut buf, &inp[..m], n)?;
+        discrete_fourier_transform(outp, &inp[m..], n)?;
 
         for i in 0..n {
             buf[i] *= outp[i];
@@ -80,9 +79,9 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for Mul<F> {
         Ok(inp[0] * inp[1])
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        gadget_call_poly_check(self, outp, inp)?;
-        if inp[0].len() >= FFT_THRESHOLD {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        gadget_call_check(self, inp.len())?;
+        if inp.len() / self.arity() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
@@ -137,32 +136,31 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
 
 impl<F: FftFriendlyFieldElement> PolyEval<F> {
     // Multiply input polynomials directly.
-    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
         outp[0] = self.poly[0];
-        let mut x = inp[0].to_vec();
+        let mut x = inp.to_vec();
         for i in 1..self.poly.len() {
             for j in 0..x.len() {
                 outp[j] += self.poly[i] * x[j];
             }
 
             if i < self.poly.len() - 1 {
-                x = poly_mul(&x, &inp[0]);
+                x = poly_mul(&x, inp);
             }
         }
         Ok(())
     }
 
     // Multiply input polynomials using FFT.
-    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
         let n = self.n;
-        let inp = &inp[0];
+        let mut buf = vec![F::zero(); 3 * n];
+        let (inp_vals, buf) = buf.split_at_mut(n);
+        let (x_vals, x) = buf.split_at_mut(n);
 
-        let mut inp_vals = vec![F::zero(); n];
-        discrete_fourier_transform(&mut inp_vals, inp, n)?;
-
-        let mut x_vals = inp_vals.clone();
-        let mut x = vec![F::zero(); n];
-        x[..inp.len()].clone_from_slice(inp);
+        discrete_fourier_transform(inp_vals, inp, n)?;
+        x_vals.copy_from_slice(inp_vals);
+        x[..inp.len()].copy_from_slice(inp);
 
         outp[0] = self.poly[0];
         for i in 1..self.poly.len() {
@@ -175,8 +173,8 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
                     x_vals[j] *= inp_vals[j];
                 }
 
-                discrete_fourier_transform(&mut x, &x_vals, n)?;
-                discrete_fourier_transform_inv_finish(&mut x, n, self.n_inv);
+                discrete_fourier_transform(x, x_vals, n)?;
+                discrete_fourier_transform_inv_finish(x, n, self.n_inv);
             }
         }
         Ok(())
@@ -189,14 +187,14 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for PolyEval<F> {
         Ok(poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        gadget_call_check(self, inp.len())?;
 
         for item in outp.iter_mut() {
             *item = F::zero();
         }
 
-        if inp[0].len() >= FFT_THRESHOLD {
+        if inp.len() / self.arity() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
@@ -245,9 +243,10 @@ impl<F: FftFriendlyFieldElement> BlindPolyEval<F> {
         }
     }
 
-    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        let x = &inp[0];
-        let y = &inp[1];
+    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        let m = inp.len() / 2;
+        let x = &inp[..m];
+        let y = &inp[m..];
 
         let mut z = y.to_vec();
         for i in 0..self.poly.len() {
@@ -262,16 +261,17 @@ impl<F: FftFriendlyFieldElement> BlindPolyEval<F> {
         Ok(())
     }
 
-    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        let m = inp.len() / self.arity();
         let n = self.n;
-        let x = &inp[0];
-        let y = &inp[1];
+        let x = &inp[..m];
+        let y = &inp[m..];
 
-        let mut x_vals = vec![F::zero(); n];
-        let mut z_vals = vec![F::zero(); n];
-        multi_discrete_fourier_transform(&mut [&mut x_vals, &mut z_vals], &[x, y], n)?;
+        let mut buf = vec![F::zero(); 3 * n];
+        multi_discrete_fourier_transform(&mut buf, &[x, y], n)?;
+        let (x_vals, buf) = buf.split_at_mut(n);
+        let (z_vals, z) = buf.split_at_mut(n);
 
-        let mut z = vec![F::zero(); n];
         let mut z_len = y.len();
         z[..y.len()].clone_from_slice(y);
 
@@ -285,8 +285,8 @@ impl<F: FftFriendlyFieldElement> BlindPolyEval<F> {
                     z_vals[j] *= x_vals[j];
                 }
 
-                discrete_fourier_transform(&mut z, &z_vals, n)?;
-                discrete_fourier_transform_inv_finish(&mut z, n, self.n_inv);
+                discrete_fourier_transform(z, z_vals, n)?;
+                discrete_fourier_transform_inv_finish(z, n, self.n_inv);
                 z_len += x.len();
             }
         }
@@ -300,14 +300,14 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for BlindPolyEval<F> {
         Ok(inp[1] * poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        gadget_call_check(self, inp.len())?;
 
         for x in outp.iter_mut() {
             *x = F::zero();
         }
 
-        if inp[0].len() >= FFT_THRESHOLD {
+        if inp.len() / self.arity() >= FFT_THRESHOLD {
             self.call_poly_fft(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
@@ -368,8 +368,9 @@ impl<F: FftFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelS
         Ok(outp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        gadget_call_check(self, inp.len())?;
+        let m = inp.len() / self.arity();
 
         for x in outp.iter_mut() {
             *x = F::zero();
@@ -377,7 +378,7 @@ impl<F: FftFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelS
 
         let mut partial_outp = vec![F::zero(); outp.len()];
 
-        for chunk in inp.chunks(self.inner.arity()) {
+        for chunk in inp.chunks(self.inner.arity() * m) {
             self.inner.call_poly(&mut partial_outp, chunk)?;
             for i in 0..outp.len() {
                 outp[i] += partial_outp[i]
@@ -463,8 +464,9 @@ where
         self.serial_sum.call(inp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        gadget_call_poly_check(self, outp, inp)?;
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
+        gadget_call_check(self, inp.len())?;
+        let m = inp.len() / self.arity();
 
         // Create a copy of the inner gadget and two working buffers on each thread. Evaluate the
         // gadget on each input polynomial, using the first temporary buffer as an output buffer.
@@ -473,7 +475,7 @@ where
         // to the output parameter. This is equivalent to the single threaded calculation in
         // ParallelSum, since we only rearrange additions, and field addition is associative.
         let res = inp
-            .par_chunks(self.serial_sum.inner.arity())
+            .par_chunks(self.serial_sum.inner.arity() * m)
             .fold(
                 || ParallelSumFoldState::new(&self.serial_sum.inner, outp.len()),
                 |mut state, chunk| {
@@ -528,47 +530,14 @@ fn gadget_call_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     in_len: usize,
 ) -> Result<(), FlpError> {
-    if in_len != gadget.arity() {
-        return Err(FlpError::Gadget(format!(
-            "unexpected number of inputs: got {}; want {}",
-            in_len,
-            gadget.arity()
-        )));
+    if in_len % gadget.arity() != 0 {
+        return Err(FlpError::Gadget(
+            "length of input is not divisible by the gadget arity".into(),
+        ));
     }
 
     if in_len == 0 {
         return Err(FlpError::Gadget("can't call an arity-0 gadget".to_string()));
-    }
-
-    Ok(())
-}
-
-// Check that the input parameters of g.call_poly() are well-formed.
-fn gadget_call_poly_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
-    gadget: &G,
-    outp: &[F],
-    inp: &[Vec<F>],
-) -> Result<(), FlpError>
-where
-    G: Gadget<F>,
-{
-    gadget_call_check(gadget, inp.len())?;
-
-    for i in 1..inp.len() {
-        if inp[i].len() != inp[0].len() {
-            return Err(FlpError::Gadget(
-                "gadget called on wire polynomials with different lengths".to_string(),
-            ));
-        }
-    }
-
-    let expected = gadget_poly_len(gadget.degree(), inp[0].len()).next_power_of_two();
-    if outp.len() != expected {
-        return Err(FlpError::Gadget(format!(
-            "incorrect output length: got {}; want {}",
-            outp.len(),
-            expected
-        )));
     }
 
     Ok(())
@@ -673,13 +642,9 @@ mod tests {
             let mut poly_outp_serial =
                 vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
             let mut prng: Prng<TestField, _> = Prng::new().unwrap();
-            let poly_inp: Vec<_> = iter::repeat_with(|| {
-                iter::repeat_with(|| prng.get())
-                    .take(1 + num_calls)
-                    .collect::<Vec<_>>()
-            })
-            .take(arity)
-            .collect();
+            let poly_inp: Vec<_> = iter::repeat_with(|| prng.get())
+                .take(arity * (1 + num_calls))
+                .collect::<Vec<_>>();
 
             g.call_poly(&mut poly_outp, &poly_inp).unwrap();
             g_serial
@@ -696,14 +661,14 @@ mod tests {
         let mut prng = Prng::new().unwrap();
         let mut inp = vec![F::zero(); g.arity()];
         let mut gadget_poly = vec![F::zero(); gadget_poly_fft_mem_len(g.degree(), num_calls)];
-        let mut wire_polys = vec![vec![F::zero(); wire_poly_len]; g.arity()];
+        let mut wire_polys = vec![F::zero(); wire_poly_len * g.arity()];
 
         let r = prng.get();
-        for i in 0..g.arity() {
-            for j in 0..wire_poly_len {
-                wire_polys[i][j] = prng.get();
+        for (i, wire_poly) in wire_polys.chunks_exact_mut(wire_poly_len).enumerate() {
+            for x in wire_poly.iter_mut() {
+                *x = prng.get();
             }
-            inp[i] = poly_eval(&wire_polys[i], r);
+            inp[i] = poly_eval(wire_poly, r);
         }
 
         g.call_poly(&mut gadget_poly, &wire_polys).unwrap();

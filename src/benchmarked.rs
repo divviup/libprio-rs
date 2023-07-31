@@ -34,7 +34,7 @@ pub fn benchmarked_recursive_fft<F: FftFriendlyFieldElement>(outp: &mut [F], inp
 pub fn benchmarked_gadget_mul_call_poly_fft<F: FftFriendlyFieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
-    inp: &[Vec<F>],
+    inp: &[F],
 ) -> Result<(), FlpError> {
     g.call_poly_fft(outp, inp)
 }
@@ -44,7 +44,7 @@ pub fn benchmarked_gadget_mul_call_poly_fft<F: FftFriendlyFieldElement>(
 pub fn benchmarked_gadget_mul_call_poly_direct<F: FftFriendlyFieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
-    inp: &[Vec<F>],
+    inp: &[F],
 ) -> Result<(), FlpError> {
     g.call_poly_direct(outp, inp)
 }

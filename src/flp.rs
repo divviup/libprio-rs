@@ -254,6 +254,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
             )));
         }
 
+        let mut max_wire_poly_buf_len = 0;
         let mut prove_rand_len = 0;
         let mut shim = self
             .gadget()
@@ -273,6 +274,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
                     &prove_rand[prove_rand_len..prove_rand_len + inner_arity],
                 )?) as Box<dyn Gadget<Self::Field>>;
                 prove_rand_len += inner_arity;
+
+                let wire_poly_buf_len = wire_poly_len(gadget.calls()) * gadget.arity();
+                if wire_poly_buf_len > max_wire_poly_buf_len {
+                    max_wire_poly_buf_len = wire_poly_buf_len;
+                }
 
                 Ok(gadget)
             })
@@ -303,6 +309,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         let _ = self.valid(&mut shim, input, joint_rand, 1)?;
 
         // Construct the proof.
+        let mut wire_poly_buf = vec![Self::Field::zero(); max_wire_poly_buf_len];
         let mut proof_len = 0;
         for idx in 0..shim.len() {
             let gadget = shim[idx]
@@ -317,10 +324,17 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 <Self::Field as FieldElementWithInteger>::Integer::try_from(m).unwrap(),
             )
             .inv();
-            let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
-            multi_discrete_fourier_transform(&mut f, &gadget.f_vals, m)?;
-            for wire in 0..gadget.arity() {
-                discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
+            let wire_poly_buf_len = m * gadget.arity();
+            multi_discrete_fourier_transform(
+                &mut wire_poly_buf[..wire_poly_buf_len],
+                &gadget.f_vals,
+                m,
+            )?;
+            for (wire, f_wire) in wire_poly_buf[..wire_poly_buf_len]
+                .chunks_exact_mut(m)
+                .enumerate()
+            {
+                discrete_fourier_transform_inv_finish(f_wire, m, m_inv);
 
                 // The first point on each wire polynomial is a random value chosen by the prover. This
                 // point is stored in the proof so that the verifier can reconstruct the wire
@@ -332,7 +346,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
             let gadget_poly_len = gadget_poly_len(gadget.degree(), m);
             let start = proof_len + gadget.arity();
             let end = start + gadget_poly_len.next_power_of_two();
-            gadget.call_poly(&mut proof[start..end], &f)?;
+            gadget.call_poly(&mut proof[start..end], &wire_poly_buf[..wire_poly_buf_len])?;
             proof_len += gadget.arity() + gadget_poly_len;
         }
 
@@ -392,6 +406,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
             )));
         }
 
+        let mut max_wire_poly_buf_len = 0;
         let mut proof_len = 0;
         let mut shim = self
             .gadget()
@@ -419,6 +434,11 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 let proof_data = &proof[proof_len..proof_len + next_len];
                 proof_len += next_len;
 
+                let wire_poly_buf_len = wire_poly_len(gadget.calls()) * gadget.arity();
+                if wire_poly_buf_len > max_wire_poly_buf_len {
+                    max_wire_poly_buf_len = wire_poly_buf_len;
+                }
+
                 Ok(Box::new(QueryShimGadget::new(gadget, r, proof_data)?)
                     as Box<dyn Gadget<Self::Field>>)
             })
@@ -445,6 +465,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         verifier.push(validity);
 
         // Fill the buffer with the verifier message.
+        let mut wire_poly_buf = vec![Self::Field::zero(); max_wire_poly_buf_len];
         for idx in 0..shim.len() {
             let r = query_rand[idx];
             let gadget = shim[idx]
@@ -459,11 +480,15 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 <Self::Field as FieldElementWithInteger>::Integer::try_from(m).unwrap(),
             )
             .inv();
-            let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
-            multi_discrete_fourier_transform(&mut f, &gadget.f_vals, m)?;
-            for wire in 0..gadget.arity() {
-                discrete_fourier_transform_inv_finish(&mut f[wire], m, m_inv);
-                verifier.push(poly_eval(&f[wire], r));
+            let wire_poly_buf_len = m * gadget.arity();
+            multi_discrete_fourier_transform(
+                &mut wire_poly_buf[..wire_poly_buf_len],
+                &gadget.f_vals,
+                m,
+            )?;
+            for f_wire in wire_poly_buf[..wire_poly_buf_len].chunks_exact_mut(m) {
+                discrete_fourier_transform_inv_finish(f_wire, m, m_inv);
+                verifier.push(poly_eval(f_wire, r));
             }
 
             // Add the value of the gadget polynomial evaluated at `r`.
@@ -554,7 +579,10 @@ pub trait Gadget<F: FftFriendlyFieldElement>: Debug {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError>;
 
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
+    ///
+    /// Input `inp` is interpreted as the coefficients of each polynomial, concatenated together
+    /// into the input slice.
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError>;
 
     /// Returns the arity of the gadget. This is the length of `inp` passed to `call` or
     /// `call_poly`.
@@ -612,7 +640,7 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
         self.inner.call(inp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn call_poly(&mut self, outp: &mut [F], inp: &[F]) -> Result<(), FlpError> {
         self.inner.call_poly(outp, inp)
     }
 
@@ -704,7 +732,7 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for QueryShimGadget<F> {
         Ok(outp)
     }
 
-    fn call_poly(&mut self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn call_poly(&mut self, _outp: &mut [F], _inp: &[F]) -> Result<(), FlpError> {
         panic!("no-op");
     }
 

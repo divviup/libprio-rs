@@ -33,7 +33,7 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
     inp: &[F],
     size: usize,
 ) -> Result<(), FftError> {
-    multi_discrete_fourier_transform(&mut [outp], &[inp], size)
+    multi_discrete_fourier_transform(outp, &[inp], size)
 }
 
 /// For each `i in 0..inp.len()`, set `outp[i]` to the DFT of `inp[i]`.
@@ -45,12 +45,8 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
 /// Assumpes that `outp.len() == inp.len()` and, for each `i in 0..inp.len()`, `outp[i].len() ==
 /// inp[i].len()`.
 #[allow(clippy::many_single_char_names)]
-pub fn multi_discrete_fourier_transform<
-    F: FftFriendlyFieldElement,
-    In: AsRef<[F]>,
-    Out: AsMut<[F]>,
->(
-    outp: &mut [Out],
+pub fn multi_discrete_fourier_transform<F: FftFriendlyFieldElement, In: AsRef<[F]>>(
+    outp: &mut [F],
     inp: &[In],
     size: usize,
 ) -> Result<(), FftError> {
@@ -70,7 +66,7 @@ pub fn multi_discrete_fourier_transform<
         for (inp, outp) in inp
             .iter()
             .map(AsRef::as_ref)
-            .zip(outp.iter_mut().map(AsMut::as_mut))
+            .zip(outp.chunks_exact_mut(size))
         {
             outp[i] = if j < inp.len() { inp[j] } else { F::zero() }
         }
@@ -84,7 +80,7 @@ pub fn multi_discrete_fourier_transform<
         for i in 0..y {
             for j in 0..(size / y) >> 1 {
                 let x = (1 << l) * j + i;
-                for outp in outp.iter_mut().map(AsMut::as_mut) {
+                for outp in outp.chunks_exact_mut(size) {
                     let u = outp[x];
                     let v = w * outp[x + y];
                     outp[x] = u + v;
