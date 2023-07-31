@@ -42,7 +42,7 @@ fn main() {
     );
 
     let len = 1000;
-    let prio3 = Prio3::new_sum_vec(num_shares, 1, len).unwrap();
+    let prio3 = Prio3::new_sum_vec(num_shares, 1, len, 31).unwrap();
     let measurement = vec![0; len];
     println!(
         "prio3 sumvec ({} len) share size = {}",
@@ -64,7 +64,7 @@ fn main() {
 
     println!();
 
-    for size in [10, 100, 1_000] {
+    for (size, chunk_len) in [(10, 3), (100, 10), (1_000, 31)] {
         // Prio2
         let measurement = vec![0u32; size];
         let prio2 = Prio2::new(size).unwrap();
@@ -76,7 +76,7 @@ fn main() {
 
         // Prio3
         let measurement = vec![0u128; size];
-        let prio3 = Prio3::new_sum_vec(2, 1, size).unwrap();
+        let prio3 = Prio3::new_sum_vec(2, 1, size, chunk_len).unwrap();
         println!(
             "prio3 sumvec ({} entries) size = {}",
             size,

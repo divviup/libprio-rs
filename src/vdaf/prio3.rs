@@ -82,8 +82,13 @@ impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
     /// the bit width of each summand of the measurement; `len` defines the length of the
     /// measurement vector.
-    pub fn new_sum_vec(num_aggregators: u8, bits: usize, len: usize) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, SumVec::new(bits, len)?)
+    pub fn new_sum_vec(
+        num_aggregators: u8,
+        bits: usize,
+        len: usize,
+        chunk_len: usize,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, SumVec::new(bits, len, chunk_len)?)
     }
 }
 
@@ -104,8 +109,9 @@ impl Prio3SumVecMultithreaded {
         num_aggregators: u8,
         bits: usize,
         len: usize,
+        chunk_len: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, SumVec::new(bits, len)?)
+        Prio3::new(num_aggregators, SumVec::new(bits, len, chunk_len)?)
     }
 }
 
@@ -1307,7 +1313,7 @@ mod tests {
 
     #[test]
     fn test_prio3_sum_vec() {
-        let prio3 = Prio3::new_sum_vec(2, 2, 20).unwrap();
+        let prio3 = Prio3::new_sum_vec(2, 2, 20, 4).unwrap();
         assert_eq!(
             run_vdaf(
                 &prio3,
@@ -1326,7 +1332,7 @@ mod tests {
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_prio3_sum_vec_multithreaded() {
-        let prio3 = Prio3::new_sum_vec_multithreaded(2, 2, 20).unwrap();
+        let prio3 = Prio3::new_sum_vec_multithreaded(2, 2, 20, 4).unwrap();
         assert_eq!(
             run_vdaf(
                 &prio3,

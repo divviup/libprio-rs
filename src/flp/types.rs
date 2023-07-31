@@ -449,6 +449,7 @@ impl<F: FftFriendlyFieldElement, S> Debug for SumVec<F, S> {
         f.debug_struct("SumVec")
             .field("len", &self.len)
             .field("bits", &self.bits)
+            .field("chunk_len", &self.chunk_len)
             .finish()
     }
 }
@@ -461,7 +462,8 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
     /// * The length of the encoded measurement, i.e., `bits * len`, overflows addressable memory.
     /// * The bit width cannot be encoded, i.e., `bits` is larger than or equal to the number of
     ///   bits required to encode field elements.
-    pub fn new(bits: usize, len: usize) -> Result<Self, FlpError> {
+    /// * Any of `bits`, `len`, or `chunk_len` are zero.
+    pub fn new(bits: usize, len: usize, chunk_len: usize) -> Result<Self, FlpError> {
         let flattened_len = bits.checked_mul(len).ok_or_else(|| {
             FlpError::InvalidParameter("`bits*len` overflows addressable memory".into())
         })?;
@@ -476,14 +478,24 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
             )));
         }
 
+        // Check for degenerate parameters.
+        if bits == 0 {
+            return Err(FlpError::InvalidParameter(
+                "bits cannot be zero".to_string(),
+            ));
+        }
+        if len == 0 {
+            return Err(FlpError::InvalidParameter("len cannot be zero".to_string()));
+        }
+        if chunk_len == 0 {
+            return Err(FlpError::InvalidParameter(
+                "chunk_len cannot be zero".to_string(),
+            ));
+        }
+
         // Compute the largest encodable measurement.
         let one = F::Integer::from(F::one());
         let max = (one << bits) - one;
-
-        // The optimal chunk length is the square root of the input length. If the input length is
-        // not a perfect square, then round down. If the result is 0, then let the chunk length be
-        // 1 so that the underlying gadget can still be called.
-        let chunk_len = std::cmp::max(1, (flattened_len as f64).sqrt() as usize);
 
         let mut gadget_calls = flattened_len / chunk_len;
         if flattened_len % chunk_len != 0 {
@@ -690,6 +702,7 @@ mod tests {
     #[cfg(feature = "multithreaded")]
     use crate::flp::gadgets::ParallelSumMultithreaded;
     use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
+    use std::cmp;
 
     #[test]
     fn test_count() {
@@ -983,15 +996,16 @@ mod tests {
 
     fn test_sum_vec<F, S>(f: F)
     where
-        F: Fn(usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
+        F: Fn(usize, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
         S: 'static + ParallelSumGadget<TestField, Mul<TestField>> + Eq,
     {
         let one = TestField::one();
         let nine = TestField::from(9);
 
         // Test on valid inputs.
-        for len in 0..10 {
-            let sum_vec = f(1, len).unwrap();
+        for len in 1..10 {
+            let chunk_len = cmp::max((len as f64).sqrt() as usize, 1);
+            let sum_vec = f(1, len, chunk_len).unwrap();
             flp_validity_test(
                 &sum_vec,
                 &sum_vec.encode_measurement(&vec![1; len]).unwrap(),
@@ -1005,7 +1019,7 @@ mod tests {
         }
 
         let len = 100;
-        let sum_vec = f(1, len).unwrap();
+        let sum_vec = f(1, len, 10).unwrap();
         flp_validity_test(
             &sum_vec,
             &sum_vec.encode_measurement(&vec![1; len]).unwrap(),
@@ -1018,7 +1032,7 @@ mod tests {
         .unwrap();
 
         let len = 23;
-        let sum_vec = f(4, len).unwrap();
+        let sum_vec = f(4, len, 4).unwrap();
         flp_validity_test(
             &sum_vec,
             &sum_vec.encode_measurement(&vec![9; len]).unwrap(),
@@ -1032,7 +1046,8 @@ mod tests {
 
         // Test on invalid inputs.
         for len in 1..10 {
-            let sum_vec = f(1, len).unwrap();
+            let chunk_len = cmp::max((len as f64).sqrt() as usize, 1);
+            let sum_vec = f(1, len, chunk_len).unwrap();
             flp_validity_test(
                 &sum_vec,
                 &vec![nine; len],
@@ -1046,7 +1061,7 @@ mod tests {
         }
 
         let len = 23;
-        let sum_vec = f(2, len).unwrap();
+        let sum_vec = f(2, len, 4).unwrap();
         flp_validity_test(
             &sum_vec,
             &vec![nine; 2 * len],
@@ -1086,7 +1101,7 @@ mod tests {
 
     #[test]
     fn sum_vec_serial_long() {
-        let typ: SumVec<TestField, ParallelSum<TestField, _>> = SumVec::new(1, 1000).unwrap();
+        let typ: SumVec<TestField, ParallelSum<TestField, _>> = SumVec::new(1, 1000, 31).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
         let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
@@ -1104,7 +1119,7 @@ mod tests {
     #[cfg(feature = "multithreaded")]
     fn sum_vec_parallel_long() {
         let typ: SumVec<TestField, ParallelSumMultithreaded<TestField, _>> =
-            SumVec::new(1, 1000).unwrap();
+            SumVec::new(1, 1000, 31).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
         let joint_rand = random_vector(typ.joint_rand_len()).unwrap();

@@ -86,8 +86,8 @@ pub fn poly_mul(c: &mut Criterion) {
 /// Benchmark generation and verification of boolean vectors.
 pub fn count_vec(c: &mut Criterion) {
     let mut group = c.benchmark_group("count_vec");
-    let test_sizes = [10, 100, 1_000];
-    for size in test_sizes {
+    let test_sizes = [(10, 3), (100, 10), (1_000, 31)];
+    for (size, chunk_len) in test_sizes {
         #[cfg(feature = "prio2")]
         {
             // Prio2
@@ -116,7 +116,7 @@ pub fn count_vec(c: &mut Criterion) {
 
         // Prio3
         let input = vec![F::zero(); size];
-        let sum_vec: SumVec<F, ParallelSum<F, _>> = SumVec::new(1, size).unwrap();
+        let sum_vec: SumVec<F, ParallelSum<F, _>> = SumVec::new(1, size, chunk_len).unwrap();
         let joint_rand = random_vector(sum_vec.joint_rand_len()).unwrap();
         let prove_rand = random_vector(sum_vec.prove_rand_len()).unwrap();
         let proof = sum_vec.prove(&input, &prove_rand, &joint_rand).unwrap();
@@ -139,7 +139,8 @@ pub fn count_vec(c: &mut Criterion) {
 
         #[cfg(feature = "multithreaded")]
         {
-            let sum_vec: SumVec<F, ParallelSumMultithreaded<F, _>> = SumVec::new(1, size).unwrap();
+            let sum_vec: SumVec<F, ParallelSumMultithreaded<F, _>> =
+                SumVec::new(1, size, chunk_len).unwrap();
 
             group.bench_function(
                 BenchmarkId::new("prio3_countvec_multithreaded_prove", size),
@@ -200,7 +201,7 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let len = 1000;
-    let prio3 = Prio3::new_sum_vec(num_shares, 1, len).unwrap();
+    let prio3 = Prio3::new_sum_vec(num_shares, 1, len, 31).unwrap();
     let measurement = vec![0; len];
     group.bench_function(BenchmarkId::new("countvec", len), |b| {
         b.iter(|| {
@@ -210,7 +211,7 @@ pub fn prio3_client(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        let prio3 = Prio3::new_sum_vec_multithreaded(num_shares, 1, len).unwrap();
+        let prio3 = Prio3::new_sum_vec_multithreaded(num_shares, 1, len, 31).unwrap();
         let measurement = vec![0; len];
         group.bench_function(BenchmarkId::new("countvec_parallel", len), |b| {
             b.iter(|| {
