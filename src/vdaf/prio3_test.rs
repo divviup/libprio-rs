@@ -192,3 +192,24 @@ fn test_vec_prio3_histogram() {
         check_prep_test_vec(&prio3, &verify_key, test_num, p);
     }
 }
+
+#[test]
+fn test_vec_prio3_sumvec() {
+    let t: TPrio3<Vec<u128>> =
+        serde_json::from_str(include_str!("test_vec/06/Prio3SumVec_0.json")).unwrap();
+    let prio3 = Prio3::new_sum_vec(2, 8, 10, 9).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+
+    let t: TPrio3<Vec<u128>> =
+        serde_json::from_str(include_str!("test_vec/06/Prio3SumVec_1.json")).unwrap();
+    let prio3 = Prio3::new_sum_vec(3, 16, 3, 7).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+}
