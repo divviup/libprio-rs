@@ -93,15 +93,15 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.175"
-when = "2023-07-24"
+version = "1.0.179"
+when = "2023-07-31"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.175"
-when = "2023-07-24"
+version = "1.0.179"
+when = "2023-07-31"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -387,6 +387,11 @@ delta = "0.8.2 -> 0.8.3"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.10.5 -> 0.11.0"
+
+[[audits.divviup.audits.rand_core]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.6.3"
 
 [[audits.embark-studios.audits.tap]]
 who = "Johan Andersson <opensource@embark-studios.com>"
