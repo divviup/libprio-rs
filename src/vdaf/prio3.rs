@@ -942,7 +942,7 @@ where
 }
 
 /// State of each [`Aggregator`] during the Preparation phase.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
     measurement_share: Share<F, SEED_SIZE>,
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
@@ -970,6 +970,22 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
             self.joint_rand_seed.as_ref(),
             other.joint_rand_seed.as_ref(),
         ) & self.measurement_share.ct_eq(&other.measurement_share)
+}
+
+impl<F, const SEED_SIZE: usize> Debug for Prio3PrepareState<F, SEED_SIZE> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prio3PrepareState")
+            .field("measurement_share", &"[redacted]")
+            .field(
+                "joint_rand_seed",
+                match self.joint_rand_seed {
+                    Some(_) => &"Some([redacted])",
+                    None => &"None",
+                },
+            )
+            .field("agg_id", &self.agg_id)
+            .field("verifier_len", &self.verifier_len)
+            .finish()
     }
 }
 

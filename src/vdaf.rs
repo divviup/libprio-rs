@@ -393,7 +393,7 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 }
 
 /// An output share comprised of a vector of field elements.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct OutputShare<F>(Vec<F>);
 
 impl<F: ConstantTimeEq> PartialEq for OutputShare<F> {
@@ -429,6 +429,12 @@ impl<F: FieldElement> Encode for OutputShare<F> {
 
     fn encoded_len(&self) -> Option<usize> {
         Some(F::ENCODED_SIZE * self.0.len())
+    }
+}
+
+impl<F> Debug for OutputShare<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("OutputShare").finish()
     }
 }
 
@@ -729,6 +735,8 @@ mod tests {
     }
 }
 
+#[cfg(feature = "test-util")]
+pub mod dummy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(
     docsrs,

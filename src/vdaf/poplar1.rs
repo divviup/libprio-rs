@@ -312,7 +312,7 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 struct PrepareState<F> {
     sketch: SketchState<F>,
     output_share: Vec<F>,
@@ -329,6 +329,14 @@ impl<F: ConstantTimeEq> Eq for PrepareState<F> {}
 impl<F: ConstantTimeEq> ConstantTimeEq for PrepareState<F> {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.sketch.ct_eq(&other.sketch) & self.output_share.ct_eq(&other.output_share)
+}
+
+impl<F> Debug for PrepareState<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("PrepareState")
+            .field("sketch", &"[redacted]")
+            .field("output_share", &"[redacted]")
+            .finish()
     }
 }
 
