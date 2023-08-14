@@ -7,6 +7,14 @@ use criterion::{BatchSize, Throughput};
 use fixed::types::{I1F15, I1F31};
 #[cfg(feature = "experimental")]
 use fixed_macro::fixed;
+#[cfg(feature = "experimental")]
+use num_bigint::BigUint;
+#[cfg(feature = "experimental")]
+use num_rational::Ratio;
+#[cfg(feature = "experimental")]
+use num_traits::ToPrimitive;
+#[cfg(feature = "experimental")]
+use prio::dp::distributions::DiscreteGaussian;
 #[cfg(feature = "prio2")]
 use prio::vdaf::prio2::Prio2;
 use prio::{
@@ -45,6 +53,30 @@ fn prng(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, size| {
             b.iter(|| random_vector::<F>(*size))
         });
+    }
+    group.finish();
+}
+
+/// Speed test for generating samples from the discrete gaussian distribution using different
+/// standard deviations.
+#[cfg(feature = "experimental")]
+pub fn dp_noise(c: &mut Criterion) {
+    let mut group = c.benchmark_group("dp_noise");
+    let mut rng = StdRng::seed_from_u64(RNG_SEED);
+
+    let test_stds = [
+        Ratio::<BigUint>::from_integer(BigUint::from(u128::MAX)).pow(2),
+        Ratio::<BigUint>::from_integer(BigUint::from(u64::MAX)),
+        Ratio::<BigUint>::from_integer(BigUint::from(u32::MAX)),
+        Ratio::<BigUint>::from_integer(BigUint::from(5u8)),
+        Ratio::<BigUint>::new(BigUint::from(10000u32), BigUint::from(23u32)),
+    ];
+    for std in test_stds {
+        let sampler = DiscreteGaussian::new(std.clone()).unwrap();
+        group.bench_function(
+            BenchmarkId::new("discrete_gaussian", std.to_f64().unwrap_or(f64::INFINITY)),
+            |b| b.iter(|| sampler.sample(&mut rng)),
+        );
     }
     group.finish();
 }
@@ -312,7 +344,7 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("serial", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![fixed!(0: I1F15); *dimension];
                     measurement[0] = fixed!(0.5: I1F15);
@@ -329,7 +361,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -350,7 +382,7 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("series", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![fixed!(0: I1F15); *dimension];
                     measurement[0] = fixed!(0.5: I1F15);
@@ -379,7 +411,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -413,7 +445,7 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("serial", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![fixed!(0: I1F31); *dimension];
                     measurement[0] = fixed!(0.5: I1F31);
@@ -430,7 +462,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -451,7 +483,7 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("series", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![fixed!(0: I1F31); *dimension];
                     measurement[0] = fixed!(0.5: I1F31);
@@ -480,7 +512,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -737,9 +769,9 @@ fn poplar1_generate_zipf_distributed_batch(
 }
 
 #[cfg(all(feature = "prio2", feature = "experimental"))]
-criterion_group!(benches, poplar1, prio3, prio2, poly_mul, prng, idpf);
+criterion_group!(benches, poplar1, prio3, prio2, poly_mul, prng, idpf, dp_noise);
 #[cfg(all(not(feature = "prio2"), feature = "experimental"))]
-criterion_group!(benches, poplar1, prio3, poly_mul, prng, idpf);
+criterion_group!(benches, poplar1, prio3, poly_mul, prng, idpf, dp_noise);
 #[cfg(all(feature = "prio2", not(feature = "experimental")))]
 criterion_group!(benches, prio3, prio2, prng, poly_mul);
 #[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]

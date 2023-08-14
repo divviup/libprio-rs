@@ -46,6 +46,8 @@
 //!
 //! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
+#[cfg(feature = "experimental")]
+use crate::dp::DifferentialPrivacyStrategy;
 use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
 use crate::field::{FftFriendlyFieldElement, FieldElement, FieldElementWithInteger, FieldError};
 use crate::fp::log2;
@@ -103,6 +105,11 @@ pub enum FlpError {
     /// Returned if a field operation encountered an error.
     #[error("Field error: {0}")]
     Field(#[from] FieldError),
+
+    #[cfg(feature = "experimental")]
+    /// An error happened during noising.
+    #[error("differential privacy error: {0}")]
+    DifferentialPrivacy(#[from] crate::dp::DpError),
 
     /// Unit test error.
     #[cfg(test)]
@@ -543,6 +550,21 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
         Ok(())
     }
+}
+
+/// A type which supports adding noise to aggregate shares for Server Differential Privacy.
+#[cfg(feature = "experimental")]
+pub trait TypeWithNoise<S>: Type
+where
+    S: DifferentialPrivacyStrategy,
+{
+    /// Add noise to the aggregate share to obtain differential privacy.
+    fn add_noise_to_result(
+        &self,
+        dp_strategy: &S,
+        agg_result: &mut [Self::Field],
+        num_measurements: usize,
+    ) -> Result<(), FlpError>;
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.

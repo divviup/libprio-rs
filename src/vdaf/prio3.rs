@@ -28,7 +28,11 @@
 //! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
 use super::prg::PrgSha3;
+#[cfg(feature = "experimental")]
+use super::AggregatorWithNoise;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
+#[cfg(feature = "experimental")]
+use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{decode_fieldvec, FftFriendlyFieldElement, FieldElement};
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
@@ -42,6 +46,8 @@ use crate::flp::types::fixedpoint_l2::{
 };
 use crate::flp::types::{Average, Count, Histogram, Sum, SumVec};
 use crate::flp::Type;
+#[cfg(feature = "experimental")]
+use crate::flp::TypeWithNoise;
 use crate::prng::Prng;
 use crate::vdaf::prg::{Prg, Seed};
 use crate::vdaf::{
@@ -148,7 +154,6 @@ impl Prio3Sum {
 pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
     FixedPointBoundedL2VecSum<
         Fx,
-        Field128,
         ParallelSum<Field128, PolyEval<Field128>>,
         ParallelSum<Field128, BlindPolyEval<Field128>>,
     >,
@@ -157,7 +162,7 @@ pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
 >;
 
 #[cfg(feature = "experimental")]
-impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3FixedPointBoundedL2VecSum<Fx> {
+impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSum<Fx> {
     /// Construct an instance of this VDAF with the given number of aggregators and number of
     /// vector entries.
     pub fn new_fixedpoint_boundedl2_vec_sum(
@@ -180,7 +185,6 @@ impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3FixedPointBoundedL2VecSum<Fx> {
 pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
     FixedPointBoundedL2VecSum<
         Fx,
-        Field128,
         ParallelSumMultithreaded<Field128, PolyEval<Field128>>,
         ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>,
     >,
@@ -189,7 +193,7 @@ pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
 >;
 
 #[cfg(all(feature = "experimental", feature = "multithreaded"))]
-impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> {
+impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> {
     /// Construct an instance of this VDAF with the given number of aggregators and number of
     /// vector entries.
     pub fn new_fixedpoint_boundedl2_vec_sum_multithreaded(
@@ -1154,6 +1158,27 @@ where
     }
 }
 
+#[cfg(feature = "experimental")]
+impl<T, P, S, const SEED_SIZE: usize> AggregatorWithNoise<SEED_SIZE, 16, S>
+    for Prio3<T, P, SEED_SIZE>
+where
+    T: TypeWithNoise<S>,
+    P: Prg<SEED_SIZE>,
+    S: DifferentialPrivacyStrategy,
+{
+    fn add_noise_to_agg_share(
+        &self,
+        dp_strategy: &S,
+        _agg_param: &Self::AggregationParam,
+        agg_share: &mut Self::AggregateShare,
+        num_measurements: usize,
+    ) -> Result<(), VdafError> {
+        self.typ
+            .add_noise_to_result(dp_strategy, &mut agg_share.0, num_measurements)?;
+        Ok(())
+    }
+}
+
 impl<T, P, const SEED_SIZE: usize> Collector for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
@@ -1384,9 +1409,9 @@ mod tests {
 
         fn test_fixed_vec<Fx, PE, BPE, const SIZE: usize>(
             fp_0: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, Field128, PE, BPE>, PrgSha3, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, BPE>, PrgSha3, 16>,
         ) where
-            Fx: Fixed + CompatibleFloat<Field128> + std::ops::Neg<Output = Fx>,
+            Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
             BPE: Eq + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Clone + 'static,
         {
@@ -1476,9 +1501,9 @@ mod tests {
             fp_4_inv: Fx,
             fp_8_inv: Fx,
             fp_16_inv: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, Field128, PE, BPE>, PrgSha3, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, BPE>, PrgSha3, 16>,
         ) where
-            Fx: Fixed + CompatibleFloat<Field128> + std::ops::Neg<Output = Fx>,
+            Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
             BPE: Eq + ParallelSumGadget<Field128, BlindPolyEval<Field128>> + Clone + 'static,
         {

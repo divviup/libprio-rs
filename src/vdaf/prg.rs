@@ -47,6 +47,7 @@ impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
         Ok(Self::from_bytes(seed))
     }
 
+    /// Construct seed from a byte slice.
     pub(crate) fn from_bytes(seed: [u8; SEED_SIZE]) -> Self {
         Self(seed)
     }
