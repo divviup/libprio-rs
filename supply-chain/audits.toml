@@ -464,6 +464,16 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "7.0.0"
 
+[[audits.zipf]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-run"
+delta = "7.0.0 -> 7.0.1"
+notes = """
+The bulk of the changes are to CI scripts that don't affect the shipping
+code. There are harmless-looking Cargo features removed. The actual code
+changes do not look unsafe.
+"""
+
 [[trusted.byteorder]]
 criteria = "safe-to-deploy"
 user-id = 189 # Andrew Gallant (BurntSushi)
