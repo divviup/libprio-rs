@@ -183,13 +183,24 @@ pub fn prio3_client(c: &mut Criterion) {
     });
 
     let length = 10;
-    let prio3 = Prio3::new_histogram(num_shares, 10).unwrap();
+    let prio3 = Prio3::new_histogram(num_shares, 10, 3).unwrap();
     let measurement = 9;
     group.bench_function(BenchmarkId::new("histogram", length), |b| {
         b.iter(|| {
             prio3.shard(&measurement, &nonce).unwrap();
         })
     });
+
+    #[cfg(feature = "multithreaded")]
+    {
+        let prio3 = Prio3::new_histogram_multithreaded(num_shares, 10, 3).unwrap();
+        let measurement = 9;
+        group.bench_function(BenchmarkId::new("histogram_parallel", length), |b| {
+            b.iter(|| {
+                prio3.shard(&measurement, &nonce).unwrap();
+            })
+        });
+    }
 
     let bits = 32;
     let prio3 = Prio3::new_sum(num_shares, bits).unwrap();

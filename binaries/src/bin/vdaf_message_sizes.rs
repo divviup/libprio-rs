@@ -24,7 +24,7 @@ fn main() {
     );
 
     let length = 10;
-    let prio3 = Prio3::new_histogram(num_shares, length).unwrap();
+    let prio3 = Prio3::new_histogram(num_shares, length, 3).unwrap();
     let measurement = 9;
     println!(
         "prio3 histogram ({} buckets) share size = {}",

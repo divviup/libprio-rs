@@ -35,7 +35,7 @@ use crate::field::{Field128, Field64};
 use crate::flp::gadgets::ParallelSumMultithreaded;
 #[cfg(feature = "experimental")]
 use crate::flp::gadgets::PolyEval;
-use crate::flp::gadgets::{BlindPolyEval, ParallelSum};
+use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSum};
 #[cfg(feature = "experimental")]
 use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
@@ -89,8 +89,7 @@ impl Prio3SumVec {
 }
 
 /// Like [`Prio3SumVec`] except this type uses multithreading to improve sharding and preparation
-/// time. Note that the improvement is only noticeable for very large input lengths, e.g., 201 and
-/// up. (Your system's mileage may vary.)
+/// time. Note that the improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3SumVecMultithreaded = Prio3<
@@ -203,13 +202,38 @@ impl<Fx: Fixed + CompatibleFloat<Field128>> Prio3FixedPointBoundedL2VecSumMultit
 
 /// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
-pub type Prio3Histogram = Prio3<Histogram<Field128>, PrgSha3, 16>;
+pub type Prio3Histogram =
+    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, PrgSha3, 16>;
 
 impl Prio3Histogram {
-    /// Constructs an instance of Prio3Histogram with the given number of aggregators and
-    /// number of buckets.
-    pub fn new_histogram(num_aggregators: u8, length: usize) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, Histogram::new(length)?)
+    /// Constructs an instance of Prio3Histogram with the given number of aggregators,
+    /// number of buckets, and parallel sum gadget chunk length.
+    pub fn new_histogram(
+        num_aggregators: u8,
+        length: usize,
+        chunk_len: usize,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, Histogram::new(length, chunk_len)?)
+    }
+}
+
+/// Like [`Prio3Histogram`] except this type uses multithreading to improve sharding and preparation
+/// time. Note that this improvement is only noticeable for very large input lengths.
+#[cfg(feature = "multithreaded")]
+#[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
+pub type Prio3HistogramMultithreaded =
+    Prio3<Histogram<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>, PrgSha3, 16>;
+
+#[cfg(feature = "multithreaded")]
+impl Prio3HistogramMultithreaded {
+    /// Construct an instance of Prio3HistogramMultithreaded with the given number of aggregators,
+    /// number of buckets, and parallel sum gadget chunk length.
+    pub fn new_histogram_multithreaded(
+        num_aggregators: u8,
+        length: usize,
+        chunk_len: usize,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, Histogram::new(length, chunk_len)?)
     }
 }
 
@@ -1543,7 +1567,23 @@ mod tests {
 
     #[test]
     fn test_prio3_histogram() {
-        let prio3 = Prio3::new_histogram(2, 4).unwrap();
+        let prio3 = Prio3::new_histogram(2, 4, 2).unwrap();
+
+        assert_eq!(
+            run_vdaf(&prio3, &(), [0, 1, 2, 3]).unwrap(),
+            vec![1, 1, 1, 1]
+        );
+        assert_eq!(run_vdaf(&prio3, &(), [0]).unwrap(), vec![1, 0, 0, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [1]).unwrap(), vec![0, 1, 0, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [2]).unwrap(), vec![0, 0, 1, 0]);
+        assert_eq!(run_vdaf(&prio3, &(), [3]).unwrap(), vec![0, 0, 0, 1]);
+        test_serialization(&prio3, &3, &[0; 16]).unwrap();
+    }
+
+    #[test]
+    #[cfg(feature = "multithreaded")]
+    fn test_prio3_histogram_multithreaded() {
+        let prio3 = Prio3::new_histogram_multithreaded(2, 4, 2).unwrap();
 
         assert_eq!(
             run_vdaf(&prio3, &(), [0, 1, 2, 3]).unwrap(),
@@ -1686,7 +1726,7 @@ mod tests {
         let vdaf = Prio3::new_sum(2, 17).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, OutputShare<Field128>>(&vdaf, &(), 1);
 
-        let vdaf = Prio3::new_histogram(2, 12).unwrap();
+        let vdaf = Prio3::new_histogram(2, 12, 3).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Histogram, OutputShare<Field128>>(&vdaf, &(), 12);
     }
 
@@ -1698,7 +1738,7 @@ mod tests {
         let vdaf = Prio3::new_sum(2, 17).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, AggregateShare<Field128>>(&vdaf, &(), 1);
 
-        let vdaf = Prio3::new_histogram(2, 12).unwrap();
+        let vdaf = Prio3::new_histogram(2, 12, 3).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Histogram, AggregateShare<Field128>>(
             &vdaf,
             &(),

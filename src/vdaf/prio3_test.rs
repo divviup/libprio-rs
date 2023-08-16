@@ -176,7 +176,7 @@ fn test_vec_prio3_sum() {
 fn test_vec_prio3_histogram() {
     let t: TPrio3<usize> =
         serde_json::from_str(include_str!("test_vec/06/Prio3Histogram_0.json")).unwrap();
-    let prio3 = Prio3::new_histogram(2, 4).unwrap();
+    let prio3 = Prio3::new_histogram(2, 4, 2).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -185,7 +185,7 @@ fn test_vec_prio3_histogram() {
 
     let t: TPrio3<usize> =
         serde_json::from_str(include_str!("test_vec/06/Prio3Histogram_1.json")).unwrap();
-    let prio3 = Prio3::new_histogram(3, 4).unwrap();
+    let prio3 = Prio3::new_histogram(3, 11, 3).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {

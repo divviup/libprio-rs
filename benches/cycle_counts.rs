@@ -106,7 +106,7 @@ fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 16>> {
 }
 
 fn prio3_client_histogram_10() -> Vec<Prio3InputShare<Field128, 16>> {
-    let prio3 = Prio3::new_histogram(2, 10).unwrap();
+    let prio3 = Prio3::new_histogram(2, 10, 3).unwrap();
     let measurement = 9;
     let nonce = [0; 16];
     prio3

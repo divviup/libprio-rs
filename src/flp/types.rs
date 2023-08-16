@@ -314,37 +314,72 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
 
 /// The histogram type. Each measurement is an integer in `[0, length)` and the aggregate is a
 /// histogram counting the number of occurrences of each measurement.
-#[derive(Clone, PartialEq, Eq)]
-pub struct Histogram<F: FftFriendlyFieldElement> {
+#[derive(PartialEq, Eq)]
+pub struct Histogram<F, S> {
     length: usize,
-    range_checker: Vec<F>,
+    chunk_len: usize,
+    gadget_calls: usize,
+    phantom: PhantomData<(F, S)>,
 }
 
-impl<F: FftFriendlyFieldElement> Debug for Histogram<F> {
+impl<F: FftFriendlyFieldElement, S> Debug for Histogram<F, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Histogram")
             .field("length", &self.length)
+            .field("chunk_len", &self.chunk_len)
             .finish()
     }
 }
 
-impl<F: FftFriendlyFieldElement> Histogram<F> {
+impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> Histogram<F, S> {
     /// Return a new [`Histogram`] type with the given number of buckets.
-    pub fn new(length: usize) -> Result<Self, FlpError> {
+    pub fn new(length: usize, chunk_len: usize) -> Result<Self, FlpError> {
         if length >= u32::MAX as usize {
             return Err(FlpError::Encode(
                 "invalid length: number of buckets exceeds maximum permitted".to_string(),
             ));
         }
+        if length == 0 {
+            return Err(FlpError::InvalidParameter(
+                "length cannot be zero".to_string(),
+            ));
+        }
+        if chunk_len == 0 {
+            return Err(FlpError::InvalidParameter(
+                "chunk_len cannot be zero".to_string(),
+            ));
+        }
+
+        let mut gadget_calls = length / chunk_len;
+        if length % chunk_len != 0 {
+            gadget_calls += 1;
+        }
 
         Ok(Self {
             length,
-            range_checker: poly_range_check(0, 2),
+            chunk_len,
+            gadget_calls,
+            phantom: PhantomData,
         })
     }
 }
 
-impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
+impl<F, S> Clone for Histogram<F, S> {
+    fn clone(&self) -> Self {
+        Self {
+            length: self.length,
+            chunk_len: self.chunk_len,
+            gadget_calls: self.gadget_calls,
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<F, S> Type for Histogram<F, S>
+where
+    F: FftFriendlyFieldElement,
+    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+{
     const ID: u32 = 0x00000002;
     type Measurement = usize;
     type AggregateResult = Vec<F::Integer>;
@@ -366,9 +401,9 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.to_vec(),
-            self.input_len(),
+        vec![Box::new(S::new(
+            Mul::new(self.gadget_calls),
+            self.chunk_len,
         ))]
     }
 
@@ -382,7 +417,27 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
         self.valid_call_check(input, joint_rand)?;
 
         // Check that each element of `input` is a 0 or 1.
-        let range_check = call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])?;
+        let s = F::from(F::valid_integer_try_from(num_shares)?).inv();
+        let mut r = joint_rand[0];
+        let mut range_check = F::zero();
+        let mut padded_chunk = vec![F::zero(); 2 * self.chunk_len];
+        for chunk in input.chunks(self.chunk_len) {
+            let d = chunk.len();
+            for i in 0..self.chunk_len {
+                if i < d {
+                    padded_chunk[2 * i] = r * chunk[i];
+                    padded_chunk[2 * i + 1] = chunk[i] - s;
+                } else {
+                    // If the chunk is smaller than the chunk length, then use zeros instead of
+                    // measurement inputs for the remaining calls.
+                    padded_chunk[2 * i] = F::zero();
+                    padded_chunk[2 * i + 1] = -s;
+                }
+                r *= joint_rand[0];
+            }
+
+            range_check += g[0].call(&padded_chunk)?;
+        }
 
         // Check that the elements of `input` sum to 1.
         let mut sum_check = -(F::one() / F::from(F::valid_integer_try_from(num_shares)?));
@@ -405,11 +460,11 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.input_len()).next_power_of_two() - 1) + 2
+        (self.chunk_len * 2) + 2 * ((1 + self.gadget_calls).next_power_of_two() - 1) + 1
     }
 
     fn verifier_len(&self) -> usize {
-        3
+        2 + self.chunk_len * 2
     }
 
     fn output_len(&self) -> usize {
@@ -421,7 +476,7 @@ impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     }
 
     fn prove_rand_len(&self) -> usize {
-        1
+        self.chunk_len * 2
     }
 
     fn query_rand_len(&self) -> usize {
@@ -882,9 +937,12 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_histogram() {
-        let hist = Histogram::new(3).unwrap();
+    fn test_histogram<F, S>(f: F)
+    where
+        F: Fn(usize, usize) -> Result<Histogram<TestField, S>, FlpError>,
+        S: ParallelSumGadget<TestField, Mul<TestField>> + Eq + 'static,
+    {
+        let hist = f(3, 2).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -981,6 +1039,19 @@ mod tests {
             },
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_histogram_serial() {
+        test_histogram(Histogram::<TestField, ParallelSum<TestField, Mul<TestField>>>::new);
+    }
+
+    #[test]
+    #[cfg(feature = "multithreaded")]
+    fn test_histogram_parallel() {
+        test_histogram(
+            Histogram::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new,
+        );
     }
 
     fn test_sum_vec<F, S>(f: F)
