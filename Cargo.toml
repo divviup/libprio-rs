@@ -46,7 +46,7 @@ rand = "0.8"
 serde_json = "1.0"
 statest = "0.2.2"
 statrs = "0.16.0"
-zipf = "7.0.0"
+zipf = "7.0.1"
 
 [features]
 default = ["crypto-dependencies"]

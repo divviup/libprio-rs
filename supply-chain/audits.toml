@@ -540,6 +540,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "7.0.0"
 
+[[audits.zipf]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-run"
+delta = "7.0.0 -> 7.0.1"
+
 [[trusted.byteorder]]
 criteria = "safe-to-deploy"
 user-id = 189 # Andrew Gallant (BurntSushi)
