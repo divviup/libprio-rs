@@ -448,6 +448,12 @@ criteria = "safe-to-deploy"
 version = "0.1.45"
 notes = "All code written or reviewed by Josh Stone."
 
+[[audits.firefox.audits.num-iter]]
+who = "Josh Stone <jistone@redhat.com>"
+criteria = "safe-to-deploy"
+version = "0.1.43"
+notes = "All code written or reviewed by Josh Stone."
+
 [[audits.firefox.audits.num-rational]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
