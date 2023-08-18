@@ -25,9 +25,11 @@ use rand_core::{
     impls::{next_u32_via_fill, next_u64_via_fill},
     RngCore, SeedableRng,
 };
+#[cfg(feature = "crypto-dependencies")]
+use sha2::{Digest, Sha256};
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
-    Shake128, Shake128Core, Shake128Reader,
+    Shake128, Shake128Core, Shake128Reader, TurboShake128, TurboShake128Core, TurboShake128Reader,
 };
 #[cfg(feature = "crypto-dependencies")]
 use std::fmt::Formatter;
@@ -251,6 +253,221 @@ impl SeedableRng for SeedStreamSha3 {
 
     fn from_seed(seed: Self::Seed) -> Self {
         XofShake128::init(&seed, b"").into_seed_stream()
+    }
+}
+
+/// XOF based on TurboSHAKE128 from [[draft-irtf-cfrg-kangarootwelve-11]].
+///
+/// TODO(cjpatton) Make sure the implementation is in compliance with the spec.
+///
+/// [draft-irtf-cfrg-kangarootwelve-11](https://datatracker.ietf.org/doc/draft-irtf-cfrg-kangarootwelve/11/)
+#[derive(Clone, Debug)]
+pub struct XofTurboShake128(TurboShake128);
+
+impl Xof<16> for XofTurboShake128 {
+    type SeedStream = SeedStreamTurboShake128;
+
+    fn init(seed_bytes: &[u8; 16], dst: &[u8]) -> Self {
+        let mut xof = Self(TurboShake128::from_core(TurboShake128Core::new(1)));
+        Update::update(
+            &mut xof.0,
+            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
+        );
+        Update::update(&mut xof.0, dst);
+        Update::update(&mut xof.0, seed_bytes);
+        xof
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        Update::update(&mut self.0, data);
+    }
+
+    fn into_seed_stream(self) -> SeedStreamTurboShake128 {
+        SeedStreamTurboShake128::new(self.0.finalize_xof())
+    }
+}
+
+/// Seed stream for [`XofTurboShake128`].
+pub struct SeedStreamTurboShake128(TurboShake128Reader);
+
+impl SeedStreamTurboShake128 {
+    pub(crate) fn new(reader: TurboShake128Reader) -> Self {
+        Self(reader)
+    }
+}
+
+impl RngCore for SeedStreamTurboShake128 {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        XofReader::read(&mut self.0, dest);
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill_bytes(dest);
+        Ok(())
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        next_u64_via_fill(self)
+    }
+}
+
+/// XOF based on SHA-256.
+///
+/// This is a tweaked version of expand_message_xmd from RFC 9380, copied here for reference:
+///
+/// ```text
+/// expand_message_xmd(msg, DST, len_in_bytes)
+///
+///    Parameters:
+///    - H, a hash function (see requirements above).
+///    - b_in_bytes, b / 8 for b the output size of H in bits.
+///      For example, for b = 256, b_in_bytes = 32.
+///    - s_in_bytes, the input block size of H, measured in bytes (see
+///      discussion above). For example, for SHA-256, s_in_bytes = 64.
+///
+///    Input:
+///    - msg, a byte string.
+///    - DST, a byte string of at most 255 bytes.
+///      See below for information on using longer DSTs.
+///    - len_in_bytes, the length of the requested output in bytes,
+///      not greater than the lesser of (255 * b_in_bytes) or 2^16-1.
+///
+///    Output:
+///    - uniform_bytes, a byte string.
+///
+///    Steps:
+///    1.  ell = ceil(len_in_bytes / b_in_bytes)
+///    2.  ABORT if ell > 255 or len_in_bytes > 65535 or len(DST) > 255
+///    3.  DST_prime = DST || I2OSP(len(DST), 1)
+///    4.  Z_pad = I2OSP(0, s_in_bytes)
+///    5.  l_i_b_str = I2OSP(len_in_bytes, 2)
+///    6.  msg_prime = Z_pad || msg || l_i_b_str || I2OSP(0, 1) || DST_prime
+///    7.  b_0 = H(msg_prime)
+///    8.  b_1 = H(b_0 || I2OSP(1, 1) || DST_prime)
+///    9.  for i in (2, ..., ell):
+///    10.    b_i = H(strxor(b_0, b_(i - 1)) || I2OSP(i, 1) || DST_prime)
+///    11. uniform_bytes = b_1 || ... || b_ell
+///    12. return substr(uniform_bytes, 0, len_in_bytes)
+/// ```
+///
+/// Changes:
+///
+///  * We don't know the length of the output `len_in_bytes` in advance, so use `0` instead. As a
+///    result, the requested output length can't be used for domain separation.
+///
+///  * Use 4 bytes to encode the block ID instead of one. This is necessary to get the longer
+///    outputs that we need in this application.
+
+#[derive(Clone, Debug)]
+pub struct XofSha2 {
+    b0_hasher: Sha256,
+    dst_prime: Vec<u8>,
+}
+
+impl Xof<16> for XofSha2 {
+    type SeedStream = SeedStreamSha2;
+
+    fn init(seed_bytes: &[u8; 16], dst: &[u8]) -> Self {
+        const S_IN_BYTES: usize = 64;
+        let mut dst_prime = Vec::with_capacity(dst.len() + 1);
+        dst_prime.extend_from_slice(dst);
+        dst_prime.push(dst.len().try_into().expect("dst too long"));
+
+        let mut b0_hasher = <Sha256 as Digest>::new();
+        Digest::update(&mut b0_hasher, [0; S_IN_BYTES]); // Z_pad
+
+        // msg = seed_bytes || binder
+        Digest::update(&mut b0_hasher, seed_bytes); // msg part
+
+        Self {
+            b0_hasher,
+            dst_prime,
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        Digest::update(&mut self.b0_hasher, data); // msg part
+    }
+
+    fn into_seed_stream(self) -> SeedStreamSha2 {
+        let Self {
+            mut b0_hasher,
+            dst_prime,
+        } = self;
+        Digest::update(&mut b0_hasher, [0; 4]); // tweaked l_i_b_str
+        Digest::update(&mut b0_hasher, 0_u32.to_be_bytes()); // tweaked block ID
+        Digest::update(&mut b0_hasher, &dst_prime); // finish msg_prime
+        let b0 = b0_hasher.finalize().into();
+
+        let mut b1_hasher = <Sha256 as Digest>::new();
+        Digest::update(&mut b1_hasher, b0);
+        Digest::update(&mut b1_hasher, 1_u32.to_be_bytes()); // tweaked block ID
+        Digest::update(&mut b1_hasher, &dst_prime);
+        let b1 = b1_hasher.finalize().into();
+
+        SeedStreamSha2 {
+            b0,
+            bcurr: b1,
+            index: 1,
+            offset: 0,
+            dst_prime,
+        }
+    }
+}
+
+/// Seed stream for [`XofSha2`].
+pub struct SeedStreamSha2 {
+    b0: [u8; 32],
+    bcurr: [u8; 32],
+    index: u32,
+    offset: usize,
+    dst_prime: Vec<u8>,
+}
+
+impl RngCore for SeedStreamSha2 {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        if dest.is_empty() {
+            return;
+        }
+
+        let mut read = 0;
+        while read < dest.len() {
+            let read_from_bcurr = std::cmp::min(dest.len() - read, 32 - self.offset);
+            dest[..read_from_bcurr]
+                .copy_from_slice(&self.bcurr[self.offset..self.offset + read_from_bcurr]);
+            self.offset += read_from_bcurr;
+            read += read_from_bcurr;
+
+            if self.offset == 32 {
+                self.offset = 0;
+                self.index += 1;
+                let mut bnext_hasher = <Sha256 as Digest>::new();
+                for (b0, bcurr) in self.b0.iter().zip(self.bcurr.iter_mut()) {
+                    *bcurr ^= *b0;
+                }
+                Digest::update(&mut bnext_hasher, self.bcurr);
+                Digest::update(&mut bnext_hasher, self.index.to_be_bytes()); // tweaked block ID
+                Digest::update(&mut bnext_hasher, &self.dst_prime);
+                self.bcurr = bnext_hasher.finalize().into();
+            }
+        }
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill_bytes(dest);
+        Ok(())
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        next_u64_via_fill(self)
     }
 }
 
