@@ -189,10 +189,6 @@ criteria = "safe-to-run"
 
 [[exemptions.ppv-lite86]]
 version = "0.2.16"
-criteria = "safe-to-deploy"
-
-[[exemptions.ppv-lite86]]
-version = "0.2.16"
 criteria = "safe-to-run"
 
 [[exemptions.proc-macro-error]]
@@ -206,10 +202,6 @@ criteria = "safe-to-deploy"
 [[exemptions.rand]]
 version = "0.7.3"
 criteria = "safe-to-run"
-
-[[exemptions.rand]]
-version = "0.8.5"
-criteria = "safe-to-deploy"
 
 [[exemptions.rand]]
 version = "0.8.5"
