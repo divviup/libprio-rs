@@ -326,6 +326,14 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// `host_state` must be `State::Continued` or the function will fail.
     ///
     /// `inbound` must not be `Message::Initialize` or the function will fail.
+    ///
+    /// # Notes
+    ///
+    /// The specification of this function in [VDAF] takes the aggregation parameter. This version
+    /// does not, because [`vdaf::Vdaf::prepare_preprocess`] does not take the aggregation
+    /// parameter. This may change in the future if/when [#670][issue] is addressed.
+    ///
+    /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn continued(
         &self,
         role: Role,
@@ -339,6 +347,16 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
     PingPongTopology<VERIFY_KEY_SIZE, NONCE_SIZE>
 {
     /// Corresponds to `ping_pong_transition` in the forthcoming `draft-irtf-cfrg-vdaf-07`.
+    /// `prep_shares` must be ordered so that the leader's prepare share is first.
+    ///
+    /// # Notes
+    ///
+    /// The specification of this function in [VDAF] takes the aggregation parameter. This version
+    /// does not, because [`vdaf::Vdaf::prepare_preprocess`] does not take the aggregation
+    /// parameter. This may change in the future if/when [#670][issue] is addressed.
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+    /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn transition(
         &self,
         prep_shares: [Self::PrepareShare; 2],
@@ -456,8 +474,8 @@ where
                     next_peer_prep_share,
                 )
                 .map_err(PingPongError::CodecPrepShare)?;
-                let mut prep_shares = [next_host_prep_share, next_peer_prep_share];
-                if role == Role::Helper {
+                let mut prep_shares = [next_peer_prep_share, next_host_prep_share];
+                if role == Role::Leader {
                     prep_shares.reverse();
                 }
                 self.transition(prep_shares, next_prep_state)
