@@ -107,8 +107,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.104"
-when = "2023-07-26"
+version = "1.0.105"
+when = "2023-08-15"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -387,6 +387,11 @@ delta = "0.8.2 -> 0.8.3"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.10.5 -> 0.11.0"
+
+[[audits.divviup.audits.rand_chacha]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.3.1"
 
 [[audits.divviup.audits.rand_core]]
 who = "David Cook <dcook@divviup.org>"
