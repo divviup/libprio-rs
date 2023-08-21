@@ -211,11 +211,6 @@ version = "0.8.5"
 criteria = "safe-to-deploy"
 notes = "This is only used when the \"test-util\" feature is enabled."
 
-[[exemptions.rand_chacha]]
-version = "0.3.1"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"test-util\" feature is enabled."
-
 [[exemptions.ring]]
 version = "0.16.20"
 criteria = "safe-to-deploy"
