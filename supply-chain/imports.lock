@@ -135,15 +135,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.44"
-when = "2023-07-21"
+version = "1.0.47"
+when = "2023-08-17"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.44"
-when = "2023-07-21"
+version = "1.0.47"
+when = "2023-08-17"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -601,6 +601,11 @@ version = "0.3.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "1.0.4"
+
+[[audits.divviup.audits.rand_chacha]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.3.1"
 
 [[audits.divviup.audits.rand_core]]
 who = "David Cook <dcook@divviup.org>"
