@@ -222,7 +222,7 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vdaf {
     /// State of the Aggregator during the Prepare process.
-    type PrepareState: Clone + Debug;
+    type PrepareState: Clone + Debug + PartialEq + Eq;
 
     /// The type of messages sent by each aggregator at each round of the Prepare Process.
     ///
@@ -235,7 +235,12 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
+    type PrepareMessage: Clone
+        + Debug
+        + PartialEq
+        + Eq
+        + ParameterizedDecode<Self::PrepareState>
+        + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
     /// is passed to [`Self::prepare_next`] to get this aggregator's first-round prepare message.
