@@ -289,7 +289,7 @@ where
 
 /// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF].
 /// VDAF describes `Start` and `Rejected` states, but the `Start` state is never instantiated in
-/// code, and the `Rejected` state is represented as `std::result::Result::Error`, so this enum does
+/// code, and the `Rejected` state is represented as `std::result::Result::Err`, so this enum does
 /// not include those variants.
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
@@ -306,17 +306,6 @@ pub enum State<
 }
 
 /// Values returned by [`PingPongTopology::continued`].
-///
-/// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF],
-/// but combined with the components of [`Message`] so that no impossible states may be represented.
-/// For example, it's impossible to be in the `Continued` state but to send an outgoing `Message` of
-/// type `Finished`.
-///
-/// VDAF describes `Start` and `Rejected` states, but the `Start` state is never instantiated in
-/// code, and the `Rejected` state is represented as [`std::result::Result::Error`], so this enum
-/// does not include those variants.
-///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
 #[derive(Clone, Debug)]
 pub enum ContinuedValue<
     const VERIFY_KEY_SIZE: usize,
@@ -420,9 +409,11 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// # Notes
     ///
     /// The specification of this function in [VDAF] takes the aggregation parameter. This version
-    /// does not, because [`vdaf::Vdaf::prepare_preprocess`] does not take the aggregation
-    /// parameter. This may change in the future if/when [#670][issue] is addressed.
+    /// does not, because [`crate::vdaf::Aggregator::prepare_preprocess`] does not take the
+    /// aggregation parameter. This may change in the future if/when [#670][issue] is addressed.
     ///
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
     /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn continued(
         &self,
