@@ -92,7 +92,7 @@ impl Message {
 
 impl Debug for Message {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Message::{}", self.state_name())
+        f.debug_tuple(self.state_name()).finish()
     }
 }
 
@@ -163,7 +163,7 @@ impl Decode for Message {
 /// # Discussion
 ///
 /// The obvious implementation would of `ping_pong_transition` would be a method on trait
-/// [`PingPongTopology`] that returns `(State, Message)`, and then `StateAndMessage::WithMessage`
+/// [`PingPongTopology`] that returns `(State, Message)`, and then `ContinuedValue::WithMessage`
 /// would contain those values. But then DAP implementations would have to store relatively large
 /// VDAF prepare shares between rounds of input preparation.
 ///
@@ -195,6 +195,8 @@ impl<
         &self,
         vdaf: &A,
     ) -> Result<(State<VERIFY_KEY_SIZE, NONCE_SIZE, A>, Message), PingPongError> {
+        let prep_msg = self.current_prepare_message.get_encoded();
+
         vdaf.prepare_step(
             self.previous_prepare_state.clone(),
             self.current_prepare_message.clone(),
@@ -203,16 +205,13 @@ impl<
             PrepareTransition::Continue(prep_state, prep_share) => (
                 State::Continued(prep_state),
                 Message::Continue {
-                    prep_msg: self.current_prepare_message.get_encoded(),
+                    prep_msg,
                     prep_share: prep_share.get_encoded(),
                 },
             ),
-            PrepareTransition::Finish(output_share) => (
-                State::Finished(output_share),
-                Message::Finish {
-                    prep_msg: self.current_prepare_message.get_encoded(),
-                },
-            ),
+            PrepareTransition::Finish(output_share) => {
+                (State::Finished(output_share), Message::Finish { prep_msg })
+            }
         })
         .map_err(PingPongError::VdafPrepareStep)
     }
@@ -314,12 +313,12 @@ pub enum State<
 /// type `Finished`.
 ///
 /// VDAF describes `Start` and `Rejected` states, but the `Start` state is never instantiated in
-/// code, and the `Rejected` state is represented as [`std::result::Result::Error`], so this enum does
-/// not include those variants.
+/// code, and the `Rejected` state is represented as [`std::result::Result::Error`], so this enum
+/// does not include those variants.
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
 #[derive(Clone, Debug)]
-pub enum StateAndMessage<
+pub enum ContinuedValue<
     const VERIFY_KEY_SIZE: usize,
     const NONCE_SIZE: usize,
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
@@ -346,8 +345,8 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
 {
     /// Specialization of [`State`] for this VDAF.
     type State;
-    /// Specialization of [`StateAndMessage`] for this VDAF.
-    type StateAndMessage;
+    /// Specialization of [`ContinuedValue`] for this VDAF.
+    type ContinuedValue;
 
     /// Initialize leader state using the leader's input share. Corresponds to
     /// `ping_pong_leader_init` in the forthcoming `draft-irtf-cfrg-vdaf-07`.
@@ -368,8 +367,8 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// Initialize helper state using the helper's input share and the leader's first prepare share.
     /// Corresponds to `ping_pong_helper_init` in the forthcoming `draft-irtf-cfrg-vdaf-07`.
     ///
-    /// If successful, the returned [`Transition`] should be evaluated, yielding a [`Message`], which
-    /// should be transmitted to the leader, and a [`State`].
+    /// If successful, the returned [`Transition`] should be evaluated, yielding a [`Message`],
+    /// which should be transmitted to the leader, and a [`State`].
     ///
     /// If the state is `State::Continued`, then it should be used by the helper along with the next
     /// `Message` received from the leader as input to [`Self::continued`] to advance to the next
@@ -396,20 +395,20 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// peer. `role` is the host's [`Role`]. Corresponds to `ping_pong_contnued` in the forthcoming
     /// `draft-irtf-cfrg-vdaf-07`.
     ///
-    /// If successful, the returned [`StateAndMessage`] will either be:
+    /// If successful, the returned [`ContinuedValue`] will either be:
     ///
-    /// - `StateAndMessage::WithMessage { transition }`: `transition` should be evaluated, yielding
-    ///   a [`Message`], which should be transmitted to the peer, and a [`State`].
+    /// - `ContinuedValue::WithMessage { transition }`: `transition` should be evaluated, yielding a
+    ///   [`Message`], which should be transmitted to the peer, and a [`State`].
     ///
     ///   If the state is `State::Continued`, then it should be used by this aggregator along with
     ///   the next `Message` received from the peer as input to [`Self::continued`] to advance to
     ///   the next round. The aggregator may store the `Transition` between rounds of preparation
     ///   instead of the `State` and `Message`.
     ///
-    ///   If the state is `State::Finished`, then preparation is finished and the output share may be
-    ///   accumulated.
+    ///   If the state is `State::Finished`, then preparation is finished and the output share may
+    ///   be accumulated.
     ///
-    /// - `StateAndMessage::FinishedNoMessage`: preparation is finished and the output share may be
+    /// - `ContinuedValue::FinishedNoMessage`: preparation is finished and the output share may be
     ///   accumulated. No message needs to be sent to the peer.
     ///
     /// # Errors
@@ -430,7 +429,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         role: Role,
         host_state: Self::State,
         inbound: &Message,
-    ) -> Result<StateAndMessage<VERIFY_KEY_SIZE, NONCE_SIZE, Self>, PingPongError>;
+    ) -> Result<ContinuedValue<VERIFY_KEY_SIZE, NONCE_SIZE, Self>, PingPongError>;
 }
 
 impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
@@ -439,7 +438,7 @@ where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
 {
     type State = State<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
-    type StateAndMessage = StateAndMessage<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
+    type ContinuedValue = ContinuedValue<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
 
     fn leader_initialize(
         &self,
@@ -513,7 +512,7 @@ where
         role: Role,
         host_state: Self::State,
         inbound: &Message,
-    ) -> Result<Self::StateAndMessage, PingPongError> {
+    ) -> Result<Self::ContinuedValue, PingPongError> {
         let host_prep_state = if let State::Continued(state) = host_state {
             state
         } else {
@@ -558,7 +557,7 @@ where
                     .prepare_preprocess(prep_shares)
                     .map_err(PingPongError::VdafPreparePreprocess)?;
 
-                Ok(StateAndMessage::WithMessage {
+                Ok(ContinuedValue::WithMessage {
                     transition: Transition {
                         previous_prepare_state: next_prep_state,
                         current_prepare_message,
@@ -566,7 +565,7 @@ where
                 })
             }
             (PrepareTransition::Finish(output_share), None) => {
-                Ok(StateAndMessage::FinishedNoMessage { output_share })
+                Ok(ContinuedValue::FinishedNoMessage { output_share })
             }
             (transition, _) => {
                 return Err(PingPongError::StateMismatch(
@@ -633,7 +632,7 @@ mod tests {
             .continued(Role::Leader, leader_state, &helper_message)
             .unwrap();
         // 1 round VDAF: leader should finish when it gets helper message and emit no message.
-        assert_matches!(leader_state, StateAndMessage::FinishedNoMessage { .. });
+        assert_matches!(leader_state, ContinuedValue::FinishedNoMessage { .. });
     }
 
     #[test]
@@ -681,7 +680,7 @@ mod tests {
             .unwrap();
         // 2 round VDAF, round 1: leader should finish and emit a finish message.
         let leader_message = assert_matches!(
-            leader_state, StateAndMessage::WithMessage { transition } => {
+            leader_state, ContinuedValue::WithMessage { transition } => {
                 let (state, message) = transition.evaluate(&leader).unwrap();
                 assert_matches!(state, State::Finished(_));
                 message
@@ -692,7 +691,7 @@ mod tests {
             .continued(Role::Helper, helper_state, &leader_message)
             .unwrap();
         // 2 round vdaf, round 1: helper should finish and emit no message.
-        assert_matches!(helper_state, StateAndMessage::FinishedNoMessage { .. });
+        assert_matches!(helper_state, ContinuedValue::FinishedNoMessage { .. });
     }
 
     #[test]
@@ -740,7 +739,7 @@ mod tests {
             .unwrap();
         // 3 round VDAF, round 1: leader should continue and emit a continue message.
         let (leader_state, leader_message) = assert_matches!(
-            leader_state, StateAndMessage::WithMessage { transition } => {
+            leader_state, ContinuedValue::WithMessage { transition } => {
                 let (state, message) = transition.evaluate(&leader).unwrap();
                 assert_matches!(state, State::Continued(_));
                 (state, message)
@@ -752,7 +751,7 @@ mod tests {
             .unwrap();
         // 3 round vdaf, round 2: helper should finish and emit a finish message.
         let helper_message = assert_matches!(
-            helper_state, StateAndMessage::WithMessage { transition } => {
+            helper_state, ContinuedValue::WithMessage { transition } => {
                 let (state, message) = transition.evaluate(&helper).unwrap();
                 assert_matches!(state, State::Finished(_));
                 message
@@ -763,6 +762,6 @@ mod tests {
             .continued(Role::Leader, leader_state, &helper_message)
             .unwrap();
         // 3 round VDAF, round 2: leader should finish and emit no message.
-        assert_matches!(leader_state, StateAndMessage::FinishedNoMessage { .. });
+        assert_matches!(leader_state, ContinuedValue::FinishedNoMessage { .. });
     }
 }
