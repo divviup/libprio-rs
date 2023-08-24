@@ -241,8 +241,8 @@ impl Prio3Average {
 ///
 /// An instance of Prio3 is determined by:
 ///
-/// - a [`Type`](crate::flp::Type) that defines the set of valid input measurements; and
-/// - a [`Prg`](crate::vdaf::prg::Prg) for deriving vectors of field elements from seeds.
+/// - a [`Type`] that defines the set of valid input measurements; and
+/// - a [`Prg`] for deriving vectors of field elements from seeds.
 ///
 /// New instances can be defined by aliasing the base type. For example, [`Prio3Count`] is an alias
 /// for `Prio3<Count<Field64>, PrgSha3, 16>`.
@@ -718,10 +718,9 @@ where
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
-/// Message broadcast by each [`Aggregator`](crate::vdaf::Aggregator) in each round of the
-/// Preparation phase.
+/// Message broadcast by each [`Aggregator`] in each round of the Preparation phase.
 pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
-    /// A share of the FLP verifier message. (See [`Type`](crate::flp::Type).)
+    /// A share of the FLP verifier message. (See [`Type`].)
     verifier: Vec<F>,
 
     /// A part of the joint randomness seed.
@@ -832,7 +831,7 @@ where
     }
 }
 
-/// State of each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
+/// State of each [`Aggregator`] during the Preparation phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
     measurement_share: Share<F, SEED_SIZE>,
