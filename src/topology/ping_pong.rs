@@ -573,11 +573,11 @@ where
 
 #[cfg(test)]
 mod tests {
-    use assert_matches::assert_matches;
+    use std::io::Cursor;
 
     use super::*;
-
     use crate::vdaf::dummy;
+    use assert_matches::assert_matches;
 
     #[test]
     fn ping_pong_one_round() {
@@ -754,5 +754,109 @@ mod tests {
             .unwrap();
         // 3 round VDAF, round 2: leader should finish and emit no message.
         assert_matches!(leader_state, ContinuedValue::FinishedNoMessage { .. });
+    }
+
+    #[test]
+    fn roundtrip_message() {
+        let messages = [
+            (
+                Message::Initialize {
+                    prep_share: Vec::from("prepare share"),
+                },
+                concat!(
+                    "00", // enum discriminant
+                    concat!(
+                        // prep_share
+                        "0000000d",                   // length
+                        "70726570617265207368617265", // contents
+                    ),
+                ),
+            ),
+            (
+                Message::Continue {
+                    prep_msg: Vec::from("prepare message"),
+                    prep_share: Vec::from("prepare share"),
+                },
+                concat!(
+                    "01", // enum discriminant
+                    concat!(
+                        // prep_msg
+                        "0000000f",                       // length
+                        "70726570617265206d657373616765", // contents
+                    ),
+                    concat!(
+                        // prep_share
+                        "0000000d",                   // length
+                        "70726570617265207368617265", // contents
+                    ),
+                ),
+            ),
+            (
+                Message::Finish {
+                    prep_msg: Vec::from("prepare message"),
+                },
+                concat!(
+                    "02", // enum discriminant
+                    concat!(
+                        // prep_msg
+                        "0000000f",                       // length
+                        "70726570617265206d657373616765", // contents
+                    ),
+                ),
+            ),
+        ];
+
+        for (message, expected_hex) in messages {
+            let mut encoded_val = Vec::new();
+            message.encode(&mut encoded_val);
+            let got_hex = hex::encode(&encoded_val);
+            assert_eq!(
+                &got_hex, expected_hex,
+                "Couldn't roundtrip (encoded value differs): {message:?}",
+            );
+            let decoded_val = Message::decode(&mut Cursor::new(&encoded_val)).unwrap();
+            assert_eq!(
+                decoded_val, message,
+                "Couldn't roundtrip (decoded value differs): {message:?}"
+            );
+            assert_eq!(
+                encoded_val.len(),
+                message.encoded_len().expect("No encoded length hint"),
+                "Encoded length hint is incorrect: {message:?}"
+            )
+        }
+    }
+
+    #[test]
+    fn roundtrip_transition() {
+        // VDAF implementations have tests for encoding/decoding their respective PrepareShare and
+        // PrepareMessage types, so we test here using the dummy VDAF.
+        let transition = Transition::<0, 16, dummy::Vdaf> {
+            previous_prepare_state: dummy::PrepareState::default(),
+            current_prepare_message: (),
+        };
+
+        let encoded = transition.get_encoded();
+        let hex_encoded = hex::encode(&encoded);
+
+        assert_eq!(
+            hex_encoded,
+            concat!(
+                concat!(
+                    // previous_prepare_state
+                    "00",       // input_share
+                    "00000000", // current_round
+                ),
+                // current_prepare_message (0 length encoding)
+            )
+        );
+
+        let decoded = Transition::get_decoded_with_param(&(), &encoded).unwrap();
+        assert_eq!(transition, decoded);
+
+        assert_eq!(
+            encoded.len(),
+            transition.encoded_len().expect("No encoded length hint"),
+        );
     }
 }

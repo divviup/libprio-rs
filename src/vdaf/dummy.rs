@@ -24,7 +24,6 @@ type ArcPrepStepFn = Arc<
 /// Dummy VDAF that does nothing.
 #[derive(Clone)]
 pub struct Vdaf {
-    rounds: u32,
     prep_init_fn: ArcPrepInitFn,
     prep_step_fn: ArcPrepStepFn,
 }
@@ -45,12 +44,11 @@ impl Vdaf {
     /// Construct a new instance of the dummy VDAF.
     pub fn new(rounds: u32) -> Self {
         Self {
-            rounds,
             prep_init_fn: Arc::new(|_| -> Result<(), VdafError> { Ok(()) }),
             prep_step_fn: Arc::new(
-                |state| -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
+                move |state| -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
                     let new_round = state.current_round + 1;
-                    if new_round == state.max_rounds {
+                    if new_round == rounds {
                         Ok(PrepareTransition::Finish(OutputShare(state.input_share)))
                     } else {
                         Ok(PrepareTransition::Continue(
@@ -66,8 +64,7 @@ impl Vdaf {
         }
     }
 
-    /// Provide an alternate implementation of
-    /// [`vdaf::Aggregator::prepare_init`].
+    /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_init`].
     pub fn with_prep_init_fn<F: Fn(&AggregationParam) -> Result<(), VdafError>>(
         mut self,
         f: F,
@@ -79,8 +76,7 @@ impl Vdaf {
         self
     }
 
-    /// Provide an alternate implementation of
-    /// [`vdaf::Aggregator::prepare_step`].
+    /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_step`].
     pub fn with_prep_step_fn<
         F: Fn(&PrepareState) -> Result<PrepareTransition<Self, 0, 16>, VdafError>,
     >(
@@ -136,7 +132,6 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
             PrepareState {
                 input_share: input_share.0,
                 current_round: 0,
-                max_rounds: self.rounds,
             },
             (),
         ))
@@ -253,22 +248,16 @@ impl Encode for OutputShare {
 pub struct PrepareState {
     input_share: u8,
     current_round: u32,
-    max_rounds: u32,
 }
 
 impl Encode for PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
         self.input_share.encode(bytes);
         self.current_round.encode(bytes);
-        self.max_rounds.encode(bytes);
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(
-            self.input_share.encoded_len()?
-                + self.current_round.encoded_len()?
-                + self.max_rounds.encoded_len()?,
-        )
+        Some(self.input_share.encoded_len()? + self.current_round.encoded_len()?)
     }
 }
 
@@ -276,11 +265,10 @@ impl Decode for PrepareState {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let input_share = u8::decode(bytes)?;
         let current_round = u32::decode(bytes)?;
-        let max_rounds = u32::decode(bytes)?;
+
         Ok(Self {
             input_share,
             current_round,
-            max_rounds,
         })
     }
 }
