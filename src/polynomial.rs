@@ -246,7 +246,7 @@ fn test_roots() {
 fn test_eval() {
     use crate::field::Field32;
 
-    let mut poly = vec![Field32::from(0); 4];
+    let mut poly = [Field32::from(0); 4];
     poly[0] = 2.into();
     poly[1] = 1.into();
     poly[2] = 5.into();
