@@ -250,7 +250,7 @@ impl Encode for BTreeSet<IdpfInput> {
 impl Decode for BTreeSet<IdpfInput> {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let inputs = decode_u24_items(&(), bytes)?;
-        Ok(Self::from_iter(inputs.into_iter()))
+        Ok(Self::from_iter(inputs))
     }
 }
 
