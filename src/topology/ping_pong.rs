@@ -336,6 +336,8 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     type State;
     /// Specialization of [`ContinuedValue`] for this VDAF.
     type ContinuedValue;
+    /// Specializaton of [`Transition`] for this VDAF.
+    type Transition;
 
     /// Initialize leader state using the leader's input share. Corresponds to
     /// `ping_pong_leader_init` in the forthcoming `draft-irtf-cfrg-vdaf-07`.
@@ -420,7 +422,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         role: Role,
         host_state: Self::State,
         inbound: &Message,
-    ) -> Result<ContinuedValue<VERIFY_KEY_SIZE, NONCE_SIZE, Self>, PingPongError>;
+    ) -> Result<Self::ContinuedValue, PingPongError>;
 }
 
 impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
@@ -430,6 +432,7 @@ where
 {
     type State = State<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
     type ContinuedValue = ContinuedValue<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
+    type Transition = Transition<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
 
     fn leader_initialize(
         &self,
@@ -466,7 +469,7 @@ where
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
         inbound: &Message,
-    ) -> Result<Transition<VERIFY_KEY_SIZE, NONCE_SIZE, Self>, PingPongError> {
+    ) -> Result<Self::Transition, PingPongError> {
         let (prep_state, prep_share) = self
             .prepare_init(
                 verify_key,

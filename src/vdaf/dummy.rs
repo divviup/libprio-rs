@@ -31,8 +31,8 @@ pub struct Vdaf {
 impl Debug for Vdaf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Vdaf")
-            .field("prep_init_result", &"[redacted]")
-            .field("prep_step_result", &"[redacted]")
+            .field("prep_init_fn", &"[redacted]")
+            .field("prep_step_fn", &"[redacted]")
             .finish()
     }
 }
