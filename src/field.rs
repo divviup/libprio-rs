@@ -838,7 +838,7 @@ pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
 #[inline(always)]
 pub(crate) fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(val: T, bytes: &mut Vec<u8>) {
     for elem in val.as_ref() {
-        bytes.append(&mut (*elem).into());
+        elem.encode(bytes);
     }
 }
 
