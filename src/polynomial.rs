@@ -255,7 +255,7 @@ mod tests {
 
     #[test]
     fn test_eval() {
-        let mut poly = vec![FieldPrio2::from(0); 4];
+        let mut poly = [FieldPrio2::from(0); 4];
         poly[0] = 2.into();
         poly[1] = 1.into();
         poly[2] = 5.into();
