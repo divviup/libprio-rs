@@ -25,7 +25,8 @@ use prio::{
 #[cfg(feature = "experimental")]
 use rand::prelude::*;
 #[cfg(feature = "experimental")]
-use std::{iter, time::Duration};
+use std::iter;
+use std::time::Duration;
 #[cfg(feature = "experimental")]
 use zipf::ZipfDistribution;
 
@@ -263,7 +264,10 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3histogram_shard");
-    for input_len in [10, 100, 1_000] {
+    for input_len in [10, 100, 1_000, 10_000, 100_000] {
+        if input_len >= 100_000 {
+            group.measurement_time(Duration::from_secs(15));
+        }
         group.bench_with_input(
             BenchmarkId::new("serial", input_len),
             &input_len,
@@ -278,7 +282,10 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3histogram_prepare_init");
-    for input_len in [10, 100, 1_000] {
+    for input_len in [10, 100, 1_000, 10_000, 100_000] {
+        if input_len >= 100_000 {
+            group.measurement_time(Duration::from_secs(15));
+        }
         group.bench_with_input(
             BenchmarkId::new("serial", input_len),
             &input_len,
