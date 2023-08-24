@@ -419,12 +419,15 @@ where
                     joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
                     joint_rand_part_prg.update(nonce);
 
+                    let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
                     for (x, y) in leader_measurement_share
                         .iter_mut()
                         .zip(measurement_share_prng)
                     {
                         *x -= y;
-                        joint_rand_part_prg.update(&y.into());
+                        y.encode(&mut encoding_buffer);
+                        joint_rand_part_prg.update(&encoding_buffer);
+                        encoding_buffer.clear();
                     }
 
                     helper_joint_rand_parts.push(joint_rand_part_prg.into_seed());
@@ -458,8 +461,11 @@ where
                     );
                     joint_rand_part_prg.update(&[0]); // Aggregator ID
                     joint_rand_part_prg.update(nonce);
+                    let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
                     for x in leader_measurement_share.iter() {
-                        joint_rand_part_prg.update(&(*x).into());
+                        x.encode(&mut encoding_buffer);
+                        joint_rand_part_prg.update(&encoding_buffer);
+                        encoding_buffer.clear();
                     }
                     leader_blind_opt = Some(leader_blind);
 
@@ -973,8 +979,11 @@ where
             );
             joint_rand_part_prg.update(&[agg_id]);
             joint_rand_part_prg.update(nonce);
+            let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
             for x in measurement_share {
-                joint_rand_part_prg.update(&(*x).into());
+                x.encode(&mut encoding_buffer);
+                joint_rand_part_prg.update(&encoding_buffer);
+                encoding_buffer.clear();
             }
             let own_joint_rand_part = joint_rand_part_prg.into_seed();
 
