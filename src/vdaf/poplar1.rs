@@ -553,7 +553,7 @@ impl Aggregatable for Poplar1FieldVec {
 ///
 /// This includes an indication of what level of the IDPF tree is being evaluated and the set of
 /// prefixes to evaluate at that level.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Poplar1AggregationParam {
     level: u16,
     prefixes: Vec<IdpfInput>,
