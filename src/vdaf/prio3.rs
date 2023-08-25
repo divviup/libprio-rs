@@ -49,7 +49,7 @@ use crate::flp::Type;
 #[cfg(feature = "experimental")]
 use crate::flp::TypeWithNoise;
 use crate::prng::Prng;
-use crate::vdaf::prg::{Prg, Seed};
+use crate::vdaf::prg::{Prg, Seed, SeedStream};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -488,24 +488,23 @@ where
             .as_ref()
             .map(|joint_rand_parts| {
                 let joint_rand_seed = Self::derive_joint_rand_seed(joint_rand_parts.iter());
-
-                let prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+                P::seed_stream(
                     &joint_rand_seed,
                     &Self::domain_separation_tag(DST_JOINT_RANDOMNESS),
                     &[],
-                ));
-                prng.take(self.typ.joint_rand_len()).collect()
+                )
+                .into_vec(self.typ.joint_rand_len())
             })
             .unwrap_or_default();
 
         // Run the proof-generation algorithm.
         let prove_rand_seed = random_seeds.next().unwrap().try_into().unwrap();
-        let prove_rand_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+        let prove_rand = P::seed_stream(
             &Seed::from_bytes(prove_rand_seed),
             &Self::domain_separation_tag(DST_PROVE_RANDOMNESS),
             &[],
-        ));
-        let prove_rand: Vec<T::Field> = prove_rand_prng.take(self.typ.prove_rand_len()).collect();
+        )
+        .into_vec(self.typ.prove_rand_len());
         let mut leader_proof_share =
             self.typ
                 .prove(&encoded_measurement, &prove_rand, &joint_rand)?;
@@ -939,19 +938,21 @@ where
             &Self::domain_separation_tag(DST_QUERY_RANDOMNESS),
         );
         query_rand_prg.update(nonce);
-        let query_rand_prng = Prng::from_seed_stream(query_rand_prg.into_seed_stream());
+        let query_rand = query_rand_prg
+            .into_seed_stream()
+            .into_vec(self.typ.query_rand_len());
 
         // Create a reference to the (expanded) measurement share.
         let expanded_measurement_share: Option<Vec<T::Field>> = match msg.measurement_share {
             Share::Leader(_) => None,
-            Share::Helper(ref seed) => {
-                let measurement_share_prng = Prng::from_seed_stream(P::seed_stream(
+            Share::Helper(ref seed) => Some(
+                P::seed_stream(
                     seed,
                     &Self::domain_separation_tag(DST_MEASUREMENT_SHARE),
                     &[agg_id],
-                ));
-                Some(measurement_share_prng.take(self.typ.input_len()).collect())
-            }
+                )
+                .into_vec(self.typ.input_len()),
+            ),
         };
         let measurement_share = match msg.measurement_share {
             Share::Leader(ref data) => data,
@@ -961,14 +962,14 @@ where
         // Create a reference to the (expanded) proof share.
         let expanded_proof_share: Option<Vec<T::Field>> = match msg.proof_share {
             Share::Leader(_) => None,
-            Share::Helper(ref seed) => {
-                let prng = Prng::from_seed_stream(P::seed_stream(
+            Share::Helper(ref seed) => Some(
+                P::seed_stream(
                     seed,
                     &Self::domain_separation_tag(DST_PROOF_SHARE),
                     &[agg_id],
-                ));
-                Some(prng.take(self.typ.proof_len()).collect())
-            }
+                )
+                .into_vec(self.typ.proof_len()),
+            ),
         };
         let proof_share = match msg.proof_share {
             Share::Leader(ref data) => data,
@@ -1014,22 +1015,16 @@ where
 
             let joint_rand_seed = Self::derive_joint_rand_seed(corrected_joint_rand_parts);
 
-            let joint_rand_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
+            let joint_rand = P::seed_stream(
                 &joint_rand_seed,
                 &Self::domain_separation_tag(DST_JOINT_RANDOMNESS),
                 &[],
-            ));
-            (
-                Some(joint_rand_seed),
-                Some(own_joint_rand_part),
-                joint_rand_prng.take(self.typ.joint_rand_len()).collect(),
             )
+            .into_vec(self.typ.joint_rand_len());
+            (Some(joint_rand_seed), Some(own_joint_rand_part), joint_rand)
         } else {
             (None, None, Vec::new())
         };
-
-        // Compute the query randomness.
-        let query_rand: Vec<T::Field> = query_rand_prng.take(self.typ.query_rand_len()).collect();
 
         // Run the query-generation algorithm.
         let verifier_share = self.typ.query(
@@ -1128,8 +1123,7 @@ where
             Share::Leader(data) => data,
             Share::Helper(seed) => {
                 let dst = Self::domain_separation_tag(DST_MEASUREMENT_SHARE);
-                let prng = Prng::from_seed_stream(P::seed_stream(&seed, &dst, &[step.agg_id]));
-                prng.take(self.typ.input_len()).collect()
+                P::seed_stream(&seed, &dst, &[step.agg_id]).into_vec(self.typ.input_len())
             }
         };
 
