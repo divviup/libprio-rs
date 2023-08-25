@@ -1,5 +1,6 @@
 use fixed::{types::extra::U15, FixedI16};
 use fixed_macro::fixed;
+
 use prio::{
     codec::Encode,
     vdaf::{

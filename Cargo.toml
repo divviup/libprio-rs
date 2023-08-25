@@ -21,6 +21,12 @@ fiat-crypto = { version = "0.1.20", optional = true }
 fixed = { version = "1.23", optional = true }
 getrandom = { version = "0.2.10", features = ["std"] }
 hmac = { version = "0.12.1", optional = true }
+num-bigint = { version = "0.4.3", optional = true, features = ["rand", "serde"] }
+num-integer = { version = "0.1.45", optional = true }
+num-iter = { version = "0.1.43", optional = true }
+num-rational = { version = "0.4.1", optional = true }
+num-traits = { version = "0.2.15", optional = true }
+rand = { version = "0.8", optional = true }
 rand_core = "0.6.4"
 rayon = { version = "1.7.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
@@ -50,7 +56,7 @@ zipf = "7.0.1"
 
 [features]
 default = ["crypto-dependencies"]
-experimental = ["bitvec", "fiat-crypto", "fixed"]
+experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", "num-traits", "num-integer", "num-iter", "rand"]
 multithreaded = ["rayon"]
 prio2 = ["crypto-dependencies", "hmac", "sha2"]
 crypto-dependencies = ["aes", "ctr", "cmac"]
@@ -68,6 +74,11 @@ harness = false
 [[bench]]
 name = "cycle_counts"
 harness = false
+
+[[test]]
+name = "discrete_gauss"
+path = "tests/discrete_gauss.rs"
+required-features = ["experimental"]
 
 [package.metadata.docs.rs]
 all-features = true
