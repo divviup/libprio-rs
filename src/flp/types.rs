@@ -2,6 +2,7 @@
 
 //! A collection of [`Type`] implementations.
 
+use crate::dp::distributions::ZCdpDiscreteGaussian;
 use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
@@ -9,6 +10,8 @@ use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
+
+use super::TypeWithNoise;
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Count<F> {
@@ -35,6 +38,8 @@ impl<F: FftFriendlyFieldElement> Default for Count<F> {
         Self::new()
     }
 }
+
+impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Count<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Count<F> {
     const ID: u32 = 0x00000000;
@@ -139,6 +144,8 @@ impl<F: FftFriendlyFieldElement> Sum<F> {
     }
 }
 
+impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Sum<F> {}
+
 impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     const ID: u32 = 0x00000001;
     type Measurement = F::Integer;
@@ -237,6 +244,8 @@ impl<F: FftFriendlyFieldElement> Average<F> {
         })
     }
 }
+
+impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Average<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Average<F> {
     const ID: u32 = 0xFFFF0000;
@@ -343,6 +352,8 @@ impl<F: FftFriendlyFieldElement> Histogram<F> {
         })
     }
 }
+
+impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Histogram<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
     const ID: u32 = 0x00000002;
@@ -518,6 +529,12 @@ impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
         }
     }
 }
+
+
+impl<F, S> TypeWithNoise<ZCdpDiscreteGaussian> for SumVec<F, S>
+where
+    F: FftFriendlyFieldElement,
+    S: ParallelSumGadget<F, BlindPolyEval<F>> + Eq + 'static {}
 
 impl<F, S> Type for SumVec<F, S>
 where
