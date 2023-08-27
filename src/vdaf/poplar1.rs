@@ -12,7 +12,7 @@ use crate::{
     vdaf::{
         prg::{Prg, PrgSha3, Seed, SeedStream},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
-    },
+    }, dp::distributions::ZCdpDiscreteGaussian,
 };
 use bitvec::{prelude::Lsb0, vec::BitVec};
 use std::{
@@ -25,6 +25,8 @@ use std::{
     ops::{Add, AddAssign, Sub},
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
+
+use super::AggregatorWithNoise;
 
 const DST_SHARD_RANDOMNESS: u16 = 1;
 const DST_CORR_INNER: u16 = 2;
@@ -847,6 +849,20 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
             getrandom::getrandom(random_seed)?;
         }
         self.shard_with_random(input, nonce, &idpf_random, &poplar_random)
+    }
+}
+
+impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> AggregatorWithNoise<SEED_SIZE, 16, ZCdpDiscreteGaussian>
+    for Poplar1<P, SEED_SIZE>
+{
+    fn add_noise_to_agg_share(
+        &self,
+        _dp_strategy: &ZCdpDiscreteGaussian,
+        _agg_param: &Self::AggregationParam,
+        _agg_share: &mut Self::AggregateShare,
+        _num_measurements: usize,
+    ) -> Result<(), VdafError> {
+        Ok(())
     }
 }
 
