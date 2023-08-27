@@ -561,10 +561,13 @@ where
     /// Add noise to the aggregate share to obtain differential privacy.
     fn add_noise_to_result(
         &self,
-        dp_strategy: &S,
-        agg_result: &mut [Self::Field],
-        num_measurements: usize,
-    ) -> Result<(), FlpError>;
+        _dp_strategy: &S,
+        _agg_result: &mut [Self::Field],
+        _num_measurements: usize,
+    ) -> Result<(), FlpError>
+    {
+        Ok(())
+    }
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
