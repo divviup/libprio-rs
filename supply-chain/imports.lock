@@ -393,6 +393,16 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.10.5 -> 0.11.0"
 
+[[audits.divviup.audits.num-bigint]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.3 -> 0.4.4"
+
+[[audits.divviup.audits.num-traits]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.15 -> 0.2.16"
+
 [[audits.divviup.audits.rand_chacha]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
