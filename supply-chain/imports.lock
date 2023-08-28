@@ -456,6 +456,11 @@ who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 delta = "0.6.2 -> 0.5.4"
 
+[[audits.chromeos.audits.num-traits]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "0.2.15"
+
 [[audits.chromeos.audits.pin-project-lite]]
 who = "ChromeOS"
 criteria = "safe-to-run"
@@ -596,6 +601,16 @@ delta = "0.10.5 -> 0.11.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "0.1.1"
+
+[[audits.divviup.audits.num-bigint]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.3 -> 0.4.4"
+
+[[audits.divviup.audits.num-traits]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.15 -> 0.2.16"
 
 [[audits.divviup.audits.opaque-debug]]
 who = "David Cook <dcook@divviup.org>"
@@ -743,12 +758,6 @@ notes = "All code written or reviewed by Josh Stone."
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
 version = "0.1.45"
-notes = "All code written or reviewed by Josh Stone."
-
-[[audits.firefox.audits.num-traits]]
-who = "Josh Stone <jistone@redhat.com>"
-criteria = "safe-to-deploy"
-version = "0.2.15"
 notes = "All code written or reviewed by Josh Stone."
 
 [[audits.firefox.audits.rayon]]
