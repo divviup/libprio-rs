@@ -16,6 +16,7 @@
 //!
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_rational::{BigRational, Ratio};
+use serde::{Serialize, Deserialize};
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
@@ -38,7 +39,7 @@ pub enum DpError {
 
 /// Positive arbitrary precision rational number to represent DP and noise distribution parameters in
 /// protocol messages and manipulate them without rounding errors.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Rational(Ratio<BigUint>);
 
 impl Rational {

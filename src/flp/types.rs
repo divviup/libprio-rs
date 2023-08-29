@@ -2,6 +2,8 @@
 
 //! A collection of [`Type`] implementations.
 
+
+#[cfg(feature = "experimental")]
 use crate::dp::distributions::ZCdpDiscreteGaussian;
 use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
@@ -11,6 +13,7 @@ use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 
+#[cfg(feature = "experimental")]
 use super::TypeWithNoise;
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
@@ -39,6 +42,7 @@ impl<F: FftFriendlyFieldElement> Default for Count<F> {
     }
 }
 
+#[cfg(feature = "experimental")]
 impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Count<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Count<F> {
@@ -144,6 +148,7 @@ impl<F: FftFriendlyFieldElement> Sum<F> {
     }
 }
 
+#[cfg(feature = "experimental")]
 impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Sum<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Sum<F> {
@@ -245,6 +250,7 @@ impl<F: FftFriendlyFieldElement> Average<F> {
     }
 }
 
+#[cfg(feature = "experimental")]
 impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Average<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Average<F> {
@@ -353,6 +359,7 @@ impl<F: FftFriendlyFieldElement> Histogram<F> {
     }
 }
 
+#[cfg(feature = "experimental")]
 impl<F: FftFriendlyFieldElement> TypeWithNoise<ZCdpDiscreteGaussian> for Histogram<F> {}
 
 impl<F: FftFriendlyFieldElement> Type for Histogram<F> {
@@ -531,6 +538,7 @@ impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
 }
 
 
+#[cfg(feature = "experimental")]
 impl<F, S> TypeWithNoise<ZCdpDiscreteGaussian> for SumVec<F, S>
 where
     F: FftFriendlyFieldElement,
