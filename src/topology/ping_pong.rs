@@ -237,23 +237,6 @@ impl<
     }
 }
 
-impl<
-        const VERIFY_KEY_SIZE: usize,
-        const NONCE_SIZE: usize,
-        A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    > Default for PingPongTransition<VERIFY_KEY_SIZE, NONCE_SIZE, A>
-where
-    A::PrepareState: Default,
-    A::PrepareMessage: Default,
-{
-    fn default() -> Self {
-        Self {
-            previous_prepare_state: A::PrepareState::default(),
-            current_prepare_message: A::PrepareMessage::default(),
-        }
-    }
-}
-
 impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> Encode
     for PingPongTransition<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 where
