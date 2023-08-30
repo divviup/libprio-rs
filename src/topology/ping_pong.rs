@@ -40,9 +40,23 @@ pub enum PingPongError {
     #[error("decode prep message {0}")]
     CodecPrepMessage(CodecError),
 
-    /// State machine mismatch between peer and host.
-    #[error("state mismatch: host state {0} peer state {0}")]
-    StateMismatch(&'static str, &'static str),
+    /// Host is in an unexpected state
+    #[error("host state mismatch: in {found} expected {expected}")]
+    HostStateMismatch {
+        /// The state the host is in.
+        found: &'static str,
+        /// The state the host expected to be in.
+        expected: &'static str,
+    },
+
+    /// Message from peer indicates it is in an unexpected state
+    #[error("peer message state mismatch: message is {found} expected {expected}")]
+    PeerMessageStateMismatch {
+        /// The state in the message from the peer.
+        found: &'static str,
+        /// The state the message from the peer was expected to be in.
+        expected: &'static str,
+    },
 
     /// Internal error
     #[error("internal error: {0}")]
@@ -76,7 +90,7 @@ pub enum PingPongMessage {
 }
 
 impl PingPongMessage {
-    fn state_name(&self) -> &'static str {
+    fn variant(&self) -> &'static str {
         match self {
             Self::Initialize { .. } => "Initialize",
             Self::Continue { .. } => "Continue",
@@ -93,7 +107,7 @@ impl Debug for PingPongMessage {
     // crate has not been audited (in the `cargo vet` sense) so we can't use it here unless we audit
     // 8,000+ lines of proc macros.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple(self.state_name()).finish()
+        f.debug_tuple(self.variant()).finish()
     }
 }
 
@@ -535,10 +549,10 @@ where
             Self::PrepareShare::get_decoded_with_param(&prep_state, prep_share)
                 .map_err(PingPongError::CodecPrepShare)?
         } else {
-            return Err(PingPongError::StateMismatch(
-                "initialize",
-                inbound.state_name(),
-            ));
+            return Err(PingPongError::PeerMessageStateMismatch {
+                found: inbound.variant(),
+                expected: "initialize",
+            });
         };
 
         let current_prepare_message = self
@@ -582,15 +596,18 @@ where
         let host_prep_state = if let PingPongState::Continued(state) = host_state {
             state
         } else {
-            return Err(PingPongError::StateMismatch("finished", "continue"));
+            return Err(PingPongError::HostStateMismatch {
+                found: "finished",
+                expected: "continued",
+            });
         };
 
         let (prep_msg, next_peer_prep_share) = match inbound {
             PingPongMessage::Initialize { .. } => {
-                return Err(PingPongError::StateMismatch(
-                    "continue",
-                    inbound.state_name(),
-                ));
+                return Err(PingPongError::PeerMessageStateMismatch {
+                    found: inbound.variant(),
+                    expected: "continued",
+                });
             }
             PingPongMessage::Continue {
                 prep_msg,
@@ -634,13 +651,13 @@ where
                 Ok(PingPongContinuedValue::FinishedNoMessage { output_share })
             }
             (transition, _) => {
-                return Err(PingPongError::StateMismatch(
-                    inbound.state_name(),
-                    match transition {
+                return Err(PingPongError::HostStateMismatch {
+                    found: match transition {
                         PrepareTransition::Continue(_, _) => "continue",
                         PrepareTransition::Finish(_) => "finished",
                     },
-                ))
+                    expected: inbound.variant(),
+                })
             }
         }
     }
