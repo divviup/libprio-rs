@@ -187,11 +187,6 @@ criteria = "safe-to-deploy"
 version = "0.8.5"
 criteria = "safe-to-deploy"
 
-[[exemptions.rand_chacha]]
-version = "0.3.1"
-criteria = "safe-to-deploy"
-notes = "This dependency is only used if feature test-util is enabled, which should not be the case for production deployments."
-
 [[exemptions.rand_distr]]
 version = "0.4.3"
 criteria = "safe-to-run"
