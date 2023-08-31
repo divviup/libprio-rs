@@ -146,13 +146,6 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn test_field96() {
-        discrete_fourier_transform_then_inv_test::<crate::field::Field96>()
-            .expect("unexpected error");
-    }
-
-    #[test]
     fn test_field128() {
         discrete_fourier_transform_then_inv_test::<Field128>().expect("unexpected error");
     }
