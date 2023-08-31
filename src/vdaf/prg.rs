@@ -16,8 +16,6 @@ use aes::{
     Aes128,
 };
 #[cfg(feature = "crypto-dependencies")]
-use cmac::{Cmac, Mac};
-#[cfg(feature = "crypto-dependencies")]
 use ctr::Ctr64BE;
 use rand_core::{
     impls::{next_u32_via_fill, next_u64_via_fill},
@@ -125,42 +123,6 @@ pub trait Prg<const SEED_SIZE: usize>: Clone + Debug {
         let mut prg = Self::init(seed.as_ref(), dst);
         prg.update(binder);
         prg.into_seed_stream()
-    }
-}
-
-/// The PRG based on AES128 as specified in previous versions of draft-irtf-cfrg-vdaf.
-///
-/// This PRG has been removed as of [[draft-irtf-cfrg-vdaf-04]], and is deprecated. [`PrgSha3`]
-/// should be used instead. cSHAKE128 is a safer choice than AES-128 for VDAFs that assume the PRG
-/// acts like a random oracle.
-///
-/// [draft-irtf-cfrg-vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
-#[derive(Clone, Debug)]
-#[cfg(feature = "crypto-dependencies")]
-#[cfg_attr(docsrs, doc(cfg(feature = "crypto-dependencies")))]
-#[deprecated(since = "0.11.0", note = "Superseded by PrgSha3")]
-pub struct PrgAes128(Cmac<Aes128>);
-
-#[cfg(feature = "crypto-dependencies")]
-#[allow(deprecated)]
-impl Prg<16> for PrgAes128 {
-    type SeedStream = SeedStreamAes128;
-
-    fn init(seed_bytes: &[u8; 16], dst: &[u8]) -> Self {
-        let mut mac = <Cmac<_> as Mac>::new_from_slice(seed_bytes).unwrap();
-        let dst_len = u16::try_from(dst.len()).expect("domain separation tag is too long");
-        Mac::update(&mut mac, &dst_len.to_be_bytes());
-        Mac::update(&mut mac, dst);
-        Self(mac)
-    }
-
-    fn update(&mut self, data: &[u8]) {
-        Mac::update(&mut self.0, data);
-    }
-
-    fn into_seed_stream(self) -> SeedStreamAes128 {
-        let key = self.0.finalize().into_bytes();
-        SeedStreamAes128::new(&key, &[0; 16])
     }
 }
 
@@ -459,32 +421,6 @@ mod tests {
         let mut got = [0; 45];
         P::seed_stream(&seed, dst, binder).fill(&mut got);
         assert_eq!(got, want);
-    }
-
-    #[test]
-    #[allow(deprecated)]
-    fn prg_aes128() {
-        let t: PrgTestVector =
-            serde_json::from_str(include_str!("test_vec/06/PrgAes128.json")).unwrap();
-        let mut prg = PrgAes128::init(&t.seed.try_into().unwrap(), &t.dst);
-        prg.update(&t.binder);
-
-        assert_eq!(
-            prg.clone().into_seed(),
-            Seed(t.derived_seed.try_into().unwrap())
-        );
-
-        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
-        let mut want = Vec::with_capacity(t.length);
-        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
-            want.push(Field128::decode(&mut bytes).unwrap())
-        }
-        let got: Vec<Field128> = Prng::from_seed_stream(prg.clone().into_seed_stream())
-            .take(t.length)
-            .collect();
-        assert_eq!(got, want);
-
-        test_prg::<PrgAes128, 16>();
     }
 
     #[test]

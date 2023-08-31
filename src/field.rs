@@ -399,9 +399,7 @@ macro_rules! make_field {
             ///
             /// We cannot use `u128::from_le_bytes` or `u128::from_be_bytes` because those functions
             /// expect inputs to be exactly 16 bytes long. Our encoding of most field elements is
-            /// more compact, and does not have to correspond to the size of an integer type. For
-            /// instance,`Field96`'s encoding is 12 bytes, even though it is a 16 byte `u128` in
-            /// memory.
+            /// more compact.
             fn try_from_bytes(bytes: &[u8], mask: u128) -> Result<Self, FieldError> {
                 if Self::ENCODED_SIZE > bytes.len() {
                     return Err(FieldError::ShortRead);
@@ -734,47 +732,6 @@ make_field!(
     FP64,
     8,
 );
-
-/// This nested module is an implementation detail to limit the scope of a module-wide
-/// `allow(deprecated)` attribute. [`Field96`] is marked as deprecated, and deprecation warnings
-/// must be silenced on multiple implementation blocks, and the macro invocation itself that
-/// defines the struct and its implementation.
-mod field96 {
-    #![allow(deprecated)]
-
-    use super::{
-        FftFriendlyFieldElement, FieldElement, FieldElementVisitor, FieldElementWithInteger,
-        FieldError,
-    };
-    use crate::{
-        codec::{CodecError, Decode, Encode},
-        fp::FP96,
-    };
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
-    use std::{
-        cmp::min,
-        fmt::{Debug, Display, Formatter},
-        hash::{Hash, Hasher},
-        io::{Cursor, Read},
-        marker::PhantomData,
-        ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
-    };
-    use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
-
-    make_field!(
-        #[deprecated]
-        /// `GF(79228148845226978974766202881)`, a 96-bit field.
-        ///
-        /// This is deprecated because it is not currently used by either Prio v2 or any VDAF.
-        Field96,
-        u128,
-        FP96,
-        12,
-    );
-}
-
-#[allow(deprecated)]
-pub use field96::Field96;
 
 make_field!(
     /// `GF(340282366920938462946865773367900766209)`, a 128-bit field.
@@ -1201,12 +1158,6 @@ mod tests {
     #[test]
     fn test_field64() {
         field_element_test::<Field64>();
-    }
-
-    #[test]
-    fn test_field96() {
-        #[allow(deprecated)]
-        field_element_test::<Field96>();
     }
 
     #[test]
