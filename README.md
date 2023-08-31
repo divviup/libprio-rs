@@ -42,18 +42,21 @@ increases (e.g., 0.10 to 0.11).
 | 0.11 | `release/0.11` | [`draft-irtf-cfrg-vdaf-04`][vdaf-04] | N/A | Yes | Unmaintained |
 | 0.12 | `release/0.12` | [`draft-irtf-cfrg-vdaf-05`][vdaf-05] | [`draft-ietf-ppm-dap-04`][dap-04] | Yes | Supported |
 | 0.13 | `release/0.13` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
-| 0.14 | `main` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Supported |
+| 0.14 | `release/0.14` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
+| 0.15 | `main` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-06`][dap-06] | [No](https://github.com/divviup/libprio-rs/issues/701) | Supported |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
 [vdaf-04]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/04/
 [vdaf-05]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 [vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+[vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 [dap-01]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/01/
 [dap-02]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/02/
 [dap-03]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/03/
 [dap-04]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/04/
 [dap-05]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/05/
+[dap-06]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/06/
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [prio-server]: https://github.com/divviup/prio-server
