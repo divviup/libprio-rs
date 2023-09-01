@@ -50,11 +50,11 @@ pub enum PingPongError {
     },
 
     /// Message from peer indicates it is in an unexpected state
-    #[error("peer message state mismatch: message is {found} expected {expected}")]
-    PeerMessageStateMismatch {
+    #[error("peer message mismatch: message is {found} expected {expected}")]
+    PeerMessageMismatch {
         /// The state in the message from the peer.
         found: &'static str,
-        /// The state the message from the peer was expected to be in.
+        /// The message expected from the peer.
         expected: &'static str,
     },
 
@@ -549,7 +549,7 @@ where
             Self::PrepareShare::get_decoded_with_param(&prep_state, prep_share)
                 .map_err(PingPongError::CodecPrepShare)?
         } else {
-            return Err(PingPongError::PeerMessageStateMismatch {
+            return Err(PingPongError::PeerMessageMismatch {
                 found: inbound.variant(),
                 expected: "initialize",
             });
@@ -604,7 +604,7 @@ where
 
         let (prep_msg, next_peer_prep_share) = match inbound {
             PingPongMessage::Initialize { .. } => {
-                return Err(PingPongError::PeerMessageStateMismatch {
+                return Err(PingPongError::PeerMessageMismatch {
                     found: inbound.variant(),
                     expected: "continued",
                 });
@@ -650,13 +650,16 @@ where
             (PrepareTransition::Finish(output_share), None) => {
                 Ok(PingPongContinuedValue::FinishedNoMessage { output_share })
             }
-            (transition, _) => {
-                return Err(PingPongError::HostStateMismatch {
-                    found: match transition {
-                        PrepareTransition::Continue(_, _) => "continue",
-                        PrepareTransition::Finish(_) => "finished",
-                    },
-                    expected: inbound.variant(),
+            (PrepareTransition::Continue(_, _), None) => {
+                return Err(PingPongError::PeerMessageMismatch {
+                    found: inbound.variant(),
+                    expected: "continue",
+                })
+            }
+            (PrepareTransition::Finish(_), Some(_)) => {
+                return Err(PingPongError::PeerMessageMismatch {
+                    found: inbound.variant(),
+                    expected: "finish",
                 })
             }
         }
