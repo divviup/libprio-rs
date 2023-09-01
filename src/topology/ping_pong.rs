@@ -598,7 +598,7 @@ where
         } else {
             return Err(PingPongError::HostStateMismatch {
                 found: "finished",
-                expected: "continued",
+                expected: "continue",
             });
         };
 
@@ -606,7 +606,7 @@ where
             PingPongMessage::Initialize { .. } => {
                 return Err(PingPongError::PeerMessageMismatch {
                     found: inbound.variant(),
-                    expected: "continued",
+                    expected: "continue",
                 });
             }
             PingPongMessage::Continue {
