@@ -16,7 +16,7 @@
 //!
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_rational::{BigRational, Ratio};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
@@ -84,6 +84,7 @@ pub trait DifferentialPrivacyDistribution {}
 /// Zero-concentrated differential privacy (ZCDP) budget as defined in [[BS16]].
 ///
 /// [BS16]: https://arxiv.org/pdf/1605.02065.pdf
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZCdpBudget {
     epsilon: Ratio<BigUint>,
 }
