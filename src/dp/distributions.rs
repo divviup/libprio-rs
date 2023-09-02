@@ -56,7 +56,7 @@ use num_iter::range_inclusive;
 use num_rational::Ratio;
 use num_traits::{One, Zero};
 use rand::{distributions::uniform::UniformSampler, distributions::Distribution, Rng};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::{
     DifferentialPrivacyBudget, DifferentialPrivacyDistribution, DifferentialPrivacyStrategy,
@@ -253,7 +253,7 @@ impl Distribution<BigInt> for DiscreteGaussian {
 impl DifferentialPrivacyDistribution for DiscreteGaussian {}
 
 /// A DP strategy using the discrete gaussian distribution.
-#[derive(Clone, PartialEq, Serialize, Deserialize, Eq)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Eq, Debug)]
 pub struct DiscreteGaussianDpStrategy<B>
 where
     B: DifferentialPrivacyBudget,
