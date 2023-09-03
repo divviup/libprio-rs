@@ -17,6 +17,7 @@
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_rational::{BigRational, Ratio};
 use serde::{Deserialize, Serialize};
+use std::fmt;
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
@@ -41,6 +42,12 @@ pub enum DpError {
 /// protocol messages and manipulate them without rounding errors.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct Rational(Ratio<BigUint>);
+
+impl fmt::Display for Rational {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
 
 impl Rational {
     /// Construct a [`Rational`] number from numerator `n` and denominator `d`. Errors if denominator is zero.
