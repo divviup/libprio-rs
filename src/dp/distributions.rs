@@ -256,7 +256,7 @@ impl DifferentialPrivacyDistribution for DiscreteGaussian {}
 #[derive(Clone, PartialEq, Serialize, Deserialize, Eq, Debug)]
 pub struct DiscreteGaussianDpStrategy<B>
 where
-    B: DifferentialPrivacyBudget,
+    B: DifferentialPrivacyBudget + std::fmt::Debug,
 {
     budget: B,
 }
