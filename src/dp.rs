@@ -17,7 +17,7 @@
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_rational::{BigRational, Ratio};
 use serde::{Deserialize, Serialize};
-use std::fmt;
+use std::{fmt, str::FromStr};
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
@@ -46,6 +46,20 @@ pub struct Rational(Ratio<BigUint>);
 impl fmt::Display for Rational {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+/// An error indicating a string could not be parsed as Rational.
+#[derive(Debug)]
+pub struct RationalParseError;
+
+impl FromStr for Rational {
+    type Err = RationalParseError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match Ratio::<BigUint>::from_str(s) {
+            Ok(r) => Ok(Rational(r)),
+            Err(_) => Err(RationalParseError),
+        }
     }
 }
 
