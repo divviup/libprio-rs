@@ -113,7 +113,7 @@ pub trait DifferentialPrivacyDistribution {}
 /// [BS16]: https://arxiv.org/pdf/1605.02065.pdf
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZCdpBudget {
-    epsilon: Ratio<BigUint>,
+    pub epsilon: Ratio<BigUint>,
 }
 
 impl ZCdpBudget {

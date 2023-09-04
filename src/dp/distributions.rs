@@ -258,7 +258,7 @@ pub struct DiscreteGaussianDpStrategy<B>
 where
     B: DifferentialPrivacyBudget + std::fmt::Debug,
 {
-    budget: B,
+    pub budget: B,
 }
 
 /// A DP strategy using the discrete gaussian distribution providing zero-concentrated DP.
