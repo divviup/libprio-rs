@@ -113,7 +113,7 @@ pub trait DifferentialPrivacyDistribution {}
 /// [BS16]: https://arxiv.org/pdf/1605.02065.pdf
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ZCdpBudget {
-    pub epsilon: Ratio<BigUint>,
+    epsilon: Ratio<BigUint>,
 }
 
 impl ZCdpBudget {
@@ -123,6 +123,11 @@ impl ZCdpBudget {
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
     pub fn new(epsilon: Rational) -> Self {
         Self { epsilon: epsilon.0 }
+    }
+
+    /// Return the `epsilon` parameter of this strategy.
+    pub fn get_epsilon(&self) -> Rational {
+        Rational(self.epsilon.clone())
     }
 }
 
