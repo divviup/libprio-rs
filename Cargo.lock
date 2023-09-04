@@ -339,9 +339,9 @@ dependencies = [
 
 [[package]]
 name = "fiat-crypto"
-version = "0.2.0"
+version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "692de2d08cf3ee05b2d6ec4a5bbee781034f3bfc7cd35dc980f7b305af66d0f8"
+checksum = "d0870c84016d4b481be5c9f323c24f65e31e901ae618f0e80f4308fb00de1d2d"
 
 [[package]]
 name = "fixed"
