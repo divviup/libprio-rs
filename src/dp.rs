@@ -53,6 +53,12 @@ impl fmt::Display for Rational {
 #[derive(Debug)]
 pub struct RationalParseError;
 
+impl fmt::Display for RationalParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "RationalParseError")
+    }
+}
+
 impl FromStr for Rational {
     type Err = RationalParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
