@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementations of XOFs specified in [[draft-irtf-cfrg-vdaf-06]].
+//! Implementations of XOFs specified in [[draft-irtf-cfrg-vdaf-07]].
 //!
-//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+//! [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 
 use crate::{
     field::FieldElement,
@@ -102,9 +102,9 @@ pub trait SeedStream: Sized {
     }
 }
 
-/// A pseudorandom generator (XOF) with the interface specified in [[draft-irtf-cfrg-vdaf-06]].
+/// A pseudorandom generator (XOF) with the interface specified in [[draft-irtf-cfrg-vdaf-07]].
 ///
-/// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+/// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this XOF.
     type SeedStream: SeedStream;
@@ -167,9 +167,9 @@ impl Debug for SeedStreamAes128 {
     }
 }
 
-/// The XOF based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-06]].
+/// The XOF based on SHA-3 as specified in [[draft-irtf-cfrg-vdaf-07]].
 ///
-/// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+/// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 #[derive(Clone, Debug)]
 pub struct XofShake128(Shake128);
 
@@ -279,7 +279,7 @@ impl XofFixedKeyAes128Key {
     }
 }
 
-/// XofFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-06]]. This XOF is NOT RECOMMENDED for
+/// XofFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-07]]. This XOF is NOT RECOMMENDED for
 /// general use; see Section 9 ("Security Considerations") for details.
 ///
 /// This XOF combines SHA-3 and a fixed-key mode of operation for AES-128. The key is "fixed" in
@@ -287,7 +287,7 @@ impl XofFixedKeyAes128Key {
 /// strings, and depending on the application, these strings can be hard-coded. The seed is used to
 /// construct each block of input passed to a hash function built from AES-128.
 ///
-/// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+/// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 #[derive(Clone, Debug)]
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(
