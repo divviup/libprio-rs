@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of Poplar1 as specified in [[draft-irtf-cfrg-vdaf-06]].
+//! Implementation of Poplar1 as specified in [[draft-irtf-cfrg-vdaf-07]].
 //!
-//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+//! [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -33,9 +33,9 @@ const DST_VERIFY_RANDOMNESS: u16 = 4;
 
 impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     /// Create an instance of [`Poplar1`]. The caller provides the bit length of each
-    /// measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-06]]).
+    /// measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-07]]).
     ///
-    /// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+    /// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
     pub fn new(bits: usize) -> Self {
         Self {
             bits,
@@ -46,9 +46,9 @@ impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
 impl Poplar1<XofShake128, 16> {
     /// Create an instance of [`Poplar1`] using [`XofShake128`]. The caller provides the bit length of
-    /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-06]]).
+    /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-07]]).
     ///
-    /// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+    /// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
     pub fn new_shake128(bits: usize) -> Self {
         Poplar1::new(bits)
     }
@@ -2112,21 +2112,21 @@ mod tests {
 
     #[test]
     fn test_vec_poplar1_0() {
-        check_test_vec(include_str!("test_vec/06/Poplar1_0.json"));
+        check_test_vec(include_str!("test_vec/07/Poplar1_0.json"));
     }
 
     #[test]
     fn test_vec_poplar1_1() {
-        check_test_vec(include_str!("test_vec/06/Poplar1_1.json"));
+        check_test_vec(include_str!("test_vec/07/Poplar1_1.json"));
     }
 
     #[test]
     fn test_vec_poplar1_2() {
-        check_test_vec(include_str!("test_vec/06/Poplar1_2.json"));
+        check_test_vec(include_str!("test_vec/07/Poplar1_2.json"));
     }
 
     #[test]
     fn test_vec_poplar1_3() {
-        check_test_vec(include_str!("test_vec/06/Poplar1_3.json"));
+        check_test_vec(include_str!("test_vec/07/Poplar1_3.json"));
     }
 }
