@@ -14,7 +14,7 @@ use crate::{
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
     flp::FlpError,
     prng::PrngError,
-    vdaf::prg::Seed,
+    vdaf::xof::Seed,
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, io::Cursor};
@@ -172,7 +172,7 @@ pub trait Vdaf: Clone + Debug {
     fn num_aggregators(&self) -> usize;
 
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
-    /// by the PRG.
+    /// by the XOF.
     fn domain_separation_tag(usage: u16) -> [u8; 8] {
         let mut dst = [0_u8; 8];
         dst[0] = VERSION;
@@ -558,10 +558,10 @@ where
     doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
 )]
 pub mod poplar1;
-pub mod prg;
 #[cfg(feature = "prio2")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
 pub mod prio2;
 pub mod prio3;
 #[cfg(test)]
 mod prio3_test;
+pub mod xof;

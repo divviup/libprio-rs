@@ -27,7 +27,7 @@
 //! [DPRS23]: https://ia.cr/2023/130
 //! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
-use super::prg::PrgSha3;
+use super::xof::XofSha3;
 #[cfg(feature = "experimental")]
 use super::AggregatorWithNoise;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
@@ -49,7 +49,7 @@ use crate::flp::Type;
 #[cfg(feature = "experimental")]
 use crate::flp::TypeWithNoise;
 use crate::prng::Prng;
-use crate::vdaf::prg::{Prg, Seed, SeedStream};
+use crate::vdaf::xof::{Seed, SeedStream, Xof};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -71,7 +71,7 @@ const DST_JOINT_RAND_SEED: u16 = 6;
 const DST_JOINT_RAND_PART: u16 = 7;
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
-pub type Prio3Count = Prio3<Count<Field64>, PrgSha3, 16>;
+pub type Prio3Count = Prio3<Count<Field64>, XofSha3, 16>;
 
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
@@ -83,7 +83,7 @@ impl Prio3Count {
 /// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
 /// aggregate is the element-wise sum.
 pub type Prio3SumVec =
-    Prio3<SumVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, PrgSha3, 16>;
+    Prio3<SumVec<Field128, ParallelSum<Field128, BlindPolyEval<Field128>>>, XofSha3, 16>;
 
 impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
@@ -101,7 +101,7 @@ impl Prio3SumVec {
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3SumVecMultithreaded = Prio3<
     SumVec<Field128, ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>>,
-    PrgSha3,
+    XofSha3,
     16,
 >;
 
@@ -121,7 +121,7 @@ impl Prio3SumVecMultithreaded {
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum = Prio3<Sum<Field128>, PrgSha3, 16>;
+pub type Prio3Sum = Prio3<Sum<Field128>, XofSha3, 16>;
 
 impl Prio3Sum {
     /// Construct an instance of Prio3Sum with the given number of aggregators and required bit
@@ -157,7 +157,7 @@ pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
         ParallelSum<Field128, PolyEval<Field128>>,
         ParallelSum<Field128, BlindPolyEval<Field128>>,
     >,
-    PrgSha3,
+    XofSha3,
     16,
 >;
 
@@ -188,7 +188,7 @@ pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
         ParallelSumMultithreaded<Field128, PolyEval<Field128>>,
         ParallelSumMultithreaded<Field128, BlindPolyEval<Field128>>,
     >,
-    PrgSha3,
+    XofSha3,
     16,
 >;
 
@@ -207,7 +207,7 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
 
 /// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
-pub type Prio3Histogram = Prio3<Histogram<Field128>, PrgSha3, 16>;
+pub type Prio3Histogram = Prio3<Histogram<Field128>, XofSha3, 16>;
 
 impl Prio3Histogram {
     /// Constructs an instance of Prio3Histogram with the given number of aggregators and
@@ -219,7 +219,7 @@ impl Prio3Histogram {
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and
 /// the aggregate is the arithmetic average.
-pub type Prio3Average = Prio3<Average<Field128>, PrgSha3, 16>;
+pub type Prio3Average = Prio3<Average<Field128>, XofSha3, 16>;
 
 impl Prio3Average {
     /// Construct an instance of Prio3Average with the given number of aggregators and required bit
@@ -246,10 +246,10 @@ impl Prio3Average {
 /// An instance of Prio3 is determined by:
 ///
 /// - a [`Type`] that defines the set of valid input measurements; and
-/// - a [`Prg`] for deriving vectors of field elements from seeds.
+/// - a [`Xof`] for deriving vectors of field elements from seeds.
 ///
 /// New instances can be defined by aliasing the base type. For example, [`Prio3Count`] is an alias
-/// for `Prio3<Count<Field64>, PrgSha3, 16>`.
+/// for `Prio3<Count<Field64>, XofSha3, 16>`.
 ///
 /// ```
 /// use prio::vdaf::{
@@ -308,7 +308,7 @@ impl Prio3Average {
 pub struct Prio3<T, P, const SEED_SIZE: usize>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     num_aggregators: u8,
     typ: T,
@@ -318,7 +318,7 @@ where
 impl<T, P, const SEED_SIZE: usize> Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     /// Construct an instance of this Prio3 VDAF with the given number of aggregators and the
     /// underlying type.
@@ -344,14 +344,14 @@ where
     fn derive_joint_rand_seed<'a>(
         parts: impl Iterator<Item = &'a Seed<SEED_SIZE>>,
     ) -> Seed<SEED_SIZE> {
-        let mut prg = P::init(
+        let mut xof = P::init(
             &[0; SEED_SIZE],
             &Self::domain_separation_tag(DST_JOINT_RAND_SEED),
         );
         for part in parts {
-            prg.update(part.as_ref());
+            xof.update(part.as_ref());
         }
-        prg.into_seed()
+        xof.into_seed()
     }
 
     fn random_size(&self) -> usize {
@@ -416,12 +416,12 @@ where
             let joint_rand_blind =
                 if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
                     let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
-                    let mut joint_rand_part_prg = P::init(
+                    let mut joint_rand_part_xof = P::init(
                         &joint_rand_blind,
                         &Self::domain_separation_tag(DST_JOINT_RAND_PART),
                     );
-                    joint_rand_part_prg.update(&[agg_id]); // Aggregator ID
-                    joint_rand_part_prg.update(nonce);
+                    joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
+                    joint_rand_part_xof.update(nonce);
 
                     let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
                     for (x, y) in leader_measurement_share
@@ -430,11 +430,11 @@ where
                     {
                         *x -= y;
                         y.encode(&mut encoding_buffer);
-                        joint_rand_part_prg.update(&encoding_buffer);
+                        joint_rand_part_xof.update(&encoding_buffer);
                         encoding_buffer.clear();
                     }
 
-                    helper_joint_rand_parts.push(joint_rand_part_prg.into_seed());
+                    helper_joint_rand_parts.push(joint_rand_part_xof.into_seed());
 
                     Some(joint_rand_blind)
                 } else {
@@ -459,21 +459,21 @@ where
                     let leader_blind_bytes = random_seeds.next().unwrap().try_into().unwrap();
                     let leader_blind = Seed::from_bytes(leader_blind_bytes);
 
-                    let mut joint_rand_part_prg = P::init(
+                    let mut joint_rand_part_xof = P::init(
                         leader_blind.as_ref(),
                         &Self::domain_separation_tag(DST_JOINT_RAND_PART),
                     );
-                    joint_rand_part_prg.update(&[0]); // Aggregator ID
-                    joint_rand_part_prg.update(nonce);
+                    joint_rand_part_xof.update(&[0]); // Aggregator ID
+                    joint_rand_part_xof.update(nonce);
                     let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
                     for x in leader_measurement_share.iter() {
                         x.encode(&mut encoding_buffer);
-                        joint_rand_part_prg.update(&encoding_buffer);
+                        joint_rand_part_xof.update(&encoding_buffer);
                         encoding_buffer.clear();
                     }
                     leader_blind_opt = Some(leader_blind);
 
-                    let leader_joint_rand_seed_part = joint_rand_part_prg.into_seed();
+                    let leader_joint_rand_seed_part = joint_rand_part_xof.into_seed();
 
                     let mut vec = Vec::with_capacity(self.num_aggregators());
                     vec.push(leader_joint_rand_seed_part);
@@ -578,7 +578,7 @@ where
 impl<T, P, const SEED_SIZE: usize> Vdaf for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     const ID: u32 = T::ID;
     type Measurement = T::Measurement;
@@ -624,7 +624,7 @@ impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Prio3<T, P, SEED_SIZE>>
     for Prio3PublicShare<SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
         decoding_parameter: &Prio3<T, P, SEED_SIZE>,
@@ -688,7 +688,7 @@ impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED
     for Prio3InputShare<T::Field, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
         (prio3, agg_id): &(&'a Prio3<T, P, SEED_SIZE>, usize),
@@ -826,7 +826,7 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
 impl<T, P, const SEED_SIZE: usize> Client<16> for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     #[allow(clippy::type_complexity)]
     fn shard(
@@ -873,7 +873,7 @@ impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED
     for Prio3PrepareState<T::Field, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
         (prio3, agg_id): &(&'a Prio3<T, P, SEED_SIZE>, usize),
@@ -908,7 +908,7 @@ where
 impl<T, P, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16> for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     type PrepareState = Prio3PrepareState<T::Field, SEED_SIZE>;
     type PrepareShare = Prio3PrepareShare<T::Field, SEED_SIZE>;
@@ -933,12 +933,12 @@ where
         VdafError,
     > {
         let agg_id = self.role_try_from(agg_id)?;
-        let mut query_rand_prg = P::init(
+        let mut query_rand_xof = P::init(
             verify_key,
             &Self::domain_separation_tag(DST_QUERY_RANDOMNESS),
         );
-        query_rand_prg.update(nonce);
-        let query_rand = query_rand_prg
+        query_rand_xof.update(nonce);
+        let query_rand = query_rand_xof
             .into_seed_stream()
             .into_vec(self.typ.query_rand_len());
 
@@ -978,19 +978,19 @@ where
 
         // Compute the joint randomness.
         let (joint_rand_seed, joint_rand_part, joint_rand) = if self.typ.joint_rand_len() > 0 {
-            let mut joint_rand_part_prg = P::init(
+            let mut joint_rand_part_xof = P::init(
                 msg.joint_rand_blind.as_ref().unwrap().as_ref(),
                 &Self::domain_separation_tag(DST_JOINT_RAND_PART),
             );
-            joint_rand_part_prg.update(&[agg_id]);
-            joint_rand_part_prg.update(nonce);
+            joint_rand_part_xof.update(&[agg_id]);
+            joint_rand_part_xof.update(nonce);
             let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
             for x in measurement_share {
                 x.encode(&mut encoding_buffer);
-                joint_rand_part_prg.update(&encoding_buffer);
+                joint_rand_part_xof.update(&encoding_buffer);
                 encoding_buffer.clear();
             }
-            let own_joint_rand_part = joint_rand_part_prg.into_seed();
+            let own_joint_rand_part = joint_rand_part_xof.into_seed();
 
             // Make an iterator over the joint randomness parts, but use this aggregator's
             // contribution, computed from the input share, in lieu of the the corresponding part
@@ -1157,7 +1157,7 @@ impl<T, P, S, const SEED_SIZE: usize> AggregatorWithNoise<SEED_SIZE, 16, S>
     for Prio3<T, P, SEED_SIZE>
 where
     T: TypeWithNoise<S>,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
     S: DifferentialPrivacyStrategy,
 {
     fn add_noise_to_agg_share(
@@ -1176,7 +1176,7 @@ where
 impl<T, P, const SEED_SIZE: usize> Collector for Prio3<T, P, SEED_SIZE>
 where
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     /// Combines aggregate shares into the aggregate result.
     fn unshard<It: IntoIterator<Item = AggregateShare<T::Field>>>(
@@ -1234,7 +1234,7 @@ impl<'a, F, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, S
 where
     F: FieldElement,
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
         (vdaf, _): &(&'a Prio3<T, P, SEED_SIZE>, &'a ()),
@@ -1249,7 +1249,7 @@ impl<'a, F, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, S
 where
     F: FieldElement,
     T: Type,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
         (vdaf, _): &(&'a Prio3<T, P, SEED_SIZE>, &'a ()),
@@ -1403,7 +1403,7 @@ mod tests {
 
         fn test_fixed_vec<Fx, PE, BPE, const SIZE: usize>(
             fp_0: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, BPE>, PrgSha3, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, BPE>, XofSha3, 16>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -1495,7 +1495,7 @@ mod tests {
             fp_4_inv: Fx,
             fp_8_inv: Fx,
             fp_16_inv: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, BPE>, PrgSha3, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, BPE>, XofSha3, 16>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -1630,7 +1630,7 @@ mod tests {
     ) -> Result<(), VdafError>
     where
         T: Type,
-        P: Prg<SEED_SIZE>,
+        P: Xof<SEED_SIZE>,
     {
         let mut verify_key = [0; SEED_SIZE];
         thread_rng().fill(&mut verify_key[..]);

@@ -4,8 +4,8 @@ use crate::{
     codec::{Encode, ParameterizedDecode},
     flp::Type,
     vdaf::{
-        prg::Prg,
         prio3::{Prio3, Prio3InputShare, Prio3PrepareShare, Prio3PublicShare},
+        xof::Xof,
         Aggregator, PrepareTransition,
     },
 };
@@ -58,7 +58,7 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
     t: &TPrio3Prep<M>,
 ) where
     T: Type<Measurement = M>,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let (public_share, input_shares) = prio3

@@ -290,7 +290,7 @@ mod tests {
 
     use super::*;
     use crate::dp::Rational;
-    use crate::vdaf::prg::SeedStreamSha3;
+    use crate::vdaf::xof::SeedStreamSha3;
 
     use num_bigint::{BigUint, Sign, ToBigInt, ToBigUint};
     use num_traits::{One, Signed, ToPrimitive};

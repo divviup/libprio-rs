@@ -7,7 +7,7 @@ use crate::{
     field::{FftFriendlyFieldElement, FieldError},
     polynomial::{poly_fft, PolyAuxMemory},
     prng::{Prng, PrngError},
-    vdaf::{prg::SeedStreamAes128, VdafError},
+    vdaf::{xof::SeedStreamAes128, VdafError},
 };
 
 use std::convert::TryFrom;

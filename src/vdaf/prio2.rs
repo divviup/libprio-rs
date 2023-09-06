@@ -2,7 +2,7 @@
 
 //! Backwards-compatible port of the ENPA Prio system to a VDAF.
 
-use super::{prg::SeedStream, AggregateShare, OutputShare};
+use super::{xof::SeedStream, AggregateShare, OutputShare};
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{
@@ -10,11 +10,11 @@ use crate::{
     },
     prng::Prng,
     vdaf::{
-        prg::Seed,
         prio2::{
             client::{self as v2_client, proof_length},
             server as v2_server,
         },
+        xof::Seed,
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share,
         ShareDecodingParameter, Vdaf, VdafError,
     },

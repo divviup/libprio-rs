@@ -10,7 +10,7 @@ use crate::{
     idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        prg::{Prg, PrgSha3, Seed, SeedStream},
+        xof::{Seed, SeedStream, Xof, XofSha3},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
@@ -44,8 +44,8 @@ impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     }
 }
 
-impl Poplar1<PrgSha3, 16> {
-    /// Create an instance of [`Poplar1`] using [`PrgSha3`]. The caller provides the bit length of
+impl Poplar1<XofSha3, 16> {
+    /// Create an instance of [`Poplar1`] using [`XofSha3`]. The caller provides the bit length of
     /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-06]]).
     ///
     /// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
@@ -61,7 +61,7 @@ pub struct Poplar1<P, const SEED_SIZE: usize> {
     phantom: PhantomData<P>,
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     /// Construct a `Prng` with the given seed and info-string suffix.
     fn init_prng<I, B, F>(
         seed: &[u8; SEED_SIZE],
@@ -71,14 +71,14 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     where
         I: IntoIterator<Item = B>,
         B: AsRef<[u8]>,
-        P: Prg<SEED_SIZE>,
+        P: Xof<SEED_SIZE>,
         F: FieldElement,
     {
-        let mut prg = P::init(seed, &Self::domain_separation_tag(usage));
+        let mut xof = P::init(seed, &Self::domain_separation_tag(usage));
         for binder_chunk in binder_chunks.into_iter() {
-            prg.update(binder_chunk.as_ref());
+            xof.update(binder_chunk.as_ref());
         }
-        Prng::from_seed_stream(prg.into_seed_stream())
+        Prng::from_seed_stream(xof.into_seed_stream())
     }
 }
 
@@ -493,7 +493,7 @@ impl Encode for Poplar1FieldVec {
     }
 }
 
-impl<'a, P: Prg<SEED_SIZE>, const SEED_SIZE: usize>
+impl<'a, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
     ParameterizedDecode<(&'a Poplar1<P, SEED_SIZE>, &'a Poplar1AggregationParam)>
     for Poplar1FieldVec
 {
@@ -694,7 +694,7 @@ impl Decode for Poplar1AggregationParam {
     }
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
     const ID: u32 = 0x00001000;
     type Measurement = IdpfInput;
     type AggregateResult = Vec<u64>;
@@ -709,7 +709,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
     }
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     fn shard_with_random(
         &self,
         input: &IdpfInput,
@@ -731,8 +731,8 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
         // Generate the authenticator for the last level of the IDPF tree (i.e., the leaves).
         //
-        // TODO(cjpatton) spec: Consider using a different PRG for the leaf and inner nodes.
-        // "Switching" the PRG between field types is awkward.
+        // TODO(cjpatton) spec: Consider using a different XOF for the leaf and inner nodes.
+        // "Switching" the XOF between field types is awkward.
         let mut prng = prng.into_new_field::<Field255>();
         let auth_leaf = prng.get();
 
@@ -832,7 +832,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     }
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_SIZE> {
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_SIZE> {
     fn shard(
         &self,
         input: &IdpfInput,
@@ -850,7 +850,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
     }
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
     for Poplar1<P, SEED_SIZE>
 {
     type PrepareState = Poplar1PrepareState;
@@ -883,7 +883,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                 DST_CORR_INNER,
                 [[agg_id as u8].as_slice(), nonce.as_slice()],
             );
-            // Fast-forward the correlated randomness PRG to the level of the tree that we are
+            // Fast-forward the correlated randomness XOF to the level of the tree that we are
             // aggregating.
             for _ in 0..3 * agg_param.level {
                 corr_prng.get();
@@ -1062,7 +1062,7 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
     }
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Collector for Poplar1<P, SEED_SIZE> {
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Collector for Poplar1<P, SEED_SIZE> {
     fn unshard<M: IntoIterator<Item = Poplar1FieldVec>>(
         &self,
         agg_param: &Poplar1AggregationParam,
@@ -1145,7 +1145,7 @@ fn eval_and_sketch<P, F, const SEED_SIZE: usize>(
     corr_prng: &mut Prng<F, P::SeedStream>,
 ) -> Result<(Vec<F>, Vec<F>), VdafError>
 where
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
     F: FieldElement,
     Poplar1IdpfValue<F>:
         From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
@@ -1374,7 +1374,7 @@ mod tests {
     use serde::Deserialize;
     use std::collections::HashSet;
 
-    fn test_prepare<P: Prg<SEED_SIZE>, const SEED_SIZE: usize>(
+    fn test_prepare<P: Xof<SEED_SIZE>, const SEED_SIZE: usize>(
         vdaf: &Poplar1<P, SEED_SIZE>,
         verify_key: &[u8; SEED_SIZE],
         nonce: &[u8; 16],
@@ -1406,7 +1406,7 @@ mod tests {
         );
     }
 
-    fn run_heavy_hitters<B: AsRef<[u8]>, P: Prg<SEED_SIZE>, const SEED_SIZE: usize>(
+    fn run_heavy_hitters<B: AsRef<[u8]>, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>(
         vdaf: &Poplar1<P, SEED_SIZE>,
         verify_key: &[u8; SEED_SIZE],
         threshold: usize,

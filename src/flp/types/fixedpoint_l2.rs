@@ -177,7 +177,7 @@ use crate::flp::gadgets::{BlindPolyEval, ParallelSumGadget, PolyEval};
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::{FlpError, Gadget, Type, TypeWithNoise};
 use crate::polynomial::poly_range_check;
-use crate::vdaf::prg::SeedStreamSha3;
+use crate::vdaf::xof::SeedStreamSha3;
 use fixed::traits::Fixed;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
@@ -710,7 +710,7 @@ mod tests {
     use crate::field::{random_vector, Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
     use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
-    use crate::vdaf::prg::SeedStreamSha3;
+    use crate::vdaf::xof::SeedStreamSha3;
     use fixed::types::extra::{U127, U14, U63};
     use fixed::{FixedI128, FixedI16, FixedI64};
     use fixed_macro::fixed;
