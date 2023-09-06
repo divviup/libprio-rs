@@ -388,6 +388,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.21.2 -> 0.21.3"
 
+[[audits.divviup.audits.fiat-crypto]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.20 -> 0.2.0"
+
 [[audits.divviup.audits.itertools]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
