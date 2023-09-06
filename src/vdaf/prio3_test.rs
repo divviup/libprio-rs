@@ -4,8 +4,8 @@ use crate::{
     codec::{Encode, ParameterizedDecode},
     flp::Type,
     vdaf::{
-        prg::Prg,
         prio3::{Prio3, Prio3InputShare, Prio3PrepareShare, Prio3PublicShare},
+        xof::Xof,
         Aggregator, PrepareTransition,
     },
 };
@@ -58,7 +58,7 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
     t: &TPrio3Prep<M>,
 ) where
     T: Type<Measurement = M>,
-    P: Prg<SEED_SIZE>,
+    P: Xof<SEED_SIZE>,
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let (public_share, input_shares) = prio3
@@ -133,7 +133,7 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
 #[test]
 fn test_vec_prio3_count() {
     let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("test_vec/06/Prio3Count_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/07/Prio3Count_0.json")).unwrap();
     let prio3 = Prio3::new_count(2).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -142,7 +142,7 @@ fn test_vec_prio3_count() {
     }
 
     let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("test_vec/06/Prio3Count_1.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/07/Prio3Count_1.json")).unwrap();
     let prio3 = Prio3::new_count(3).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -154,7 +154,7 @@ fn test_vec_prio3_count() {
 #[test]
 fn test_vec_prio3_sum() {
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/06/Prio3Sum_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/07/Prio3Sum_0.json")).unwrap();
     let prio3 = Prio3::new_sum(2, 8).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -163,7 +163,7 @@ fn test_vec_prio3_sum() {
     }
 
     let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/06/Prio3Sum_1.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/07/Prio3Sum_1.json")).unwrap();
     let prio3 = Prio3::new_sum(3, 8).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -172,10 +172,35 @@ fn test_vec_prio3_sum() {
     }
 }
 
+// TODO Re-enable this test once https://github.com/divviup/libprio-rs/pull/695
+#[ignore]
+#[test]
+fn test_vec_prio3_sum_vec() {
+    let t: TPrio3<Vec<u128>> =
+        serde_json::from_str(include_str!("test_vec/07/Prio3SumVec_0.json")).unwrap();
+    let prio3 = Prio3::new_sum_vec(2, 8, 10).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+
+    let t: TPrio3<Vec<u128>> =
+        serde_json::from_str(include_str!("test_vec/07/Prio3SumVec_1.json")).unwrap();
+    let prio3 = Prio3::new_sum_vec(3, 16, 3).unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
+    for (test_num, p) in t.prep.iter().enumerate() {
+        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+    }
+}
+
+// TODO Re-enable this test once https://github.com/divviup/libprio-rs/pull/695
+#[ignore]
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<usize> =
-        serde_json::from_str(include_str!("test_vec/06/Prio3Histogram_0.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/07/Prio3Histogram_0.json")).unwrap();
     let prio3 = Prio3::new_histogram(2, 4).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
@@ -184,7 +209,7 @@ fn test_vec_prio3_histogram() {
     }
 
     let t: TPrio3<usize> =
-        serde_json::from_str(include_str!("test_vec/06/Prio3Histogram_1.json")).unwrap();
+        serde_json::from_str(include_str!("test_vec/07/Prio3Histogram_1.json")).unwrap();
     let prio3 = Prio3::new_histogram(3, 4).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 

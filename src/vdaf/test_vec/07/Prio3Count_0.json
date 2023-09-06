@@ -2,23 +2,23 @@
     "agg_param": null,
     "agg_result": 1,
     "agg_shares": [
-        "3ead59ec98fe1c4f",
-        "c452a6136601e3b0"
+        "afead111dacc0c7e",
+        "53152eee2433f381"
     ],
     "prep": [
         {
             "input_shares": [
-                "3ead59ec98fe1c4f70171b7a5f0b5c731ae0c48b62f687b98e981a811540934d76db271df5a3a6e97105856c18576573",
+                "afead111dacc0c7ec08c411babd6e2404df512ddfa0a81736b7607f4ccb3f39e414fdb4bc89a63569702c92aed6a6a96",
                 "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
             ],
             "measurement": 1,
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
                 [
-                    "3ead59ec98fe1c4f"
+                    "afead111dacc0c7e"
                 ],
                 [
-                    "c452a6136601e3b0"
+                    "53152eee2433f381"
                 ]
             ],
             "prep_messages": [
@@ -26,8 +26,8 @@
             ],
             "prep_shares": [
                 [
-                    "4c151ee49ef43488213d8945b7aff36fc979166c714bd4b07676eea77634a432",
-                    "b5eae11b600bcb77827a46303c1e0f073ebc46fcdc9c3fe9aeeb4a5f09e9c163"
+                    "123f23c117b7ed6099be9e6a31a42a9caa60882a3b4aa50303f8b588c9efe60b",
+                    "efc0dc3ee748129f2da661f47a625a57d64a5b62ab38647c34bb161c7576d721"
                 ]
             ],
             "public_share": "",

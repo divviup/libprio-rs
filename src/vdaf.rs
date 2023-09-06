@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Verifiable Distributed Aggregation Functions (VDAFs) as described in
-//! [[draft-irtf-cfrg-vdaf-06]].
+//! [[draft-irtf-cfrg-vdaf-07]].
 //!
-//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+//! [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
@@ -14,14 +14,14 @@ use crate::{
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
     flp::FlpError,
     prng::PrngError,
-    vdaf::prg::Seed,
+    vdaf::xof::Seed,
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, io::Cursor};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 6;
+pub(crate) const VERSION: u8 = 7;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -172,7 +172,7 @@ pub trait Vdaf: Clone + Debug {
     fn num_aggregators(&self) -> usize;
 
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
-    /// by the PRG.
+    /// by the XOF.
     fn domain_separation_tag(usage: u16) -> [u8; 8] {
         let mut dst = [0_u8; 8];
         dst[0] = VERSION;
@@ -558,10 +558,10 @@ where
     doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
 )]
 pub mod poplar1;
-pub mod prg;
 #[cfg(feature = "prio2")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
 pub mod prio2;
 pub mod prio3;
 #[cfg(test)]
 mod prio3_test;
+pub mod xof;

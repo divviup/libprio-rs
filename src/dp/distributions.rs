@@ -290,7 +290,7 @@ mod tests {
 
     use super::*;
     use crate::dp::Rational;
-    use crate::vdaf::prg::SeedStreamSha3;
+    use crate::vdaf::xof::SeedStreamSha3;
 
     use num_bigint::{BigUint, Sign, ToBigInt, ToBigUint};
     use num_traits::{One, Signed, ToPrimitive};
@@ -311,8 +311,8 @@ mod tests {
         let samples1: Vec<i8> = (0..10)
             .map(|_| i8::try_from(sampler.sample(&mut rng)).unwrap())
             .collect();
-        assert_eq!(samples, vec!(5, -7, 10, -6, 0, -2, -3, 5, -2, -3));
-        assert_eq!(samples1, vec!(0, 4, 0, 1, 4, -5, 7, 10, 3, -9));
+        assert_eq!(samples, vec![-3, -11, -3, 5, 1, 5, 2, 2, 1, 18]);
+        assert_eq!(samples1, vec![4, -4, -5, -2, 0, -5, -3, 1, 1, -2]);
     }
 
     #[test]

@@ -7,7 +7,7 @@ use prio::{
     codec::{Decode, Encode, ParameterizedDecode},
     field::{Field255, FieldElement},
     idpf::{Idpf, IdpfInput, IdpfPublicShare, RingBufferCache},
-    vdaf::{poplar1::Poplar1IdpfValue, prg::Seed},
+    vdaf::{poplar1::Poplar1IdpfValue, xof::Seed},
 };
 #[cfg(feature = "prio2")]
 use prio::{

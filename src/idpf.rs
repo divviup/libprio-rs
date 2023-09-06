@@ -1,13 +1,13 @@
 //! This module implements the incremental distributed point function (IDPF) described in
-//! [[draft-irtf-cfrg-vdaf-06]].
+//! [[draft-irtf-cfrg-vdaf-07]].
 //!
-//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+//! [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{FieldElement, FieldElementExt},
     vdaf::{
-        prg::{PrgFixedKeyAes128Key, Seed, SeedStream},
+        xof::{Seed, SeedStream, XofFixedKeyAes128Key},
         VdafError, VERSION,
     },
 };
@@ -138,7 +138,7 @@ where
 /// Values must form an Abelian group, so that they can be secret-shared, and the group operation
 /// must be represented by [`Add`]. Values must be encodable and decodable, without need for a
 /// decoding parameter. Values can be pseudorandomly generated, with a uniform probability
-/// distribution, from PRG output.
+/// distribution, from XOF output.
 pub trait IdpfValue:
     Add<Output = Self>
     + AddAssign
@@ -231,8 +231,8 @@ where
     }
 }
 
-fn extend(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([[u8; 16]; 2], [Choice; 2]) {
-    let mut seed_stream = prg_fixed_key.with_seed(seed);
+fn extend(seed: &[u8; 16], xof_fixed_key: &XofFixedKeyAes128Key) -> ([[u8; 16]; 2], [Choice; 2]) {
+    let mut seed_stream = xof_fixed_key.with_seed(seed);
 
     let mut seeds = [[0u8; 16], [0u8; 16]];
     seed_stream.fill(&mut seeds[0]);
@@ -247,13 +247,13 @@ fn extend(seed: &[u8; 16], prg_fixed_key: &PrgFixedKeyAes128Key) -> ([[u8; 16]; 
 
 fn convert<V>(
     seed: &[u8; 16],
-    prg_fixed_key: &PrgFixedKeyAes128Key,
+    xof_fixed_key: &XofFixedKeyAes128Key,
     parameter: &V::ValueParameter,
 ) -> ([u8; 16], V)
 where
     V: IdpfValue,
 {
-    let mut seed_stream = prg_fixed_key.with_seed(seed);
+    let mut seed_stream = xof_fixed_key.with_seed(seed);
 
     let mut next_seed = [0u8; 16];
     seed_stream.fill(&mut next_seed);
@@ -269,15 +269,15 @@ fn generate_correction_word<V>(
     parameter: &V::ValueParameter,
     keys: &mut [[u8; 16]; 2],
     control_bits: &mut [Choice; 2],
-    extend_prg_fixed_key: &PrgFixedKeyAes128Key,
-    convert_prg_fixed_key: &PrgFixedKeyAes128Key,
+    extend_xof_fixed_key: &XofFixedKeyAes128Key,
+    convert_xof_fixed_key: &XofFixedKeyAes128Key,
 ) -> IdpfCorrectionWord<V>
 where
     V: IdpfValue,
 {
     // Expand both keys into two seeds and two control bits each.
-    let (seed_0, control_bits_0) = extend(&keys[0], extend_prg_fixed_key);
-    let (seed_1, control_bits_1) = extend(&keys[1], extend_prg_fixed_key);
+    let (seed_0, control_bits_0) = extend(&keys[0], extend_xof_fixed_key);
+    let (seed_1, control_bits_1) = extend(&keys[1], extend_xof_fixed_key);
 
     let (keep, lose) = (input_bit, !input_bit);
 
@@ -308,9 +308,9 @@ where
     ];
 
     let (new_key_0, elements_0) =
-        convert::<V>(&seeds_corrected[0], convert_prg_fixed_key, parameter);
+        convert::<V>(&seeds_corrected[0], convert_xof_fixed_key, parameter);
     let (new_key_1, elements_1) =
-        convert::<V>(&seeds_corrected[1], convert_prg_fixed_key, parameter);
+        convert::<V>(&seeds_corrected[1], convert_xof_fixed_key, parameter);
 
     keys[0] = new_key_0;
     keys[1] = new_key_1;
@@ -335,13 +335,13 @@ fn eval_next<V>(
     control_bit: &mut Choice,
     correction_word: &IdpfCorrectionWord<V>,
     input_bit: Choice,
-    extend_prg_fixed_key: &PrgFixedKeyAes128Key,
-    convert_prg_fixed_key: &PrgFixedKeyAes128Key,
+    extend_xof_fixed_key: &XofFixedKeyAes128Key,
+    convert_xof_fixed_key: &XofFixedKeyAes128Key,
 ) -> V
 where
     V: IdpfValue,
 {
-    let (mut seeds, mut control_bits) = extend(key, extend_prg_fixed_key);
+    let (mut seeds, mut control_bits) = extend(key, extend_xof_fixed_key);
 
     seeds[0] = conditional_xor_seeds(&seeds[0], &correction_word.seed, *control_bit);
     control_bits[0] ^= correction_word.control_bits[0] & *control_bit;
@@ -351,7 +351,7 @@ where
     let seed_corrected = conditional_select_seed(input_bit, &seeds);
     *control_bit = Choice::conditional_select(&control_bits[0], &control_bits[1], input_bit);
 
-    let (new_key, elements) = convert::<V>(&seed_corrected, convert_prg_fixed_key, parameter);
+    let (new_key, elements) = convert::<V>(&seed_corrected, convert_xof_fixed_key, parameter);
     *key = new_key;
 
     let mut out =
@@ -414,8 +414,8 @@ where
             0, 0, 0, 0, /* algorithm ID */
             0, 1, /* usage */
         ];
-        let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_dst, binder);
-        let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_dst, binder);
+        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&extend_dst, binder);
+        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&convert_dst, binder);
 
         let mut keys = [initial_keys[0].0, initial_keys[1].0];
         let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -434,8 +434,8 @@ where
                 &self.inner_node_value_parameter,
                 &mut keys,
                 &mut control_bits,
-                &extend_prg_fixed_key,
-                &convert_prg_fixed_key,
+                &extend_xof_fixed_key,
+                &convert_xof_fixed_key,
             ));
         }
         if inner_correction_words.len() != bits - 1 {
@@ -449,8 +449,8 @@ where
             &self.leaf_node_value_parameter,
             &mut keys,
             &mut control_bits,
-            &extend_prg_fixed_key,
-            &convert_prg_fixed_key,
+            &extend_xof_fixed_key,
+            &convert_xof_fixed_key,
         );
         let public_share = IdpfPublicShare {
             inner_correction_words,
@@ -512,8 +512,8 @@ where
             0, 0, 0, 0, /* algorithm ID */
             0, 1, /* usage */
         ];
-        let extend_prg_fixed_key = PrgFixedKeyAes128Key::new(&extend_dst, binder);
-        let convert_prg_fixed_key = PrgFixedKeyAes128Key::new(&convert_dst, binder);
+        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&extend_dst, binder);
+        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&convert_dst, binder);
 
         let mut last_inner_output = None;
         for ((correction_word, input_bit), level) in public_share.inner_correction_words
@@ -529,8 +529,8 @@ where
                 &mut control_bit,
                 correction_word,
                 Choice::from(*input_bit as u8),
-                &extend_prg_fixed_key,
-                &convert_prg_fixed_key,
+                &extend_xof_fixed_key,
+                &convert_xof_fixed_key,
             ));
             let cache_key = &prefix[..=level];
             cache.insert(cache_key, &(key, control_bit.unwrap_u8()));
@@ -544,8 +544,8 @@ where
                 &mut control_bit,
                 &public_share.leaf_correction_word,
                 Choice::from(prefix[bits - 1] as u8),
-                &extend_prg_fixed_key,
-                &convert_prg_fixed_key,
+                &extend_xof_fixed_key,
+                &convert_xof_fixed_key,
             );
             // Note: there's no point caching this node's key, because we will always run the
             // eval_next() call for the leaf level.
@@ -808,7 +808,7 @@ fn or_seeds(left: &[u8; 16], right: &[u8; 16]) -> [u8; 16] {
     seed
 }
 
-/// Take a control bit, and fan it out into a byte array that can be used as a mask for PRG seeds,
+/// Take a control bit, and fan it out into a byte array that can be used as a mask for XOF seeds,
 /// without branching. If the control bit input is 0, all bytes will be equal to 0, and if the
 /// control bit input is 1, all bytes will be equal to 255.
 fn control_bit_to_seed_mask(control: Choice) -> [u8; 16] {
@@ -979,7 +979,7 @@ mod tests {
         },
         field::{Field128, Field255, Field64, FieldElement},
         prng::Prng,
-        vdaf::{poplar1::Poplar1IdpfValue, prg::Seed},
+        vdaf::{poplar1::Poplar1IdpfValue, xof::Seed},
     };
 
     #[test]
@@ -1819,7 +1819,7 @@ mod tests {
     /// Load a test vector for Idpf key generation.
     fn load_idpfpoplar_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
-            serde_json::from_str(include_str!("vdaf/test_vec/06/IdpfPoplar_0.json")).unwrap();
+            serde_json::from_str(include_str!("vdaf/test_vec/07/IdpfPoplar_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
 
         let bits = test_vec_obj
@@ -1972,7 +1972,7 @@ mod tests {
 
             fn generate<S>(_: &mut S, _: &Self::ValueParameter) -> Self
             where
-                S: crate::vdaf::prg::SeedStream,
+                S: crate::vdaf::xof::SeedStream,
             {
                 MyUnit
             }
@@ -2037,7 +2037,7 @@ mod tests {
 
             fn generate<S>(seed_stream: &mut S, length: &Self::ValueParameter) -> Self
             where
-                S: crate::vdaf::prg::SeedStream,
+                S: crate::vdaf::xof::SeedStream,
             {
                 let mut output = vec![<Field128 as FieldElement>::zero(); *length];
                 for element in output.iter_mut() {

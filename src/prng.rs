@@ -6,9 +6,9 @@
 //! NOTE: The public API for this module is a work in progress.
 
 use crate::field::{FieldElement, FieldElementExt};
-use crate::vdaf::prg::SeedStream;
+use crate::vdaf::xof::SeedStream;
 #[cfg(feature = "crypto-dependencies")]
-use crate::vdaf::prg::SeedStreamAes128;
+use crate::vdaf::xof::SeedStreamAes128;
 #[cfg(feature = "crypto-dependencies")]
 use getrandom::getrandom;
 
@@ -26,7 +26,7 @@ pub enum PrngError {
 }
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
-/// sequence is derived from a PRG's key stream.
+/// sequence is derived from a XOF's key stream.
 #[derive(Debug)]
 pub(crate) struct Prng<F, S> {
     phantom: PhantomData<F>,
@@ -88,7 +88,7 @@ where
                 }
             }
 
-            // Refresh buffer with the next chunk of PRG output, filling the front of the buffer
+            // Refresh buffer with the next chunk of XOF output, filling the front of the buffer
             // with the leftovers. This ensures continuity of the seed stream after converting the
             // `Prng` to a new field type via `into_new_field()`.
             let left_over = self.buffer.len() - self.buffer_index;
@@ -99,14 +99,6 @@ where
     }
 
     /// Convert this object into a field element generator for a different field.
-    //
-    // TODO(cjpatton) spec: Consider using distinct seeds for distinct field types. Buffering the
-    // seed stream seems to be important for performance, at least according to the benchmarks for
-    // `PrgAes128`. But having to support multiple output types is delicate because the buffer size
-    // is computed from the field modulus.
-    //
-    // If we don't end up making this spec change, then add tests to ensure that changing field
-    // types is done correctly.
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     pub(crate) fn into_new_field<F1: FieldElement>(self) -> Prng<F1, S> {
         Prng {
@@ -136,7 +128,7 @@ mod tests {
     use crate::{
         codec::Decode,
         field::{Field64, FieldPrio2},
-        vdaf::prg::{Prg, PrgSha3, Seed, SeedStreamSha3},
+        vdaf::xof::{Seed, SeedStreamSha3, Xof, XofShake128},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
@@ -223,23 +215,25 @@ mod tests {
 
     #[test]
     fn rejection_sampling_test_vector() {
-        // These constants were found in a brute-force search, and they test that the PRG performs
-        // rejection sampling correctly when raw cSHAKE128 output exceeds the prime modulus.
-        let seed =
-            Seed::get_decoded(b"\x23\x1c\x40\x0d\xcb\xaf\xce\x34\x5e\xfd\x3c\xa7\x79\x65\xee\x06")
-                .unwrap();
-        let expected = Field64::from(13681157193520586550);
+        // These constants were found in a brute-force search, and they test that the XOF performs
+        // rejection sampling correctly when the raw output exceeds the prime modulus.
+        let seed = Seed::get_decoded(&[
+            0x29, 0xb2, 0x98, 0x64, 0xb4, 0xaa, 0x4e, 0x07, 0x2a, 0x44, 0x49, 0x24, 0xf6, 0x74,
+            0x0a, 0x3d,
+        ])
+        .unwrap();
+        let expected = Field64::from(2035552711764301796);
 
-        let seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
+        let seed_stream = XofShake128::seed_stream(&seed, b"", b"");
         let mut prng = Prng::<Field64, _>::from_seed_stream(seed_stream);
-        let actual = prng.nth(4).unwrap();
+        let actual = prng.nth(33236).unwrap();
         assert_eq!(actual, expected);
 
         #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
         {
-            let mut seed_stream = PrgSha3::seed_stream(&seed, b"", b"");
+            let mut seed_stream = XofShake128::seed_stream(&seed, b"", b"");
             let mut actual = <Field64 as FieldElement>::zero();
-            for _ in 0..=4 {
+            for _ in 0..=33236 {
                 actual = <Field64 as crate::idpf::IdpfValue>::generate(&mut seed_stream, &());
             }
             assert_eq!(actual, expected);
@@ -253,11 +247,11 @@ mod tests {
         let seed = Seed::generate().unwrap();
 
         let mut prng: Prng<Field64, SeedStreamSha3> =
-            Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
 
         // Construct a `Prng` with a longer-than-usual buffer.
         let mut prng_weird_buffer_size: Prng<Field64, SeedStreamSha3> =
-            Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
         let mut extra = [0; 7];
         prng_weird_buffer_size.seed_stream.fill(&mut extra);
         prng_weird_buffer_size.buffer.extend_from_slice(&extra);
@@ -274,7 +268,7 @@ mod tests {
     fn into_new_field() {
         let seed = Seed::generate().unwrap();
         let want: Prng<Field64, SeedStreamSha3> =
-            Prng::from_seed_stream(PrgSha3::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
         let want_buffer = want.buffer.clone();
 
         let got: Prng<FieldPrio2, _> = want.into_new_field();

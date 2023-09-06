@@ -177,7 +177,7 @@ use crate::flp::gadgets::{BlindPolyEval, ParallelSumGadget, PolyEval};
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::{FlpError, Gadget, Type, TypeWithNoise};
 use crate::polynomial::poly_range_check;
-use crate::vdaf::prg::SeedStreamSha3;
+use crate::vdaf::xof::SeedStreamSha3;
 use fixed::traits::Fixed;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
@@ -710,7 +710,7 @@ mod tests {
     use crate::field::{random_vector, Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
     use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
-    use crate::vdaf::prg::SeedStreamSha3;
+    use crate::vdaf::xof::SeedStreamSha3;
     use fixed::types::extra::{U127, U14, U63};
     use fixed::{FixedI128, FixedI16, FixedI64};
     use fixed_macro::fixed;
@@ -797,17 +797,9 @@ mod tests {
             vsum.decode_result(&v, 1).unwrap(),
             match n {
                 // sensitivity depends on encoding so the noise differs
-                16 => vec!(0.307464599609375, 0.087310791015625, 0.080108642578125),
-                32 => vec!(
-                    0.29547774279490113,
-                    0.14262904040515423,
-                    0.024025703314691782
-                ),
-                64 => vec!(
-                    0.26282219659181755,
-                    0.18725036621584434,
-                    0.18477686410976318
-                ),
+                16 => vec![0.150604248046875, 0.139373779296875, -0.03759765625],
+                32 => vec![0.3051439793780446, 0.1226568529382348, 0.08595499861985445],
+                64 => vec![0.2896077990915178, 0.16115188007715098, 0.0788390114728425],
                 _ => panic!("unsupported bitsize"),
             }
         );
