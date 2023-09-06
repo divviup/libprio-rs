@@ -99,14 +99,6 @@ where
     }
 
     /// Convert this object into a field element generator for a different field.
-    //
-    // TODO(cjpatton) spec: Consider using distinct seeds for distinct field types. Buffering the
-    // seed stream seems to be important for performance, at least according to the benchmarks for
-    // `XofAes128`. But having to support multiple output types is delicate because the buffer size
-    // is computed from the field modulus.
-    //
-    // If we don't end up making this spec change, then add tests to ensure that changing field
-    // types is done correctly.
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     pub(crate) fn into_new_field<F1: FieldElement>(self) -> Prng<F1, S> {
         Prng {
