@@ -4,7 +4,11 @@
 //!
 //! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
 
-use crate::vdaf::{CodecError, Decode, Encode};
+use crate::{
+    field::FieldElement,
+    prng::Prng,
+    vdaf::{CodecError, Decode, Encode},
+};
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use aes::{
     cipher::{generic_array::GenericArray, BlockEncrypt, KeyInit},
@@ -88,9 +92,14 @@ impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {
 }
 
 /// A stream of pseudorandom bytes derived from a seed.
-pub trait SeedStream {
+pub trait SeedStream: Sized {
     /// Fill `buf` with the next `buf.len()` bytes of output.
     fn fill(&mut self, buf: &mut [u8]);
+
+    /// Generate a finite field vector from the seed stream.
+    fn into_vec<F: FieldElement>(self, length: usize) -> Vec<F> {
+        Prng::from_seed_stream(self).take(length).collect()
+    }
 }
 
 /// A pseudorandom generator (PRG) with the interface specified in [[draft-irtf-cfrg-vdaf-06]].
@@ -380,7 +389,7 @@ impl SeedStreamFixedKeyAes128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{field::Field128, prng::Prng};
+    use crate::field::Field128;
     use serde::{Deserialize, Serialize};
     use std::{convert::TryInto, io::Cursor};
 
@@ -440,9 +449,7 @@ mod tests {
         while (bytes.position() as usize) < t.expanded_vec_field128.len() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
-        let got: Vec<Field128> = Prng::from_seed_stream(prg.clone().into_seed_stream())
-            .take(t.length)
-            .collect();
+        let got: Vec<Field128> = prg.clone().into_seed_stream().into_vec(t.length);
         assert_eq!(got, want);
 
         test_prg::<PrgSha3, 16>();
@@ -466,9 +473,7 @@ mod tests {
         while (bytes.position() as usize) < t.expanded_vec_field128.len() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
-        let got: Vec<Field128> = Prng::from_seed_stream(prg.clone().into_seed_stream())
-            .take(t.length)
-            .collect();
+        let got: Vec<Field128> = prg.clone().into_seed_stream().into_vec(t.length);
         assert_eq!(got, want);
 
         test_prg::<PrgFixedKeyAes128, 16>();
