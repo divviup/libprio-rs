@@ -1819,7 +1819,7 @@ mod tests {
     /// Load a test vector for Idpf key generation.
     fn load_idpfpoplar_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
-            serde_json::from_str(include_str!("vdaf/test_vec/06/IdpfPoplar_0.json")).unwrap();
+            serde_json::from_str(include_str!("vdaf/test_vec/07/IdpfPoplar_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
 
         let bits = test_vec_obj

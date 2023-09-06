@@ -10,7 +10,7 @@ use crate::{
     idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        xof::{Seed, SeedStream, Xof, XofSha3},
+        xof::{Seed, SeedStream, Xof, XofShake128},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
@@ -44,12 +44,12 @@ impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     }
 }
 
-impl Poplar1<XofSha3, 16> {
-    /// Create an instance of [`Poplar1`] using [`XofSha3`]. The caller provides the bit length of
+impl Poplar1<XofShake128, 16> {
+    /// Create an instance of [`Poplar1`] using [`XofShake128`]. The caller provides the bit length of
     /// each measurement (`BITS` as defined in the [[draft-irtf-cfrg-vdaf-06]]).
     ///
     /// [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
-    pub fn new_sha3(bits: usize) -> Self {
+    pub fn new_shake128(bits: usize) -> Self {
         Poplar1::new(bits)
     }
 }
@@ -1505,7 +1505,7 @@ mod tests {
     #[test]
     fn shard_prepare() {
         let mut rng = thread_rng();
-        let vdaf = Poplar1::new_sha3(64);
+        let vdaf = Poplar1::new_shake128(64);
         let verify_key = rng.gen();
         let input = IdpfInput::from_bytes(b"12341324");
         let nonce = rng.gen();
@@ -1549,7 +1549,7 @@ mod tests {
     fn heavy_hitters() {
         let mut rng = thread_rng();
         let verify_key = rng.gen();
-        let vdaf = Poplar1::new_sha3(8);
+        let vdaf = Poplar1::new_shake128(8);
 
         run_heavy_hitters(
             &vdaf,
@@ -1640,7 +1640,7 @@ mod tests {
 
     #[test]
     fn round_trip_prepare_state() {
-        let vdaf = Poplar1::new_sha3(1);
+        let vdaf = Poplar1::new_shake128(1);
         for (agg_id, prep_state) in [
             (
                 0,
@@ -1902,7 +1902,7 @@ mod tests {
         let nonce = prep.nonce.as_ref().try_into().unwrap();
 
         // Shard measurement.
-        let poplar = Poplar1::new_sha3(test_vector.bits);
+        let poplar = Poplar1::new_shake128(test_vector.bits);
         let (public_share, input_shares) = poplar
             .test_vec_shard(&measurement, &prep.nonce.as_ref().try_into().unwrap())
             .unwrap();
