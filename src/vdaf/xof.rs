@@ -91,7 +91,7 @@ impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {
     }
 }
 
-/// A stream of pseudorandom bytes derived from a seed.
+/// A stream of bytes derived from a seed.
 pub trait SeedStream: Sized {
     /// Fill `buf` with the next `buf.len()` bytes of output.
     fn fill(&mut self, buf: &mut [u8]);
@@ -102,7 +102,7 @@ pub trait SeedStream: Sized {
     }
 }
 
-/// A pseudorandom generator (XOF) with the interface specified in [[draft-irtf-cfrg-vdaf-07]].
+/// An extendable output function (XOF) with the interface specified in [[draft-irtf-cfrg-vdaf-07]].
 ///
 /// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
@@ -269,7 +269,7 @@ impl XofFixedKeyAes128Key {
         }
     }
 
-    /// Combine a fixed key with a seed to produce a new stream of pseudorandom bytes.
+    /// Combine a fixed key with a seed to produce a new stream of bytes.
     pub fn with_seed(&self, seed: &[u8; 16]) -> SeedStreamFixedKeyAes128 {
         SeedStreamFixedKeyAes128 {
             cipher: self.cipher.clone(),
