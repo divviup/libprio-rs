@@ -2,7 +2,6 @@
 
 //! Backwards-compatible port of the ENPA Prio system to a VDAF.
 
-use super::{xof::SeedStream, AggregateShare, OutputShare};
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{
@@ -15,11 +14,12 @@ use crate::{
             server as v2_server,
         },
         xof::Seed,
-        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Share,
-        ShareDecodingParameter, Vdaf, VdafError,
+        Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare,
+        PrepareTransition, Share, ShareDecodingParameter, Vdaf, VdafError,
     },
 };
 use hmac::{Hmac, Mac};
+use rand_core::RngCore;
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
 
@@ -98,7 +98,7 @@ impl Prio2 {
     /// The point returned is not one of the roots used for polynomial interpolation.
     pub(crate) fn choose_eval_at<S>(&self, prng: &mut Prng<FieldPrio2, S>) -> FieldPrio2
     where
-        S: SeedStream,
+        S: RngCore,
     {
         // Make sure the query randomness isn't a root of unity. Evaluating the proof at any of
         // these points would be a privacy violation, since these points were used by the prover to

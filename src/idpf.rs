@@ -7,7 +7,7 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{FieldElement, FieldElementExt},
     vdaf::{
-        xof::{Seed, SeedStream, XofFixedKeyAes128Key},
+        xof::{Seed, XofFixedKeyAes128Key},
         VdafError, VERSION,
     },
 };
@@ -19,6 +19,7 @@ use bitvec::{
     vec::BitVec,
     view::BitView,
 };
+use rand_core::RngCore;
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -154,7 +155,7 @@ pub trait IdpfValue:
     /// Generate a pseudorandom value from a seed stream.
     fn generate<S>(seed_stream: &mut S, parameter: &Self::ValueParameter) -> Self
     where
-        S: SeedStream;
+        S: RngCore;
 
     /// Returns the additive identity.
     fn zero(parameter: &Self::ValueParameter) -> Self;
@@ -174,17 +175,17 @@ where
 
     fn generate<S>(seed_stream: &mut S, _: &()) -> Self
     where
-        S: SeedStream,
+        S: RngCore,
     {
         // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
-        // `SeedStream` output.
+        // output.
         let mut buffer = [0u8; 64];
         assert!(
             buffer.len() >= F::ENCODED_SIZE,
             "field is too big for buffer"
         );
         loop {
-            seed_stream.fill(&mut buffer[..F::ENCODED_SIZE]);
+            seed_stream.fill_bytes(&mut buffer[..F::ENCODED_SIZE]);
             match F::from_random_rejection(&buffer[..F::ENCODED_SIZE]) {
                 ControlFlow::Break(x) => return x,
                 ControlFlow::Continue(()) => continue,
@@ -235,11 +236,11 @@ fn extend(seed: &[u8; 16], xof_fixed_key: &XofFixedKeyAes128Key) -> ([[u8; 16]; 
     let mut seed_stream = xof_fixed_key.with_seed(seed);
 
     let mut seeds = [[0u8; 16], [0u8; 16]];
-    seed_stream.fill(&mut seeds[0]);
-    seed_stream.fill(&mut seeds[1]);
+    seed_stream.fill_bytes(&mut seeds[0]);
+    seed_stream.fill_bytes(&mut seeds[1]);
 
     let mut byte = [0u8];
-    seed_stream.fill(&mut byte);
+    seed_stream.fill_bytes(&mut byte);
     let control_bits = [(byte[0] & 1).into(), ((byte[0] >> 1) & 1).into()];
 
     (seeds, control_bits)
@@ -256,7 +257,7 @@ where
     let mut seed_stream = xof_fixed_key.with_seed(seed);
 
     let mut next_seed = [0u8; 16];
-    seed_stream.fill(&mut next_seed);
+    seed_stream.fill_bytes(&mut next_seed);
 
     (next_seed, V::generate(&mut seed_stream, parameter))
 }
@@ -1972,7 +1973,7 @@ mod tests {
 
             fn generate<S>(_: &mut S, _: &Self::ValueParameter) -> Self
             where
-                S: crate::vdaf::xof::SeedStream,
+                S: rand_core::RngCore,
             {
                 MyUnit
             }
@@ -2037,7 +2038,7 @@ mod tests {
 
             fn generate<S>(seed_stream: &mut S, length: &Self::ValueParameter) -> Self
             where
-                S: crate::vdaf::xof::SeedStream,
+                S: rand_core::RngCore,
             {
                 let mut output = vec![<Field128 as FieldElement>::zero(); *length];
                 for element in output.iter_mut() {

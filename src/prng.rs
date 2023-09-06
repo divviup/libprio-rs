@@ -6,11 +6,11 @@
 //! NOTE: The public API for this module is a work in progress.
 
 use crate::field::{FieldElement, FieldElementExt};
-use crate::vdaf::xof::SeedStream;
 #[cfg(feature = "crypto-dependencies")]
 use crate::vdaf::xof::SeedStreamAes128;
 #[cfg(feature = "crypto-dependencies")]
 use getrandom::getrandom;
+use rand_core::RngCore;
 
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
@@ -56,11 +56,11 @@ impl<F: FieldElement> Prng<F, SeedStreamAes128> {
 impl<F, S> Prng<F, S>
 where
     F: FieldElement,
-    S: SeedStream,
+    S: RngCore,
 {
     pub(crate) fn from_seed_stream(mut seed_stream: S) -> Self {
         let mut buffer = vec![0; BUFFER_SIZE_IN_ELEMENTS * F::ENCODED_SIZE];
-        seed_stream.fill(&mut buffer);
+        seed_stream.fill_bytes(&mut buffer);
 
         Self {
             phantom: PhantomData::<F>,
@@ -93,7 +93,7 @@ where
             // `Prng` to a new field type via `into_new_field()`.
             let left_over = self.buffer.len() - self.buffer_index;
             self.buffer.copy_within(self.buffer_index.., 0);
-            self.seed_stream.fill(&mut self.buffer[left_over..]);
+            self.seed_stream.fill_bytes(&mut self.buffer[left_over..]);
             self.buffer_index = 0;
         }
     }
@@ -113,7 +113,7 @@ where
 impl<F, S> Iterator for Prng<F, S>
 where
     F: FieldElement,
-    S: SeedStream,
+    S: RngCore,
 {
     type Item = F;
 
@@ -253,7 +253,7 @@ mod tests {
         let mut prng_weird_buffer_size: Prng<Field64, SeedStreamSha3> =
             Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
         let mut extra = [0; 7];
-        prng_weird_buffer_size.seed_stream.fill(&mut extra);
+        prng_weird_buffer_size.seed_stream.fill_bytes(&mut extra);
         prng_weird_buffer_size.buffer.extend_from_slice(&extra);
 
         // Check that the next several outputs match. We need to check enough outputs to ensure
