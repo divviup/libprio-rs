@@ -61,6 +61,7 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::{self, IntoIterator};
 use std::marker::PhantomData;
+use subtle::{Choice, ConstantTimeEq};
 
 const DST_MEASUREMENT_SHARE: u16 = 1;
 const DST_PROOF_SHARE: u16 = 2;
@@ -595,7 +596,7 @@ where
 }
 
 /// Message broadcast by the [`Client`] to every [`Aggregator`] during the Sharding phase.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Prio3PublicShare<const SEED_SIZE: usize> {
     /// Contributions to the joint randomness from every aggregator's share.
     joint_rand_parts: Option<Vec<Seed<SEED_SIZE>>>,
@@ -619,6 +620,22 @@ impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
         }
     }
 }
+
+impl<const SEED_SIZE: usize> PartialEq for Prio3PublicShare<SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        // Handle case that both join_rand_parts are populated.
+        if let Some(self_joint_rand_parts) = &self.joint_rand_parts {
+            if let Some(other_joint_rand_parts) = &other.joint_rand_parts {
+                return self_joint_rand_parts.ct_eq(other_joint_rand_parts).into();
+            }
+        }
+
+        // Handle case that at least one joint_rand_parts is not populated.
+        self.joint_rand_parts.is_none() && other.joint_rand_parts.is_none()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Prio3PublicShare<SEED_SIZE> {}
 
 impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Prio3<T, P, SEED_SIZE>>
     for Prio3PublicShare<SEED_SIZE>
@@ -646,7 +663,9 @@ where
 }
 
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     /// The measurement share.
     measurement_share: Share<F, SEED_SIZE>,
@@ -657,6 +676,24 @@ pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     /// Blinding seed used by the Aggregator to compute the joint randomness. This field is optional
     /// because not every [`Type`] requires joint randomness.
     joint_rand_blind: Option<Seed<SEED_SIZE>>,
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3InputShare<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the existence (but not contents) of the joint_rand_blind,
+        // as its existence is a property of the type in use.
+        let joint_rand_eq = match (&self.joint_rand_blind, &other.joint_rand_blind) {
+            (Some(self_joint_rand), Some(other_joint_rand)) => {
+                self_joint_rand.ct_eq(other_joint_rand)
+            }
+            (None, None) => Choice::from(1),
+            _ => Choice::from(0),
+        };
+
+        joint_rand_eq
+            & self.measurement_share.ct_eq(&other.measurement_share)
+            & self.proof_share.ct_eq(&other.proof_share)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputShare<F, SEED_SIZE> {
@@ -726,7 +763,9 @@ where
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 /// Message broadcast by each [`Aggregator`] in each round of the Preparation phase.
 pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
     /// A share of the FLP verifier message. (See [`Type`].)
@@ -783,7 +822,9 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 /// Result of combining a round of [`Prio3PrepareShare`] messages.
 pub struct Prio3PrepareMessage<const SEED_SIZE: usize> {
     /// The joint randomness seed computed by the Aggregators.
@@ -841,7 +882,9 @@ where
 }
 
 /// State of each [`Aggregator`] during the Preparation phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
     measurement_share: Share<F, SEED_SIZE>,
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
@@ -1111,7 +1154,13 @@ where
     ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
-            if step.joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
+            if (!step
+                .joint_rand_seed
+                .as_ref()
+                .unwrap()
+                .ct_eq(msg.joint_rand_seed.as_ref().unwrap()))
+            .into()
+            {
                 return Err(VdafError::Uncategorized(
                     "joint randomness mismatch".to_string(),
                 ));

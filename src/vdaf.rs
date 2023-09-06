@@ -18,6 +18,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, io::Cursor};
+use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
@@ -57,7 +58,9 @@ pub enum VdafError {
 }
 
 /// An additive share of a vector of field elements.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub enum Share<F, const SEED_SIZE: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
@@ -74,6 +77,18 @@ impl<F: Clone, const SEED_SIZE: usize> Share<F, SEED_SIZE> {
         match self {
             Self::Leader(ref data) => Self::Leader(data[..len].to_vec()),
             Self::Helper(ref seed) => Self::Helper(seed.clone()),
+        }
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Share<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        // We allow short-circuiting on the type (Leader vs Helper) of the value, but not the types'
+        // contents.
+        match (self, other) {
+            (Share::Leader(self_val), Share::Leader(other_val)) => self_val.ct_eq(other_val),
+            (Share::Helper(self_val), Share::Helper(other_val)) => self_val.ct_eq(other_val),
+            _ => Choice::from(0),
         }
     }
 }
@@ -310,7 +325,7 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 }
 
 /// An output share comprised of a vector of field elements.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct OutputShare<F>(Vec<F>);
 
 impl<F> AsRef<[F]> for OutputShare<F> {
@@ -339,7 +354,10 @@ impl<F: FieldElement> Encode for OutputShare<F> {
 ///
 /// This is suitable for VDAFs where both output shares and aggregate shares are vectors of field
 /// elements, and output shares need no special transformation to be merged into an aggregate share.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
+
 pub struct AggregateShare<F>(Vec<F>);
 
 impl<F: FieldElement> AsRef<[F]> for AggregateShare<F> {

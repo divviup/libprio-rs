@@ -165,7 +165,9 @@ impl Client<16> for Prio2 {
 }
 
 /// State of each [`Aggregator`] during the Preparation phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Prio2PrepareState(Share<FieldPrio2, 32>);
 
 impl Encode for Prio2PrepareState {

@@ -110,7 +110,9 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for P
 ///
 /// This is comprised of an IDPF key share and the correlated randomness used to compute the sketch
 /// during preparation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// IDPF key share.
     idpf_key: Seed<16>,
@@ -126,6 +128,24 @@ pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// Aggregator's share of the correlated randomness used in the second part of the sketch. Used
     /// for leaf nodes of the IDPF tree.
     corr_leaf: [Field255; 2],
+}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Poplar1InputShare<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We short-circuit on the length of corr_inner being different. Only the content is
+        // protected.
+        if self.corr_inner.len() != other.corr_inner.len() {
+            return Choice::from(0);
+        }
+
+        let mut rslt = self.idpf_key.ct_eq(&other.idpf_key)
+            & self.corr_seed.ct_eq(&other.corr_seed)
+            & self.corr_leaf.ct_eq(&other.corr_leaf);
+        for (x, y) in self.corr_inner.iter().zip(other.corr_inner.iter()) {
+            rslt &= x.ct_eq(y);
+        }
+        rslt
+    }
 }
 
 impl<const SEED_SIZE: usize> Encode for Poplar1InputShare<SEED_SIZE> {
@@ -174,7 +194,9 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 }
 
 /// Poplar1 preparation state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Poplar1PrepareState(PrepareStateVariant);
 
 impl Encode for Poplar1PrepareState {
@@ -201,7 +223,9 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 enum PrepareStateVariant {
     Inner(PrepareState<Field64>),
     Leaf(PrepareState<Field255>),
@@ -252,7 +276,9 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 struct PrepareState<F> {
     sketch: SketchState<F>,
     output_share: Vec<F>,
@@ -450,7 +476,9 @@ impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
 }
 
 /// A vector of field elements transmitted while evaluating Poplar1.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub enum Poplar1FieldVec {
     /// Field type for inner nodes of the IDPF tree.
     Inner(Vec<Field64>),

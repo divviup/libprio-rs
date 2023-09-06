@@ -38,7 +38,9 @@ use std::{
 use subtle::{Choice, ConstantTimeEq};
 
 /// Input of [`Xof`].
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug)]
+// Only derive equality checks in test code, as the content of this type is sometimes a secret.
+#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
 impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
@@ -64,12 +66,6 @@ impl<const SEED_SIZE: usize> AsRef<[u8; SEED_SIZE]> for Seed<SEED_SIZE> {
 impl<const SEED_SIZE: usize> ConstantTimeEq for Seed<SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.0.ct_eq(&other.0)
-    }
-}
-
-impl<const SEED_SIZE: usize> PartialEq for Seed<SEED_SIZE> {
-    fn eq(&self, other: &Self) -> bool {
-        self.ct_eq(other).into()
     }
 }
 
