@@ -49,7 +49,7 @@ use crate::flp::Type;
 #[cfg(feature = "experimental")]
 use crate::flp::TypeWithNoise;
 use crate::prng::Prng;
-use crate::vdaf::xof::{Seed, SeedStream, Xof};
+use crate::vdaf::xof::{IntoFieldVec, Seed, Xof};
 use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
     Share, ShareDecodingParameter, Vdaf, VdafError,
@@ -493,7 +493,7 @@ where
                     &Self::domain_separation_tag(DST_JOINT_RANDOMNESS),
                     &[],
                 )
-                .into_vec(self.typ.joint_rand_len())
+                .into_field_vec(self.typ.joint_rand_len())
             })
             .unwrap_or_default();
 
@@ -504,7 +504,7 @@ where
             &Self::domain_separation_tag(DST_PROVE_RANDOMNESS),
             &[],
         )
-        .into_vec(self.typ.prove_rand_len());
+        .into_field_vec(self.typ.prove_rand_len());
         let mut leader_proof_share =
             self.typ
                 .prove(&encoded_measurement, &prove_rand, &joint_rand)?;
@@ -940,7 +940,7 @@ where
         query_rand_xof.update(nonce);
         let query_rand = query_rand_xof
             .into_seed_stream()
-            .into_vec(self.typ.query_rand_len());
+            .into_field_vec(self.typ.query_rand_len());
 
         // Create a reference to the (expanded) measurement share.
         let expanded_measurement_share: Option<Vec<T::Field>> = match msg.measurement_share {
@@ -951,7 +951,7 @@ where
                     &Self::domain_separation_tag(DST_MEASUREMENT_SHARE),
                     &[agg_id],
                 )
-                .into_vec(self.typ.input_len()),
+                .into_field_vec(self.typ.input_len()),
             ),
         };
         let measurement_share = match msg.measurement_share {
@@ -968,7 +968,7 @@ where
                     &Self::domain_separation_tag(DST_PROOF_SHARE),
                     &[agg_id],
                 )
-                .into_vec(self.typ.proof_len()),
+                .into_field_vec(self.typ.proof_len()),
             ),
         };
         let proof_share = match msg.proof_share {
@@ -1020,7 +1020,7 @@ where
                 &Self::domain_separation_tag(DST_JOINT_RANDOMNESS),
                 &[],
             )
-            .into_vec(self.typ.joint_rand_len());
+            .into_field_vec(self.typ.joint_rand_len());
             (Some(joint_rand_seed), Some(own_joint_rand_part), joint_rand)
         } else {
             (None, None, Vec::new())
@@ -1123,7 +1123,7 @@ where
             Share::Leader(data) => data,
             Share::Helper(seed) => {
                 let dst = Self::domain_separation_tag(DST_MEASUREMENT_SHARE);
-                P::seed_stream(&seed, &dst, &[step.agg_id]).into_vec(self.typ.input_len())
+                P::seed_stream(&seed, &dst, &[step.agg_id]).into_field_vec(self.typ.input_len())
             }
         };
 

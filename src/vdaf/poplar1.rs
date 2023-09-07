@@ -10,11 +10,12 @@ use crate::{
     idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
-        xof::{Seed, SeedStream, Xof, XofShake128},
+        xof::{Seed, Xof, XofShake128},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
 use bitvec::{prelude::Lsb0, vec::BitVec};
+use rand_core::RngCore;
 use std::{
     convert::TryFrom,
     fmt::Debug,
@@ -1117,7 +1118,7 @@ impl From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>
 // seed, rather than iteratively, as we do in Doplar. This would be more efficient for the
 // Aggregators. As long as the Client isn't significantly slower, this should be a win.
 #[allow(non_snake_case)]
-fn compute_next_corr_shares<F: FieldElement + From<u64>, S: SeedStream>(
+fn compute_next_corr_shares<F: FieldElement + From<u64>, S: RngCore>(
     prng: &mut Prng<F, S>,
     corr_prng_0: &mut Prng<F, S>,
     corr_prng_1: &mut Prng<F, S>,
@@ -1261,7 +1262,7 @@ where
         Self([F::zero(); 2])
     }
 
-    fn generate<S: SeedStream>(seed_stream: &mut S, _: &()) -> Self {
+    fn generate<S: RngCore>(seed_stream: &mut S, _: &()) -> Self {
         Self([F::generate(seed_stream, &()), F::generate(seed_stream, &())])
     }
 

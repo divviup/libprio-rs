@@ -91,13 +91,14 @@ impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {
     }
 }
 
-/// A stream of bytes derived from a seed.
-pub trait SeedStream: Sized {
-    /// Fill `buf` with the next `buf.len()` bytes of output.
-    fn fill(&mut self, buf: &mut [u8]);
-
+/// Trait for deriving a vector of field elements.
+pub trait IntoFieldVec: RngCore + Sized {
     /// Generate a finite field vector from the seed stream.
-    fn into_vec<F: FieldElement>(self, length: usize) -> Vec<F> {
+    fn into_field_vec<F: FieldElement>(self, length: usize) -> Vec<F>;
+}
+
+impl<S: RngCore> IntoFieldVec for S {
+    fn into_field_vec<F: FieldElement>(self, length: usize) -> Vec<F> {
         Prng::from_seed_stream(self).take(length).collect()
     }
 }
@@ -107,7 +108,7 @@ pub trait SeedStream: Sized {
 /// [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this XOF.
-    type SeedStream: SeedStream;
+    type SeedStream: RngCore + Sized;
 
     /// Construct an instance of [`Xof`] with the given seed.
     fn init(seed_bytes: &[u8; SEED_SIZE], dst: &[u8]) -> Self;
@@ -123,7 +124,7 @@ pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
     fn into_seed(self) -> Seed<SEED_SIZE> {
         let mut new_seed = [0; SEED_SIZE];
         let mut seed_stream = self.into_seed_stream();
-        seed_stream.fill(&mut new_seed);
+        seed_stream.fill_bytes(&mut new_seed);
         Seed(new_seed)
     }
 
@@ -145,13 +146,30 @@ impl SeedStreamAes128 {
     pub(crate) fn new(key: &[u8], iv: &[u8]) -> Self {
         SeedStreamAes128(<Ctr64BE<Aes128> as KeyIvInit>::new(key.into(), iv.into()))
     }
-}
 
-#[cfg(feature = "crypto-dependencies")]
-impl SeedStream for SeedStreamAes128 {
     fn fill(&mut self, buf: &mut [u8]) {
         buf.fill(0);
         self.0.apply_keystream(buf);
+    }
+}
+
+#[cfg(feature = "crypto-dependencies")]
+impl RngCore for SeedStreamAes128 {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.fill(dest);
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill(dest);
+        Ok(())
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        next_u64_via_fill(self)
     }
 }
 
@@ -205,19 +223,13 @@ impl SeedStreamSha3 {
     }
 }
 
-impl SeedStream for SeedStreamSha3 {
-    fn fill(&mut self, buf: &mut [u8]) {
-        XofReader::read(&mut self.0, buf);
-    }
-}
-
 impl RngCore for SeedStreamSha3 {
     fn fill_bytes(&mut self, dest: &mut [u8]) {
-        self.fill(dest);
+        XofReader::read(&mut self.0, dest);
     }
 
     fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        self.fill(dest);
+        XofReader::read(&mut self.0, dest);
         Ok(())
     }
 
@@ -347,32 +359,6 @@ pub struct SeedStreamFixedKeyAes128 {
 }
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-impl SeedStream for SeedStreamFixedKeyAes128 {
-    fn fill(&mut self, buf: &mut [u8]) {
-        let next_length_consumed = self.length_consumed + u64::try_from(buf.len()).unwrap();
-        let mut offset = usize::try_from(self.length_consumed % 16).unwrap();
-        let mut index = 0;
-        let mut block = Block::from([0; 16]);
-
-        // NOTE(cjpatton) We might be able to speed this up by unrolling this loop and encrypting
-        // multiple blocks at the same time via `self.cipher.encrypt_blocks()`.
-        for block_counter in self.length_consumed / 16..(next_length_consumed + 15) / 16 {
-            block.clone_from(&self.base_block);
-            for (b, i) in block.iter_mut().zip(block_counter.to_le_bytes().iter()) {
-                *b ^= i;
-            }
-            self.hash_block(&mut block);
-            let read = std::cmp::min(16 - offset, buf.len() - index);
-            buf[index..index + read].copy_from_slice(&block[offset..offset + read]);
-            offset = 0;
-            index += read;
-        }
-
-        self.length_consumed = next_length_consumed;
-    }
-}
-
-#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 impl SeedStreamFixedKeyAes128 {
     fn hash_block(&self, block: &mut Block) {
         let sigma = Block::from([
@@ -399,6 +385,49 @@ impl SeedStreamFixedKeyAes128 {
         for (b, s) in block.iter_mut().zip(sigma.iter()) {
             *b ^= s;
         }
+    }
+
+    fn fill(&mut self, buf: &mut [u8]) {
+        let next_length_consumed = self.length_consumed + u64::try_from(buf.len()).unwrap();
+        let mut offset = usize::try_from(self.length_consumed % 16).unwrap();
+        let mut index = 0;
+        let mut block = Block::from([0; 16]);
+
+        // NOTE(cjpatton) We might be able to speed this up by unrolling this loop and encrypting
+        // multiple blocks at the same time via `self.cipher.encrypt_blocks()`.
+        for block_counter in self.length_consumed / 16..(next_length_consumed + 15) / 16 {
+            block.clone_from(&self.base_block);
+            for (b, i) in block.iter_mut().zip(block_counter.to_le_bytes().iter()) {
+                *b ^= i;
+            }
+            self.hash_block(&mut block);
+            let read = std::cmp::min(16 - offset, buf.len() - index);
+            buf[index..index + read].copy_from_slice(&block[offset..offset + read]);
+            offset = 0;
+            index += read;
+        }
+
+        self.length_consumed = next_length_consumed;
+    }
+}
+
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+impl RngCore for SeedStreamFixedKeyAes128 {
+    fn fill_bytes(&mut self, dest: &mut [u8]) {
+        self.fill(dest);
+    }
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
+        self.fill(dest);
+        Ok(())
+    }
+
+    fn next_u32(&mut self) -> u32 {
+        next_u32_via_fill(self)
+    }
+
+    fn next_u64(&mut self) -> u64 {
+        next_u64_via_fill(self)
     }
 }
 
@@ -437,14 +466,14 @@ mod tests {
         xof.update(binder);
 
         let mut want = Seed([0; SEED_SIZE]);
-        xof.clone().into_seed_stream().fill(&mut want.0[..]);
+        xof.clone().into_seed_stream().fill_bytes(&mut want.0[..]);
         let got = xof.clone().into_seed();
         assert_eq!(got, want);
 
         let mut want = [0; 45];
-        xof.clone().into_seed_stream().fill(&mut want);
+        xof.clone().into_seed_stream().fill_bytes(&mut want);
         let mut got = [0; 45];
-        P::seed_stream(&seed, dst, binder).fill(&mut got);
+        P::seed_stream(&seed, dst, binder).fill_bytes(&mut got);
         assert_eq!(got, want);
     }
 
@@ -465,7 +494,7 @@ mod tests {
         while (bytes.position() as usize) < t.expanded_vec_field128.len() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
-        let got: Vec<Field128> = xof.clone().into_seed_stream().into_vec(t.length);
+        let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);
         assert_eq!(got, want);
 
         test_xof::<XofShake128, 16>();
@@ -489,7 +518,7 @@ mod tests {
         while (bytes.position() as usize) < t.expanded_vec_field128.len() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
-        let got: Vec<Field128> = xof.clone().into_seed_stream().into_vec(t.length);
+        let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);
         assert_eq!(got, want);
 
         test_xof::<XofFixedKeyAes128, 16>();
