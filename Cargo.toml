@@ -46,7 +46,7 @@ itertools = "0.11.0"
 modinverse = "0.1.0"
 num-bigint = "0.4.4"
 once_cell = "1.18.0"
-prio = { path = ".", features = ["crypto-dependencies", "test-util"] }
+prio = { path = ".", features = ["crypto-dependencies"] }
 rand = "0.8"
 serde_json = "1.0"
 statrs = "0.16.0"
@@ -58,7 +58,6 @@ experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", 
 multithreaded = ["rayon"]
 prio2 = ["crypto-dependencies", "hmac", "sha2"]
 crypto-dependencies = ["aes", "ctr"]
-test-util = []
 
 [workspace]
 members = [".", "binaries"]

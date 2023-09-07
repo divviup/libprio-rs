@@ -59,8 +59,6 @@ pub enum VdafError {
 
 /// An additive share of a vector of field elements.
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub enum Share<F, const SEED_SIZE: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
@@ -80,6 +78,14 @@ impl<F: Clone, const SEED_SIZE: usize> Share<F, SEED_SIZE> {
         }
     }
 }
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Share<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Share<F, SEED_SIZE> {}
 
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Share<F, SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> subtle::Choice {
@@ -355,10 +361,22 @@ impl<F: FieldElement> Encode for OutputShare<F> {
 /// This is suitable for VDAFs where both output shares and aggregate shares are vectors of field
 /// elements, and output shares need no special transformation to be merged into an aggregate share.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 
 pub struct AggregateShare<F>(Vec<F>);
+
+impl<F: ConstantTimeEq> PartialEq for AggregateShare<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for AggregateShare<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for AggregateShare<F> {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl<F: FieldElement> AsRef<[F]> for AggregateShare<F> {
     fn as_ref(&self) -> &[F] {

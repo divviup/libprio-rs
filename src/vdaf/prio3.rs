@@ -623,15 +623,11 @@ impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
 
 impl<const SEED_SIZE: usize> PartialEq for Prio3PublicShare<SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
-        // Handle case that both join_rand_parts are populated.
-        if let Some(self_joint_rand_parts) = &self.joint_rand_parts {
-            if let Some(other_joint_rand_parts) = &other.joint_rand_parts {
-                return self_joint_rand_parts.ct_eq(other_joint_rand_parts).into();
-            }
+        match (&self.joint_rand_parts, &other.joint_rand_parts) {
+            (Some(self_jrps), Some(other_jrps)) => self_jrps.ct_eq(other_jrps).into(),
+            (None, None) => true,
+            _ => false,
         }
-
-        // Handle case that at least one joint_rand_parts is not populated.
-        self.joint_rand_parts.is_none() && other.joint_rand_parts.is_none()
     }
 }
 
@@ -664,8 +660,6 @@ where
 
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     /// The measurement share.
     measurement_share: Share<F, SEED_SIZE>,
@@ -678,19 +672,17 @@ pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     joint_rand_blind: Option<Seed<SEED_SIZE>>,
 }
 
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3InputShare<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3InputShare<F, SEED_SIZE> {}
+
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3InputShare<F, SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
-        // We allow short-circuiting on the existence (but not contents) of the joint_rand_blind,
-        // as its existence is a property of the type in use.
-        let joint_rand_eq = match (&self.joint_rand_blind, &other.joint_rand_blind) {
-            (Some(self_joint_rand), Some(other_joint_rand)) => {
-                self_joint_rand.ct_eq(other_joint_rand)
-            }
-            (None, None) => Choice::from(1),
-            _ => Choice::from(0),
-        };
-
-        joint_rand_eq
+        option_ct_eq(&self.joint_rand_blind, &other.joint_rand_blind)
             & self.measurement_share.ct_eq(&other.measurement_share)
             & self.proof_share.ct_eq(&other.proof_share)
     }
@@ -764,15 +756,29 @@ where
 }
 
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 /// Message broadcast by each [`Aggregator`] in each round of the Preparation phase.
+
 pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
     /// A share of the FLP verifier message. (See [`Type`].)
     verifier: Vec<F>,
 
     /// A part of the joint randomness seed.
     joint_rand_part: Option<Seed<SEED_SIZE>>,
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3PrepareShare<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareShare<F, SEED_SIZE> {}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareShare<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        option_ct_eq(&self.joint_rand_part, &other.joint_rand_part)
+            & self.verifier.ct_eq(&other.verifier)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
@@ -823,12 +829,24 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
 }
 
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 /// Result of combining a round of [`Prio3PrepareShare`] messages.
 pub struct Prio3PrepareMessage<const SEED_SIZE: usize> {
     /// The joint randomness seed computed by the Aggregators.
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
+}
+
+impl<const SEED_SIZE: usize> PartialEq for Prio3PrepareMessage<SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Prio3PrepareMessage<SEED_SIZE> {}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareMessage<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        option_ct_eq(&self.joint_rand_seed, &other.joint_rand_seed)
+    }
 }
 
 impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
@@ -883,13 +901,28 @@ where
 
 /// State of each [`Aggregator`] during the Preparation phase.
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
     measurement_share: Share<F, SEED_SIZE>,
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
     agg_id: u8,
     verifier_len: usize,
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3PrepareState<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareState<F, SEED_SIZE> {}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareState<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        option_ct_eq(&self.joint_rand_seed, &other.joint_rand_seed)
+            & self.measurement_share.ct_eq(&other.measurement_share)
+            & self.agg_id.ct_eq(&other.agg_id)
+            & self.verifier_len.ct_eq(&other.verifier_len)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
@@ -1154,12 +1187,12 @@ where
     ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
-            if (!step
+            if step
                 .joint_rand_seed
                 .as_ref()
                 .unwrap()
-                .ct_eq(msg.joint_rand_seed.as_ref().unwrap()))
-            .into()
+                .ct_ne(msg.joint_rand_seed.as_ref().unwrap())
+                .into()
             {
                 return Err(VdafError::Uncategorized(
                     "joint randomness mismatch".to_string(),
@@ -1305,6 +1338,17 @@ where
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(vdaf.output_len(), bytes).map(Self)
+    }
+}
+
+// This function determines equality between two optional, constant-time comparable values. It
+// short-circuits on the existence (but not contents) of the values -- timing information may reveal
+// whether the values match on Some or None.
+fn option_ct_eq<T: ConstantTimeEq>(left: &Option<T>, right: &Option<T>) -> Choice {
+    match (left, right) {
+        (Some(left), Some(right)) => left.ct_eq(right),
+        (None, None) => Choice::from(1),
+        _ => Choice::from(0),
     }
 }
 

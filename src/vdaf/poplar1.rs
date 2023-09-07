@@ -111,8 +111,6 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for P
 /// This is comprised of an IDPF key share and the correlated randomness used to compute the sketch
 /// during preparation.
 #[derive(Debug, Clone)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// IDPF key share.
     idpf_key: Seed<16>,
@@ -130,6 +128,14 @@ pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     corr_leaf: [Field255; 2],
 }
 
+impl<const SEED_SIZE: usize> PartialEq for Poplar1InputShare<SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Poplar1InputShare<SEED_SIZE> {}
+
 impl<const SEED_SIZE: usize> ConstantTimeEq for Poplar1InputShare<SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
         // We short-circuit on the length of corr_inner being different. Only the content is
@@ -138,13 +144,13 @@ impl<const SEED_SIZE: usize> ConstantTimeEq for Poplar1InputShare<SEED_SIZE> {
             return Choice::from(0);
         }
 
-        let mut rslt = self.idpf_key.ct_eq(&other.idpf_key)
+        let mut res = self.idpf_key.ct_eq(&other.idpf_key)
             & self.corr_seed.ct_eq(&other.corr_seed)
             & self.corr_leaf.ct_eq(&other.corr_leaf);
         for (x, y) in self.corr_inner.iter().zip(other.corr_inner.iter()) {
-            rslt &= x.ct_eq(y);
+            res &= x.ct_eq(y);
         }
-        rslt
+        res
     }
 }
 
@@ -195,9 +201,21 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 
 /// Poplar1 preparation state.
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Poplar1PrepareState(PrepareStateVariant);
+
+impl PartialEq for Poplar1PrepareState {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Poplar1PrepareState {}
+
+impl ConstantTimeEq for Poplar1PrepareState {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl Encode for Poplar1PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -224,11 +242,28 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 }
 
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 enum PrepareStateVariant {
     Inner(PrepareState<Field64>),
     Leaf(PrepareState<Field255>),
+}
+
+impl PartialEq for PrepareStateVariant {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for PrepareStateVariant {}
+
+impl ConstantTimeEq for PrepareStateVariant {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the type (Inner vs Leaf).
+        match (self, other) {
+            (Self::Inner(self_val), Self::Inner(other_val)) => self_val.ct_eq(other_val),
+            (Self::Leaf(self_val), Self::Leaf(other_val)) => self_val.ct_eq(other_val),
+            _ => Choice::from(0),
+        }
+    }
 }
 
 impl Encode for PrepareStateVariant {
@@ -277,11 +312,23 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 }
 
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 struct PrepareState<F> {
     sketch: SketchState<F>,
     output_share: Vec<F>,
+}
+
+impl<F: ConstantTimeEq> PartialEq for PrepareState<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for PrepareState<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for PrepareState<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.sketch.ct_eq(&other.sketch) & self.output_share.ct_eq(&other.output_share)
+    }
 }
 
 impl<F: FieldElement> Encode for PrepareState<F> {
@@ -323,7 +370,7 @@ impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum SketchState<F> {
     #[allow(non_snake_case)]
     RoundOne {
@@ -332,6 +379,44 @@ enum SketchState<F> {
         is_leader: bool,
     },
     RoundTwo,
+}
+
+impl<F: ConstantTimeEq> PartialEq for SketchState<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for SketchState<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for SketchState<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the round (RoundOne vs RoundTwo).
+        match (self, other) {
+            (
+                SketchState::RoundOne {
+                    A_share: self_a_share,
+                    B_share: self_b_share,
+                    is_leader: self_is_leader,
+                },
+                SketchState::RoundOne {
+                    A_share: other_a_share,
+                    B_share: other_b_share,
+                    is_leader: other_is_leader,
+                },
+            ) => {
+                let self_is_leader = Choice::from(*self_is_leader as u8);
+                let other_is_leader = Choice::from(*other_is_leader as u8);
+
+                self_a_share.ct_eq(other_a_share)
+                    & self_b_share.ct_eq(other_b_share)
+                    & self_is_leader.ct_eq(&other_is_leader)
+            }
+
+            (SketchState::RoundTwo, SketchState::RoundTwo) => Choice::from(1),
+            _ => Choice::from(0),
+        }
+    }
 }
 
 impl<F: FieldElement> Encode for SketchState<F> {
@@ -477,8 +562,6 @@ impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
 
 /// A vector of field elements transmitted while evaluating Poplar1.
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub enum Poplar1FieldVec {
     /// Field type for inner nodes of the IDPF tree.
     Inner(Vec<Field64>),
@@ -493,6 +576,29 @@ impl Poplar1FieldVec {
             Self::Leaf(vec![<Field255 as FieldElement>::zero(); len])
         } else {
             Self::Inner(vec![<Field64 as FieldElement>::zero(); len])
+        }
+    }
+}
+
+impl PartialEq for Poplar1FieldVec {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Poplar1FieldVec {}
+
+impl ConstantTimeEq for Poplar1FieldVec {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the type (Inner vs Leaf).
+        match (self, other) {
+            (Poplar1FieldVec::Inner(self_val), Poplar1FieldVec::Inner(other_val)) => {
+                self_val.ct_eq(&other_val)
+            }
+            (Poplar1FieldVec::Leaf(self_val), Poplar1FieldVec::Leaf(other_val)) => {
+                self_val.ct_eq(&other_val)
+            }
+            _ => Choice::from(0),
         }
     }
 }

@@ -22,6 +22,7 @@ use crate::{
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
+use subtle::{Choice, ConstantTimeEq};
 
 mod client;
 mod server;
@@ -166,9 +167,21 @@ impl Client<16> for Prio2 {
 
 /// State of each [`Aggregator`] during the Preparation phase.
 #[derive(Clone, Debug)]
-// Only derive equality checks in test code, as the content of this type is a secret.
-#[cfg_attr(feature = "test-util", derive(PartialEq, Eq))]
 pub struct Prio2PrepareState(Share<FieldPrio2, 32>);
+
+impl PartialEq for Prio2PrepareState {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Prio2PrepareState {}
+
+impl ConstantTimeEq for Prio2PrepareState {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl Encode for Prio2PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
