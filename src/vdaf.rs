@@ -334,6 +334,20 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 #[derive(Clone, Debug)]
 pub struct OutputShare<F>(Vec<F>);
 
+impl<F: ConstantTimeEq> PartialEq for OutputShare<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for OutputShare<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for OutputShare<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
+
 impl<F> AsRef<[F]> for OutputShare<F> {
     fn as_ref(&self) -> &[F] {
         &self.0
@@ -586,6 +600,65 @@ where
     let encoded = value.get_encoded();
 
     assert_eq!(encoded, bytes);
+}
+
+#[cfg(test)]
+fn equality_comparison_test<T>(values: &[T])
+where
+    T: Debug + PartialEq,
+{
+    use std::ptr;
+
+    // This function expects that every value passed in `values` is distinct, i.e. should not
+    // compare as equal to any other element. We test both (i, j) and (j, i) to gain confidence that
+    // equality implementations are symmetric.
+    for (i, i_val) in values.iter().enumerate() {
+        for (j, j_val) in values.iter().enumerate() {
+            if i == j {
+                assert!(ptr::eq(i_val, j_val)); // sanity
+                assert_eq!(
+                    i_val, j_val,
+                    "Expected element at index {i} to be equal to itself, but it was not"
+                );
+            } else {
+                assert_ne!(
+                    i_val, j_val,
+                    "Expected elements at indices {i} & {j} to not be equal, but they were"
+                )
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::vdaf::{equality_comparison_test, xof::Seed, AggregateShare, OutputShare, Share};
+
+    #[test]
+    fn share_equality_test() {
+        equality_comparison_test(&[
+            Share::Leader(Vec::from([1, 2, 3])),
+            Share::Leader(Vec::from([3, 2, 1])),
+            Share::Helper(Seed([1, 2, 3])),
+            Share::Helper(Seed([3, 2, 1])),
+        ])
+    }
+
+    #[test]
+    fn output_share_equality_test() {
+        equality_comparison_test(&[
+            OutputShare(Vec::from([1, 2, 3])),
+            OutputShare(Vec::from([3, 2, 1])),
+        ])
+    }
+
+    #[test]
+    fn aggregate_share_equality_test() {
+        equality_comparison_test(&[
+            AggregateShare(Vec::from([1, 2, 3])),
+            AggregateShare(Vec::from([3, 2, 1])),
+        ])
+    }
 }
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]

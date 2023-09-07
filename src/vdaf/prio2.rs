@@ -385,7 +385,10 @@ fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vdaf::{fieldvec_roundtrip_test, prio2::test_vector::Priov2TestVector, run_vdaf};
+    use crate::vdaf::{
+        equality_comparison_test, fieldvec_roundtrip_test, prio2::test_vector::Priov2TestVector,
+        run_vdaf,
+    };
     use assert_matches::assert_matches;
     use rand::prelude::*;
 
@@ -515,5 +518,25 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(reconstructed, test_vector.reference_sum);
+    }
+
+    #[test]
+    fn prepare_state_equality_test() {
+        equality_comparison_test(&[
+            Prio2PrepareState(Share::Leader(Vec::from([
+                FieldPrio2::from(0),
+                FieldPrio2::from(1),
+            ]))),
+            Prio2PrepareState(Share::Leader(Vec::from([
+                FieldPrio2::from(1),
+                FieldPrio2::from(0),
+            ]))),
+            Prio2PrepareState(Share::Helper(Seed(
+                (0..32).collect::<Vec<_>>().try_into().unwrap(),
+            ))),
+            Prio2PrepareState(Share::Helper(Seed(
+                (1..33).collect::<Vec<_>>().try_into().unwrap(),
+            ))),
+        ])
     }
 }

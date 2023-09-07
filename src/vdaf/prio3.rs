@@ -1357,7 +1357,9 @@ mod tests {
     use super::*;
     #[cfg(feature = "experimental")]
     use crate::flp::gadgets::ParallelSumGadget;
-    use crate::vdaf::{fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare};
+    use crate::vdaf::{
+        equality_comparison_test, fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare,
+    };
     use assert_matches::assert_matches;
     #[cfg(feature = "experimental")]
     use fixed::{
@@ -1824,5 +1826,148 @@ mod tests {
             &(),
             12,
         );
+    }
+
+    #[test]
+    fn public_share_equality_test() {
+        equality_comparison_test(&[
+            Prio3PublicShare {
+                joint_rand_parts: Some(Vec::from([Seed([0])])),
+            },
+            Prio3PublicShare {
+                joint_rand_parts: Some(Vec::from([Seed([1])])),
+            },
+            Prio3PublicShare {
+                joint_rand_parts: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn input_share_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: Some(Seed([2])),
+            },
+            // Modified measurement share.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([100])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: Some(Seed([2])),
+            },
+            // Modified proof share.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([101])),
+                joint_rand_blind: Some(Seed([2])),
+            },
+            // Modified joint_rand_blind.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: Some(Seed([102])),
+            },
+            // Missing joint_rand_blind.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_share_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3PrepareShare {
+                verifier: Vec::from([0]),
+                joint_rand_part: Some(Seed([1])),
+            },
+            // Modified verifier.
+            Prio3PrepareShare {
+                verifier: Vec::from([100]),
+                joint_rand_part: Some(Seed([1])),
+            },
+            // Modified joint_rand_part.
+            Prio3PrepareShare {
+                verifier: Vec::from([0]),
+                joint_rand_part: Some(Seed([101])),
+            },
+            // Missing joint_rand_part.
+            Prio3PrepareShare {
+                verifier: Vec::from([0]),
+                joint_rand_part: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_message_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3PrepareMessage {
+                joint_rand_seed: Some(Seed([0])),
+            },
+            // Modified joint_rand_seed.
+            Prio3PrepareMessage {
+                joint_rand_seed: Some(Seed([100])),
+            },
+            // Missing joint_rand_seed.
+            Prio3PrepareMessage {
+                joint_rand_seed: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_state_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Modified measurement share.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([100])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Modified joint_rand_seed.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([101])),
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Missing joint_rand_seed.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: None,
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Modified agg_id.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 102,
+                verifier_len: 3,
+            },
+            // Modified verifier_len.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 2,
+                verifier_len: 103,
+            },
+        ])
     }
 }

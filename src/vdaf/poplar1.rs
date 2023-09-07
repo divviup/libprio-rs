@@ -593,10 +593,10 @@ impl ConstantTimeEq for Poplar1FieldVec {
         // We allow short-circuiting on the type (Inner vs Leaf).
         match (self, other) {
             (Poplar1FieldVec::Inner(self_val), Poplar1FieldVec::Inner(other_val)) => {
-                self_val.ct_eq(&other_val)
+                self_val.ct_eq(other_val)
             }
             (Poplar1FieldVec::Leaf(self_val), Poplar1FieldVec::Leaf(other_val)) => {
-                self_val.ct_eq(&other_val)
+                self_val.ct_eq(other_val)
             }
             _ => Choice::from(0),
         }
@@ -1502,7 +1502,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vdaf::run_vdaf_prepare;
+    use crate::vdaf::{equality_comparison_test, run_vdaf_prepare};
     use assert_matches::assert_matches;
     use rand::prelude::*;
     use serde::Deserialize;
@@ -2262,5 +2262,197 @@ mod tests {
     #[test]
     fn test_vec_poplar1_3() {
         check_test_vec(include_str!("test_vec/07/Poplar1_3.json"));
+    }
+
+    #[test]
+    fn input_share_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified idpf_key.
+            Poplar1InputShare {
+                idpf_key: Seed([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified corr_seed.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([18, 17, 16]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified corr_inner.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(24), Field64::from(23)],
+                    [Field64::from(22), Field64::from(21)],
+                    [Field64::from(20), Field64::from(19)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified corr_leaf.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(26), Field255::from(25)],
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_state_equality_test() {
+        // This test effectively covers PrepareStateVariant, PrepareState, SketchState as well.
+        equality_comparison_test(&[
+            // Inner, round one. (default)
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified A_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(100),
+                    B_share: Field64::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified B_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(101),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified is_leader.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(1),
+                    is_leader: true,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(3), Field64::from(2)]),
+            })),
+            // Inner, round two. (default)
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round two, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field64::from(3), Field64::from(2)]),
+            })),
+            // Leaf, round one. (default)
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified A_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(100),
+                    B_share: Field255::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified B_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(101),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified is_leader.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(1),
+                    is_leader: true,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(3), Field255::from(2)]),
+            })),
+            // Leaf, round two. (default)
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round two, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field255::from(3), Field255::from(2)]),
+            })),
+        ])
+    }
+
+    #[test]
+    fn field_vec_equality_test() {
+        equality_comparison_test(&[
+            // Inner. (default)
+            Poplar1FieldVec::Inner(Vec::from([Field64::from(0), Field64::from(1)])),
+            // Inner, modified value.
+            Poplar1FieldVec::Inner(Vec::from([Field64::from(1), Field64::from(0)])),
+            // Leaf. (deafult)
+            Poplar1FieldVec::Leaf(Vec::from([Field255::from(0), Field255::from(1)])),
+            // Leaf, modified value.
+            Poplar1FieldVec::Leaf(Vec::from([Field255::from(1), Field255::from(0)])),
+        ])
     }
 }

@@ -407,7 +407,7 @@ impl SeedStreamFixedKeyAes128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field128;
+    use crate::{field::Field128, vdaf::equality_comparison_test};
     use serde::{Deserialize, Serialize};
     use std::{convert::TryInto, io::Cursor};
 
@@ -536,5 +536,10 @@ mod tests {
 
         assert_eq!(output_1_trait_api, output_1_alternate_api);
         assert_eq!(output_2_trait_api, output_2_alternate_api);
+    }
+
+    #[test]
+    fn seed_equality_test() {
+        equality_comparison_test(&[Seed([1, 2, 3]), Seed([3, 2, 1])])
     }
 }
