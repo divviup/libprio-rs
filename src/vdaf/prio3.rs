@@ -623,15 +623,22 @@ impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
 
 impl<const SEED_SIZE: usize> PartialEq for Prio3PublicShare<SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
-        match (&self.joint_rand_parts, &other.joint_rand_parts) {
-            (Some(self_jrps), Some(other_jrps)) => self_jrps.ct_eq(other_jrps).into(),
-            (None, None) => true,
-            _ => false,
-        }
+        self.ct_eq(other).into()
     }
 }
 
 impl<const SEED_SIZE: usize> Eq for Prio3PublicShare<SEED_SIZE> {}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PublicShare<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_parts.
+        match (&self.joint_rand_parts, &other.joint_rand_parts) {
+            (Some(self_joint_rand_parts), Some(other_joint_rand_parts)) => self_joint_rand_parts.ct_eq(other_joint_rand_parts).into(),
+            (None, None) => Choice::from(1),
+            _ => Choice::from(0),
+        }
+    }
+}
 
 impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Prio3<T, P, SEED_SIZE>>
     for Prio3PublicShare<SEED_SIZE>
@@ -682,6 +689,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3InputShare<F, SEED_S
 
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3InputShare<F, SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_blind.
         option_ct_eq(&self.joint_rand_blind, &other.joint_rand_blind)
             & self.measurement_share.ct_eq(&other.measurement_share)
             & self.proof_share.ct_eq(&other.proof_share)
@@ -776,6 +784,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareShare<F, SEED
 
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareShare<F, SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_part.
         option_ct_eq(&self.joint_rand_part, &other.joint_rand_part)
             & self.verifier.ct_eq(&other.verifier)
     }
@@ -845,6 +854,7 @@ impl<const SEED_SIZE: usize> Eq for Prio3PrepareMessage<SEED_SIZE> {}
 
 impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareMessage<SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presnce or absence of the joint_rand_seed.
         option_ct_eq(&self.joint_rand_seed, &other.joint_rand_seed)
     }
 }
@@ -918,10 +928,14 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareState<F, SEED
 
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareState<F, SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_seed, as well as
+        // the aggregator ID & verifier length parameters.
+        if self.agg_id != other.agg_id || self.verifier_len != other.verifier_len {
+            return Choice::from(0);
+        }
+
         option_ct_eq(&self.joint_rand_seed, &other.joint_rand_seed)
             & self.measurement_share.ct_eq(&other.measurement_share)
-            & self.agg_id.ct_eq(&other.agg_id)
-            & self.verifier_len.ct_eq(&other.verifier_len)
     }
 }
 
@@ -1342,8 +1356,8 @@ where
 }
 
 // This function determines equality between two optional, constant-time comparable values. It
-// short-circuits on the existence (but not contents) of the values -- timing information may reveal
-// whether the values match on Some or None.
+// short-circuits on the existence (but not contents) of the values -- a timing side-channel may
+// reveal whether the values match on Some or None.
 fn option_ct_eq<T: ConstantTimeEq>(left: &Option<T>, right: &Option<T>) -> Choice {
     match (left, right) {
         (Some(left), Some(right)) => left.ct_eq(right),

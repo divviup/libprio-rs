@@ -391,7 +391,8 @@ impl<F: ConstantTimeEq> Eq for SketchState<F> {}
 
 impl<F: ConstantTimeEq> ConstantTimeEq for SketchState<F> {
     fn ct_eq(&self, other: &Self) -> Choice {
-        // We allow short-circuiting on the round (RoundOne vs RoundTwo).
+        // We allow short-circuiting on the round (RoundOne vs RoundTwo), as well as is_leader for
+        // RoundOne comparisons.
         match (self, other) {
             (
                 SketchState::RoundOne {
@@ -405,12 +406,12 @@ impl<F: ConstantTimeEq> ConstantTimeEq for SketchState<F> {
                     is_leader: other_is_leader,
                 },
             ) => {
-                let self_is_leader = Choice::from(*self_is_leader as u8);
-                let other_is_leader = Choice::from(*other_is_leader as u8);
-
+                if self_is_leader != other_is_leader {
+                    return Choice::from(0);
+                }
+                
                 self_a_share.ct_eq(other_a_share)
                     & self_b_share.ct_eq(other_b_share)
-                    & self_is_leader.ct_eq(&other_is_leader)
             }
 
             (SketchState::RoundTwo, SketchState::RoundTwo) => Choice::from(1),
