@@ -111,7 +111,7 @@ pub trait DifferentialPrivacyDistribution {}
 /// Zero-concentrated differential privacy (ZCDP) budget as defined in [[BS16]].
 ///
 /// [BS16]: https://arxiv.org/pdf/1605.02065.pdf
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
 pub struct ZCdpBudget {
     epsilon: Ratio<BigUint>,
 }
