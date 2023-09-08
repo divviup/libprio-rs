@@ -409,9 +409,8 @@ impl<F: ConstantTimeEq> ConstantTimeEq for SketchState<F> {
                 if self_is_leader != other_is_leader {
                     return Choice::from(0);
                 }
-                
-                self_a_share.ct_eq(other_a_share)
-                    & self_b_share.ct_eq(other_b_share)
+
+                self_a_share.ct_eq(other_a_share) & self_b_share.ct_eq(other_b_share)
             }
 
             (SketchState::RoundTwo, SketchState::RoundTwo) => Choice::from(1),
