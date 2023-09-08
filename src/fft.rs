@@ -58,15 +58,26 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
         w = F::one();
         let r = F::root(l).unwrap();
         let y = 1 << (l - 1);
-        for i in 0..y {
-            for j in 0..(size / y) >> 1 {
-                let x = (1 << l) * j + i;
+        let chunk = (size / y) >> 1;
+
+        // unrolling first iteration of i-loop.
+        for j in 0..chunk {
+            let x = j << l;
+            let u = outp[x];
+            let v = outp[x + y];
+            outp[x] = u + v;
+            outp[x + y] = u - v;
+        }
+
+        for i in 1..y {
+            w *= r;
+            for j in 0..chunk {
+                let x = (j << l) + i;
                 let u = outp[x];
                 let v = w * outp[x + y];
                 outp[x] = u + v;
                 outp[x + y] = u - v;
             }
-            w *= r;
         }
     }
 
