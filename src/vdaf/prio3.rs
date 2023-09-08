@@ -765,7 +765,6 @@ where
 
 #[derive(Clone, Debug)]
 /// Message broadcast by each [`Aggregator`] in each round of the Preparation phase.
-
 pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
     /// A share of the FLP verifier message. (See [`Type`].)
     verifier: Vec<F>,
