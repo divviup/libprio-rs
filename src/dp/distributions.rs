@@ -253,7 +253,7 @@ impl Distribution<BigInt> for DiscreteGaussian {
 impl DifferentialPrivacyDistribution for DiscreteGaussian {}
 
 /// A DP strategy using the discrete gaussian distribution.
-#[derive(Clone, PartialEq, Serialize, Deserialize, Eq, Debug)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Eq, Debug, Ord, PartialOrd)]
 pub struct DiscreteGaussianDpStrategy<B>
 where
     B: DifferentialPrivacyBudget + std::fmt::Debug,
