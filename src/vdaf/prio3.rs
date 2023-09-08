@@ -61,6 +61,7 @@ use std::fmt::Debug;
 use std::io::Cursor;
 use std::iter::{self, IntoIterator};
 use std::marker::PhantomData;
+use subtle::{Choice, ConstantTimeEq};
 
 const DST_MEASUREMENT_SHARE: u16 = 1;
 const DST_PROOF_SHARE: u16 = 2;
@@ -622,7 +623,7 @@ where
 }
 
 /// Message broadcast by the [`Client`] to every [`Aggregator`] during the Sharding phase.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Prio3PublicShare<const SEED_SIZE: usize> {
     /// Contributions to the joint randomness from every aggregator's share.
     joint_rand_parts: Option<Vec<Seed<SEED_SIZE>>>,
@@ -644,6 +645,24 @@ impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
         } else {
             Some(0)
         }
+    }
+}
+
+impl<const SEED_SIZE: usize> PartialEq for Prio3PublicShare<SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Prio3PublicShare<SEED_SIZE> {}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PublicShare<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_parts.
+        option_ct_eq(
+            self.joint_rand_parts.as_deref(),
+            other.joint_rand_parts.as_deref(),
+        )
     }
 }
 
@@ -673,7 +692,7 @@ where
 }
 
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     /// The measurement share.
     measurement_share: Share<F, SEED_SIZE>,
@@ -684,6 +703,25 @@ pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
     /// Blinding seed used by the Aggregator to compute the joint randomness. This field is optional
     /// because not every [`Type`] requires joint randomness.
     joint_rand_blind: Option<Seed<SEED_SIZE>>,
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3InputShare<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3InputShare<F, SEED_SIZE> {}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3InputShare<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_blind.
+        option_ct_eq(
+            self.joint_rand_blind.as_ref(),
+            other.joint_rand_blind.as_ref(),
+        ) & self.measurement_share.ct_eq(&other.measurement_share)
+            & self.proof_share.ct_eq(&other.proof_share)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputShare<F, SEED_SIZE> {
@@ -753,7 +791,7 @@ where
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 /// Message broadcast by each [`Aggregator`] in each round of the Preparation phase.
 pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
     /// A share of the FLP verifier message. (See [`Type`].)
@@ -761,6 +799,24 @@ pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
 
     /// A part of the joint randomness seed.
     joint_rand_part: Option<Seed<SEED_SIZE>>,
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3PrepareShare<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareShare<F, SEED_SIZE> {}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareShare<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_part.
+        option_ct_eq(
+            self.joint_rand_part.as_ref(),
+            other.joint_rand_part.as_ref(),
+        ) & self.verifier.ct_eq(&other.verifier)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
@@ -810,11 +866,29 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
     }
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 /// Result of combining a round of [`Prio3PrepareShare`] messages.
 pub struct Prio3PrepareMessage<const SEED_SIZE: usize> {
     /// The joint randomness seed computed by the Aggregators.
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
+}
+
+impl<const SEED_SIZE: usize> PartialEq for Prio3PrepareMessage<SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Prio3PrepareMessage<SEED_SIZE> {}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareMessage<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presnce or absence of the joint_rand_seed.
+        option_ct_eq(
+            self.joint_rand_seed.as_ref(),
+            other.joint_rand_seed.as_ref(),
+        )
+    }
 }
 
 impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
@@ -868,12 +942,35 @@ where
 }
 
 /// State of each [`Aggregator`] during the Preparation phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
     measurement_share: Share<F, SEED_SIZE>,
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
     agg_id: u8,
     verifier_len: usize,
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3PrepareState<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareState<F, SEED_SIZE> {}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareState<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the presence or absence of the joint_rand_seed, as well as
+        // the aggregator ID & verifier length parameters.
+        if self.agg_id != other.agg_id || self.verifier_len != other.verifier_len {
+            return Choice::from(0);
+        }
+
+        option_ct_eq(
+            self.joint_rand_seed.as_ref(),
+            other.joint_rand_seed.as_ref(),
+        ) & self.measurement_share.ct_eq(&other.measurement_share)
+    }
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
@@ -1138,7 +1235,13 @@ where
     ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
-            if step.joint_rand_seed.as_ref().unwrap() != msg.joint_rand_seed.as_ref().unwrap() {
+            if step
+                .joint_rand_seed
+                .as_ref()
+                .unwrap()
+                .ct_ne(msg.joint_rand_seed.as_ref().unwrap())
+                .into()
+            {
                 return Err(VdafError::Uncategorized(
                     "joint randomness mismatch".to_string(),
                 ));
@@ -1286,12 +1389,29 @@ where
     }
 }
 
+// This function determines equality between two optional, constant-time comparable values. It
+// short-circuits on the existence (but not contents) of the values -- a timing side-channel may
+// reveal whether the values match on Some or None.
+#[inline]
+fn option_ct_eq<T>(left: Option<&T>, right: Option<&T>) -> Choice
+where
+    T: ConstantTimeEq + ?Sized,
+{
+    match (left, right) {
+        (Some(left), Some(right)) => left.ct_eq(right),
+        (None, None) => Choice::from(1),
+        _ => Choice::from(0),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     #[cfg(feature = "experimental")]
     use crate::flp::gadgets::ParallelSumGadget;
-    use crate::vdaf::{fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare};
+    use crate::vdaf::{
+        equality_comparison_test, fieldvec_roundtrip_test, run_vdaf, run_vdaf_prepare,
+    };
     use assert_matches::assert_matches;
     #[cfg(feature = "experimental")]
     use fixed::{
@@ -1774,5 +1894,148 @@ mod tests {
             &(),
             12,
         );
+    }
+
+    #[test]
+    fn public_share_equality_test() {
+        equality_comparison_test(&[
+            Prio3PublicShare {
+                joint_rand_parts: Some(Vec::from([Seed([0])])),
+            },
+            Prio3PublicShare {
+                joint_rand_parts: Some(Vec::from([Seed([1])])),
+            },
+            Prio3PublicShare {
+                joint_rand_parts: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn input_share_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: Some(Seed([2])),
+            },
+            // Modified measurement share.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([100])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: Some(Seed([2])),
+            },
+            // Modified proof share.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([101])),
+                joint_rand_blind: Some(Seed([2])),
+            },
+            // Modified joint_rand_blind.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: Some(Seed([102])),
+            },
+            // Missing joint_rand_blind.
+            Prio3InputShare {
+                measurement_share: Share::Leader(Vec::from([0])),
+                proof_share: Share::Leader(Vec::from([1])),
+                joint_rand_blind: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_share_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3PrepareShare {
+                verifier: Vec::from([0]),
+                joint_rand_part: Some(Seed([1])),
+            },
+            // Modified verifier.
+            Prio3PrepareShare {
+                verifier: Vec::from([100]),
+                joint_rand_part: Some(Seed([1])),
+            },
+            // Modified joint_rand_part.
+            Prio3PrepareShare {
+                verifier: Vec::from([0]),
+                joint_rand_part: Some(Seed([101])),
+            },
+            // Missing joint_rand_part.
+            Prio3PrepareShare {
+                verifier: Vec::from([0]),
+                joint_rand_part: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_message_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3PrepareMessage {
+                joint_rand_seed: Some(Seed([0])),
+            },
+            // Modified joint_rand_seed.
+            Prio3PrepareMessage {
+                joint_rand_seed: Some(Seed([100])),
+            },
+            // Missing joint_rand_seed.
+            Prio3PrepareMessage {
+                joint_rand_seed: None,
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_state_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Modified measurement share.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([100])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Modified joint_rand_seed.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([101])),
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Missing joint_rand_seed.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: None,
+                agg_id: 2,
+                verifier_len: 3,
+            },
+            // Modified agg_id.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 102,
+                verifier_len: 3,
+            },
+            // Modified verifier_len.
+            Prio3PrepareState {
+                measurement_share: Share::Leader(Vec::from([0])),
+                joint_rand_seed: Some(Seed([1])),
+                agg_id: 2,
+                verifier_len: 103,
+            },
+        ])
     }
 }

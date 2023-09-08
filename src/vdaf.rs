@@ -18,6 +18,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use std::{fmt::Debug, io::Cursor};
+use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
@@ -57,7 +58,7 @@ pub enum VdafError {
 }
 
 /// An additive share of a vector of field elements.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Share<F, const SEED_SIZE: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
@@ -74,6 +75,26 @@ impl<F: Clone, const SEED_SIZE: usize> Share<F, SEED_SIZE> {
         match self {
             Self::Leader(ref data) => Self::Leader(data[..len].to_vec()),
             Self::Helper(ref seed) => Self::Helper(seed.clone()),
+        }
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Share<F, SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Share<F, SEED_SIZE> {}
+
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Share<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        // We allow short-circuiting on the type (Leader vs Helper) of the value, but not the types'
+        // contents.
+        match (self, other) {
+            (Share::Leader(self_val), Share::Leader(other_val)) => self_val.ct_eq(other_val),
+            (Share::Helper(self_val), Share::Helper(other_val)) => self_val.ct_eq(other_val),
+            _ => Choice::from(0),
         }
     }
 }
@@ -310,8 +331,22 @@ pub trait Aggregatable: Clone + Debug + From<Self::OutputShare> {
 }
 
 /// An output share comprised of a vector of field elements.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct OutputShare<F>(Vec<F>);
+
+impl<F: ConstantTimeEq> PartialEq for OutputShare<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for OutputShare<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for OutputShare<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl<F> AsRef<[F]> for OutputShare<F> {
     fn as_ref(&self) -> &[F] {
@@ -339,8 +374,23 @@ impl<F: FieldElement> Encode for OutputShare<F> {
 ///
 /// This is suitable for VDAFs where both output shares and aggregate shares are vectors of field
 /// elements, and output shares need no special transformation to be merged into an aggregate share.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+
 pub struct AggregateShare<F>(Vec<F>);
+
+impl<F: ConstantTimeEq> PartialEq for AggregateShare<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for AggregateShare<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for AggregateShare<F> {
+    fn ct_eq(&self, other: &Self) -> subtle::Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl<F: FieldElement> AsRef<[F]> for AggregateShare<F> {
     fn as_ref(&self) -> &[F] {
@@ -550,6 +600,65 @@ where
     let encoded = value.get_encoded();
 
     assert_eq!(encoded, bytes);
+}
+
+#[cfg(test)]
+fn equality_comparison_test<T>(values: &[T])
+where
+    T: Debug + PartialEq,
+{
+    use std::ptr;
+
+    // This function expects that every value passed in `values` is distinct, i.e. should not
+    // compare as equal to any other element. We test both (i, j) and (j, i) to gain confidence that
+    // equality implementations are symmetric.
+    for (i, i_val) in values.iter().enumerate() {
+        for (j, j_val) in values.iter().enumerate() {
+            if i == j {
+                assert!(ptr::eq(i_val, j_val)); // sanity
+                assert_eq!(
+                    i_val, j_val,
+                    "Expected element at index {i} to be equal to itself, but it was not"
+                );
+            } else {
+                assert_ne!(
+                    i_val, j_val,
+                    "Expected elements at indices {i} & {j} to not be equal, but they were"
+                )
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::vdaf::{equality_comparison_test, xof::Seed, AggregateShare, OutputShare, Share};
+
+    #[test]
+    fn share_equality_test() {
+        equality_comparison_test(&[
+            Share::Leader(Vec::from([1, 2, 3])),
+            Share::Leader(Vec::from([3, 2, 1])),
+            Share::Helper(Seed([1, 2, 3])),
+            Share::Helper(Seed([3, 2, 1])),
+        ])
+    }
+
+    #[test]
+    fn output_share_equality_test() {
+        equality_comparison_test(&[
+            OutputShare(Vec::from([1, 2, 3])),
+            OutputShare(Vec::from([3, 2, 1])),
+        ])
+    }
+
+    #[test]
+    fn aggregate_share_equality_test() {
+        equality_comparison_test(&[
+            AggregateShare(Vec::from([1, 2, 3])),
+            AggregateShare(Vec::from([3, 2, 1])),
+        ])
+    }
 }
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]

@@ -38,7 +38,7 @@ use std::{
 use subtle::{Choice, ConstantTimeEq};
 
 /// Input of [`Xof`].
-#[derive(Clone, Debug, Eq)]
+#[derive(Clone, Debug)]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
 impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
@@ -61,15 +61,17 @@ impl<const SEED_SIZE: usize> AsRef<[u8; SEED_SIZE]> for Seed<SEED_SIZE> {
     }
 }
 
-impl<const SEED_SIZE: usize> ConstantTimeEq for Seed<SEED_SIZE> {
-    fn ct_eq(&self, other: &Self) -> Choice {
-        self.0.ct_eq(&other.0)
-    }
-}
-
 impl<const SEED_SIZE: usize> PartialEq for Seed<SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Seed<SEED_SIZE> {}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Seed<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
     }
 }
 
@@ -434,7 +436,7 @@ impl RngCore for SeedStreamFixedKeyAes128 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field128;
+    use crate::{field::Field128, vdaf::equality_comparison_test};
     use serde::{Deserialize, Serialize};
     use std::{convert::TryInto, io::Cursor};
 
@@ -563,5 +565,10 @@ mod tests {
 
         assert_eq!(output_1_trait_api, output_1_alternate_api);
         assert_eq!(output_2_trait_api, output_2_alternate_api);
+    }
+
+    #[test]
+    fn seed_equality_test() {
+        equality_comparison_test(&[Seed([1, 2, 3]), Seed([3, 2, 1])])
     }
 }

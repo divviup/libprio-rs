@@ -22,6 +22,7 @@ use hmac::{Hmac, Mac};
 use rand_core::RngCore;
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
+use subtle::{Choice, ConstantTimeEq};
 
 mod client;
 mod server;
@@ -165,8 +166,22 @@ impl Client<16> for Prio2 {
 }
 
 /// State of each [`Aggregator`] during the Preparation phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct Prio2PrepareState(Share<FieldPrio2, 32>);
+
+impl PartialEq for Prio2PrepareState {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Prio2PrepareState {}
+
+impl ConstantTimeEq for Prio2PrepareState {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl Encode for Prio2PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -370,7 +385,10 @@ fn role_try_from(agg_id: usize) -> Result<bool, VdafError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vdaf::{fieldvec_roundtrip_test, prio2::test_vector::Priov2TestVector, run_vdaf};
+    use crate::vdaf::{
+        equality_comparison_test, fieldvec_roundtrip_test, prio2::test_vector::Priov2TestVector,
+        run_vdaf,
+    };
     use assert_matches::assert_matches;
     use rand::prelude::*;
 
@@ -500,5 +518,25 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(reconstructed, test_vector.reference_sum);
+    }
+
+    #[test]
+    fn prepare_state_equality_test() {
+        equality_comparison_test(&[
+            Prio2PrepareState(Share::Leader(Vec::from([
+                FieldPrio2::from(0),
+                FieldPrio2::from(1),
+            ]))),
+            Prio2PrepareState(Share::Leader(Vec::from([
+                FieldPrio2::from(1),
+                FieldPrio2::from(0),
+            ]))),
+            Prio2PrepareState(Share::Helper(Seed(
+                (0..32).collect::<Vec<_>>().try_into().unwrap(),
+            ))),
+            Prio2PrepareState(Share::Helper(Seed(
+                (1..33).collect::<Vec<_>>().try_into().unwrap(),
+            ))),
+        ])
     }
 }

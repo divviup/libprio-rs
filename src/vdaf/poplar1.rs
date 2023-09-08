@@ -111,7 +111,7 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for P
 ///
 /// This is comprised of an IDPF key share and the correlated randomness used to compute the sketch
 /// during preparation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone)]
 pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// IDPF key share.
     idpf_key: Seed<16>,
@@ -127,6 +127,32 @@ pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// Aggregator's share of the correlated randomness used in the second part of the sketch. Used
     /// for leaf nodes of the IDPF tree.
     corr_leaf: [Field255; 2],
+}
+
+impl<const SEED_SIZE: usize> PartialEq for Poplar1InputShare<SEED_SIZE> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<const SEED_SIZE: usize> Eq for Poplar1InputShare<SEED_SIZE> {}
+
+impl<const SEED_SIZE: usize> ConstantTimeEq for Poplar1InputShare<SEED_SIZE> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We short-circuit on the length of corr_inner being different. Only the content is
+        // protected.
+        if self.corr_inner.len() != other.corr_inner.len() {
+            return Choice::from(0);
+        }
+
+        let mut res = self.idpf_key.ct_eq(&other.idpf_key)
+            & self.corr_seed.ct_eq(&other.corr_seed)
+            & self.corr_leaf.ct_eq(&other.corr_leaf);
+        for (x, y) in self.corr_inner.iter().zip(other.corr_inner.iter()) {
+            res &= x.ct_eq(y);
+        }
+        res
+    }
 }
 
 impl<const SEED_SIZE: usize> Encode for Poplar1InputShare<SEED_SIZE> {
@@ -175,8 +201,22 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 }
 
 /// Poplar1 preparation state.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Poplar1PrepareState(PrepareStateVariant);
+
+impl PartialEq for Poplar1PrepareState {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Poplar1PrepareState {}
+
+impl ConstantTimeEq for Poplar1PrepareState {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0.ct_eq(&other.0)
+    }
+}
 
 impl Encode for Poplar1PrepareState {
     fn encode(&self, bytes: &mut Vec<u8>) {
@@ -202,10 +242,29 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum PrepareStateVariant {
     Inner(PrepareState<Field64>),
     Leaf(PrepareState<Field255>),
+}
+
+impl PartialEq for PrepareStateVariant {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for PrepareStateVariant {}
+
+impl ConstantTimeEq for PrepareStateVariant {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the type (Inner vs Leaf).
+        match (self, other) {
+            (Self::Inner(self_val), Self::Inner(other_val)) => self_val.ct_eq(other_val),
+            (Self::Leaf(self_val), Self::Leaf(other_val)) => self_val.ct_eq(other_val),
+            _ => Choice::from(0),
+        }
+    }
 }
 
 impl Encode for PrepareStateVariant {
@@ -253,10 +312,24 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 struct PrepareState<F> {
     sketch: SketchState<F>,
     output_share: Vec<F>,
+}
+
+impl<F: ConstantTimeEq> PartialEq for PrepareState<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for PrepareState<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for PrepareState<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.sketch.ct_eq(&other.sketch) & self.output_share.ct_eq(&other.output_share)
+    }
 }
 
 impl<F: FieldElement> Encode for PrepareState<F> {
@@ -298,7 +371,7 @@ impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 enum SketchState<F> {
     #[allow(non_snake_case)]
     RoundOne {
@@ -307,6 +380,44 @@ enum SketchState<F> {
         is_leader: bool,
     },
     RoundTwo,
+}
+
+impl<F: ConstantTimeEq> PartialEq for SketchState<F> {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<F: ConstantTimeEq> Eq for SketchState<F> {}
+
+impl<F: ConstantTimeEq> ConstantTimeEq for SketchState<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the round (RoundOne vs RoundTwo), as well as is_leader for
+        // RoundOne comparisons.
+        match (self, other) {
+            (
+                SketchState::RoundOne {
+                    A_share: self_a_share,
+                    B_share: self_b_share,
+                    is_leader: self_is_leader,
+                },
+                SketchState::RoundOne {
+                    A_share: other_a_share,
+                    B_share: other_b_share,
+                    is_leader: other_is_leader,
+                },
+            ) => {
+                if self_is_leader != other_is_leader {
+                    return Choice::from(0);
+                }
+
+                self_a_share.ct_eq(other_a_share) & self_b_share.ct_eq(other_b_share)
+            }
+
+            (SketchState::RoundTwo, SketchState::RoundTwo) => Choice::from(1),
+            _ => Choice::from(0),
+        }
+    }
 }
 
 impl<F: FieldElement> Encode for SketchState<F> {
@@ -451,7 +562,7 @@ impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
 }
 
 /// A vector of field elements transmitted while evaluating Poplar1.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum Poplar1FieldVec {
     /// Field type for inner nodes of the IDPF tree.
     Inner(Vec<Field64>),
@@ -466,6 +577,29 @@ impl Poplar1FieldVec {
             Self::Leaf(vec![<Field255 as FieldElement>::zero(); len])
         } else {
             Self::Inner(vec![<Field64 as FieldElement>::zero(); len])
+        }
+    }
+}
+
+impl PartialEq for Poplar1FieldVec {
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl Eq for Poplar1FieldVec {}
+
+impl ConstantTimeEq for Poplar1FieldVec {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        // We allow short-circuiting on the type (Inner vs Leaf).
+        match (self, other) {
+            (Poplar1FieldVec::Inner(self_val), Poplar1FieldVec::Inner(other_val)) => {
+                self_val.ct_eq(other_val)
+            }
+            (Poplar1FieldVec::Leaf(self_val), Poplar1FieldVec::Leaf(other_val)) => {
+                self_val.ct_eq(other_val)
+            }
+            _ => Choice::from(0),
         }
     }
 }
@@ -1369,7 +1503,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vdaf::run_vdaf_prepare;
+    use crate::vdaf::{equality_comparison_test, run_vdaf_prepare};
     use assert_matches::assert_matches;
     use rand::prelude::*;
     use serde::Deserialize;
@@ -2129,5 +2263,197 @@ mod tests {
     #[test]
     fn test_vec_poplar1_3() {
         check_test_vec(include_str!("test_vec/07/Poplar1_3.json"));
+    }
+
+    #[test]
+    fn input_share_equality_test() {
+        equality_comparison_test(&[
+            // Default.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified idpf_key.
+            Poplar1InputShare {
+                idpf_key: Seed([15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified corr_seed.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([18, 17, 16]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified corr_inner.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(24), Field64::from(23)],
+                    [Field64::from(22), Field64::from(21)],
+                    [Field64::from(20), Field64::from(19)],
+                ]),
+                corr_leaf: [Field255::from(25), Field255::from(26)],
+            },
+            // Modified corr_leaf.
+            Poplar1InputShare {
+                idpf_key: Seed([0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]),
+                corr_seed: Seed([16, 17, 18]),
+                corr_inner: Vec::from([
+                    [Field64::from(19), Field64::from(20)],
+                    [Field64::from(21), Field64::from(22)],
+                    [Field64::from(23), Field64::from(24)],
+                ]),
+                corr_leaf: [Field255::from(26), Field255::from(25)],
+            },
+        ])
+    }
+
+    #[test]
+    fn prepare_state_equality_test() {
+        // This test effectively covers PrepareStateVariant, PrepareState, SketchState as well.
+        equality_comparison_test(&[
+            // Inner, round one. (default)
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified A_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(100),
+                    B_share: Field64::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified B_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(101),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified is_leader.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(1),
+                    is_leader: true,
+                },
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round one, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field64::from(0),
+                    B_share: Field64::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field64::from(3), Field64::from(2)]),
+            })),
+            // Inner, round two. (default)
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field64::from(2), Field64::from(3)]),
+            })),
+            // Inner, round two, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field64::from(3), Field64::from(2)]),
+            })),
+            // Leaf, round one. (default)
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified A_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(100),
+                    B_share: Field255::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified B_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(101),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified is_leader.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(1),
+                    is_leader: true,
+                },
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round one, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundOne {
+                    A_share: Field255::from(0),
+                    B_share: Field255::from(1),
+                    is_leader: false,
+                },
+                output_share: Vec::from([Field255::from(3), Field255::from(2)]),
+            })),
+            // Leaf, round two. (default)
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field255::from(2), Field255::from(3)]),
+            })),
+            // Leaf, round two, modified output_share.
+            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                sketch: SketchState::RoundTwo,
+                output_share: Vec::from([Field255::from(3), Field255::from(2)]),
+            })),
+        ])
+    }
+
+    #[test]
+    fn field_vec_equality_test() {
+        equality_comparison_test(&[
+            // Inner. (default)
+            Poplar1FieldVec::Inner(Vec::from([Field64::from(0), Field64::from(1)])),
+            // Inner, modified value.
+            Poplar1FieldVec::Inner(Vec::from([Field64::from(1), Field64::from(0)])),
+            // Leaf. (deafult)
+            Poplar1FieldVec::Leaf(Vec::from([Field255::from(0), Field255::from(1)])),
+            // Leaf, modified value.
+            Poplar1FieldVec::Leaf(Vec::from([Field255::from(1), Field255::from(0)])),
+        ])
     }
 }
