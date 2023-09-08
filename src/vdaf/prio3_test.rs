@@ -172,13 +172,11 @@ fn test_vec_prio3_sum() {
     }
 }
 
-// TODO Re-enable this test once https://github.com/divviup/libprio-rs/pull/695
-#[ignore]
 #[test]
 fn test_vec_prio3_sum_vec() {
     let t: TPrio3<Vec<u128>> =
         serde_json::from_str(include_str!("test_vec/07/Prio3SumVec_0.json")).unwrap();
-    let prio3 = Prio3::new_sum_vec(2, 8, 10).unwrap();
+    let prio3 = Prio3::new_sum_vec(2, 8, 10, 9).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -187,7 +185,7 @@ fn test_vec_prio3_sum_vec() {
 
     let t: TPrio3<Vec<u128>> =
         serde_json::from_str(include_str!("test_vec/07/Prio3SumVec_1.json")).unwrap();
-    let prio3 = Prio3::new_sum_vec(3, 16, 3).unwrap();
+    let prio3 = Prio3::new_sum_vec(3, 16, 3, 7).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -195,13 +193,11 @@ fn test_vec_prio3_sum_vec() {
     }
 }
 
-// TODO Re-enable this test once https://github.com/divviup/libprio-rs/pull/695
-#[ignore]
 #[test]
 fn test_vec_prio3_histogram() {
     let t: TPrio3<usize> =
         serde_json::from_str(include_str!("test_vec/07/Prio3Histogram_0.json")).unwrap();
-    let prio3 = Prio3::new_histogram(2, 4).unwrap();
+    let prio3 = Prio3::new_histogram(2, 4, 2).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {
@@ -210,7 +206,7 @@ fn test_vec_prio3_histogram() {
 
     let t: TPrio3<usize> =
         serde_json::from_str(include_str!("test_vec/07/Prio3Histogram_1.json")).unwrap();
-    let prio3 = Prio3::new_histogram(3, 4).unwrap();
+    let prio3 = Prio3::new_histogram(3, 11, 3).unwrap();
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
     for (test_num, p) in t.prep.iter().enumerate() {

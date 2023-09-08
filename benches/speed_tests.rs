@@ -119,13 +119,13 @@ fn poly_mul(c: &mut Criterion) {
 #[cfg(feature = "prio2")]
 fn prio2(c: &mut Criterion) {
     let mut group = c.benchmark_group("prio2_shard");
-    for input_len in [10, 100, 1_000] {
+    for input_length in [10, 100, 1_000] {
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_len),
-            &input_len,
-            |b, input_len| {
-                let vdaf = Prio2::new(*input_len).unwrap();
-                let measurement = (0..u32::try_from(*input_len).unwrap())
+            BenchmarkId::from_parameter(input_length),
+            &input_length,
+            |b, input_length| {
+                let vdaf = Prio2::new(*input_length).unwrap();
+                let measurement = (0..u32::try_from(*input_length).unwrap())
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
@@ -136,13 +136,13 @@ fn prio2(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio2_prepare_init");
-    for input_len in [10, 100, 1_000] {
+    for input_length in [10, 100, 1_000] {
         group.bench_with_input(
-            BenchmarkId::from_parameter(input_len),
-            &input_len,
-            |b, input_len| {
-                let vdaf = Prio2::new(*input_len).unwrap();
-                let measurement = (0..u32::try_from(*input_len).unwrap())
+            BenchmarkId::from_parameter(input_length),
+            &input_length,
+            |b, input_length| {
+                let vdaf = Prio2::new(*input_length).unwrap();
+                let measurement = (0..u32::try_from(*input_length).unwrap())
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
@@ -209,13 +209,13 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3sumvec_shard");
-    for input_len in [10, 100, 1_000] {
+    for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
         group.bench_with_input(
-            BenchmarkId::new("serial", input_len),
-            &input_len,
-            |b, input_len| {
-                let vdaf = Prio3::new_sum_vec(num_shares, 1, *input_len).unwrap();
-                let measurement = (0..u128::try_from(*input_len).unwrap())
+            BenchmarkId::new("serial", input_length),
+            &(input_length, chunk_length),
+            |b, (input_length, chunk_length)| {
+                let vdaf = Prio3::new_sum_vec(num_shares, 1, *input_length, *chunk_length).unwrap();
+                let measurement = (0..u128::try_from(*input_length).unwrap())
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
@@ -226,13 +226,19 @@ fn prio3(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        for input_len in [10, 100, 1_000] {
+        for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
             group.bench_with_input(
-                BenchmarkId::new("parallel", input_len),
-                &input_len,
-                |b, input_len| {
-                    let vdaf = Prio3::new_sum_vec_multithreaded(num_shares, 1, *input_len).unwrap();
-                    let measurement = (0..u128::try_from(*input_len).unwrap())
+                BenchmarkId::new("parallel", input_length),
+                &(input_length, chunk_length),
+                |b, (input_length, chunk_length)| {
+                    let vdaf = Prio3::new_sum_vec_multithreaded(
+                        num_shares,
+                        1,
+                        *input_length,
+                        *chunk_length,
+                    )
+                    .unwrap();
+                    let measurement = (0..u128::try_from(*input_length).unwrap())
                         .map(|i| i & 1)
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
@@ -244,13 +250,13 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3sumvec_prepare_init");
-    for input_len in [10, 100, 1_000] {
+    for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
         group.bench_with_input(
-            BenchmarkId::new("serial", input_len),
-            &input_len,
-            |b, input_len| {
-                let vdaf = Prio3::new_sum_vec(num_shares, 1, *input_len).unwrap();
-                let measurement = (0..u128::try_from(*input_len).unwrap())
+            BenchmarkId::new("serial", input_length),
+            &(input_length, chunk_length),
+            |b, (input_length, chunk_length)| {
+                let vdaf = Prio3::new_sum_vec(num_shares, 1, *input_length, *chunk_length).unwrap();
+                let measurement = (0..u128::try_from(*input_length).unwrap())
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
@@ -266,13 +272,19 @@ fn prio3(c: &mut Criterion) {
 
     #[cfg(feature = "multithreaded")]
     {
-        for input_len in [10, 100, 1_000] {
+        for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
             group.bench_with_input(
-                BenchmarkId::new("parallel", input_len),
-                &input_len,
-                |b, input_len| {
-                    let vdaf = Prio3::new_sum_vec_multithreaded(num_shares, 1, *input_len).unwrap();
-                    let measurement = (0..u128::try_from(*input_len).unwrap())
+                BenchmarkId::new("parallel", input_length),
+                &(input_length, chunk_length),
+                |b, (input_length, chunk_length)| {
+                    let vdaf = Prio3::new_sum_vec_multithreaded(
+                        num_shares,
+                        1,
+                        *input_length,
+                        *chunk_length,
+                    )
+                    .unwrap();
+                    let measurement = (0..u128::try_from(*input_length).unwrap())
                         .map(|i| i & 1)
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
@@ -296,33 +308,75 @@ fn prio3(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("prio3histogram_shard");
-    for input_len in [10, 100, 1_000, 10_000, 100_000] {
-        if input_len >= 100_000 {
+    for (input_length, chunk_length) in [
+        (10, 3),
+        (100, 10),
+        (1_000, 31),
+        (10_000, 100),
+        (100_000, 316),
+    ] {
+        if input_length >= 100_000 {
             group.measurement_time(Duration::from_secs(15));
         }
         group.bench_with_input(
-            BenchmarkId::new("serial", input_len),
-            &input_len,
-            |b, input_len| {
-                let vdaf = Prio3::new_histogram(num_shares, *input_len).unwrap();
+            BenchmarkId::new("serial", input_length),
+            &(input_length, chunk_length),
+            |b, (input_length, chunk_length)| {
+                let vdaf = Prio3::new_histogram(num_shares, *input_length, *chunk_length).unwrap();
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
                 b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
             },
         );
     }
+
+    #[cfg(feature = "multithreaded")]
+    {
+        for (input_length, chunk_length) in [
+            (10, 3),
+            (100, 10),
+            (1_000, 31),
+            (10_000, 100),
+            (100_000, 316),
+        ] {
+            if input_length >= 100_000 {
+                group.measurement_time(Duration::from_secs(15));
+            }
+            group.bench_with_input(
+                BenchmarkId::new("parallel", input_length),
+                &(input_length, chunk_length),
+                |b, (input_length, chunk_length)| {
+                    let vdaf = Prio3::new_histogram_multithreaded(
+                        num_shares,
+                        *input_length,
+                        *chunk_length,
+                    )
+                    .unwrap();
+                    let measurement = black_box(0);
+                    let nonce = black_box([0u8; 16]);
+                    b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                },
+            );
+        }
+    }
     group.finish();
 
     let mut group = c.benchmark_group("prio3histogram_prepare_init");
-    for input_len in [10, 100, 1_000, 10_000, 100_000] {
-        if input_len >= 100_000 {
+    for (input_length, chunk_length) in [
+        (10, 3),
+        (100, 10),
+        (1_000, 31),
+        (10_000, 100),
+        (100_000, 316),
+    ] {
+        if input_length >= 100_000 {
             group.measurement_time(Duration::from_secs(15));
         }
         group.bench_with_input(
-            BenchmarkId::new("serial", input_len),
-            &input_len,
-            |b, input_len| {
-                let vdaf = Prio3::new_histogram(num_shares, *input_len).unwrap();
+            BenchmarkId::new("serial", input_length),
+            &(input_length, chunk_length),
+            |b, (input_length, chunk_length)| {
+                let vdaf = Prio3::new_histogram(num_shares, *input_length, *chunk_length).unwrap();
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 16]);
@@ -333,6 +387,48 @@ fn prio3(c: &mut Criterion) {
                 });
             },
         );
+    }
+
+    #[cfg(feature = "multithreaded")]
+    {
+        for (input_length, chunk_length) in [
+            (10, 3),
+            (100, 10),
+            (1_000, 31),
+            (10_000, 100),
+            (100_000, 316),
+        ] {
+            if input_length >= 100_000 {
+                group.measurement_time(Duration::from_secs(15));
+            }
+            group.bench_with_input(
+                BenchmarkId::new("parallel", input_length),
+                &(input_length, chunk_length),
+                |b, (input_length, chunk_length)| {
+                    let vdaf = Prio3::new_histogram_multithreaded(
+                        num_shares,
+                        *input_length,
+                        *chunk_length,
+                    )
+                    .unwrap();
+                    let measurement = black_box(0);
+                    let nonce = black_box([0u8; 16]);
+                    let verify_key = black_box([0u8; 16]);
+                    let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                    b.iter(|| {
+                        vdaf.prepare_init(
+                            &verify_key,
+                            0,
+                            &(),
+                            &nonce,
+                            &public_share,
+                            &input_shares[0],
+                        )
+                        .unwrap()
+                    });
+                },
+            );
+        }
     }
     group.finish();
 
