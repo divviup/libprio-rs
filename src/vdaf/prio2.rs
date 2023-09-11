@@ -268,8 +268,9 @@ impl Aggregator<32, 16> for Prio2 {
         self.prepare_init_with_query_rand(query_rand, input_share, is_leader)
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Prio2PrepareShare>>(
+    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Prio2PrepareShare>>(
         &self,
+        _: &Self::AggregationParam,
         inputs: M,
     ) -> Result<(), VdafError> {
         let verifier_shares: Vec<v2_server::VerificationMessage<FieldPrio2>> =
@@ -289,7 +290,7 @@ impl Aggregator<32, 16> for Prio2 {
         Ok(())
     }
 
-    fn prepare_step(
+    fn prepare_next(
         &self,
         state: Prio2PrepareState,
         _input: (),
@@ -491,12 +492,12 @@ mod tests {
             let (prepare_state_2, prepare_share_2) = vdaf
                 .prepare_init(&[0; 32], 1, &(), &[0; 16], &(), &input_share_2)
                 .unwrap();
-            vdaf.prepare_preprocess([prepare_share_1, prepare_share_2])
+            vdaf.prepare_shares_to_prepare_message(&(), [prepare_share_1, prepare_share_2])
                 .unwrap();
-            let transition_1 = vdaf.prepare_step(prepare_state_1, ()).unwrap();
+            let transition_1 = vdaf.prepare_next(prepare_state_1, ()).unwrap();
             let output_share_1 =
                 assert_matches!(transition_1, PrepareTransition::Finish(out) => out);
-            let transition_2 = vdaf.prepare_step(prepare_state_2, ()).unwrap();
+            let transition_2 = vdaf.prepare_next(prepare_state_2, ()).unwrap();
             let output_share_2 =
                 assert_matches!(transition_2, PrepareTransition::Finish(out) => out);
             leader_output_shares.push(output_share_1);

@@ -106,14 +106,14 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
     }
 
     let inbound = prio3
-        .prepare_preprocess(prep_shares)
+        .prepare_shares_to_prepare_message(&(), prep_shares)
         .unwrap_or_else(|e| err!(test_num, e, "prep preprocess"));
     assert_eq!(t.prep_messages.len(), 1);
     assert_eq!(inbound.get_encoded(), t.prep_messages[0].as_ref());
 
     let mut out_shares = Vec::new();
     for state in states.iter_mut() {
-        match prio3.prepare_step(state.clone(), inbound.clone()).unwrap() {
+        match prio3.prepare_next(state.clone(), inbound.clone()).unwrap() {
             PrepareTransition::Finish(out_share) => {
                 out_shares.push(out_share);
             }
