@@ -970,6 +970,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
             self.joint_rand_seed.as_ref(),
             other.joint_rand_seed.as_ref(),
         ) & self.measurement_share.ct_eq(&other.measurement_share)
+    }
 }
 
 impl<F, const SEED_SIZE: usize> Debug for Prio3PrepareState<F, SEED_SIZE> {

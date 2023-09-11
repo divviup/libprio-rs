@@ -58,7 +58,7 @@ experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", 
 multithreaded = ["rayon"]
 prio2 = ["crypto-dependencies", "hmac", "sha2"]
 crypto-dependencies = ["aes", "ctr"]
-test-util = ["dep:rand"]
+test-util = ["rand"]
 
 [workspace]
 members = [".", "binaries"]

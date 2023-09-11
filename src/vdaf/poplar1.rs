@@ -329,6 +329,7 @@ impl<F: ConstantTimeEq> Eq for PrepareState<F> {}
 impl<F: ConstantTimeEq> ConstantTimeEq for PrepareState<F> {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.sketch.ct_eq(&other.sketch) & self.output_share.ct_eq(&other.output_share)
+    }
 }
 
 impl<F> Debug for PrepareState<F> {
