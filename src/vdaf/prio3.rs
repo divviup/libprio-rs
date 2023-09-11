@@ -313,7 +313,7 @@ impl Prio3Average {
 ///         prep_states.push(state);
 ///         prep_shares.push(share);
 ///     }
-///     let prep_msg = vdaf.prepare_preprocess(prep_shares).unwrap();
+///     let prep_msg = vdaf.prepare_shares_to_prepare_message(&(), prep_shares).unwrap();
 ///
 ///     for (agg_id, state) in prep_states.into_iter().enumerate() {
 ///         let out_share = match vdaf.prepare_step(state, prep_msg.clone()).unwrap() {
@@ -1173,8 +1173,11 @@ where
         ))
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Prio3PrepareShare<T::Field, SEED_SIZE>>>(
+    fn prepare_shares_to_prepare_message<
+        M: IntoIterator<Item = Prio3PrepareShare<T::Field, SEED_SIZE>>,
+    >(
         &self,
+        _: &Self::AggregationParam,
         inputs: M,
     ) -> Result<Prio3PrepareMessage<SEED_SIZE>, VdafError> {
         let mut verifier = vec![T::Field::zero(); self.typ.verifier_len()];
@@ -1228,7 +1231,7 @@ where
         Ok(Prio3PrepareMessage { joint_rand_seed })
     }
 
-    fn prepare_step(
+    fn prepare_next(
         &self,
         step: Prio3PrepareState<T::Field, SEED_SIZE>,
         msg: Prio3PrepareMessage<SEED_SIZE>,
@@ -1851,7 +1854,9 @@ mod tests {
             last_prepare_state = Some(prepare_state);
         }
 
-        let prepare_message = prio3.prepare_preprocess(prepare_shares).unwrap();
+        let prepare_message = prio3
+            .prepare_shares_to_prepare_message(&(), prepare_shares)
+            .unwrap();
 
         let encoded_prepare_message = prepare_message.get_encoded();
         let decoded_prepare_message = Prio3PrepareMessage::get_decoded_with_param(

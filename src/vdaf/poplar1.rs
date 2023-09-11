@@ -1076,8 +1076,9 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         }
     }
 
-    fn prepare_preprocess<M: IntoIterator<Item = Poplar1FieldVec>>(
+    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Poplar1FieldVec>>(
         &self,
+        _: &Poplar1AggregationParam,
         inputs: M,
     ) -> Result<Poplar1PrepareMessage, VdafError> {
         let mut inputs = inputs.into_iter();
@@ -1114,7 +1115,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         }
     }
 
-    fn prepare_step(
+    fn prepare_next(
         &self,
         state: Poplar1PrepareState,
         msg: Poplar1PrepareMessage,
@@ -2065,35 +2066,41 @@ mod tests {
             .unwrap();
 
         let r1_prep_msg = poplar
-            .prepare_preprocess([init_prep_share_0.clone(), init_prep_share_1.clone()])
+            .prepare_shares_to_prepare_message(
+                &agg_param,
+                [init_prep_share_0.clone(), init_prep_share_1.clone()],
+            )
             .unwrap();
 
         let (r1_prep_state_0, r1_prep_share_0) = assert_matches!(
             poplar
-                .prepare_step(init_prep_state_0.clone(), r1_prep_msg.clone())
+                .prepare_next(init_prep_state_0.clone(), r1_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Continue(state, share) => (state, share)
         );
         let (r1_prep_state_1, r1_prep_share_1) = assert_matches!(
             poplar
-                .prepare_step(init_prep_state_1.clone(), r1_prep_msg.clone())
+                .prepare_next(init_prep_state_1.clone(), r1_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Continue(state, share) => (state, share)
         );
 
         let r2_prep_msg = poplar
-            .prepare_preprocess([r1_prep_share_0.clone(), r1_prep_share_1.clone()])
+            .prepare_shares_to_prepare_message(
+                &agg_param,
+                [r1_prep_share_0.clone(), r1_prep_share_1.clone()],
+            )
             .unwrap();
 
         let out_share_0 = assert_matches!(
             poplar
-                .prepare_step(r1_prep_state_0.clone(), r2_prep_msg.clone())
+                .prepare_next(r1_prep_state_0.clone(), r2_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Finish(out) => out
         );
         let out_share_1 = assert_matches!(
             poplar
-                .prepare_step(r1_prep_state_1, r2_prep_msg.clone())
+                .prepare_next(r1_prep_state_1, r2_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Finish(out) => out
         );

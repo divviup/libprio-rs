@@ -208,6 +208,10 @@ pub trait Vdaf: Clone + Debug {
 pub trait Client<const NONCE_SIZE: usize>: Vdaf {
     /// Shards a measurement into a public share and a sequence of input shares, one for each
     /// Aggregator.
+    ///
+    /// Implements `Vdaf::shard` from [VDAF].
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.1
     fn shard(
         &self,
         measurement: &Self::Measurement,
@@ -234,8 +238,11 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     type PrepareMessage: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
-    /// is passed to [`Aggregator::prepare_step`] to get this aggregator's first-round prepare
-    /// message.
+    /// is passed to [`Self::prepare_next`] to get this aggregator's first-round prepare message.
+    ///
+    /// Implements `Vdaf.prep_init` from [VDAF].
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
     fn prepare_init(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
@@ -246,9 +253,36 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         input_share: &Self::InputShare,
     ) -> Result<(Self::PrepareState, Self::PrepareShare), VdafError>;
 
-    /// Preprocess a round of preparation shares into a single input to [`Aggregator::prepare_step`].
+    /// Preprocess a round of preparation shares into a single input to [`Self::prepare_next`].
+    ///
+    /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
+    ///
+    /// # Notes
+    ///
+    /// [`Self::prepare_shares_to_prepare_message`] is preferable since its name better matches the
+    /// specification.
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    #[deprecated(
+        since = "0.15.0",
+        note = "Use Vdaf::prepare_shares_to_prepare_message instead"
+    )]
     fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
+        agg_param: &Self::AggregationParam,
+        inputs: M,
+    ) -> Result<Self::PrepareMessage, VdafError> {
+        self.prepare_shares_to_prepare_message(agg_param, inputs)
+    }
+
+    /// Preprocess a round of preparation shares into a single input to [`Self::prepare_next`].
+    ///
+    /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
+        &self,
+        agg_param: &Self::AggregationParam,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError>;
 
@@ -259,7 +293,35 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
     /// aggregated. If the method returns an error, the aggregator should consider its input share
     /// invalid and not attempt to process it any further.
+    ///
+    /// Implements `Vdaf.prep_next` from [VDAF].
+    ///
+    /// # Notes
+    ///
+    /// [`Self::prepare_next`] is preferable since its name better matches the specification.
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    #[deprecated(since = "0.15.0", note = "Use Vdaf::prepare_next")]
     fn prepare_step(
+        &self,
+        state: Self::PrepareState,
+        input: Self::PrepareMessage,
+    ) -> Result<PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError> {
+        self.prepare_next(state, input)
+    }
+
+    /// Compute the next state transition from the current state and the previous round of input
+    /// messages. If this returns [`PrepareTransition::Continue`], then the returned
+    /// [`Self::PrepareShare`] should be combined with the other Aggregators' `PrepareShare`s from
+    /// this round and passed into another call to this method. This continues until this method
+    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
+    /// aggregated. If the method returns an error, the aggregator should consider its input share
+    /// invalid and not attempt to process it any further.
+    ///
+    /// Implements `Vdaf.prep_next` from [VDAF].
+    ///
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    fn prepare_next(
         &self,
         state: Self::PrepareState,
         input: Self::PrepareMessage,
@@ -531,17 +593,20 @@ where
     }
 
     let mut inbound = vdaf
-        .prepare_preprocess(outbound.iter().map(|encoded| {
-            V::PrepareShare::get_decoded_with_param(&states[0], encoded)
-                .expect("failed to decode prep share")
-        }))?
+        .prepare_shares_to_prepare_message(
+            agg_param,
+            outbound.iter().map(|encoded| {
+                V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                    .expect("failed to decode prep share")
+            }),
+        )?
         .get_encoded();
 
     let mut out_shares = Vec::new();
     loop {
         let mut outbound = Vec::new();
         for state in states.iter_mut() {
-            match vdaf.prepare_step(
+            match vdaf.prepare_next(
                 state.clone(),
                 V::PrepareMessage::get_decoded_with_param(state, &inbound)
                     .expect("failed to decode prep message"),
@@ -559,10 +624,13 @@ where
         if outbound.len() == vdaf.num_aggregators() {
             // Another round is required before output shares are computed.
             inbound = vdaf
-                .prepare_preprocess(outbound.iter().map(|encoded| {
-                    V::PrepareShare::get_decoded_with_param(&states[0], encoded)
-                        .expect("failed to decode prep share")
-                }))?
+                .prepare_shares_to_prepare_message(
+                    agg_param,
+                    outbound.iter().map(|encoded| {
+                        V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                            .expect("failed to decode prep share")
+                    }),
+                )?
                 .get_encoded();
         } else if outbound.is_empty() {
             // Each Aggregator recovered an output share.
