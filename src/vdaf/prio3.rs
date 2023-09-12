@@ -400,7 +400,7 @@ where
     }
 
     #[allow(clippy::type_complexity)]
-    fn shard_with_random<const N: usize>(
+    pub(crate) fn shard_with_random<const N: usize>(
         &self,
         measurement: &T::Measurement,
         nonce: &[u8; N],
@@ -570,29 +570,6 @@ where
         }
 
         Ok((public_share, out))
-    }
-
-    /// Shard measurement with constant randomness of repeated bytes.
-    /// This method is not secure. It is used for running test vectors for Prio3.
-    #[allow(clippy::type_complexity)]
-    #[cfg(test)]
-    pub(crate) fn test_vec_shard<const N: usize>(
-        &self,
-        measurement: &T::Measurement,
-        nonce: &[u8; N],
-    ) -> Result<
-        (
-            Prio3PublicShare<SEED_SIZE>,
-            Vec<Prio3InputShare<T::Field, SEED_SIZE>>,
-        ),
-        VdafError,
-    > {
-        let size = self.random_size();
-        let random = iter::repeat(0..=255)
-            .flatten()
-            .take(size)
-            .collect::<Vec<u8>>();
-        self.shard_with_random(measurement, nonce, &random)
     }
 
     fn role_try_from(&self, agg_id: usize) -> Result<u8, VdafError> {

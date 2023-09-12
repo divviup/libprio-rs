@@ -26,6 +26,8 @@ struct TPrio3Prep<M> {
     measurement: M,
     #[serde(with = "hex")]
     nonce: Vec<u8>,
+    #[serde(with = "hex")]
+    rand: Vec<u8>,
     public_share: TEncoded,
     input_shares: Vec<TEncoded>,
     prep_shares: Vec<Vec<TEncoded>>,
@@ -62,7 +64,7 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let (public_share, input_shares) = prio3
-        .test_vec_shard(&t.measurement, &nonce)
+        .shard_with_random(&t.measurement, &nonce, &t.rand)
         .expect("failed to generate input shares");
 
     assert_eq!(
