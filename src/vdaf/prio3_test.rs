@@ -137,96 +137,70 @@ fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
 
 #[test]
 fn test_vec_prio3_count() {
-    let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3Count_0.json")).unwrap();
-    let prio3 = Prio3::new_count(t.shares).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    for test_vector_str in [
+        include_str!("test_vec/07/Prio3Count_0.json"),
+        include_str!("test_vec/07/Prio3Count_1.json"),
+    ] {
+        let t: TPrio3<u64> = serde_json::from_str(test_vector_str).unwrap();
+        let prio3 = Prio3::new_count(t.shares).unwrap();
+        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
-    }
-
-    let t: TPrio3<u64> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3Count_1.json")).unwrap();
-    let prio3 = Prio3::new_count(t.shares).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
-
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        for (test_num, p) in t.prep.iter().enumerate() {
+            check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        }
     }
 }
 
 #[test]
 fn test_vec_prio3_sum() {
-    let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3Sum_0.json")).unwrap();
-    let bits = t.other_params["bits"].as_u64().unwrap() as usize;
-    let prio3 = Prio3::new_sum(t.shares, bits).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    for test_vector_str in [
+        include_str!("test_vec/07/Prio3Sum_0.json"),
+        include_str!("test_vec/07/Prio3Sum_1.json"),
+    ] {
+        let t: TPrio3<u128> = serde_json::from_str(test_vector_str).unwrap();
+        let bits = t.other_params["bits"].as_u64().unwrap() as usize;
+        let prio3 = Prio3::new_sum(t.shares, bits).unwrap();
+        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
-    }
-
-    let t: TPrio3<u128> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3Sum_1.json")).unwrap();
-    let bits = t.other_params["bits"].as_u64().unwrap() as usize;
-    let prio3 = Prio3::new_sum(t.shares, bits).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
-
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        for (test_num, p) in t.prep.iter().enumerate() {
+            check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        }
     }
 }
 
 #[test]
 fn test_vec_prio3_sum_vec() {
-    let t: TPrio3<Vec<u128>> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3SumVec_0.json")).unwrap();
-    let bits = t.other_params["bits"].as_u64().unwrap() as usize;
-    let length = t.other_params["length"].as_u64().unwrap() as usize;
-    let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
-    let prio3 = Prio3::new_sum_vec(t.shares, bits, length, chunk_length).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    for test_vector_str in [
+        include_str!("test_vec/07/Prio3SumVec_0.json"),
+        include_str!("test_vec/07/Prio3SumVec_1.json"),
+    ] {
+        let t: TPrio3<Vec<u128>> = serde_json::from_str(test_vector_str).unwrap();
+        let bits = t.other_params["bits"].as_u64().unwrap() as usize;
+        let length = t.other_params["length"].as_u64().unwrap() as usize;
+        let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
+        let prio3 = Prio3::new_sum_vec(t.shares, bits, length, chunk_length).unwrap();
+        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
-    }
-
-    let t: TPrio3<Vec<u128>> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3SumVec_1.json")).unwrap();
-    let bits = t.other_params["bits"].as_u64().unwrap() as usize;
-    let length = t.other_params["length"].as_u64().unwrap() as usize;
-    let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
-    let prio3 = Prio3::new_sum_vec(t.shares, bits, length, chunk_length).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
-
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        for (test_num, p) in t.prep.iter().enumerate() {
+            check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        }
     }
 }
 
 #[test]
 fn test_vec_prio3_histogram() {
-    let t: TPrio3<usize> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3Histogram_0.json")).unwrap();
-    let length = t.other_params["length"].as_u64().unwrap() as usize;
-    let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
-    let prio3 = Prio3::new_histogram(t.shares, length, chunk_length).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    for test_vector_str in [
+        include_str!("test_vec/07/Prio3Histogram_0.json"),
+        include_str!("test_vec/07/Prio3Histogram_1.json"),
+    ] {
+        let t: TPrio3<usize> = serde_json::from_str(test_vector_str).unwrap();
+        let length = t.other_params["length"].as_u64().unwrap() as usize;
+        let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
+        let prio3 = Prio3::new_histogram(t.shares, length, chunk_length).unwrap();
+        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
-    }
-
-    let t: TPrio3<usize> =
-        serde_json::from_str(include_str!("test_vec/07/Prio3Histogram_1.json")).unwrap();
-    let length = t.other_params["length"].as_u64().unwrap() as usize;
-    let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
-    let prio3 = Prio3::new_histogram(t.shares, length, chunk_length).unwrap();
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
-
-    for (test_num, p) in t.prep.iter().enumerate() {
-        check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        for (test_num, p) in t.prep.iter().enumerate() {
+            check_prep_test_vec(&prio3, &verify_key, test_num, p);
+        }
     }
 }
