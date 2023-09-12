@@ -57,7 +57,7 @@ macro_rules! err {
 }
 
 // TODO Generalize this method to work with any VDAF. To do so we would need to add
-// `test_vec_setup()` and `test_vec_shard()` to traits. (There may be a less invasive alternative.)
+// `shard_with_random()` to traits. (There may be a less invasive alternative.)
 fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
     prio3: &Prio3<T, P, SEED_SIZE>,
     verify_key: &[u8; SEED_SIZE],
