@@ -6,13 +6,14 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    dp::distributions::ZCdpDiscreteGaussian,
     field::{decode_fieldvec, merge_vector, Field255, Field64, FieldElement},
     idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
     vdaf::{
         prg::{Prg, PrgSha3, Seed, SeedStream},
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
-    }, dp::distributions::ZCdpDiscreteGaussian,
+    },
 };
 use bitvec::{prelude::Lsb0, vec::BitVec};
 use std::{
@@ -555,7 +556,7 @@ impl Aggregatable for Poplar1FieldVec {
 ///
 /// This includes an indication of what level of the IDPF tree is being evaluated and the set of
 /// prefixes to evaluate at that level.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Poplar1AggregationParam {
     level: u16,
     prefixes: Vec<IdpfInput>,
@@ -852,8 +853,8 @@ impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
     }
 }
 
-impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize> AggregatorWithNoise<SEED_SIZE, 16, ZCdpDiscreteGaussian>
-    for Poplar1<P, SEED_SIZE>
+impl<P: Prg<SEED_SIZE>, const SEED_SIZE: usize>
+    AggregatorWithNoise<SEED_SIZE, 16, ZCdpDiscreteGaussian> for Poplar1<P, SEED_SIZE>
 {
     fn add_noise_to_agg_share(
         &self,
