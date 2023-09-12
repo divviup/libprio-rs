@@ -13,7 +13,7 @@ resolver = "2"
 aes = { version = "0.8.3", optional = true }
 ctr = { version = "0.9.2", optional = true }
 cmac = { version = "0.7.2", optional = true }
-base64 = "0.21.3"
+base64 = "0.21.4"
 byteorder = "1.4.3"
 fixed = "1.23"
 getrandom = { version = "0.2.10", features = ["std"] }
