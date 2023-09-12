@@ -60,6 +60,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.21.2 -> 0.21.3"
 
+[[audits.base64]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.21.3 -> 0.21.4"
+
 [[audits.block-buffer]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
