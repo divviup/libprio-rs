@@ -953,7 +953,6 @@ mod tests {
         collections::HashMap,
         convert::{TryFrom, TryInto},
         io::Cursor,
-        iter,
         ops::{Add, AddAssign, Sub},
         str::FromStr,
         sync::Mutex,
@@ -1897,11 +1896,6 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let random_iter = iter::repeat(0..=255u8).flatten();
-        let mut random = [[0u8; 16]; 2];
-        for (src, dest) in random_iter.zip(random.iter_mut().flat_map(|seed| seed.iter_mut())) {
-            *dest = src;
-        }
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
             .gen_with_random(
@@ -1909,7 +1903,7 @@ mod tests {
                 test_vector.beta_inner,
                 test_vector.beta_leaf,
                 b"some nonce",
-                &random,
+                &test_vector.keys,
             )
             .unwrap();
 
