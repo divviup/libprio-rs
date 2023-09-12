@@ -143,13 +143,14 @@ where
 #[must_use]
 fn check_aggregate_test_vec<M, T, P, const SEED_SIZE: usize>(
     prio3: &Prio3<T, P, SEED_SIZE>,
-    verify_key: &[u8; SEED_SIZE],
     t: &TPrio3<M>,
 ) -> T::AggregateResult
 where
     T: Type<Measurement = M>,
     P: Xof<SEED_SIZE>,
 {
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+
     let mut all_output_shares = vec![Vec::new(); prio3.num_aggregators()];
     for (test_num, p) in t.prep.iter().enumerate() {
         let output_shares = check_prep_test_vec(prio3, verify_key, test_num, p);
@@ -181,9 +182,8 @@ fn test_vec_prio3_count() {
     ] {
         let t: TPrio3<u64> = serde_json::from_str(test_vector_str).unwrap();
         let prio3 = Prio3::new_count(t.shares).unwrap();
-        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-        let aggregate_result = check_aggregate_test_vec(&prio3, &verify_key, &t);
+        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
         assert_eq!(aggregate_result, t.agg_result.as_u64().unwrap());
     }
 }
@@ -197,9 +197,8 @@ fn test_vec_prio3_sum() {
         let t: TPrio3<u128> = serde_json::from_str(test_vector_str).unwrap();
         let bits = t.other_params["bits"].as_u64().unwrap() as usize;
         let prio3 = Prio3::new_sum(t.shares, bits).unwrap();
-        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-        let aggregate_result = check_aggregate_test_vec(&prio3, &verify_key, &t);
+        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
         assert_eq!(aggregate_result, t.agg_result.as_u64().unwrap() as u128);
     }
 }
@@ -215,9 +214,8 @@ fn test_vec_prio3_sum_vec() {
         let length = t.other_params["length"].as_u64().unwrap() as usize;
         let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
         let prio3 = Prio3::new_sum_vec(t.shares, bits, length, chunk_length).unwrap();
-        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-        let aggregate_result = check_aggregate_test_vec(&prio3, &verify_key, &t);
+        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
         let expected_aggregate_result = t
             .agg_result
             .as_array()
@@ -239,9 +237,8 @@ fn test_vec_prio3_histogram() {
         let length = t.other_params["length"].as_u64().unwrap() as usize;
         let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
         let prio3 = Prio3::new_histogram(t.shares, length, chunk_length).unwrap();
-        let verify_key = t.verify_key.as_ref().try_into().unwrap();
 
-        let aggregate_result = check_aggregate_test_vec(&prio3, &verify_key, &t);
+        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
         let expected_aggregate_result = t
             .agg_result
             .as_array()
