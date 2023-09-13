@@ -30,4 +30,5 @@ mod fp;
 pub mod idpf;
 mod polynomial;
 mod prng;
+pub mod topology;
 pub mod vdaf;
