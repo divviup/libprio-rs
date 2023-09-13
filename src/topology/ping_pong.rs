@@ -4,11 +4,7 @@
 //! two aggregators, designated "Leader" and "Helper". This topology is required for implementing
 //! the [Distributed Aggregation Protocol][DAP].
 //!
-//! Note that while this implementation is compatible with VDAF-06, it actually implements the
-//! ping-pong wrappers specified in VDAF-07 (forthcoming) since those line up better with the VDAF
-//! implementation in this crate.
-//!
-//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
 //! [DAP]: https://datatracker.ietf.org/doc/html/draft-ietf-ppm-dap
 
 use crate::{
@@ -24,9 +20,9 @@ pub enum PingPongError {
     #[error("vdaf.prepare_init: {0}")]
     VdafPrepareInit(VdafError),
 
-    /// Error running prepare_preprocess
-    #[error("vdaf.prepare_preprocess {0}")]
-    VdafPreparePreprocess(VdafError),
+    /// Error running prepare_shares_to_prepare_message
+    #[error("vdaf.prepare_shares_to_prepare_message {0}")]
+    VdafPrepareSharesToPrepareMessage(VdafError),
 
     /// Error running prepare_step
     #[error("vdaf.prepare_step {0}")]
@@ -67,7 +63,7 @@ pub enum PingPongError {
 /// variants are opaque byte buffers. This is because the ping-pong routines take responsibility for
 /// decoding preparation shares and messages, which usually requires having the preparation state.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
 #[derive(Clone, PartialEq, Eq)]
 pub enum PingPongMessage {
     /// Corresponds to MessageType.initialize.
@@ -186,7 +182,7 @@ impl Decode for PingPongMessage {
 /// preprocessed prepare message. Their encoding is much smaller than the `(State, Message)` tuple,
 /// which can always be recomputed with [`Self::evaluate`].
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
 #[derive(Clone, Debug, Eq)]
 pub struct PingPongTransition<
     const VERIFY_KEY_SIZE: usize,
@@ -218,7 +214,7 @@ impl<
     > {
         let prep_msg = self.current_prepare_message.get_encoded();
 
-        vdaf.prepare_step(
+        vdaf.prepare_next(
             self.previous_prepare_state.clone(),
             self.current_prepare_message.clone(),
         )
@@ -297,7 +293,7 @@ where
 /// code, and the `Rejected` state is represented as `std::result::Result::Err`, so this enum does
 /// not include those variants.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PingPongState<
     const VERIFY_KEY_SIZE: usize,
@@ -335,7 +331,7 @@ pub enum PingPongContinuedValue<
 
 /// Extension trait on [`crate::vdaf::Aggregator`] which adds the [VDAF Ping-Pong Topology][VDAF].
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
 pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>:
     Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>
 {
@@ -355,7 +351,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// leader along with the next [`PingPongMessage`] received from the helper as input to
     /// [`Self::leader_continued`] to advance to the next round.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
     fn leader_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
@@ -426,11 +422,12 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// aggregation parameter. This may change in the future if/when [#670][issue] is addressed.
     ///
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
     /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn leader_continued(
         &self,
         leader_state: Self::State,
+        agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 
@@ -468,11 +465,12 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// aggregation parameter. This may change in the future if/when [#670][issue] is addressed.
     ///
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-06#section-5.8
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
     /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn helper_continued(
         &self,
         helper_state: Self::State,
+        agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 }
@@ -484,7 +482,8 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
     fn continued(
         &self,
         is_leader: bool,
-        helper_state: Self::State,
+        host_state: Self::State,
+        agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 }
@@ -556,8 +555,8 @@ where
         };
 
         let current_prepare_message = self
-            .prepare_preprocess([inbound_prep_share, prep_share])
-            .map_err(PingPongError::VdafPreparePreprocess)?;
+            .prepare_shares_to_prepare_message(agg_param, [inbound_prep_share, prep_share])
+            .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
         Ok(PingPongTransition {
             previous_prepare_state: prep_state,
@@ -568,17 +567,19 @@ where
     fn leader_continued(
         &self,
         leader_state: Self::State,
+        agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(true, leader_state, inbound)
+        self.continued(true, leader_state, agg_param, inbound)
     }
 
     fn helper_continued(
         &self,
         helper_state: Self::State,
+        agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(false, helper_state, inbound)
+        self.continued(false, helper_state, agg_param, inbound)
     }
 }
 
@@ -591,6 +592,7 @@ where
         &self,
         is_leader: bool,
         host_state: Self::State,
+        agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
         let host_prep_state = if let PingPongState::Continued(state) = host_state {
@@ -619,7 +621,7 @@ where
         let prep_msg = Self::PrepareMessage::get_decoded_with_param(&host_prep_state, prep_msg)
             .map_err(PingPongError::CodecPrepMessage)?;
         let host_prep_transition = self
-            .prepare_step(host_prep_state, prep_msg)
+            .prepare_next(host_prep_state, prep_msg)
             .map_err(PingPongError::VdafPrepareStep)?;
 
         match (host_prep_transition, next_peer_prep_share) {
@@ -637,8 +639,8 @@ where
                     prep_shares.reverse();
                 }
                 let current_prepare_message = self
-                    .prepare_preprocess(prep_shares)
-                    .map_err(PingPongError::VdafPreparePreprocess)?;
+                    .prepare_shares_to_prepare_message(agg_param, prep_shares)
+                    .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
                 Ok(PingPongContinuedValue::WithMessage {
                     transition: PingPongTransition {
@@ -715,7 +717,7 @@ mod tests {
         assert_matches!(helper_state, PingPongState::Finished(_));
 
         let leader_state = leader
-            .leader_continued(leader_state, &helper_message)
+            .leader_continued(leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 1 round VDAF: leader should finish when it gets helper message and emit no message.
         assert_matches!(
@@ -765,7 +767,7 @@ mod tests {
         assert_matches!(helper_state, PingPongState::Continued(_));
 
         let leader_state = leader
-            .leader_continued(leader_state, &helper_message)
+            .leader_continued(leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 2 round VDAF, round 1: leader should finish and emit a finish message.
         let leader_message = assert_matches!(
@@ -777,7 +779,7 @@ mod tests {
         );
 
         let helper_state = helper
-            .helper_continued(helper_state, &leader_message)
+            .helper_continued(helper_state, &aggregation_param, &leader_message)
             .unwrap();
         // 2 round vdaf, round 1: helper should finish and emit no message.
         assert_matches!(
@@ -827,7 +829,7 @@ mod tests {
         assert_matches!(helper_state, PingPongState::Continued(_));
 
         let leader_state = leader
-            .leader_continued(leader_state, &helper_message)
+            .leader_continued(leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 3 round VDAF, round 1: leader should continue and emit a continue message.
         let (leader_state, leader_message) = assert_matches!(
@@ -839,7 +841,7 @@ mod tests {
         );
 
         let helper_state = helper
-            .helper_continued(helper_state, &leader_message)
+            .helper_continued(helper_state, &aggregation_param, &leader_message)
             .unwrap();
         // 3 round vdaf, round 2: helper should finish and emit a finish message.
         let helper_message = assert_matches!(
@@ -851,7 +853,7 @@ mod tests {
         );
 
         let leader_state = leader
-            .leader_continued(leader_state, &helper_message)
+            .leader_continued(leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 3 round VDAF, round 2: leader should finish and emit no message.
         assert_matches!(
