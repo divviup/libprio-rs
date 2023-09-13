@@ -953,7 +953,6 @@ mod tests {
         collections::HashMap,
         convert::{TryFrom, TryInto},
         io::Cursor,
-        iter,
         ops::{Add, AddAssign, Sub},
         str::FromStr,
         sync::Mutex,
@@ -1805,6 +1804,8 @@ mod tests {
     struct IdpfTestVector {
         /// The number of bits in IDPF inputs.
         bits: usize,
+        /// The binder string used when generating and evaluating keys.
+        binder: Vec<u8>,
         /// The IDPF input provided to the key generation algorithm.
         alpha: IdpfInput,
         /// The IDPF output values, at each inner level, provided to the key generation algorithm.
@@ -1884,8 +1885,12 @@ mod tests {
         let public_share_hex = test_vec_obj.get("public_share").unwrap();
         let public_share = hex::decode(public_share_hex.as_str().unwrap()).unwrap();
 
+        let binder_hex = test_vec_obj.get("binder").unwrap();
+        let binder = hex::decode(binder_hex.as_str().unwrap()).unwrap();
+
         IdpfTestVector {
             bits,
+            binder,
             alpha,
             beta_inner,
             beta_leaf,
@@ -1897,19 +1902,14 @@ mod tests {
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
-        let random_iter = iter::repeat(0..=255u8).flatten();
-        let mut random = [[0u8; 16]; 2];
-        for (src, dest) in random_iter.zip(random.iter_mut().flat_map(|seed| seed.iter_mut())) {
-            *dest = src;
-        }
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
             .gen_with_random(
                 &test_vector.alpha,
                 test_vector.beta_inner,
                 test_vector.beta_leaf,
-                b"some nonce",
-                &random,
+                &test_vector.binder,
+                &test_vector.keys,
             )
             .unwrap();
 

@@ -943,28 +943,6 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
             ],
         ))
     }
-
-    #[cfg(test)]
-    fn test_vec_shard(
-        &self,
-        measurement: &IdpfInput,
-        nonce: &[u8; 16],
-    ) -> Result<(Poplar1PublicShare, Vec<Poplar1InputShare<SEED_SIZE>>), VdafError> {
-        let mut idpf_random = [[0u8; 16]; 2];
-        let mut poplar_random = [[0u8; SEED_SIZE]; 3];
-        let mut sequential_iter = std::iter::repeat(0..=255).flatten();
-        for random_seed in idpf_random.iter_mut() {
-            for byte in random_seed.iter_mut() {
-                *byte = sequential_iter.next().unwrap();
-            }
-        }
-        for random_seed in poplar_random.iter_mut() {
-            for byte in random_seed.iter_mut() {
-                *byte = sequential_iter.next().unwrap();
-            }
-        }
-        self.shard_with_random(measurement, nonce, &idpf_random, &poplar_random)
-    }
 }
 
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_SIZE> {
@@ -2011,6 +1989,7 @@ mod tests {
         prep_messages: Vec<HexEncoded>,
         prep_shares: Vec<Vec<HexEncoded>>,
         public_share: HexEncoded,
+        rand: HexEncoded,
     }
 
     fn check_test_vec(input: &str) {
@@ -2037,10 +2016,21 @@ mod tests {
         let verify_key = test_vector.verify_key.as_ref().try_into().unwrap();
         let nonce = prep.nonce.as_ref().try_into().unwrap();
 
+        let mut idpf_random = [[0u8; 16]; 2];
+        let mut poplar_random = [[0u8; 16]; 3];
+        for (input, output) in prep
+            .rand
+            .as_ref()
+            .chunks_exact(16)
+            .zip(idpf_random.iter_mut().chain(poplar_random.iter_mut()))
+        {
+            output.copy_from_slice(input);
+        }
+
         // Shard measurement.
         let poplar = Poplar1::new_shake128(test_vector.bits);
         let (public_share, input_shares) = poplar
-            .test_vec_shard(&measurement, &prep.nonce.as_ref().try_into().unwrap())
+            .shard_with_random(&measurement, &nonce, &idpf_random, &poplar_random)
             .unwrap();
 
         // Run aggregation.
