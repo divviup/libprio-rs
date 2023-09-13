@@ -43,7 +43,7 @@ increases (e.g., 0.10 to 0.11).
 | 0.12 | `release/0.12` | [`draft-irtf-cfrg-vdaf-05`][vdaf-05] | [`draft-ietf-ppm-dap-04`][dap-04] | Yes | Supported |
 | 0.13 | `release/0.13` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
 | 0.14 | `release/0.14` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
-| 0.15 | `main` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-06`][dap-06] | [No](https://github.com/divviup/libprio-rs/issues/701) | Supported |
+| 0.15 | `main` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-06`][dap-06] | Yes | Supported |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
