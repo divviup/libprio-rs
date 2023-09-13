@@ -24,9 +24,9 @@ pub enum PingPongError {
     #[error("vdaf.prepare_shares_to_prepare_message {0}")]
     VdafPrepareSharesToPrepareMessage(VdafError),
 
-    /// Error running prepare_step
-    #[error("vdaf.prepare_step {0}")]
-    VdafPrepareStep(VdafError),
+    /// Error running prepare_next
+    #[error("vdaf.prepare_next {0}")]
+    VdafPrepareNext(VdafError),
 
     /// Error decoding a prepare share
     #[error("decode prep share {0}")]
@@ -231,7 +231,7 @@ impl<
                 PingPongMessage::Finish { prep_msg },
             ),
         })
-        .map_err(PingPongError::VdafPrepareStep)
+        .map_err(PingPongError::VdafPrepareNext)
     }
 }
 
@@ -622,7 +622,7 @@ where
             .map_err(PingPongError::CodecPrepMessage)?;
         let host_prep_transition = self
             .prepare_next(host_prep_state, prep_msg)
-            .map_err(PingPongError::VdafPrepareStep)?;
+            .map_err(PingPongError::VdafPrepareNext)?;
 
         match (host_prep_transition, next_peer_prep_share) {
             (
