@@ -1401,6 +1401,57 @@ where
     }
 }
 
+/// This is a polyfill for `usize::ilog2()`, which is only available in Rust 1.67 and later. It is
+/// based on the implementation in the standard library. It can be removed when the MSRV has been
+/// advanced past 1.67.
+///
+/// # Panics
+///
+/// This function will panic if `input` is zero.
+fn ilog2(input: usize) -> u32 {
+    if input == 0 {
+        panic!("Tried to take the logarithm of zero");
+    }
+    (usize::BITS - 1) - input.leading_zeros()
+}
+
+/// Finds the optimal choice of chunk length for [`Prio3Histogram`] or [`Prio3SumVec`], given its
+/// encoded measurement length. For [`Prio3Histogram`], the measurement length is equal to the
+/// length parameter. For [`Prio3SumVec`], the measurement length is equal to the product of the
+/// length and bits parameters.
+pub fn optimal_chunk_length(measurement_length: usize) -> usize {
+    if measurement_length <= 1 {
+        return 1;
+    }
+
+    /// Candidate set of parameter choices for the parallel sum optimization.
+    struct Candidate {
+        gadget_calls: usize,
+        chunk_length: usize,
+    }
+
+    let max_log2 = ilog2(measurement_length + 1);
+    let best_opt = (1..=max_log2)
+        .rev()
+        .map(|log2| {
+            let gadget_calls = (1 << log2) - 1;
+            let chunk_length = (measurement_length + gadget_calls - 1) / gadget_calls;
+            Candidate {
+                gadget_calls,
+                chunk_length,
+            }
+        })
+        .min_by_key(|candidate| {
+            // Compute the proof length, in field elements, for either Prio3Histogram or Prio3SumVec
+            (candidate.chunk_length * 2)
+                + 2 * ((1 + candidate.gadget_calls).next_power_of_two() - 1)
+        });
+    // Unwrap safety: max_log2 must be at least 1, because smaller measurement_length inputs are
+    // dealt with separately. Thus, the range iterator that the search is over will be nonempty,
+    // and min_by_key() will always return Some.
+    best_opt.unwrap().chunk_length
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2036,5 +2087,41 @@ mod tests {
                 verifier_len: 103,
             },
         ])
+    }
+
+    #[test]
+    fn test_optimal_chunk_length() {
+        // nonsense argument, but make sure it doesn't panic.
+        optimal_chunk_length(0);
+
+        // edge cases on either side of power-of-two jumps
+        assert_eq!(optimal_chunk_length(1), 1);
+        assert_eq!(optimal_chunk_length(2), 2);
+        assert_eq!(optimal_chunk_length(3), 1);
+        assert_eq!(optimal_chunk_length(18), 6);
+        assert_eq!(optimal_chunk_length(19), 3);
+
+        // additional arbitrary test cases
+        assert_eq!(optimal_chunk_length(40), 6);
+        assert_eq!(optimal_chunk_length(10_000), 79);
+        assert_eq!(optimal_chunk_length(100_000), 393);
+
+        // confirm that the chunk lengths are truly optimal
+        for measurement_length in [2, 3, 4, 5, 18, 19, 40] {
+            let optimal_chunk_length = optimal_chunk_length(measurement_length);
+            let optimal_proof_length = Histogram::<Field128, ParallelSum<_, _>>::new(
+                measurement_length,
+                optimal_chunk_length,
+            )
+            .unwrap()
+            .proof_len();
+            for chunk_length in 1..=measurement_length {
+                let proof_length =
+                    Histogram::<Field128, ParallelSum<_, _>>::new(measurement_length, chunk_length)
+                        .unwrap()
+                        .proof_len();
+                assert!(proof_length >= optimal_proof_length);
+            }
+        }
     }
 }
