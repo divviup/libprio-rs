@@ -14,6 +14,9 @@
 //!
 //! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
+#[macro_use]
+extern crate impl_ops;
+
 pub mod benchmarked;
 pub mod codec;
 #[cfg(feature = "experimental")]
