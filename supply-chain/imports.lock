@@ -43,13 +43,6 @@ user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
-[[publisher.num_cpus]]
-version = "1.13.1"
-when = "2021-12-20"
-user-id = 359
-user-login = "seanmonstar"
-user-name = "Sean McArthur"
-
 [[publisher.paste]]
 version = "1.0.9"
 when = "2022-08-31"
@@ -637,10 +630,20 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.6.1 -> 1.7.0"
 
+[[audits.divviup.audits.rayon]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.7.0 -> 1.8.0"
+
 [[audits.divviup.audits.rayon-core]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.10.2 -> 1.11.0"
+
+[[audits.divviup.audits.rayon-core]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.11.0 -> 1.12.0"
 
 [[audits.divviup.audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
