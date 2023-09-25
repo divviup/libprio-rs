@@ -43,13 +43,6 @@ user-id = 539
 user-login = "cuviper"
 user-name = "Josh Stone"
 
-[[publisher.num_cpus]]
-version = "1.13.1"
-when = "2021-12-20"
-user-id = 359
-user-login = "seanmonstar"
-user-name = "Sean McArthur"
-
 [[publisher.paste]]
 version = "1.0.9"
 when = "2022-08-31"
