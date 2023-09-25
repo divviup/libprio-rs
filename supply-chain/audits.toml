@@ -1,6 +1,11 @@
 
 # cargo-vet audits file
 
+[[audits.aes-gcm]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.10.2 -> 0.10.3"
+
 [[audits.anstyle]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
