@@ -216,7 +216,7 @@ impl Xof<16> for XofShake128 {
     }
 }
 
-/// The key stream produced by the cSHAKE128 XOF.
+/// The seed stream produced by SHAKE128.
 pub struct SeedStreamSha3(Shake128Reader);
 
 impl SeedStreamSha3 {
@@ -297,7 +297,7 @@ impl XofFixedKeyAes128Key {
 /// general use; see Section 9 ("Security Considerations") for details.
 ///
 /// This XOF combines SHA-3 and a fixed-key mode of operation for AES-128. The key is "fixed" in
-/// the sense that it is derived (using cSHAKE128) from the domain separation tag and binder
+/// the sense that it is derived (using SHAKE128) from the domain separation tag and binder
 /// strings, and depending on the application, these strings can be hard-coded. The seed is used to
 /// construct each block of input passed to a hash function built from AES-128.
 ///
