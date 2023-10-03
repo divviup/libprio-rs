@@ -79,11 +79,6 @@ criteria = "safe-to-run"
 version = "0.5.0"
 criteria = "safe-to-run"
 
-[[exemptions.crossbeam-channel]]
-version = "0.5.6"
-criteria = "safe-to-deploy"
-notes = "This is only used when the \"multithreaded\" feature is enabled."
-
 [[exemptions.crossbeam-deque]]
 version = "0.8.2"
 criteria = "safe-to-deploy"
@@ -136,7 +131,7 @@ criteria = "safe-to-deploy"
 
 [[exemptions.hermit-abi]]
 version = "0.1.19"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.iai]]
 version = "0.1.1"
