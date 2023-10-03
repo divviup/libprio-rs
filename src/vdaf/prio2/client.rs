@@ -239,10 +239,13 @@ fn construct_proof<F: FftFriendlyFieldElement>(
 
     // set f_i = data_(i - 1)
     // set g_i = f_i - 1
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..dimension {
-        mem.points_f[i + 1] = data[i];
-        mem.points_g[i + 1] = data[i] - F::one();
+    for ((f_coeff, g_coeff), data_val) in mem.points_f[1..1 + dimension]
+        .iter_mut()
+        .zip(mem.points_g[1..1 + dimension].iter_mut())
+        .zip(data[..dimension].iter())
+    {
+        *f_coeff = *data_val;
+        *g_coeff = *data_val - F::one();
     }
 
     // interpolate and evaluate at roots of unity

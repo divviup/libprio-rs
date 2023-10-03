@@ -47,10 +47,9 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
         return Err(FftError::SizeInvalid);
     }
 
-    #[allow(clippy::needless_range_loop)]
-    for i in 0..size {
+    for (i, outp_val) in outp[..size].iter_mut().enumerate() {
         let j = bitrev(d, i);
-        outp[i] = if j < inp.len() { inp[j] } else { F::zero() }
+        *outp_val = if j < inp.len() { inp[j] } else { F::zero() };
     }
 
     let mut w: F;
@@ -197,14 +196,11 @@ mod tests {
         // Just for fun, let's do something different with a subset of the inputs. For the first
         // share, every odd element is set to the plaintext value. For all shares but the first,
         // every odd element is set to 0.
-        #[allow(clippy::needless_range_loop)]
-        for i in 0..len {
+        for (i, x_val) in x.iter().enumerate() {
             if i % 2 != 0 {
-                x_shares[0][i] = x[i];
-            }
-            for j in 1..num_shares {
-                if i % 2 != 0 {
-                    x_shares[j][i] = Field64::zero();
+                x_shares[0][i] = *x_val;
+                for x_share in x_shares[1..num_shares].iter_mut() {
+                    x_share[i] = Field64::zero();
                 }
             }
         }
