@@ -121,22 +121,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.48"
-when = "2023-09-02"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.thiserror]]
 version = "1.0.49"
 when = "2023-09-27"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.thiserror-impl]]
-version = "1.0.48"
-when = "2023-09-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
