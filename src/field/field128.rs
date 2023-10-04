@@ -27,6 +27,82 @@ use std::{
 };
 use subtle::{Choice, ConditionallySelectable, ConstantTimeEq};
 
+pub mod primitives {
+    /// The function fp128_addcarryx_u64 is an addition with carry.
+    ///
+    /// Postconditions:
+    ///   out1 = (arg1 + arg2 + arg3) mod 2^64
+    ///   out2 = ⌊(arg1 + arg2 + arg3) / 2^64⌋
+    ///
+    /// Input Bounds:
+    ///   arg1: [0x0 ~> 0x1]
+    ///   arg2: [0x0 ~> 0xffffffffffffffff]
+    ///   arg3: [0x0 ~> 0xffffffffffffffff]
+    /// Output Bounds:
+    ///   out1: [0x0 ~> 0xffffffffffffffff]
+    ///   out2: [0x0 ~> 0x1]
+    #[inline(always)]
+    pub fn fp128_addcarryx_u64(out1: &mut u64, out2: &mut u8, arg1: u8, arg2: u64, arg3: u64) {
+        let c;
+        (*out1, c) = arg2.carrying_add(arg3, arg1 != 0);
+        *out2 = c as u8;
+    }
+
+    /// The function fp128_subborrowx_u64 is a subtraction with borrow.
+    ///
+    /// Postconditions:
+    ///   out1 = (-arg1 + arg2 + -arg3) mod 2^64
+    ///   out2 = -⌊(-arg1 + arg2 + -arg3) / 2^64⌋
+    ///
+    /// Input Bounds:
+    ///   arg1: [0x0 ~> 0x1]
+    ///   arg2: [0x0 ~> 0xffffffffffffffff]
+    ///   arg3: [0x0 ~> 0xffffffffffffffff]
+    /// Output Bounds:
+    ///   out1: [0x0 ~> 0xffffffffffffffff]
+    ///   out2: [0x0 ~> 0x1]
+    #[inline(always)]
+    pub fn fp128_subborrowx_u64(out1: &mut u64, out2: &mut u8, arg1: u8, arg2: u64, arg3: u64) {
+        let b;
+        (*out1, b) = arg2.borrowing_sub(arg3, arg1 != 0);
+        *out2 = b as u8;
+    }
+
+    /// The function fp128_mulx_u64 is a multiplication, returning the full double-width result.
+    ///
+    /// Postconditions:
+    ///   out1 = (arg1 * arg2) mod 2^64
+    ///   out2 = ⌊arg1 * arg2 / 2^64⌋
+    ///
+    /// Input Bounds:
+    ///   arg1: [0x0 ~> 0xffffffffffffffff]
+    ///   arg2: [0x0 ~> 0xffffffffffffffff]
+    /// Output Bounds:
+    ///   out1: [0x0 ~> 0xffffffffffffffff]
+    ///   out2: [0x0 ~> 0xffffffffffffffff]
+    #[inline(always)]
+    pub fn fp128_mulx_u64(out1: &mut u64, out2: &mut u64, arg1: u64, arg2: u64) {
+        (*out1, *out2) = arg1.widening_mul(arg2)
+    }
+
+    /// The function fp128_cmovznz_u64 is a single-word conditional move.
+    ///
+    /// Postconditions:
+    ///   out1 = (if arg1 = 0 then arg2 else arg3)
+    ///
+    /// Input Bounds:
+    ///   arg1: [0x0 ~> 0x1]
+    ///   arg2: [0x0 ~> 0xffffffffffffffff]
+    ///   arg3: [0x0 ~> 0xffffffffffffffff]
+    /// Output Bounds:
+    ///   out1: [0x0 ~> 0xffffffffffffffff]
+    #[inline(always)]
+    pub fn fp128_cmovznz_u64(out1: &mut u64, arg1: u8, arg2: u64, arg3: u64) {
+        cmov::Cmov::cmovz(out1, &arg2, arg1);
+        cmov::Cmov::cmovnz(out1, &arg3, arg1);
+    }
+}
+
 impl From<Fp128NonMontgomeryDomainFieldElement> for u128 {
     fn from(x: Fp128NonMontgomeryDomainFieldElement) -> Self {
         ((x.0[1] as u128) << 64) | (x.0[0] as u128)
