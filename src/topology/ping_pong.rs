@@ -652,18 +652,14 @@ where
             (PrepareTransition::Finish(output_share), None) => {
                 Ok(PingPongContinuedValue::FinishedNoMessage { output_share })
             }
-            (PrepareTransition::Continue(_, _), None) => {
-                return Err(PingPongError::PeerMessageMismatch {
-                    found: inbound.variant(),
-                    expected: "continue",
-                })
-            }
-            (PrepareTransition::Finish(_), Some(_)) => {
-                return Err(PingPongError::PeerMessageMismatch {
-                    found: inbound.variant(),
-                    expected: "finish",
-                })
-            }
+            (PrepareTransition::Continue(_, _), None) => Err(PingPongError::PeerMessageMismatch {
+                found: inbound.variant(),
+                expected: "continue",
+            }),
+            (PrepareTransition::Finish(_), Some(_)) => Err(PingPongError::PeerMessageMismatch {
+                found: inbound.variant(),
+                expected: "finish",
+            }),
         }
     }
 }
