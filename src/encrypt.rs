@@ -90,12 +90,11 @@ pub fn encrypt_share(share: &[u8], key: &PublicKey) -> Result<Vec<u8>, EncryptEr
         .compute_public_key()
         .map_err(|_| EncryptError::KeyAgreement)?;
 
-    let symmetric_key_bytes = agreement::agree_ephemeral(
-        ephemeral_priv,
-        &peer_public,
-        EncryptError::KeyAgreement,
-        |material| Ok(x963_kdf(material, ephemeral_pub.as_ref())),
-    )?;
+    let symmetric_key_bytes =
+        agreement::agree_ephemeral(ephemeral_priv, &peer_public, |material| {
+            x963_kdf(material, ephemeral_pub.as_ref())
+        })
+        .map_err(|_| EncryptError::KeyAgreement)?;
 
     let in_out = share.to_owned();
     let encrypted = encrypt_aes_gcm(
@@ -132,12 +131,10 @@ pub fn decrypt_share(share: &[u8], key: &PrivateKey) -> Result<Vec<u8>, EncryptE
     let private_key = agreement::EphemeralPrivateKey::generate(&agreement::ECDH_P256, &fake_rng)
         .map_err(|_| EncryptError::KeyAgreement)?;
 
-    let symmetric_key_bytes = agreement::agree_ephemeral(
-        private_key,
-        &ephemeral_pub,
-        EncryptError::KeyAgreement,
-        |material| Ok(x963_kdf(material, empheral_pub_bytes)),
-    )?;
+    let symmetric_key_bytes = agreement::agree_ephemeral(private_key, &ephemeral_pub, |material| {
+        x963_kdf(material, empheral_pub_bytes)
+    })
+    .map_err(|_| EncryptError::KeyAgreement)?;
 
     // in_out is the AES-GCM ciphertext+tag, wihtout the ephemeral EC pubkey
     let in_out = share[PUBLICKEY_LENGTH..].to_owned();
