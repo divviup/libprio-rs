@@ -470,11 +470,6 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.10.1 -> 1.10.2"
 
-[[audits.firefox.audits.sha2]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-delta = "0.10.2 -> 0.10.6"
-
 [[audits.firefox.audits.subtle]]
 who = "Simon Friedberger <simon@mozilla.com>"
 criteria = "safe-to-deploy"
@@ -605,18 +600,6 @@ delta = "1.17.0 -> 1.17.1"
 notes = """
 Small refactor that reduces the overall amount of `unsafe` code. The new strict provenance
 approach looks reasonable.
-"""
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.sha2]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "0.10.6 -> 0.10.7"
-notes = """
-The new `unsafe` assembly backend only uses aarch64 intrinsics, via their typed
-Rust APIs (aside from the SHA2-specific intrinsics that are not in Rust yet). I
-did not perform a cryptographic review, but the code to load from and store into
-the function arguments looks correct.
 """
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
