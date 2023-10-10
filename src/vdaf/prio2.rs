@@ -51,10 +51,9 @@ impl Prio2 {
     /// Prepare an input share for aggregation using the given field element `query_rand` to
     /// compute the verifier share.
     ///
-    /// In the [`Aggregator`](crate::vdaf::Aggregator) trait implementation for [`Prio2`], the
-    /// query randomness is computed jointly by the Aggregators. This method is designed to be used
-    /// in applications, like ENPA, in which the query randomness is instead chosen by a
-    /// third-party.
+    /// In the [`Aggregator`] trait implementation for [`Prio2`], the query randomness is computed
+    /// jointly by the Aggregators. This method is designed to be used in applications, like ENPA,
+    /// in which the query randomness is instead chosen by a third-party.
     pub fn prepare_init_with_query_rand(
         &self,
         query_rand: FieldPrio2,
@@ -135,7 +134,7 @@ impl Client for Prio2 {
     }
 }
 
-/// State of each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
+/// State of each [`Aggregator`] during the Preparation phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio2PrepareState(Share<FieldPrio2, 32>);
 
@@ -160,7 +159,7 @@ impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
     }
 }
 
-/// Message emitted by each [`Aggregator`](crate::vdaf::Aggregator) during the Preparation phase.
+/// Message emitted by each [`Aggregator`] during the Preparation phase.
 #[derive(Clone, Debug)]
 pub struct Prio2PrepareShare(v2_server::VerificationMessage<FieldPrio2>);
 
