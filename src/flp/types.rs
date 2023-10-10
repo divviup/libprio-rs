@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! A collection of [`Type`](crate::flp::Type) implementations.
+//! A collection of [`Type`] implementations.
 
 use crate::field::{FftFriendlyFieldElement, FieldElementExt};
 use crate::flp::gadgets::{BlindPolyEval, Mul, ParallelSumGadget, PolyEval};
