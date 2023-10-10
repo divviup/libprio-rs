@@ -189,10 +189,6 @@ version = "0.8.5"
 criteria = "safe-to-deploy"
 
 [[exemptions.ring]]
-version = "0.16.20"
-criteria = "safe-to-deploy"
-
-[[exemptions.ring]]
 version = "0.17.2"
 criteria = "safe-to-deploy"
 notes = "ring is only used in prio2 and eliminated from the main branch. We accept the risk of updating ring without an audit."
@@ -200,10 +196,6 @@ notes = "ring is only used in prio2 and eliminated from the main branch. We acce
 [[exemptions.sharded-slab]]
 version = "0.1.4"
 criteria = "safe-to-run"
-
-[[exemptions.spin]]
-version = "0.5.2"
-criteria = "safe-to-deploy"
 
 [[exemptions.spin]]
 version = "0.9.8"
@@ -253,12 +245,12 @@ notes = "untrusted is used by ring, see ring's exemption for details"
 
 [[exemptions.winapi]]
 version = "0.3.9"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.winapi-i686-pc-windows-gnu]]
 version = "0.4.0"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.winapi-x86_64-pc-windows-gnu]]
 version = "0.4.0"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
