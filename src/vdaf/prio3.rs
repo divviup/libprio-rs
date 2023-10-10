@@ -532,8 +532,7 @@ where
     }
 }
 
-/// Message sent by the [`Client`](crate::vdaf::Client) to each
-/// [`Aggregator`](crate::vdaf::Aggregator) during the Sharding phase.
+/// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct Prio3InputShare<F, const L: usize> {
     /// The input share.
