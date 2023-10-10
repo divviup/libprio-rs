@@ -190,6 +190,11 @@ criteria = "safe-to-run"
 version = "0.7.0"
 criteria = "safe-to-run"
 
+[[exemptions.sha2]]
+version = "0.10.8"
+criteria = "safe-to-deploy"
+notes = "We do not use the new asm backend, either its feature or CPU architecture"
+
 [[exemptions.simba]]
 version = "0.6.0"
 criteria = "safe-to-run"
