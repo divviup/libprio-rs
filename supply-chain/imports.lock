@@ -424,6 +424,11 @@ who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 delta = "0.4.0 -> 0.3.3"
 
+[[audits.chromeos.audits.hex]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "0.4.3"
+
 [[audits.chromeos.audits.io-lifetimes]]
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
@@ -438,6 +443,11 @@ version = "0.10.5"
 who = "Android Legacy"
 criteria = "safe-to-run"
 version = "1.4.0"
+
+[[audits.chromeos.audits.log]]
+who = "ChromeOS"
+criteria = "safe-to-run"
+version = "0.4.17"
 
 [[audits.chromeos.audits.miniz_oxide]]
 who = "George Burgess IV <gbiv@google.com>"
@@ -682,46 +692,53 @@ who = "Radu Matei <radu.matei@fermyon.com>"
 criteria = "safe-to-run"
 version = "0.3.3"
 
-[[audits.firefox.wildcard-audits.unicode-segmentation]]
+[[audits.mozilla.wildcard-audits.unicode-segmentation]]
 who = "Manish Goregaokar <manishsmail@gmail.com>"
 criteria = "safe-to-deploy"
 user-id = 1139 # Manish Goregaokar (Manishearth)
 start = "2019-05-15"
 end = "2024-05-03"
 notes = "All code written or reviewed by Manish"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.autocfg]]
+[[audits.mozilla.audits.autocfg]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
 version = "1.1.0"
 notes = "All code written or reviewed by Josh Stone."
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.block-buffer]]
+[[audits.mozilla.audits.block-buffer]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "0.10.2 -> 0.10.3"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.crypto-common]]
+[[audits.mozilla.audits.crypto-common]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "0.1.3 -> 0.1.6"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.either]]
+[[audits.mozilla.audits.either]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.6.1 -> 1.7.0"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.either]]
+[[audits.mozilla.audits.either]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.7.0 -> 1.8.0"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.getrandom]]
+[[audits.mozilla.audits.getrandom]]
 who = "Yannis Juglaret <yjuglaret@mozilla.com>"
 criteria = "safe-to-deploy"
 delta = "0.2.8 -> 0.2.9"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.half]]
+[[audits.mozilla.audits.half]]
 who = "John M. Schanck <jschanck@mozilla.com>"
 criteria = "safe-to-deploy"
 version = "1.8.2"
@@ -730,65 +747,65 @@ This crate contains unsafe code for bitwise casts to/from binary16 floating-poin
 format. I've reviewed these and found no issues. There are no uses of ambient
 capabilities.
 """
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.hermit-abi]]
+[[audits.mozilla.audits.hermit-abi]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "0.1.19 -> 0.2.6"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.hex]]
-who = "Simon Friedberger <simon@mozilla.com>"
-criteria = "safe-to-deploy"
-version = "0.4.3"
-
-[[audits.firefox.audits.log]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-version = "0.4.17"
-
-[[audits.firefox.audits.num-bigint]]
+[[audits.mozilla.audits.num-bigint]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
 version = "0.4.3"
 notes = "All code written or reviewed by Josh Stone."
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.num-integer]]
+[[audits.mozilla.audits.num-integer]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
 version = "0.1.45"
 notes = "All code written or reviewed by Josh Stone."
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.rayon]]
+[[audits.mozilla.audits.rayon]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
 version = "1.5.3"
 notes = "All code written or reviewed by Josh Stone or Niko Matsakis."
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.rayon]]
+[[audits.mozilla.audits.rayon]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.5.3 -> 1.6.1"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.rayon-core]]
+[[audits.mozilla.audits.rayon-core]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
 version = "1.9.3"
 notes = "All code written or reviewed by Josh Stone or Niko Matsakis."
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.rayon-core]]
+[[audits.mozilla.audits.rayon-core]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.9.3 -> 1.10.1"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.rayon-core]]
+[[audits.mozilla.audits.rayon-core]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "1.10.1 -> 1.10.2"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.firefox.audits.tracing]]
+[[audits.mozilla.audits.tracing]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-run"
 delta = "0.1.35 -> 0.1.36"
+aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
 [[audits.zcash.audits.inout]]
 who = "Daira Hopwood <daira@jacaranda.org>"
