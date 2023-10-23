@@ -211,10 +211,6 @@ version = "0.17.2"
 criteria = "safe-to-deploy"
 notes = "ring is only used in prio2 and eliminated from the main branch. We accept the risk of updating ring without an audit."
 
-[[exemptions.sharded-slab]]
-version = "0.1.4"
-criteria = "safe-to-run"
-
 [[exemptions.spin]]
 version = "0.9.8"
 criteria = "safe-to-deploy"
