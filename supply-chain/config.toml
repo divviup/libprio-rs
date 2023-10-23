@@ -70,6 +70,10 @@ criteria = "safe-to-deploy"
 version = "0.3.0"
 criteria = "safe-to-run"
 
+[[exemptions.cc]]
+version = "1.0.83"
+criteria = "safe-to-deploy"
+
 [[exemptions.cipher]]
 version = "0.4.3"
 criteria = "safe-to-deploy"
@@ -207,9 +211,8 @@ criteria = "safe-to-deploy"
 notes = "This is only used when the \"test-util\" feature is enabled."
 
 [[exemptions.ring]]
-version = "0.17.2"
+version = "0.17.5"
 criteria = "safe-to-deploy"
-notes = "ring is only used in prio2 and eliminated from the main branch. We accept the risk of updating ring without an audit."
 
 [[exemptions.spin]]
 version = "0.9.8"
