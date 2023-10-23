@@ -128,15 +128,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.49"
-when = "2023-09-27"
+version = "1.0.50"
+when = "2023-10-19"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.49"
-when = "2023-09-27"
+version = "1.0.50"
+when = "2023-10-19"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -384,6 +384,12 @@ who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"
 version = "0.37.13"
 notes = "The Bytecode Alliance is the author of this crate."
+
+[[audits.bytecode-alliance.audits.sharded-slab]]
+who = "Pat Hickey <phickey@fastly.com>"
+criteria = "safe-to-deploy"
+version = "0.1.4"
+notes = "I always really enjoy reading eliza's code, she left perfect comments at every use of unsafe."
 
 [[audits.chromeos.audits.ansi_term]]
 who = "George Burgess IV <gbiv@google.com>"
