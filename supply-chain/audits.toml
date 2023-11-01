@@ -163,6 +163,12 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.1.20 -> 0.2.0"
 
+[[audits.fiat-crypto]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.1 -> 0.2.2"
+notes = "No new usage of `unsafe` nor any functional changes I can detect."
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
