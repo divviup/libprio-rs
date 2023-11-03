@@ -419,12 +419,12 @@ where
         // Encode the integer entries bitwise, and write them into the `encoded`
         // vector.
         let mut encoded: Vec<Field128> =
-            vec![Field128::zero(); self.bits_per_entry * self.entries + self.bits_for_norm];
-        for (l, entry) in integer_entries.clone().enumerate() {
-            Field128::fill_with_bitvector_representation(
-                &entry,
-                &mut encoded[l * self.bits_per_entry..(l + 1) * self.bits_per_entry],
-            )?;
+            Vec::with_capacity(self.bits_per_entry * self.entries + self.bits_for_norm);
+        for entry in integer_entries.clone() {
+            encoded.extend(Field128::encode_into_bitvector_representation(
+                entry,
+                self.bits_per_entry,
+            )?);
         }
 
         // (II) Vector norm.
@@ -434,10 +434,10 @@ where
         let norm_int = u128::from(norm);
 
         // Write the norm into the `entries` vector.
-        Field128::fill_with_bitvector_representation(
-            &norm_int,
-            &mut encoded[self.range_norm_begin..self.range_norm_end],
-        )?;
+        encoded.extend(Field128::encode_into_bitvector_representation(
+            norm_int,
+            self.bits_for_norm,
+        )?);
 
         Ok(encoded)
     }

@@ -146,7 +146,7 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_into_bitvector_representation(summand, self.bits)?;
+        let v = F::encode_into_bitvector_representation(*summand, self.bits)?.collect();
         Ok(v)
     }
 
@@ -245,7 +245,7 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_into_bitvector_representation(summand, self.bits)?;
+        let v = F::encode_into_bitvector_representation(*summand, self.bits)?.collect();
         Ok(v)
     }
 
@@ -588,18 +588,17 @@ where
             )));
         }
 
-        let mut flattened = vec![F::zero(); self.flattened_len];
-        for (summand, chunk) in measurement
-            .iter()
-            .zip(flattened.chunks_exact_mut(self.bits))
-        {
+        let mut flattened = Vec::with_capacity(self.flattened_len);
+        for summand in measurement.iter() {
             if summand > &self.max {
                 return Err(FlpError::Encode(format!(
                     "summand exceeds maximum of 2^{}-1",
                     self.bits
                 )));
             }
-            F::fill_with_bitvector_representation(summand, chunk)?;
+            flattened.extend(F::encode_into_bitvector_representation(
+                *summand, self.bits,
+            )?);
         }
 
         Ok(flattened)

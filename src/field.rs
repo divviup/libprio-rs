@@ -25,8 +25,8 @@ use std::{
     io::{Cursor, Read},
     marker::PhantomData,
     ops::{
-        Add, AddAssign, BitAnd, ControlFlow, Div, DivAssign, Mul, MulAssign, Neg, Shl, Shr, Sub,
-        SubAssign,
+        Add, AddAssign, BitAnd, ControlFlow, Div, DivAssign, Mul, MulAssign, Neg, Range, Shl, Shr,
+        Sub, SubAssign,
     },
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -194,57 +194,55 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
 
     /// Returns the prime modulus `p`.
     fn modulus() -> Self::Integer;
+    /// Encode the integer `input` as a sequence of bits in two's complement representation, least
+    /// significant bit first, and then map each bit to a field element.
+    ///
+    /// Returns an error if `input` cannot be represented with `bits` many bits, or if `bits`
+    /// is larger than the bit width of the field's modulus.
+    fn encode_into_bitvector_representation(
+        input: Self::Integer,
+        bits: usize,
+    ) -> Result<BitvectorRepresentationIter<Self>, FieldError> {
+        if !Self::valid_integer_bitlength(bits) {
+            return Err(FieldError::ModulusOverflow);
+        }
+        if input >> bits != Self::zero_integer() {
+            return Err(FieldError::InputSizeMismatch);
+        }
+
+        Ok(BitvectorRepresentationIter {
+            inner: 0..bits,
+            input,
+        })
+    }
+}
+
+/// This iterator returns a sequence of field elements that are equal to zero or one, representing
+/// some integer in two's complement form. See
+/// [`FieldElementWithInteger::encode_into_bitvector_representation`].
+// Note that this is implemented with a separate struct, instead of using the map combinator,
+// because return_position_impl_trait_in_trait is not yet stable.
+#[derive(Debug)]
+pub struct BitvectorRepresentationIter<F: FieldElementWithInteger> {
+    inner: Range<usize>,
+    input: F::Integer,
+}
+
+impl<F> Iterator for BitvectorRepresentationIter<F>
+where
+    F: FieldElementWithInteger,
+{
+    type Item = F;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let bit_offset = self.inner.next()?;
+        Some(F::from((self.input >> bit_offset) & F::one_integer()))
+    }
 }
 
 /// Methods common to all `FieldElementWithInteger` implementations that are private to the crate.
 pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
-    /// Encode `input` as bitvector of elements of `Self`. Output is written into the `output` slice.
-    /// If `output.len()` is smaller than the number of bits required to respresent `input`,
-    /// an error is returned.
-    ///
-    /// # Arguments
-    ///
-    /// * `input` - The field element to encode
-    /// * `output` - The slice to write the encoded bits into. Least signicant bit comes first
-    fn fill_with_bitvector_representation(
-        input: &Self::Integer,
-        output: &mut [Self],
-    ) -> Result<(), FieldError> {
-        // Create a mutable copy of `input`. In each iteration of the following loop we take the
-        // least significant bit, and shift input to the right by one bit.
-        let mut i = *input;
-
-        let one = Self::one_integer();
-        for bit in output.iter_mut() {
-            let w = Self::from(i & one);
-            *bit = w;
-            i = i >> 1;
-        }
-
-        // If `i` is still not zero, this means that it cannot be encoded by `bits` bits.
-        if i != Self::zero_integer() {
-            return Err(FieldError::InputSizeMismatch);
-        }
-
-        Ok(())
-    }
-
-    /// Encode `input` as `bits`-bit vector of elements of `Self` if it's small enough
-    /// to be represented with that many bits.
-    ///
-    /// # Arguments
-    ///
-    /// * `input` - The field element to encode
-    /// * `bits` - The number of bits to use for the encoding
-    fn encode_into_bitvector_representation(
-        input: &Self::Integer,
-        bits: usize,
-    ) -> Result<Vec<Self>, FieldError> {
-        let mut result = vec![Self::zero(); bits];
-        Self::fill_with_bitvector_representation(input, &mut result)?;
-        Ok(result)
-    }
-
     /// Decode the bitvector-represented value `input` into a simple representation as a single
     /// field element.
     ///
@@ -1183,22 +1181,19 @@ mod tests {
     fn test_encode_into_bitvector() {
         let zero = Field128::zero();
         let one = Field128::one();
-        let zero_enc = Field128::encode_into_bitvector_representation(&0, 4).unwrap();
-        let one_enc = Field128::encode_into_bitvector_representation(&1, 4).unwrap();
-        let fifteen_enc = Field128::encode_into_bitvector_representation(&15, 4).unwrap();
+        let zero_enc = Field128::encode_into_bitvector_representation(0, 4)
+            .unwrap()
+            .collect::<Vec<_>>();
+        let one_enc = Field128::encode_into_bitvector_representation(1, 4)
+            .unwrap()
+            .collect::<Vec<_>>();
+        let fifteen_enc = Field128::encode_into_bitvector_representation(15, 4)
+            .unwrap()
+            .collect::<Vec<_>>();
         assert_eq!(zero_enc, [zero; 4]);
         assert_eq!(one_enc, [one, zero, zero, zero]);
         assert_eq!(fifteen_enc, [one; 4]);
-        Field128::encode_into_bitvector_representation(&16, 4).unwrap_err();
-    }
-
-    #[test]
-    fn test_fill_bitvector() {
-        let zero = Field128::zero();
-        let one = Field128::one();
-        let mut output: Vec<Field128> = vec![zero; 6];
-        Field128::fill_with_bitvector_representation(&9, &mut output[1..5]).unwrap();
-        assert_eq!(output, [zero, one, zero, zero, one, zero]);
-        Field128::fill_with_bitvector_representation(&16, &mut output[1..5]).unwrap_err();
+        Field128::encode_into_bitvector_representation(16, 4).unwrap_err();
+        Field128::encode_into_bitvector_representation(0, 129).unwrap_err();
     }
 }
