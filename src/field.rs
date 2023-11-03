@@ -215,6 +215,36 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
             input,
         })
     }
+
+    /// Inverts the encoding done by [`Self::encode_into_bitvector_representation`], and returns a
+    /// single field element.
+    ///
+    /// This performs an inner product between the input vector of field elements and successive
+    /// powers of two (starting with 2^0 = 1). If the input came from
+    /// [`Self::encode_into_bitvector_representation`], then the result will be equal to the
+    /// originally encoded integer, projected into the field.
+    ///
+    /// Note that this decoding operation is linear, so it can be applied to secret shares of an
+    /// encoded integer, and if the results are summed up, it will be equal to the encoded integer.
+    ///
+    /// # Errors
+    ///
+    /// This function errors if `2^input.len() - 1` does not fit into the field `Self`.
+    fn decode_from_bitvector_representation(input: &[Self]) -> Result<Self, FieldError> {
+        if !Self::valid_integer_bitlength(input.len()) {
+            return Err(FieldError::ModulusOverflow);
+        }
+
+        let mut decoded = Self::zero();
+        let one = Self::one();
+        let two = one + one;
+        let mut power_of_two = one;
+        for value in input.iter() {
+            decoded += *value * power_of_two;
+            power_of_two *= two;
+        }
+        Ok(decoded)
+    }
 }
 
 /// This iterator returns a sequence of field elements that are equal to zero or one, representing
@@ -243,27 +273,6 @@ where
 
 /// Methods common to all `FieldElementWithInteger` implementations that are private to the crate.
 pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
-    /// Decode the bitvector-represented value `input` into a simple representation as a single
-    /// field element.
-    ///
-    /// # Errors
-    ///
-    /// This function errors if `2^input.len() - 1` does not fit into the field `Self`.
-    fn decode_from_bitvector_representation(input: &[Self]) -> Result<Self, FieldError> {
-        let fi_one = Self::one_integer();
-
-        if !Self::valid_integer_bitlength(input.len()) {
-            return Err(FieldError::ModulusOverflow);
-        }
-
-        let mut decoded = Self::zero();
-        for (l, bit) in input.iter().enumerate() {
-            let w = fi_one << l;
-            decoded += Self::from(w) * *bit;
-        }
-        Ok(decoded)
-    }
-
     /// Interpret `i` as [`Self::Integer`] if it's representable in that type and smaller than the
     /// field modulus.
     fn valid_integer_try_from<N>(i: N) -> Result<Self::Integer, FieldError>
