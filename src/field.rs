@@ -194,12 +194,6 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
 
     /// Returns the prime modulus `p`.
     fn modulus() -> Self::Integer;
-
-    /// Returns the integer representation of the additive identity.
-    fn zero_integer() -> Self::Integer;
-
-    /// Returns the integer representation of the multiplicative identity.
-    fn one_integer() -> Self::Integer;
 }
 
 /// Methods common to all `FieldElementWithInteger` implementations that are private to the crate.
@@ -296,9 +290,23 @@ pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
         }
         false
     }
+
+    /// Returns the integer representation of the additive identity.
+    fn zero_integer() -> Self::Integer;
+
+    /// Returns the integer representation of the multiplicative identity.
+    fn one_integer() -> Self::Integer;
 }
 
-impl<F: FieldElementWithInteger> FieldElementWithIntegerExt for F {}
+impl<F: FieldElementWithInteger> FieldElementWithIntegerExt for F {
+    fn zero_integer() -> Self::Integer {
+        0usize.try_into().unwrap()
+    }
+
+    fn one_integer() -> Self::Integer {
+        1usize.try_into().unwrap()
+    }
+}
 
 /// Methods common to all `FieldElement` implementations that are private to the crate.
 pub(crate) trait FieldElementExt: FieldElement {
@@ -700,14 +708,6 @@ macro_rules! make_field {
 
             fn modulus() -> Self::Integer {
                 $fp.p as $int
-            }
-
-            fn zero_integer() -> Self::Integer {
-                0
-            }
-
-            fn one_integer() -> Self::Integer {
-                1
             }
         }
 
