@@ -214,7 +214,7 @@ pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
         // least significant bit, and shift input to the right by one bit.
         let mut i = *input;
 
-        let one = Self::Integer::from(Self::one());
+        let one = Self::one_integer();
         for bit in output.iter_mut() {
             let w = Self::from(i & one);
             *bit = w;
@@ -222,7 +222,7 @@ pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
         }
 
         // If `i` is still not zero, this means that it cannot be encoded by `bits` bits.
-        if i != Self::Integer::from(Self::zero()) {
+        if i != Self::zero_integer() {
             return Err(FieldError::InputSizeMismatch);
         }
 
@@ -252,7 +252,7 @@ pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
     ///
     /// This function errors if `2^input.len() - 1` does not fit into the field `Self`.
     fn decode_from_bitvector_representation(input: &[Self]) -> Result<Self, FieldError> {
-        let fi_one = Self::Integer::from(Self::one());
+        let fi_one = Self::one_integer();
 
         if !Self::valid_integer_bitlength(input.len()) {
             return Err(FieldError::ModulusOverflow);
@@ -285,14 +285,28 @@ pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
         if bits >= 8 * Self::ENCODED_SIZE {
             return false;
         }
-        if Self::modulus() >> bits != Self::Integer::from(Self::zero()) {
+        if Self::modulus() >> bits != Self::zero_integer() {
             return true;
         }
         false
     }
+
+    /// Returns the integer representation of the additive identity.
+    fn zero_integer() -> Self::Integer;
+
+    /// Returns the integer representation of the multiplicative identity.
+    fn one_integer() -> Self::Integer;
 }
 
-impl<F: FieldElementWithInteger> FieldElementWithIntegerExt for F {}
+impl<F: FieldElementWithInteger> FieldElementWithIntegerExt for F {
+    fn zero_integer() -> Self::Integer {
+        0usize.try_into().unwrap()
+    }
+
+    fn one_integer() -> Self::Integer {
+        1usize.try_into().unwrap()
+    }
+}
 
 /// Methods common to all `FieldElement` implementations that are private to the crate.
 pub(crate) trait FieldElementExt: FieldElement {

@@ -250,7 +250,7 @@ where
     /// fixed point vector with `entries` entries.
     pub fn new(entries: usize) -> Result<Self, FlpError> {
         // (0) initialize constants
-        let fi_one = u128::from(Field128::one());
+        let fi_one = Field128::one_integer();
 
         // (I) Check that the fixed type is compatible.
         //
@@ -544,7 +544,7 @@ where
 
             // Chunks which are too short need to be extended with a share of the
             // encoded zero value, that is: 1/num_shares * (2^(n-1))
-            let fi_one = u128::from(Field128::one());
+            let fi_one = Field128::one_integer();
             let zero_enc = Field128::from(fi_one << (self.bits_per_entry - 1));
             let zero_enc_share = zero_enc * num_shares_inverse;
 
