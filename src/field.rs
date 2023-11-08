@@ -199,13 +199,18 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
     ///
     /// Returns an error if `input` cannot be represented with `bits` many bits, or if `bits`
     /// is larger than the bit width of the field's modulus.
-    fn encode_into_bitvector_representation(
+    fn encode_as_bitvector(
         input: Self::Integer,
         bits: usize,
     ) -> Result<BitvectorRepresentationIter<Self>, FieldError> {
+        // Check if `bits` is too large for this field.
         if !Self::valid_integer_bitlength(bits) {
             return Err(FieldError::ModulusOverflow);
         }
+
+        // Check if the input value can be represented in the requested number of bits by shifting
+        // it. The above check on `bits` ensures this shift won't panic due to the shift width
+        // being too large.
         if input >> bits != Self::zero_integer() {
             return Err(FieldError::InputSizeMismatch);
         }
@@ -216,21 +221,19 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
         })
     }
 
-    /// Inverts the encoding done by [`Self::encode_into_bitvector_representation`], and returns a
-    /// single field element.
+    /// Inverts the encoding done by [`Self::encode_as_bitvector`], and returns a single field
+    /// element.
     ///
     /// This performs an inner product between the input vector of field elements and successive
-    /// powers of two (starting with 2^0 = 1). If the input came from
-    /// [`Self::encode_into_bitvector_representation`], then the result will be equal to the
-    /// originally encoded integer, projected into the field.
+    /// powers of two (starting with 2^0 = 1). If the input came from [`Self::encode_as_bitvector`],
+    /// then the result will be equal to the originally encoded integer, projected into the field.
     ///
     /// Note that this decoding operation is linear, so it can be applied to secret shares of an
     /// encoded integer, and if the results are summed up, it will be equal to the encoded integer.
     ///
-    /// # Errors
-    ///
-    /// This function errors if `2^input.len() - 1` does not fit into the field `Self`.
-    fn decode_from_bitvector_representation(input: &[Self]) -> Result<Self, FieldError> {
+    /// Returns an error if the length of the input is larger than the bit width of the field's
+    /// modulus.
+    fn decode_bitvector(input: &[Self]) -> Result<Self, FieldError> {
         if !Self::valid_integer_bitlength(input.len()) {
             return Err(FieldError::ModulusOverflow);
         }
@@ -248,11 +251,10 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
 }
 
 /// This iterator returns a sequence of field elements that are equal to zero or one, representing
-/// some integer in two's complement form. See
-/// [`FieldElementWithInteger::encode_into_bitvector_representation`].
+/// some integer in two's complement form. See [`FieldElementWithInteger::encode_as_bitvector`].
 // Note that this is implemented with a separate struct, instead of using the map combinator,
 // because return_position_impl_trait_in_trait is not yet stable.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BitvectorRepresentationIter<F: FieldElementWithInteger> {
     inner: Range<usize>,
     input: F::Integer,
@@ -1190,19 +1192,19 @@ mod tests {
     fn test_encode_into_bitvector() {
         let zero = Field128::zero();
         let one = Field128::one();
-        let zero_enc = Field128::encode_into_bitvector_representation(0, 4)
+        let zero_enc = Field128::encode_as_bitvector(0, 4)
             .unwrap()
             .collect::<Vec<_>>();
-        let one_enc = Field128::encode_into_bitvector_representation(1, 4)
+        let one_enc = Field128::encode_as_bitvector(1, 4)
             .unwrap()
             .collect::<Vec<_>>();
-        let fifteen_enc = Field128::encode_into_bitvector_representation(15, 4)
+        let fifteen_enc = Field128::encode_as_bitvector(15, 4)
             .unwrap()
             .collect::<Vec<_>>();
         assert_eq!(zero_enc, [zero; 4]);
         assert_eq!(one_enc, [one, zero, zero, zero]);
         assert_eq!(fifteen_enc, [one; 4]);
-        Field128::encode_into_bitvector_representation(16, 4).unwrap_err();
-        Field128::encode_into_bitvector_representation(0, 129).unwrap_err();
+        Field128::encode_as_bitvector(16, 4).unwrap_err();
+        Field128::encode_as_bitvector(0, 129).unwrap_err();
     }
 }

@@ -146,7 +146,7 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_into_bitvector_representation(*summand, self.bits)?.collect();
+        let v = F::encode_as_bitvector(*summand, self.bits)?.collect();
         Ok(v)
     }
 
@@ -174,7 +174,7 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         self.truncate_call_check(&input)?;
-        let res = F::decode_from_bitvector_representation(&input)?;
+        let res = F::decode_bitvector(&input)?;
         Ok(vec![res])
     }
 
@@ -245,7 +245,7 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_into_bitvector_representation(*summand, self.bits)?.collect();
+        let v = F::encode_as_bitvector(*summand, self.bits)?.collect();
         Ok(v)
     }
 
@@ -279,7 +279,7 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         self.truncate_call_check(&input)?;
-        let res = F::decode_from_bitvector_representation(&input)?;
+        let res = F::decode_bitvector(&input)?;
         Ok(vec![res])
     }
 
@@ -596,9 +596,7 @@ where
                     self.bits
                 )));
             }
-            flattened.extend(F::encode_into_bitvector_representation(
-                *summand, self.bits,
-            )?);
+            flattened.extend(F::encode_as_bitvector(*summand, self.bits)?);
         }
 
         Ok(flattened)
@@ -641,7 +639,7 @@ where
         self.truncate_call_check(&input)?;
         let mut unflattened = Vec::with_capacity(self.len);
         for chunk in input.chunks(self.bits) {
-            unflattened.push(F::decode_from_bitvector_representation(chunk)?);
+            unflattened.push(F::decode_bitvector(chunk)?);
         }
         Ok(unflattened)
     }

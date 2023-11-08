@@ -421,10 +421,7 @@ where
         let mut encoded: Vec<Field128> =
             Vec::with_capacity(self.bits_per_entry * self.entries + self.bits_for_norm);
         for entry in integer_entries.clone() {
-            encoded.extend(Field128::encode_into_bitvector_representation(
-                entry,
-                self.bits_per_entry,
-            )?);
+            encoded.extend(Field128::encode_as_bitvector(entry, self.bits_per_entry)?);
         }
 
         // (II) Vector norm.
@@ -434,10 +431,7 @@ where
         let norm_int = u128::from(norm);
 
         // Write the norm into the `entries` vector.
-        encoded.extend(Field128::encode_into_bitvector_representation(
-            norm_int,
-            self.bits_for_norm,
-        )?);
+        encoded.extend(Field128::encode_as_bitvector(norm_int, self.bits_for_norm)?);
 
         Ok(encoded)
     }
@@ -535,7 +529,7 @@ where
         // decode the bit-encoded entries into elements in the range [0,2^n):
         let decoded_entries: Result<Vec<_>, _> = input[0..self.entries * self.bits_per_entry]
             .chunks(self.bits_per_entry)
-            .map(Field128::decode_from_bitvector_representation)
+            .map(Field128::decode_bitvector)
             .collect();
 
         // run parallel sum gadget on the decoded entries
@@ -567,7 +561,7 @@ where
         // The submitted norm is also decoded from its bit-encoding, and
         // compared with the computed norm.
         let submitted_norm_enc = &input[self.range_norm_begin..self.range_norm_end];
-        let submitted_norm = Field128::decode_from_bitvector_representation(submitted_norm_enc)?;
+        let submitted_norm = Field128::decode_bitvector(submitted_norm_enc)?;
 
         let norm_check = computed_norm - submitted_norm;
 
@@ -586,7 +580,7 @@ where
             let start = i_entry * self.bits_per_entry;
             let end = (i_entry + 1) * self.bits_per_entry;
 
-            let decoded = Field128::decode_from_bitvector_representation(&input[start..end])?;
+            let decoded = Field128::decode_bitvector(&input[start..end])?;
             decoded_vector.push(decoded);
         }
         Ok(decoded_vector)
