@@ -128,7 +128,7 @@ mod tests {
     use crate::{
         codec::Decode,
         field::{Field64, FieldPrio2},
-        vdaf::xof::{Seed, SeedStreamSha3, Xof, XofShake128},
+        vdaf::xof::{Seed, SeedStreamSha3, Xof, XofTurboShake128},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
@@ -224,14 +224,14 @@ mod tests {
         .unwrap();
         let expected = Field64::from(2035552711764301796);
 
-        let seed_stream = XofShake128::seed_stream(&seed, b"", b"");
+        let seed_stream = XofTurboShake128::seed_stream(&seed, b"", b"");
         let mut prng = Prng::<Field64, _>::from_seed_stream(seed_stream);
         let actual = prng.nth(33236).unwrap();
         assert_eq!(actual, expected);
 
         #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
         {
-            let mut seed_stream = XofShake128::seed_stream(&seed, b"", b"");
+            let mut seed_stream = XofTurboShake128::seed_stream(&seed, b"", b"");
             let mut actual = <Field64 as FieldElement>::zero();
             for _ in 0..=33236 {
                 actual = <Field64 as crate::idpf::IdpfValue>::generate(&mut seed_stream, &());
@@ -247,11 +247,11 @@ mod tests {
         let seed = Seed::generate().unwrap();
 
         let mut prng: Prng<Field64, SeedStreamSha3> =
-            Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
 
         // Construct a `Prng` with a longer-than-usual buffer.
         let mut prng_weird_buffer_size: Prng<Field64, SeedStreamSha3> =
-            Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
         let mut extra = [0; 7];
         prng_weird_buffer_size.seed_stream.fill_bytes(&mut extra);
         prng_weird_buffer_size.buffer.extend_from_slice(&extra);
@@ -268,7 +268,7 @@ mod tests {
     fn into_new_field() {
         let seed = Seed::generate().unwrap();
         let want: Prng<Field64, SeedStreamSha3> =
-            Prng::from_seed_stream(XofShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
         let want_buffer = want.buffer.clone();
 
         let got: Prng<FieldPrio2, _> = want.into_new_field();

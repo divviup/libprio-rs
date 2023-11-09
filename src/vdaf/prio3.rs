@@ -27,7 +27,7 @@
 //! [DPRS23]: https://ia.cr/2023/130
 //! [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 
-use super::xof::XofShake128;
+use super::xof::XofTurboShake128;
 #[cfg(feature = "experimental")]
 use super::AggregatorWithNoise;
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
@@ -72,7 +72,7 @@ const DST_JOINT_RAND_SEED: u16 = 6;
 const DST_JOINT_RAND_PART: u16 = 7;
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
-pub type Prio3Count = Prio3<Count<Field64>, XofShake128, 16>;
+pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 16>;
 
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
@@ -84,7 +84,7 @@ impl Prio3Count {
 /// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
 /// aggregate is the element-wise sum.
 pub type Prio3SumVec =
-    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofShake128, 16>;
+    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
 
 impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
@@ -105,7 +105,7 @@ impl Prio3SumVec {
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3SumVecMultithreaded =
-    Prio3<SumVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>, XofShake128, 16>;
+    Prio3<SumVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
 
 #[cfg(feature = "multithreaded")]
 impl Prio3SumVecMultithreaded {
@@ -124,7 +124,7 @@ impl Prio3SumVecMultithreaded {
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum = Prio3<Sum<Field128>, XofShake128, 16>;
+pub type Prio3Sum = Prio3<Sum<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Sum {
     /// Construct an instance of Prio3Sum with the given number of aggregators and required bit
@@ -160,7 +160,7 @@ pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
         ParallelSum<Field128, PolyEval<Field128>>,
         ParallelSum<Field128, Mul<Field128>>,
     >,
-    XofShake128,
+    XofTurboShake128,
     16,
 >;
 
@@ -191,7 +191,7 @@ pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
         ParallelSumMultithreaded<Field128, PolyEval<Field128>>,
         ParallelSumMultithreaded<Field128, Mul<Field128>>,
     >,
-    XofShake128,
+    XofTurboShake128,
     16,
 >;
 
@@ -211,7 +211,7 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
 /// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
 pub type Prio3Histogram =
-    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofShake128, 16>;
+    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
 
 impl Prio3Histogram {
     /// Constructs an instance of Prio3Histogram with the given number of aggregators,
@@ -230,7 +230,7 @@ impl Prio3Histogram {
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3HistogramMultithreaded =
-    Prio3<Histogram<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>, XofShake128, 16>;
+    Prio3<Histogram<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
 
 #[cfg(feature = "multithreaded")]
 impl Prio3HistogramMultithreaded {
@@ -247,7 +247,7 @@ impl Prio3HistogramMultithreaded {
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and
 /// the aggregate is the arithmetic average.
-pub type Prio3Average = Prio3<Average<Field128>, XofShake128, 16>;
+pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Average {
     /// Construct an instance of Prio3Average with the given number of aggregators and required bit
@@ -277,7 +277,7 @@ impl Prio3Average {
 /// - a [`Xof`] for deriving vectors of field elements from seeds.
 ///
 /// New instances can be defined by aliasing the base type. For example, [`Prio3Count`] is an alias
-/// for `Prio3<Count<Field64>, XofShake128, 16>`.
+/// for `Prio3<Count<Field64>, XofTurboShake128, 16>`.
 ///
 /// ```
 /// use prio::vdaf::{
@@ -1598,7 +1598,7 @@ mod tests {
 
         fn test_fixed_vec<Fx, PE, M, const SIZE: usize>(
             fp_0: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofShake128, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 16>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -1690,7 +1690,7 @@ mod tests {
             fp_4_inv: Fx,
             fp_8_inv: Fx,
             fp_16_inv: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofShake128, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 16>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
