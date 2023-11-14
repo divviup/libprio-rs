@@ -583,6 +583,8 @@ where
     V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
     M: IntoIterator<Item = V::InputShare>,
 {
+    let public_share =
+        V::PublicShare::get_decoded_with_param(vdaf, &public_share.get_encoded()).unwrap();
     let input_shares = input_shares
         .into_iter()
         .map(|input_share| input_share.get_encoded());
