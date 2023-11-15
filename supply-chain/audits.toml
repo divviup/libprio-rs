@@ -230,6 +230,11 @@ criteria = "safe-to-deploy"
 delta = "0.2.9 -> 0.2.10"
 notes = "These changes include some new `unsafe` code for the `emscripten` and `psvita` targets, but all it does is call `libc::getentropy`."
 
+[[audits.getrandom]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.2.10 -> 0.2.11"
+
 [[audits.ghash]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -289,6 +294,11 @@ delta = "0.1.3 -> 0.1.4"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.2.139 -> 0.2.141"
+
+[[audits.libc]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.2.149 -> 0.2.150"
 
 [[audits.linux-raw-sys]]
 who = "Brandon Pitman <bran@bran.land>"
