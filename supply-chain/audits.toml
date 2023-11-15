@@ -199,6 +199,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "1.2.0"
 
+[[audits.getrandom]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.2.10 -> 0.2.11"
+
 [[audits.ghash]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
