@@ -56,6 +56,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.22.1 -> 1.23.0"
 
+[[audits.getrandom]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.2.10 -> 0.2.11"
+
 [[audits.hermit-abi]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
