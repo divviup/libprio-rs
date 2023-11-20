@@ -20,6 +20,7 @@ use std::{
 
 /// An error that occurred during decoding.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum CodecError {
     /// An I/O error.
     #[error("I/O error")]

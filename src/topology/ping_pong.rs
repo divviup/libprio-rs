@@ -15,6 +15,7 @@ use std::fmt::Debug;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PingPongError {
     /// Error running prepare_init
     #[error("vdaf.prepare_init: {0}")]
