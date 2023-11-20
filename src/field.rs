@@ -405,7 +405,7 @@ macro_rules! make_field {
         ///
         /// As an invariant, this integer representing the field element in the Montgomery domain
         /// must be less than the field modulus, `p`.
-        #[derive(Clone, Copy, PartialOrd, Ord, Default)]
+        #[derive(Clone, Copy, Default)]
         pub struct $elem(u128);
 
         impl $elem {
