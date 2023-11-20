@@ -189,6 +189,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.2.2 -> 0.2.4"
 
+[[audits.fiat-crypto]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.4 -> 0.2.5"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
