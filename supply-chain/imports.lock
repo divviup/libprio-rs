@@ -78,6 +78,13 @@ user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
+[[publisher.rustix]]
+version = "0.37.27"
+when = "2023-10-26"
+user-id = 6825
+user-login = "sunfishcode"
+user-name = "Dan Gohman"
+
 [[publisher.ryu]]
 version = "1.0.11"
 when = "2022-08-03"
