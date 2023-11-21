@@ -76,7 +76,7 @@ impl Vdaf {
         self
     }
 
-    /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_step`].
+    /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_next`].
     pub fn with_prep_step_fn<
         F: Fn(&PrepareState) -> Result<PrepareTransition<Self, 0, 16>, VdafError>,
     >(

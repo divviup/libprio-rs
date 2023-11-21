@@ -263,58 +263,12 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
     ///
-    /// # Notes
-    ///
-    /// [`Self::prepare_shares_to_prepare_message`] is preferable since its name better matches the
-    /// specification.
-    ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
-    #[deprecated(
-        since = "0.15.0",
-        note = "Use Vdaf::prepare_shares_to_prepare_message instead"
-    )]
-    fn prepare_preprocess<M: IntoIterator<Item = Self::PrepareShare>>(
-        &self,
-        agg_param: &Self::AggregationParam,
-        inputs: M,
-    ) -> Result<Self::PrepareMessage, VdafError> {
-        self.prepare_shares_to_prepare_message(agg_param, inputs)
-    }
-
-    /// Preprocess a round of preparation shares into a single input to [`Self::prepare_next`].
-    ///
-    /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
-    ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
         agg_param: &Self::AggregationParam,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError>;
-
-    /// Compute the next state transition from the current state and the previous round of input
-    /// messages. If this returns [`PrepareTransition::Continue`], then the returned
-    /// [`Self::PrepareShare`] should be combined with the other Aggregators' `PrepareShare`s from
-    /// this round and passed into another call to this method. This continues until this method
-    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
-    /// aggregated. If the method returns an error, the aggregator should consider its input share
-    /// invalid and not attempt to process it any further.
-    ///
-    /// Implements `Vdaf.prep_next` from [VDAF].
-    ///
-    /// # Notes
-    ///
-    /// [`Self::prepare_next`] is preferable since its name better matches the specification.
-    ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
-    #[deprecated(since = "0.15.0", note = "Use Vdaf::prepare_next")]
-    fn prepare_step(
-        &self,
-        state: Self::PrepareState,
-        input: Self::PrepareMessage,
-    ) -> Result<PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError> {
-        self.prepare_next(state, input)
-    }
 
     /// Compute the next state transition from the current state and the previous round of input
     /// messages. If this returns [`PrepareTransition::Continue`], then the returned

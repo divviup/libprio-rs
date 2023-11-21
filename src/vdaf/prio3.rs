@@ -316,7 +316,7 @@ impl Prio3Average {
 ///     let prep_msg = vdaf.prepare_shares_to_prepare_message(&(), prep_shares).unwrap();
 ///
 ///     for (agg_id, state) in prep_states.into_iter().enumerate() {
-///         let out_share = match vdaf.prepare_step(state, prep_msg.clone()).unwrap() {
+///         let out_share = match vdaf.prepare_next(state, prep_msg.clone()).unwrap() {
 ///             PrepareTransition::Finish(out_share) => out_share,
 ///             _ => panic!("unexpected transition"),
 ///         };

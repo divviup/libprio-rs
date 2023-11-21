@@ -416,15 +416,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `inbound` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// # Notes
-    ///
-    /// The specification of this function in [VDAF] takes the aggregation parameter. This version
-    /// does not, because [`crate::vdaf::Aggregator::prepare_preprocess`] does not take the
-    /// aggregation parameter. This may change in the future if/when [#670][issue] is addressed.
-    ///
-    ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
-    /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn leader_continued(
         &self,
         leader_state: Self::State,
@@ -459,15 +451,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `inbound` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// # Notes
-    ///
-    /// The specification of this function in [VDAF] takes the aggregation parameter. This version
-    /// does not, because [`crate::vdaf::Aggregator::prepare_preprocess`] does not take the
-    /// aggregation parameter. This may change in the future if/when [#670][issue] is addressed.
-    ///
-    ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.8
-    /// [issue]: https://github.com/divviup/libprio-rs/issues/670
     fn helper_continued(
         &self,
         helper_state: Self::State,
