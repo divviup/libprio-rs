@@ -61,6 +61,7 @@ pub mod types;
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum FlpError {
     /// Calling [`Type::prove`] returned an error.
     #[error("prove error: {0}")]

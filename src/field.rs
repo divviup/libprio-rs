@@ -39,6 +39,7 @@ pub use field255::Field255;
 
 /// Possible errors from finite field operations.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum FieldError {
     /// Input sizes do not match.
     #[error("input sizes do not match")]

@@ -19,6 +19,7 @@ const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum PrngError {
     /// Failure when calling getrandom().
     #[error("getrandom: {0}")]

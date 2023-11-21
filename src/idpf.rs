@@ -30,6 +30,7 @@ use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTi
 
 /// IDPF-related errors.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum IdpfError {
     /// Error from incompatible shares at different levels.
     #[error("tried to merge shares from incompatible levels")]

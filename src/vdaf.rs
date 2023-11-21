@@ -26,6 +26,7 @@ pub(crate) const VERSION: u8 = 7;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum VdafError {
     /// An error occurred.
     #[error("vdaf error: {0}")]
