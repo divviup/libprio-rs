@@ -175,6 +175,7 @@ where
 }
 
 #[test]
+#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_count() {
     for test_vector_str in [
         include_str!("test_vec/07/Prio3Count_0.json"),
@@ -189,6 +190,7 @@ fn test_vec_prio3_count() {
 }
 
 #[test]
+#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_sum() {
     for test_vector_str in [
         include_str!("test_vec/07/Prio3Sum_0.json"),
@@ -204,6 +206,7 @@ fn test_vec_prio3_sum() {
 }
 
 #[test]
+#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_sum_vec() {
     for test_vector_str in [
         include_str!("test_vec/07/Prio3SumVec_0.json"),
@@ -228,6 +231,7 @@ fn test_vec_prio3_sum_vec() {
 }
 
 #[test]
+#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_histogram() {
     for test_vector_str in [
         include_str!("test_vec/07/Prio3Histogram_0.json"),

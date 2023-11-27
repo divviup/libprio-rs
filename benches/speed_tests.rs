@@ -712,7 +712,7 @@ fn poplar1(c: &mut Criterion) {
     for size in test_sizes.iter() {
         group.throughput(Throughput::Bytes(*size as u64 / 8));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let vdaf = Poplar1::new_shake128(size);
+            let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
             let nonce = rng.gen::<[u8; 16]>();
 
@@ -736,7 +736,7 @@ fn poplar1(c: &mut Criterion) {
     for size in test_sizes.iter() {
         group.measurement_time(Duration::from_secs(30)); // slower benchmark
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let vdaf = Poplar1::new_shake128(size);
+            let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
 
             b.iter_batched(
