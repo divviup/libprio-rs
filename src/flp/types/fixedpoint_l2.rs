@@ -177,7 +177,7 @@ use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::types::parallel_sum_range_checks;
 use crate::flp::{FlpError, Gadget, Type, TypeWithNoise};
-use crate::vdaf::xof::SeedStreamSha3;
+use crate::vdaf::xof::SeedStreamTurboShake128;
 use fixed::traits::Fixed;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
@@ -638,7 +638,11 @@ where
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
     ) -> Result<(), FlpError> {
-        self.add_noise(dp_strategy, agg_result, &mut SeedStreamSha3::from_entropy())
+        self.add_noise(
+            dp_strategy,
+            agg_result,
+            &mut SeedStreamTurboShake128::from_entropy(),
+        )
     }
 }
 
@@ -681,7 +685,7 @@ mod tests {
     use crate::field::{random_vector, Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
     use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
-    use crate::vdaf::xof::SeedStreamSha3;
+    use crate::vdaf::xof::SeedStreamTurboShake128;
     use fixed::types::extra::{U127, U14, U63};
     use fixed::{FixedI128, FixedI16, FixedI64};
     use fixed_macro::fixed;
@@ -762,15 +766,23 @@ mod tests {
         let strategy = ZCdpDiscreteGaussian::from_budget(ZCdpBudget::new(
             Rational::from_unsigned(100u8, 3u8).unwrap(),
         ));
-        vsum.add_noise(&strategy, &mut v, &mut SeedStreamSha3::from_seed([0u8; 16]))
-            .unwrap();
+        vsum.add_noise(
+            &strategy,
+            &mut v,
+            &mut SeedStreamTurboShake128::from_seed([0u8; 16]),
+        )
+        .unwrap();
         assert_eq!(
             vsum.decode_result(&v, 1).unwrap(),
             match n {
                 // sensitivity depends on encoding so the noise differs
-                16 => vec![0.150604248046875, 0.139373779296875, -0.03759765625],
-                32 => vec![0.3051439793780446, 0.1226568529382348, 0.08595499861985445],
-                64 => vec![0.2896077990915178, 0.16115188007715098, 0.0788390114728425],
+                16 => vec![0.288970947265625, 0.168853759765625, 0.085662841796875],
+                32 => vec![0.257810294162482, 0.10634658299386501, 0.10149003705009818],
+                64 => vec![
+                    0.37697368351762867,
+                    -0.02388947667663828,
+                    0.19813152630930916
+                ],
                 _ => panic!("unsupported bitsize"),
             }
         );

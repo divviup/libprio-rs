@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Verifiable Distributed Aggregation Functions (VDAFs) as described in
-//! [[draft-irtf-cfrg-vdaf-07]].
+//! [[draft-irtf-cfrg-vdaf-08]].
 //!
-//! [draft-irtf-cfrg-vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
+//! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
@@ -212,7 +212,7 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
     ///
     /// Implements `Vdaf::shard` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.1
     fn shard(
         &self,
         measurement: &Self::Measurement,
@@ -248,7 +248,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.prep_init` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_init(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
@@ -263,7 +263,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
         agg_param: &Self::AggregationParam,
@@ -280,7 +280,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.prep_next` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-07#section-5.2
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_next(
         &self,
         state: Self::PrepareState,
