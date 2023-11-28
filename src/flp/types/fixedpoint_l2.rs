@@ -172,7 +172,9 @@
 pub mod compatible_float;
 
 use crate::dp::{distributions::ZCdpDiscreteGaussian, DifferentialPrivacyStrategy, DpError};
-use crate::field::{Field128, FieldElement, FieldElementWithInteger, FieldElementWithIntegerExt};
+use crate::field::{
+    Field128, FieldElement, FieldElementWithInteger, FieldElementWithIntegerExt, Integer,
+};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::types::parallel_sum_range_checks;
@@ -180,7 +182,7 @@ use crate::flp::{FlpError, Gadget, Type, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
 use fixed::traits::Fixed;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
-use num_integer::Integer;
+use num_integer::Integer as _;
 use num_rational::Ratio;
 use rand::{distributions::Distribution, Rng};
 use rand_core::SeedableRng;
@@ -250,7 +252,7 @@ where
     /// fixed point vector with `entries` entries.
     pub fn new(entries: usize) -> Result<Self, FlpError> {
         // (0) initialize constants
-        let fi_one = Field128::one_integer();
+        let fi_one = <Field128 as FieldElementWithInteger>::Integer::one();
 
         // (I) Check that the fixed type is compatible.
         //
@@ -538,7 +540,7 @@ where
 
             // Chunks which are too short need to be extended with a share of the
             // encoded zero value, that is: 1/num_shares * (2^(n-1))
-            let fi_one = Field128::one_integer();
+            let fi_one = <Field128 as FieldElementWithInteger>::Integer::one();
             let zero_enc = Field128::from(fi_one << (self.bits_per_entry - 1));
             let zero_enc_share = zero_enc * num_shares_inverse;
 
