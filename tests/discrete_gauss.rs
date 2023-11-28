@@ -29,24 +29,15 @@ pub struct DiscreteGaussTestVector {
 #[test]
 fn discrete_gauss_reference() {
     let test_vectors: Vec<DiscreteGaussTestVector> = vec![
-        serde_json::from_str(include_str!(concat!("test_vectors/discrete_gauss_3.json"))).unwrap(),
-        serde_json::from_str(include_str!(concat!("test_vectors/discrete_gauss_9.json"))).unwrap(),
-        serde_json::from_str(include_str!(concat!(
-            "test_vectors/discrete_gauss_100.json"
-        )))
-        .unwrap(),
-        serde_json::from_str(include_str!(concat!(
-            "test_vectors/discrete_gauss_41293847.json"
-        )))
-        .unwrap(),
-        serde_json::from_str(include_str!(concat!(
+        serde_json::from_str(include_str!("test_vectors/discrete_gauss_3.json")).unwrap(),
+        serde_json::from_str(include_str!("test_vectors/discrete_gauss_9.json")).unwrap(),
+        serde_json::from_str(include_str!("test_vectors/discrete_gauss_100.json")).unwrap(),
+        serde_json::from_str(include_str!("test_vectors/discrete_gauss_41293847.json")).unwrap(),
+        serde_json::from_str(include_str!(
             "test_vectors/discrete_gauss_9999999999999999999999.json"
-        )))
+        ))
         .unwrap(),
-        serde_json::from_str(include_str!(concat!(
-            "test_vectors/discrete_gauss_2.342.json"
-        )))
-        .unwrap(),
+        serde_json::from_str(include_str!("test_vectors/discrete_gauss_2.342.json")).unwrap(),
     ];
 
     for test_vector in test_vectors {
