@@ -175,11 +175,10 @@ where
 }
 
 #[test]
-#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_count() {
     for test_vector_str in [
-        include_str!("test_vec/07/Prio3Count_0.json"),
-        include_str!("test_vec/07/Prio3Count_1.json"),
+        include_str!("test_vec/08/Prio3Count_0.json"),
+        include_str!("test_vec/08/Prio3Count_1.json"),
     ] {
         let t: TPrio3<u64> = serde_json::from_str(test_vector_str).unwrap();
         let prio3 = Prio3::new_count(t.shares).unwrap();
@@ -190,11 +189,10 @@ fn test_vec_prio3_count() {
 }
 
 #[test]
-#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_sum() {
     for test_vector_str in [
-        include_str!("test_vec/07/Prio3Sum_0.json"),
-        include_str!("test_vec/07/Prio3Sum_1.json"),
+        include_str!("test_vec/08/Prio3Sum_0.json"),
+        include_str!("test_vec/08/Prio3Sum_1.json"),
     ] {
         let t: TPrio3<u128> = serde_json::from_str(test_vector_str).unwrap();
         let bits = t.other_params["bits"].as_u64().unwrap() as usize;
@@ -206,11 +204,10 @@ fn test_vec_prio3_sum() {
 }
 
 #[test]
-#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_sum_vec() {
     for test_vector_str in [
-        include_str!("test_vec/07/Prio3SumVec_0.json"),
-        include_str!("test_vec/07/Prio3SumVec_1.json"),
+        include_str!("test_vec/08/Prio3SumVec_0.json"),
+        include_str!("test_vec/08/Prio3SumVec_1.json"),
     ] {
         let t: TPrio3<Vec<u128>> = serde_json::from_str(test_vector_str).unwrap();
         let bits = t.other_params["bits"].as_u64().unwrap() as usize;
@@ -231,11 +228,10 @@ fn test_vec_prio3_sum_vec() {
 }
 
 #[test]
-#[ignore = "VDAF-08 support is incomplete"]
 fn test_vec_prio3_histogram() {
     for test_vector_str in [
-        include_str!("test_vec/07/Prio3Histogram_0.json"),
-        include_str!("test_vec/07/Prio3Histogram_1.json"),
+        include_str!("test_vec/08/Prio3Histogram_0.json"),
+        include_str!("test_vec/08/Prio3Histogram_1.json"),
     ] {
         let t: TPrio3<usize> = serde_json::from_str(test_vector_str).unwrap();
         let length = t.other_params["length"].as_u64().unwrap() as usize;
