@@ -159,9 +159,6 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
 /// and [`Collector`], which define the roles of the various parties involved in the execution of
 /// the VDAF.
 pub trait Vdaf: Clone + Debug {
-    /// Algorithm identifier for this VDAF.
-    const ID: u32;
-
     /// The type of Client measurement to be aggregated.
     type Measurement: Clone + Debug;
 
@@ -189,17 +186,20 @@ pub trait Vdaf: Clone + Debug {
         + for<'a> ParameterizedDecode<(&'a Self, &'a Self::AggregationParam)>
         + Encode;
 
+    /// Return the VDAF's algorithm ID.
+    fn algorithm_id(&self) -> u32;
+
     /// The number of Aggregators. The Client generates as many input shares as there are
     /// Aggregators.
     fn num_aggregators(&self) -> usize;
 
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the XOF.
-    fn domain_separation_tag(usage: u16) -> [u8; 8] {
+    fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
         let mut dst = [0_u8; 8];
         dst[0] = VERSION;
         dst[1] = 0; // algorithm class
-        dst[2..6].copy_from_slice(&(Self::ID).to_be_bytes());
+        dst[2..6].copy_from_slice(&(self.algorithm_id()).to_be_bytes());
         dst[6..8].copy_from_slice(&usage.to_be_bytes());
         dst
     }

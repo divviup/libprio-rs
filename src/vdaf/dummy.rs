@@ -98,8 +98,6 @@ impl Default for Vdaf {
 }
 
 impl vdaf::Vdaf for Vdaf {
-    const ID: u32 = 0xFFFF0000;
-
     type Measurement = u8;
     type AggregateResult = u8;
     type AggregationParam = AggregationParam;
@@ -107,6 +105,10 @@ impl vdaf::Vdaf for Vdaf {
     type InputShare = InputShare;
     type OutputShare = OutputShare;
     type AggregateShare = AggregateShare;
+
+    fn algorithm_id(&self) -> u32 {
+        0xFFFF0000
+    }
 
     fn num_aggregators(&self) -> usize {
         2

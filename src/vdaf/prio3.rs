@@ -77,7 +77,7 @@ pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 16>;
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
     pub fn new_count(num_aggregators: u8) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, Count::new())
+        Prio3::new(num_aggregators, 1, 0x00000000, Count::new())
     }
 }
 
@@ -96,7 +96,12 @@ impl Prio3SumVec {
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, SumVec::new(bits, len, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000002,
+            SumVec::new(bits, len, chunk_length)?,
+        )
     }
 }
 
@@ -121,7 +126,12 @@ impl Prio3SumVecMultithreaded {
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, SumVec::new(bits, len, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000002,
+            SumVec::new(bits, len, chunk_length)?,
+        )
     }
 }
 
@@ -139,7 +149,7 @@ impl Prio3Sum {
             )));
         }
 
-        Prio3::new(num_aggregators, 1, Sum::new(bits)?)
+        Prio3::new(num_aggregators, 1, 0x00000001, Sum::new(bits)?)
     }
 }
 
@@ -176,7 +186,12 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSum<Fx> {
         entries: usize,
     ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
-        Prio3::new(num_aggregators, 1, FixedPointBoundedL2VecSum::new(entries)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0xFFFF0000,
+            FixedPointBoundedL2VecSum::new(entries)?,
+        )
     }
 }
 
@@ -207,7 +222,12 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
         entries: usize,
     ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
-        Prio3::new(num_aggregators, 1, FixedPointBoundedL2VecSum::new(entries)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0xFFFF0000,
+            FixedPointBoundedL2VecSum::new(entries)?,
+        )
     }
 }
 
@@ -224,7 +244,12 @@ impl Prio3Histogram {
         length: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, Histogram::new(length, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000003,
+            Histogram::new(length, chunk_length)?,
+        )
     }
 }
 
@@ -247,7 +272,12 @@ impl Prio3HistogramMultithreaded {
         length: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, Histogram::new(length, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000003,
+            Histogram::new(length, chunk_length)?,
+        )
     }
 }
 
@@ -270,6 +300,7 @@ impl Prio3Average {
         Ok(Prio3 {
             num_aggregators,
             num_proofs: 1,
+            algorithm_id: 0xFFFF0000,
             typ: Average::new(bits)?,
             phantom: PhantomData,
         })
@@ -347,6 +378,7 @@ where
 {
     num_aggregators: u8,
     num_proofs: u8,
+    algorithm_id: u32,
     typ: T,
     phantom: PhantomData<P>,
 }
@@ -357,8 +389,13 @@ where
     P: Xof<SEED_SIZE>,
 {
     /// Construct an instance of this Prio3 VDAF with the given number of aggregators, number of
-    /// proofs to generate and verify, and the underlying type.
-    pub fn new(num_aggregators: u8, num_proofs: u8, typ: T) -> Result<Self, VdafError> {
+    /// proofs to generate and verify, the algorithm ID, and the underlying type.
+    pub fn new(
+        num_aggregators: u8,
+        num_proofs: u8,
+        algorithm_id: u32,
+        typ: T,
+    ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
         if num_proofs == 0 {
             return Err(VdafError::Uncategorized(
@@ -369,6 +406,7 @@ where
         Ok(Self {
             num_aggregators,
             num_proofs,
+            algorithm_id,
             typ,
             phantom: PhantomData,
         })
@@ -392,7 +430,7 @@ where
     fn derive_prove_rands(&self, prove_rand_seed: &Seed<SEED_SIZE>) -> Vec<T::Field> {
         P::seed_stream(
             prove_rand_seed,
-            &Self::domain_separation_tag(DST_PROVE_RANDOMNESS),
+            &self.domain_separation_tag(DST_PROVE_RANDOMNESS),
             &[self.num_proofs],
         )
         .into_field_vec(self.typ.prove_rand_len() * self.num_proofs())
@@ -404,7 +442,7 @@ where
     ) -> Seed<SEED_SIZE> {
         let mut xof = P::init(
             &[0; SEED_SIZE],
-            &Self::domain_separation_tag(DST_JOINT_RAND_SEED),
+            &self.domain_separation_tag(DST_JOINT_RAND_SEED),
         );
         for part in joint_rand_parts {
             xof.update(part.as_ref());
@@ -419,7 +457,7 @@ where
         let joint_rand_seed = self.derive_joint_rand_seed(joint_rand_parts);
         let joint_rands = P::seed_stream(
             &joint_rand_seed,
-            &Self::domain_separation_tag(DST_JOINT_RANDOMNESS),
+            &self.domain_separation_tag(DST_JOINT_RANDOMNESS),
             &[self.num_proofs],
         )
         .into_field_vec(self.typ.joint_rand_len() * self.num_proofs());
@@ -434,7 +472,7 @@ where
     ) -> Prng<T::Field, P::SeedStream> {
         Prng::from_seed_stream(P::seed_stream(
             proofs_share_seed,
-            &Self::domain_separation_tag(DST_PROOF_SHARE),
+            &self.domain_separation_tag(DST_PROOF_SHARE),
             &[self.num_proofs, agg_id],
         ))
     }
@@ -442,7 +480,7 @@ where
     fn derive_query_rands(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
-            &Self::domain_separation_tag(DST_QUERY_RANDOMNESS),
+            &self.domain_separation_tag(DST_QUERY_RANDOMNESS),
         );
         xof.update(&[self.num_proofs]);
         xof.update(nonce);
@@ -506,7 +544,7 @@ where
             let proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
                 &Seed(measurement_share_seed),
-                &Self::domain_separation_tag(DST_MEASUREMENT_SHARE),
+                &self.domain_separation_tag(DST_MEASUREMENT_SHARE),
                 &[agg_id],
             ));
             let joint_rand_blind =
@@ -514,7 +552,7 @@ where
                     let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
                     let mut joint_rand_part_xof = P::init(
                         &joint_rand_blind,
-                        &Self::domain_separation_tag(DST_JOINT_RAND_PART),
+                        &self.domain_separation_tag(DST_JOINT_RAND_PART),
                     );
                     joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
                     joint_rand_part_xof.update(nonce);
@@ -557,7 +595,7 @@ where
 
                     let mut joint_rand_part_xof = P::init(
                         leader_blind.as_ref(),
-                        &Self::domain_separation_tag(DST_JOINT_RAND_PART),
+                        &self.domain_separation_tag(DST_JOINT_RAND_PART),
                     );
                     joint_rand_part_xof.update(&[0]); // Aggregator ID
                     joint_rand_part_xof.update(nonce);
@@ -650,7 +688,6 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    const ID: u32 = T::ID;
     type Measurement = T::Measurement;
     type AggregateResult = T::AggregateResult;
     type AggregationParam = ();
@@ -658,6 +695,10 @@ where
     type InputShare = Prio3InputShare<T::Field, SEED_SIZE>;
     type OutputShare = OutputShare<T::Field>;
     type AggregateShare = AggregateShare<T::Field>;
+
+    fn algorithm_id(&self) -> u32 {
+        self.algorithm_id
+    }
 
     fn num_aggregators(&self) -> usize {
         self.num_aggregators as usize
@@ -1123,7 +1164,7 @@ where
             Share::Helper(ref seed) => Some(
                 P::seed_stream(
                     seed,
-                    &Self::domain_separation_tag(DST_MEASUREMENT_SHARE),
+                    &self.domain_separation_tag(DST_MEASUREMENT_SHARE),
                     &[agg_id],
                 )
                 .into_field_vec(self.typ.input_len()),
@@ -1152,7 +1193,7 @@ where
         let (joint_rand_seed, joint_rand_part, joint_rands) = if self.typ.joint_rand_len() > 0 {
             let mut joint_rand_part_xof = P::init(
                 msg.joint_rand_blind.as_ref().unwrap().as_ref(),
-                &Self::domain_separation_tag(DST_JOINT_RAND_PART),
+                &self.domain_separation_tag(DST_JOINT_RAND_PART),
             );
             joint_rand_part_xof.update(&[agg_id]);
             joint_rand_part_xof.update(nonce);
@@ -1311,7 +1352,7 @@ where
         let measurement_share = match step.measurement_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
-                let dst = Self::domain_separation_tag(DST_MEASUREMENT_SHARE);
+                let dst = self.domain_separation_tag(DST_MEASUREMENT_SHARE);
                 P::seed_stream(&seed, &dst, &[step.agg_id]).into_field_vec(self.typ.input_len())
             }
         };
@@ -1617,7 +1658,7 @@ mod tests {
             SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>,
             XofTurboShake128,
             16,
-        >::new(2, 2, SumVec::new(2, 20, 4).unwrap())
+        >::new(2, 2, 0xFFFF0000, SumVec::new(2, 20, 4).unwrap())
         .unwrap();
 
         assert_eq!(
