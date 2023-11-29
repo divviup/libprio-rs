@@ -65,6 +65,7 @@ pub struct Poplar1<P, const SEED_SIZE: usize> {
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     /// Construct a `Prng` with the given seed and info-string suffix.
     fn init_prng<I, B, F>(
+        &self,
         seed: &[u8; SEED_SIZE],
         usage: u16,
         binder_chunks: I,
@@ -75,7 +76,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         P: Xof<SEED_SIZE>,
         F: FieldElement,
     {
-        let mut xof = P::init(seed, &Self::domain_separation_tag(usage));
+        let mut xof = P::init(seed, &self.domain_separation_tag(usage));
         for binder_chunk in binder_chunks.into_iter() {
             xof.update(binder_chunk.as_ref());
         }
@@ -839,7 +840,6 @@ impl Decode for Poplar1AggregationParam {
 }
 
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
-    const ID: u32 = 0x00001000;
     type Measurement = IdpfInput;
     type AggregateResult = Vec<u64>;
     type AggregationParam = Poplar1AggregationParam;
@@ -847,6 +847,10 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
     type InputShare = Poplar1InputShare<SEED_SIZE>;
     type OutputShare = Poplar1FieldVec;
     type AggregateShare = Poplar1FieldVec;
+
+    fn algorithm_id(&self) -> u32 {
+        0x00001000
+    }
 
     fn num_aggregators(&self) -> usize {
         2
@@ -870,7 +874,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
         // Generate the authenticator for each inner level of the IDPF tree.
         let mut prng =
-            Self::init_prng::<_, _, Field64>(&poplar_random[2], DST_SHARD_RANDOMNESS, [&[]]);
+            self.init_prng::<_, _, Field64>(&poplar_random[2], DST_SHARD_RANDOMNESS, [&[]]);
         let auth_inner: Vec<Field64> = (0..self.bits - 1).map(|_| prng.get()).collect();
 
         // Generate the authenticator for the last level of the IDPF tree (i.e., the leaves).
@@ -900,12 +904,12 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         let corr_seed_0 = &poplar_random[0];
         let corr_seed_1 = &poplar_random[1];
         let mut prng = prng.into_new_field::<Field64>();
-        let mut corr_prng_0 = Self::init_prng::<_, _, Field64>(
+        let mut corr_prng_0 = self.init_prng::<_, _, Field64>(
             corr_seed_0,
             DST_CORR_INNER,
             [[0].as_slice(), nonce.as_slice()],
         );
-        let mut corr_prng_1 = Self::init_prng::<_, _, Field64>(
+        let mut corr_prng_1 = self.init_prng::<_, _, Field64>(
             corr_seed_1,
             DST_CORR_INNER,
             [[1].as_slice(), nonce.as_slice()],
@@ -921,12 +925,12 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
         // Generate the correlated randomness for the leaf nodes.
         let mut prng = prng.into_new_field::<Field255>();
-        let mut corr_prng_0 = Self::init_prng::<_, _, Field255>(
+        let mut corr_prng_0 = self.init_prng::<_, _, Field255>(
             corr_seed_0,
             DST_CORR_LEAF,
             [[0].as_slice(), nonce.as_slice()],
         );
-        let mut corr_prng_1 = Self::init_prng::<_, _, Field255>(
+        let mut corr_prng_1 = self.init_prng::<_, _, Field255>(
             corr_seed_1,
             DST_CORR_LEAF,
             [[1].as_slice(), nonce.as_slice()],
@@ -951,6 +955,59 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
                 },
             ],
         ))
+    }
+
+    /// Evaluate the IDPF at the given prefixes and compute the Aggregator's share of the sketch.
+    fn eval_and_sketch<F>(
+        &self,
+        verify_key: &[u8; SEED_SIZE],
+        agg_id: usize,
+        nonce: &[u8; 16],
+        agg_param: &Poplar1AggregationParam,
+        public_share: &Poplar1PublicShare,
+        idpf_key: &Seed<16>,
+        corr_prng: &mut Prng<F, P::SeedStream>,
+    ) -> Result<(Vec<F>, Vec<F>), VdafError>
+    where
+        P: Xof<SEED_SIZE>,
+        F: FieldElement,
+        Poplar1IdpfValue<F>:
+            From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
+    {
+        let mut verify_prng = self.init_prng(
+            verify_key,
+            DST_VERIFY_RANDOMNESS,
+            [nonce.as_slice(), agg_param.level.to_be_bytes().as_slice()],
+        );
+
+        let mut out_share = Vec::with_capacity(agg_param.prefixes.len());
+        let mut sketch_share = vec![
+            corr_prng.get(), // a_share
+            corr_prng.get(), // b_share
+            corr_prng.get(), // c_share
+        ];
+
+        let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
+        let idpf = Idpf::<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>::new((), ());
+        for prefix in agg_param.prefixes.iter() {
+            let share = Poplar1IdpfValue::<F>::from(idpf.eval(
+                agg_id,
+                public_share,
+                idpf_key,
+                prefix,
+                nonce,
+                &mut idpf_eval_cache,
+            )?);
+
+            let r = verify_prng.get();
+            let checked_data_share = share.0[0] * r;
+            sketch_share[0] += checked_data_share;
+            sketch_share[1] += checked_data_share * r;
+            sketch_share[2] += share.0[1] * r;
+            out_share.push(share.0[0]);
+        }
+
+        Ok((out_share, sketch_share))
     }
 }
 
@@ -1000,7 +1057,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         };
 
         if usize::from(agg_param.level) < self.bits - 1 {
-            let mut corr_prng = Self::init_prng::<_, _, Field64>(
+            let mut corr_prng = self.init_prng::<_, _, Field64>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_INNER,
                 [[agg_id as u8].as_slice(), nonce.as_slice()],
@@ -1011,7 +1068,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                 corr_prng.get();
             }
 
-            let (output_share, sketch_share) = eval_and_sketch::<P, Field64, SEED_SIZE>(
+            let (output_share, sketch_share) = self.eval_and_sketch::<Field64>(
                 verify_key,
                 agg_id,
                 nonce,
@@ -1033,13 +1090,13 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                 Poplar1FieldVec::Inner(sketch_share),
             ))
         } else {
-            let corr_prng = Self::init_prng::<_, _, Field255>(
+            let corr_prng = self.init_prng::<_, _, Field255>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_LEAF,
                 [[agg_id as u8].as_slice(), nonce.as_slice()],
             );
 
-            let (output_share, sketch_share) = eval_and_sketch::<P, Field255, SEED_SIZE>(
+            let (output_share, sketch_share) = self.eval_and_sketch::<Field255>(
                 verify_key,
                 agg_id,
                 nonce,
@@ -1255,59 +1312,6 @@ fn compute_next_corr_shares<F: FieldElement + From<u64>, S: RngCore>(
     let corr_1 = [prng.get(), prng.get()];
     let corr_0 = [A - corr_1[0], B - corr_1[1]];
     (corr_0, corr_1)
-}
-
-/// Evaluate the IDPF at the given prefixes and compute the Aggregator's share of the sketch.
-fn eval_and_sketch<P, F, const SEED_SIZE: usize>(
-    verify_key: &[u8; SEED_SIZE],
-    agg_id: usize,
-    nonce: &[u8; 16],
-    agg_param: &Poplar1AggregationParam,
-    public_share: &Poplar1PublicShare,
-    idpf_key: &Seed<16>,
-    corr_prng: &mut Prng<F, P::SeedStream>,
-) -> Result<(Vec<F>, Vec<F>), VdafError>
-where
-    P: Xof<SEED_SIZE>,
-    F: FieldElement,
-    Poplar1IdpfValue<F>:
-        From<IdpfOutputShare<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>>,
-{
-    // TODO(cjpatton) spec: Consider not encoding the prefixes here.
-    let mut verify_prng = Poplar1::<P, SEED_SIZE>::init_prng(
-        verify_key,
-        DST_VERIFY_RANDOMNESS,
-        [nonce.as_slice(), agg_param.level.to_be_bytes().as_slice()],
-    );
-
-    let mut out_share = Vec::with_capacity(agg_param.prefixes.len());
-    let mut sketch_share = vec![
-        corr_prng.get(), // a_share
-        corr_prng.get(), // b_share
-        corr_prng.get(), // c_share
-    ];
-
-    let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
-    let idpf = Idpf::<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>::new((), ());
-    for prefix in agg_param.prefixes.iter() {
-        let share = Poplar1IdpfValue::<F>::from(idpf.eval(
-            agg_id,
-            public_share,
-            idpf_key,
-            prefix,
-            nonce,
-            &mut idpf_eval_cache,
-        )?);
-
-        let r = verify_prng.get();
-        let checked_data_share = share.0[0] * r;
-        sketch_share[0] += checked_data_share;
-        sketch_share[1] += checked_data_share * r;
-        sketch_share[2] += share.0[1] * r;
-        out_share.push(share.0[0]);
-    }
-
-    Ok((out_share, sketch_share))
 }
 
 /// Compute the Aggregator's share of the sketch verifier. The shares should sum to zero.

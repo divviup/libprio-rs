@@ -392,7 +392,7 @@ where
     fn derive_prove_rands(&self, prove_rand_seed: &Seed<SEED_SIZE>) -> Vec<T::Field> {
         P::seed_stream(
             prove_rand_seed,
-            &Self::domain_separation_tag(DST_PROVE_RANDOMNESS),
+            &self.domain_separation_tag(DST_PROVE_RANDOMNESS),
             &[self.num_proofs],
         )
         .into_field_vec(self.typ.prove_rand_len() * self.num_proofs())
@@ -404,7 +404,7 @@ where
     ) -> Seed<SEED_SIZE> {
         let mut xof = P::init(
             &[0; SEED_SIZE],
-            &Self::domain_separation_tag(DST_JOINT_RAND_SEED),
+            &self.domain_separation_tag(DST_JOINT_RAND_SEED),
         );
         for part in joint_rand_parts {
             xof.update(part.as_ref());
@@ -419,7 +419,7 @@ where
         let joint_rand_seed = self.derive_joint_rand_seed(joint_rand_parts);
         let joint_rands = P::seed_stream(
             &joint_rand_seed,
-            &Self::domain_separation_tag(DST_JOINT_RANDOMNESS),
+            &self.domain_separation_tag(DST_JOINT_RANDOMNESS),
             &[self.num_proofs],
         )
         .into_field_vec(self.typ.joint_rand_len() * self.num_proofs());
@@ -434,7 +434,7 @@ where
     ) -> Prng<T::Field, P::SeedStream> {
         Prng::from_seed_stream(P::seed_stream(
             proofs_share_seed,
-            &Self::domain_separation_tag(DST_PROOF_SHARE),
+            &self.domain_separation_tag(DST_PROOF_SHARE),
             &[self.num_proofs, agg_id],
         ))
     }
@@ -442,7 +442,7 @@ where
     fn derive_query_rands(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
-            &Self::domain_separation_tag(DST_QUERY_RANDOMNESS),
+            &self.domain_separation_tag(DST_QUERY_RANDOMNESS),
         );
         xof.update(&[self.num_proofs]);
         xof.update(nonce);
@@ -506,7 +506,7 @@ where
             let proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
                 &Seed(measurement_share_seed),
-                &Self::domain_separation_tag(DST_MEASUREMENT_SHARE),
+                &self.domain_separation_tag(DST_MEASUREMENT_SHARE),
                 &[agg_id],
             ));
             let joint_rand_blind =
@@ -514,7 +514,7 @@ where
                     let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
                     let mut joint_rand_part_xof = P::init(
                         &joint_rand_blind,
-                        &Self::domain_separation_tag(DST_JOINT_RAND_PART),
+                        &self.domain_separation_tag(DST_JOINT_RAND_PART),
                     );
                     joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
                     joint_rand_part_xof.update(nonce);
@@ -557,7 +557,7 @@ where
 
                     let mut joint_rand_part_xof = P::init(
                         leader_blind.as_ref(),
-                        &Self::domain_separation_tag(DST_JOINT_RAND_PART),
+                        &self.domain_separation_tag(DST_JOINT_RAND_PART),
                     );
                     joint_rand_part_xof.update(&[0]); // Aggregator ID
                     joint_rand_part_xof.update(nonce);
@@ -650,7 +650,6 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    const ID: u32 = T::ID;
     type Measurement = T::Measurement;
     type AggregateResult = T::AggregateResult;
     type AggregationParam = ();
@@ -658,6 +657,10 @@ where
     type InputShare = Prio3InputShare<T::Field, SEED_SIZE>;
     type OutputShare = OutputShare<T::Field>;
     type AggregateShare = AggregateShare<T::Field>;
+
+    fn algorithm_id(&self) -> u32 {
+        T::ID
+    }
 
     fn num_aggregators(&self) -> usize {
         self.num_aggregators as usize
@@ -1123,7 +1126,7 @@ where
             Share::Helper(ref seed) => Some(
                 P::seed_stream(
                     seed,
-                    &Self::domain_separation_tag(DST_MEASUREMENT_SHARE),
+                    &self.domain_separation_tag(DST_MEASUREMENT_SHARE),
                     &[agg_id],
                 )
                 .into_field_vec(self.typ.input_len()),
@@ -1152,7 +1155,7 @@ where
         let (joint_rand_seed, joint_rand_part, joint_rands) = if self.typ.joint_rand_len() > 0 {
             let mut joint_rand_part_xof = P::init(
                 msg.joint_rand_blind.as_ref().unwrap().as_ref(),
-                &Self::domain_separation_tag(DST_JOINT_RAND_PART),
+                &self.domain_separation_tag(DST_JOINT_RAND_PART),
             );
             joint_rand_part_xof.update(&[agg_id]);
             joint_rand_part_xof.update(nonce);
@@ -1311,7 +1314,7 @@ where
         let measurement_share = match step.measurement_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
-                let dst = Self::domain_separation_tag(DST_MEASUREMENT_SHARE);
+                let dst = self.domain_separation_tag(DST_MEASUREMENT_SHARE);
                 P::seed_stream(&seed, &dst, &[step.agg_id]).into_field_vec(self.typ.input_len())
             }
         };

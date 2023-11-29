@@ -117,7 +117,6 @@ impl Prio2 {
 }
 
 impl Vdaf for Prio2 {
-    const ID: u32 = 0xFFFF0000;
     type Measurement = Vec<u32>;
     type AggregateResult = Vec<u32>;
     type AggregationParam = ();
@@ -125,6 +124,10 @@ impl Vdaf for Prio2 {
     type InputShare = Share<FieldPrio2, 32>;
     type OutputShare = OutputShare<FieldPrio2>;
     type AggregateShare = AggregateShare<FieldPrio2>;
+
+    fn algorithm_id(&self) -> u32 {
+        0xFFFF0000
+    }
 
     fn num_aggregators(&self) -> usize {
         // Prio2 can easily be extended to support more than two Aggregators.
