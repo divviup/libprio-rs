@@ -77,7 +77,7 @@ pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 16>;
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
     pub fn new_count(num_aggregators: u8) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, Count::new())
+        Prio3::new(num_aggregators, 1, 0x00000000, Count::new())
     }
 }
 
@@ -96,7 +96,12 @@ impl Prio3SumVec {
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, SumVec::new(bits, len, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000002,
+            SumVec::new(bits, len, chunk_length)?,
+        )
     }
 }
 
@@ -121,7 +126,12 @@ impl Prio3SumVecMultithreaded {
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, SumVec::new(bits, len, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000002,
+            SumVec::new(bits, len, chunk_length)?,
+        )
     }
 }
 
@@ -139,7 +149,7 @@ impl Prio3Sum {
             )));
         }
 
-        Prio3::new(num_aggregators, 1, Sum::new(bits)?)
+        Prio3::new(num_aggregators, 1, 0x00000001, Sum::new(bits)?)
     }
 }
 
@@ -176,7 +186,12 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSum<Fx> {
         entries: usize,
     ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
-        Prio3::new(num_aggregators, 1, FixedPointBoundedL2VecSum::new(entries)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0xFFFF0000,
+            FixedPointBoundedL2VecSum::new(entries)?,
+        )
     }
 }
 
@@ -207,7 +222,12 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
         entries: usize,
     ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
-        Prio3::new(num_aggregators, 1, FixedPointBoundedL2VecSum::new(entries)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0xFFFF0000,
+            FixedPointBoundedL2VecSum::new(entries)?,
+        )
     }
 }
 
@@ -224,7 +244,12 @@ impl Prio3Histogram {
         length: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, Histogram::new(length, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000003,
+            Histogram::new(length, chunk_length)?,
+        )
     }
 }
 
@@ -247,7 +272,12 @@ impl Prio3HistogramMultithreaded {
         length: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, Histogram::new(length, chunk_length)?)
+        Prio3::new(
+            num_aggregators,
+            1,
+            0x00000003,
+            Histogram::new(length, chunk_length)?,
+        )
     }
 }
 
@@ -270,6 +300,7 @@ impl Prio3Average {
         Ok(Prio3 {
             num_aggregators,
             num_proofs: 1,
+            algorithm_id: 0xFFFF0000,
             typ: Average::new(bits)?,
             phantom: PhantomData,
         })
@@ -347,6 +378,7 @@ where
 {
     num_aggregators: u8,
     num_proofs: u8,
+    algorithm_id: u32,
     typ: T,
     phantom: PhantomData<P>,
 }
@@ -357,8 +389,13 @@ where
     P: Xof<SEED_SIZE>,
 {
     /// Construct an instance of this Prio3 VDAF with the given number of aggregators, number of
-    /// proofs to generate and verify, and the underlying type.
-    pub fn new(num_aggregators: u8, num_proofs: u8, typ: T) -> Result<Self, VdafError> {
+    /// proofs to generate and verify, the algorithm ID, and the underlying type.
+    pub fn new(
+        num_aggregators: u8,
+        num_proofs: u8,
+        algorithm_id: u32,
+        typ: T,
+    ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
         if num_proofs == 0 {
             return Err(VdafError::Uncategorized(
@@ -369,6 +406,7 @@ where
         Ok(Self {
             num_aggregators,
             num_proofs,
+            algorithm_id,
             typ,
             phantom: PhantomData,
         })
@@ -659,7 +697,7 @@ where
     type AggregateShare = AggregateShare<T::Field>;
 
     fn algorithm_id(&self) -> u32 {
-        T::ID
+        self.algorithm_id
     }
 
     fn num_aggregators(&self) -> usize {
@@ -1620,7 +1658,7 @@ mod tests {
             SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>,
             XofTurboShake128,
             16,
-        >::new(2, 2, SumVec::new(2, 20, 4).unwrap())
+        >::new(2, 2, 0xFFFF0000, SumVec::new(2, 20, 4).unwrap())
         .unwrap();
 
         assert_eq!(

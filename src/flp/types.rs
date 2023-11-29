@@ -37,7 +37,6 @@ impl<F: FftFriendlyFieldElement> Default for Count<F> {
 }
 
 impl<F: FftFriendlyFieldElement> Type for Count<F> {
-    const ID: u32 = 0x00000000;
     type Measurement = F::Integer;
     type AggregateResult = F::Integer;
     type Field = F;
@@ -140,7 +139,6 @@ impl<F: FftFriendlyFieldElement> Sum<F> {
 }
 
 impl<F: FftFriendlyFieldElement> Type for Sum<F> {
-    const ID: u32 = 0x00000001;
     type Measurement = F::Integer;
     type AggregateResult = F::Integer;
     type Field = F;
@@ -239,7 +237,6 @@ impl<F: FftFriendlyFieldElement> Average<F> {
 }
 
 impl<F: FftFriendlyFieldElement> Type for Average<F> {
-    const ID: u32 = 0xFFFF0000;
     type Measurement = F::Integer;
     type AggregateResult = f64;
     type Field = F;
@@ -380,7 +377,6 @@ where
     F: FftFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
-    const ID: u32 = 0x00000003;
     type Measurement = usize;
     type AggregateResult = Vec<F::Integer>;
     type Field = F;
@@ -574,7 +570,6 @@ where
     F: FftFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
-    const ID: u32 = 0x00000002;
     type Measurement = Vec<F::Integer>;
     type AggregateResult = Vec<F::Integer>;
     type Field = F;

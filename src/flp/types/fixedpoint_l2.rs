@@ -400,7 +400,6 @@ where
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
     SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
 {
-    const ID: u32 = 0xFFFF0000;
     type Measurement = Vec<T>;
     type AggregateResult = Vec<f64>;
     type Field = Field128;

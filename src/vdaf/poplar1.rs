@@ -958,6 +958,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     }
 
     /// Evaluate the IDPF at the given prefixes and compute the Aggregator's share of the sketch.
+    #[allow(clippy::too_many_arguments)]
     fn eval_and_sketch<F>(
         &self,
         verify_key: &[u8; SEED_SIZE],
