@@ -406,6 +406,12 @@ impl<F> Debug for OutputShare<F> {
 
 pub struct AggregateShare<F>(Vec<F>);
 
+impl<F> From<Vec<F>> for AggregateShare<F> {
+    fn from(other: Vec<F>) -> Self {
+        Self(other)
+    }
+}
+
 impl<F: ConstantTimeEq> PartialEq for AggregateShare<F> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
