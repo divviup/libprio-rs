@@ -874,7 +874,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
         // Generate the authenticator for each inner level of the IDPF tree.
         let mut prng =
-            self.init_prng::<_, _, Field64>(&poplar_random[2], DST_SHARD_RANDOMNESS, [&[]]);
+            self.init_prng::<_, _, Field64>(&poplar_random[2], DST_SHARD_RANDOMNESS, [nonce]);
         let auth_inner: Vec<Field64> = (0..self.bits - 1).map(|_| prng.get()).collect();
 
         // Generate the authenticator for the last level of the IDPF tree (i.e., the leaves).
@@ -2257,27 +2257,23 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "VDAF-08 support is incomplete"]
     fn test_vec_poplar1_0() {
-        check_test_vec(include_str!("test_vec/07/Poplar1_0.json"));
+        check_test_vec(include_str!("test_vec/08/Poplar1_0.json"));
     }
 
     #[test]
-    #[ignore = "VDAF-08 support is incomplete"]
     fn test_vec_poplar1_1() {
-        check_test_vec(include_str!("test_vec/07/Poplar1_1.json"));
+        check_test_vec(include_str!("test_vec/08/Poplar1_1.json"));
     }
 
     #[test]
-    #[ignore = "VDAF-08 support is incomplete"]
     fn test_vec_poplar1_2() {
-        check_test_vec(include_str!("test_vec/07/Poplar1_2.json"));
+        check_test_vec(include_str!("test_vec/08/Poplar1_2.json"));
     }
 
     #[test]
-    #[ignore = "VDAF-08 support is incomplete"]
     fn test_vec_poplar1_3() {
-        check_test_vec(include_str!("test_vec/07/Poplar1_3.json"));
+        check_test_vec(include_str!("test_vec/08/Poplar1_3.json"));
     }
 
     #[test]

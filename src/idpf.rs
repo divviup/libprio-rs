@@ -240,11 +240,13 @@ fn extend(seed: &[u8; 16], xof_fixed_key: &XofFixedKeyAes128Key) -> ([[u8; 16]; 
     seed_stream.fill_bytes(&mut seeds[0]);
     seed_stream.fill_bytes(&mut seeds[1]);
 
-    let mut byte = [0u8];
-    seed_stream.fill_bytes(&mut byte);
-    let control_bits = [(byte[0] & 1).into(), ((byte[0] >> 1) & 1).into()];
+    // "Steal" the control bits from the seeds.
+    let control_bits_0 = seeds[0].as_ref()[0] & 1;
+    let control_bits_1 = seeds[1].as_ref()[0] & 1;
+    seeds[0].as_mut()[0] &= 0xfe;
+    seeds[1].as_mut()[0] &= 0xfe;
 
-    (seeds, control_bits)
+    (seeds, [control_bits_0.into(), control_bits_1.into()])
 }
 
 fn convert<V>(
@@ -1822,7 +1824,7 @@ mod tests {
     /// Load a test vector for Idpf key generation.
     fn load_idpfpoplar_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
-            serde_json::from_str(include_str!("vdaf/test_vec/07/IdpfPoplar_0.json")).unwrap();
+            serde_json::from_str(include_str!("vdaf/test_vec/08/IdpfPoplar_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
 
         let bits = test_vec_obj
