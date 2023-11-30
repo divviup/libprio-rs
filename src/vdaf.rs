@@ -17,7 +17,7 @@ use crate::{
     vdaf::xof::Seed,
 };
 use serde::{Deserialize, Serialize};
-use std::{fmt::Debug, io::Cursor};
+use std::{error::Error, fmt::Debug, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
@@ -56,6 +56,10 @@ pub enum VdafError {
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("idpf error: {0}")]
     Idpf(#[from] IdpfError),
+
+    /// Errors from other VDAFs.
+    #[error(transparent)]
+    Other(Box<dyn Error + 'static + Send + Sync>),
 }
 
 /// An additive share of a vector of field elements.
