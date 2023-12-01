@@ -101,8 +101,8 @@ pub trait FieldElement:
     fn inv(&self) -> Self;
 
     /// Interprets the next [`Self::ENCODED_SIZE`] bytes from the input slice as an element of the
-    /// field. The `m` most significant bits are cleared, where `m` is equal to the length of
-    /// [`Self::Integer`] in bits minus the length of the modulus in bits.
+    /// field. Any of the most significant bits beyond the bit length of the modulus will be
+    /// cleared, in order to minimize the amount of rejection sampling needed.
     ///
     /// # Errors
     ///
@@ -111,9 +111,9 @@ pub trait FieldElement:
     ///
     /// # Warnings
     ///
-    /// This function should only be used within [`prng::Prng`] to convert a random byte string into
-    /// a field element. Use [`Self::decode`] to deserialize field elements. Use
-    /// [`field::rand`] or [`prng::Prng`] to randomly generate field elements.
+    /// This function should only be used internally to convert a random byte string into
+    /// a field element. Use [`Decode::decode`] to deserialize field elements. Use
+    /// [`random_vector`] to randomly generate field elements.
     #[doc(hidden)]
     fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError>;
 
