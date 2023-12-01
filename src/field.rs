@@ -47,9 +47,9 @@ pub enum FieldError {
     /// Returned when decoding a [`FieldElement`] from a too-short byte string.
     #[error("short read from bytes")]
     ShortRead,
-    /// Returned when decoding a [`FieldElement`] from a byte string that encodes an integer greater
-    /// than or equal to the field modulus.
-    #[error("read from byte slice exceeds modulus")]
+    /// Returned when converting an integer to a [`FieldElement`] if the integer is greater than or
+    /// equal to the field modulus.
+    #[error("input value exceeds modulus")]
     ModulusOverflow,
     /// Error while performing I/O.
     #[error("I/O error")]
@@ -60,6 +60,10 @@ pub enum FieldError {
     /// Error converting to [`FieldElementWithInteger::Integer`].
     #[error("Integer TryFrom error")]
     IntegerTryFrom,
+    /// Returned when encoding an integer to "bitvector representation", or decoding from the same,
+    /// if the number of bits is larger than the bit length of the field's modulus.
+    #[error("bit vector length exceeds modulus bit length")]
+    BitVectorTooLong,
 }
 
 /// Objects with this trait represent an element of `GF(p)` for some prime `p`.
@@ -206,7 +210,7 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
     ) -> Result<BitvectorRepresentationIter<Self>, FieldError> {
         // Check if `bits` is too large for this field.
         if !Self::valid_integer_bitlength(bits) {
-            return Err(FieldError::ModulusOverflow);
+            return Err(FieldError::BitVectorTooLong);
         }
 
         // Check if the input value can be represented in the requested number of bits by shifting
@@ -236,7 +240,7 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
     /// modulus.
     fn decode_bitvector(input: &[Self]) -> Result<Self, FieldError> {
         if !Self::valid_integer_bitlength(input.len()) {
-            return Err(FieldError::ModulusOverflow);
+            return Err(FieldError::BitVectorTooLong);
         }
 
         let mut decoded = Self::zero();
