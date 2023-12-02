@@ -716,6 +716,6 @@ pub mod poplar1;
 #[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
 pub mod prio2;
 pub mod prio3;
-#[cfg(test)]
-mod prio3_test;
+#[cfg(any(test, feature = "test-util"))]
+pub mod prio3_test;
 pub mod xof;

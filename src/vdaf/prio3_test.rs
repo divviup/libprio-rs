@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: MPL-2.0
 
+//! Tools for evaluating Prio3 test vectors.
+
 use crate::{
     codec::{Encode, ParameterizedDecode},
     flp::Type,
@@ -174,17 +176,34 @@ where
     prio3.unshard(&(), aggregate_shares, 1).unwrap()
 }
 
+/// Evaluate a Prio3 test vector. The instance of Prio3 is constructed from the `new_vdaf`
+/// callback, which takes in the VDAF parameters encoded by the test vectors and the number of
+/// shares.
+#[cfg(feature = "test-util")]
+pub fn check_test_vec<M, A, T, P, const SEED_SIZE: usize>(
+    test_vec_json_str: &str,
+    new_vdaf: impl Fn(&HashMap<String, serde_json::Value>, u8) -> Prio3<T, P, SEED_SIZE>,
+) where
+    M: for<'de> Deserialize<'de>,
+    A: for<'de> Deserialize<'de> + Debug + Eq,
+    T: Type<Measurement = M, AggregateResult = A>,
+    P: Xof<SEED_SIZE>,
+{
+    let t: TPrio3<M> = serde_json::from_str(test_vec_json_str).unwrap();
+    let vdaf = new_vdaf(&t.other_params, t.shares);
+    let agg_result = check_aggregate_test_vec(&vdaf, &t);
+    assert_eq!(agg_result, serde_json::from_value(t.agg_result).unwrap());
+}
+
 #[test]
 fn test_vec_prio3_count() {
     for test_vector_str in [
         include_str!("test_vec/08/Prio3Count_0.json"),
         include_str!("test_vec/08/Prio3Count_1.json"),
     ] {
-        let t: TPrio3<u64> = serde_json::from_str(test_vector_str).unwrap();
-        let prio3 = Prio3::new_count(t.shares).unwrap();
-
-        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
-        assert_eq!(aggregate_result, t.agg_result.as_u64().unwrap());
+        check_test_vec(test_vector_str, |_json_params, num_shares| {
+            Prio3::new_count(num_shares).unwrap()
+        });
     }
 }
 
@@ -194,12 +213,10 @@ fn test_vec_prio3_sum() {
         include_str!("test_vec/08/Prio3Sum_0.json"),
         include_str!("test_vec/08/Prio3Sum_1.json"),
     ] {
-        let t: TPrio3<u128> = serde_json::from_str(test_vector_str).unwrap();
-        let bits = t.other_params["bits"].as_u64().unwrap() as usize;
-        let prio3 = Prio3::new_sum(t.shares, bits).unwrap();
-
-        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
-        assert_eq!(aggregate_result, t.agg_result.as_u64().unwrap() as u128);
+        check_test_vec(test_vector_str, |json_params, num_shares| {
+            let bits = json_params["bits"].as_u64().unwrap() as usize;
+            Prio3::new_sum(num_shares, bits).unwrap()
+        });
     }
 }
 
@@ -209,21 +226,12 @@ fn test_vec_prio3_sum_vec() {
         include_str!("test_vec/08/Prio3SumVec_0.json"),
         include_str!("test_vec/08/Prio3SumVec_1.json"),
     ] {
-        let t: TPrio3<Vec<u128>> = serde_json::from_str(test_vector_str).unwrap();
-        let bits = t.other_params["bits"].as_u64().unwrap() as usize;
-        let length = t.other_params["length"].as_u64().unwrap() as usize;
-        let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
-        let prio3 = Prio3::new_sum_vec(t.shares, bits, length, chunk_length).unwrap();
-
-        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
-        let expected_aggregate_result = t
-            .agg_result
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|val| val.as_u64().unwrap() as u128)
-            .collect::<Vec<u128>>();
-        assert_eq!(aggregate_result, expected_aggregate_result);
+        check_test_vec(test_vector_str, |json_params, num_shares| {
+            let bits = json_params["bits"].as_u64().unwrap() as usize;
+            let length = json_params["length"].as_u64().unwrap() as usize;
+            let chunk_length = json_params["chunk_length"].as_u64().unwrap() as usize;
+            Prio3::new_sum_vec(num_shares, bits, length, chunk_length).unwrap()
+        });
     }
 }
 
@@ -233,19 +241,10 @@ fn test_vec_prio3_histogram() {
         include_str!("test_vec/08/Prio3Histogram_0.json"),
         include_str!("test_vec/08/Prio3Histogram_1.json"),
     ] {
-        let t: TPrio3<usize> = serde_json::from_str(test_vector_str).unwrap();
-        let length = t.other_params["length"].as_u64().unwrap() as usize;
-        let chunk_length = t.other_params["chunk_length"].as_u64().unwrap() as usize;
-        let prio3 = Prio3::new_histogram(t.shares, length, chunk_length).unwrap();
-
-        let aggregate_result = check_aggregate_test_vec(&prio3, &t);
-        let expected_aggregate_result = t
-            .agg_result
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|val| val.as_u64().unwrap() as u128)
-            .collect::<Vec<u128>>();
-        assert_eq!(aggregate_result, expected_aggregate_result);
+        check_test_vec(test_vector_str, |json_params, num_shares| {
+            let length = json_params["length"].as_u64().unwrap() as usize;
+            let chunk_length = json_params["chunk_length"].as_u64().unwrap() as usize;
+            Prio3::new_histogram(num_shares, length, chunk_length).unwrap()
+        });
     }
 }
