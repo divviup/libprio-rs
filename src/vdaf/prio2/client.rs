@@ -4,7 +4,8 @@
 //! Primitives for the Prio2 client.
 
 use crate::{
-    field::{FftFriendlyFieldElement, FieldError},
+    codec::CodecError,
+    field::FftFriendlyFieldElement,
     polynomial::{poly_fft, PolyAuxMemory},
     prng::{Prng, PrngError},
     vdaf::{xof::SeedStreamAes128, VdafError},
@@ -32,9 +33,9 @@ pub enum SerializeError {
     /// Emitted by `unpack_proof[_mut]` if the serialized share+proof has the wrong length
     #[error("serialized input has wrong length")]
     UnpackInputSizeMismatch,
-    /// Finite field operation error.
-    #[error("finite field operation error")]
-    Field(#[from] FieldError),
+    /// Codec error.
+    #[error(transparent)]
+    Codec(#[from] CodecError),
 }
 
 #[derive(Debug)]

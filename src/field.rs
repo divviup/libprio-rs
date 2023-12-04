@@ -56,7 +56,8 @@ pub enum FieldError {
     Io(#[from] std::io::Error),
     /// Error encoding or decoding a field.
     #[error("Codec error")]
-    Codec(#[from] CodecError),
+    #[deprecated]
+    Codec(CodecError),
     /// Error converting to [`FieldElementWithInteger::Integer`].
     #[error("Integer TryFrom error")]
     IntegerTryFrom,
@@ -134,6 +135,7 @@ pub trait FieldElement:
     /// Ideally we would implement `From<&[F: FieldElement]> for Vec<u8>` or the corresponding
     /// `Into`, but the orphan rule and the stdlib's blanket implementations of `Into` make this
     /// impossible.
+    #[deprecated]
     fn slice_into_byte_vec(values: &[Self]) -> Vec<u8> {
         let mut vec = Vec::with_capacity(values.len() * Self::ENCODED_SIZE);
         encode_fieldvec(values, &mut vec);
@@ -154,13 +156,15 @@ pub trait FieldElement:
     /// Ideally we would implement `From<&[u8]> for Vec<F: FieldElement>` or the corresponding
     /// `Into`, but the orphan rule and the stdlib's blanket implementations of `Into` make this
     /// impossible.
+    #[deprecated]
     fn byte_slice_into_vec(bytes: &[u8]) -> Result<Vec<Self>, FieldError> {
         if bytes.len() % Self::ENCODED_SIZE != 0 {
             return Err(FieldError::ShortRead);
         }
         let mut vec = Vec::with_capacity(bytes.len() / Self::ENCODED_SIZE);
         for chunk in bytes.chunks_exact(Self::ENCODED_SIZE) {
-            vec.push(Self::get_decoded(chunk)?);
+            #[allow(deprecated)]
+            vec.push(Self::get_decoded(chunk).map_err(FieldError::Codec)?);
         }
         Ok(vec)
     }
@@ -1026,9 +1030,12 @@ pub(crate) mod test_utils {
             assert_eq!(got, *want);
         }
 
-        let serialized_vec = F::slice_into_byte_vec(&test_inputs);
-        let deserialized = F::byte_slice_into_vec(&serialized_vec).unwrap();
-        assert_eq!(deserialized, test_inputs);
+        #[allow(deprecated)]
+        {
+            let serialized_vec = F::slice_into_byte_vec(&test_inputs);
+            let deserialized = F::byte_slice_into_vec(&serialized_vec).unwrap();
+            assert_eq!(deserialized, test_inputs);
+        }
 
         let test_input = prng.get();
         let json = serde_json::to_string(&test_input).unwrap();
@@ -1041,13 +1048,16 @@ pub(crate) mod test_utils {
             element.as_u64().unwrap();
         }
 
-        let err = F::byte_slice_into_vec(&[0]).unwrap_err();
-        assert_matches!(err, FieldError::ShortRead);
+        #[allow(deprecated)]
+        {
+            let err = F::byte_slice_into_vec(&[0]).unwrap_err();
+            assert_matches!(err, FieldError::ShortRead);
 
-        let err = F::byte_slice_into_vec(&vec![0xffu8; F::ENCODED_SIZE]).unwrap_err();
-        assert_matches!(err, FieldError::Codec(CodecError::Other(err)) => {
-            assert_matches!(err.downcast_ref::<FieldError>(), Some(FieldError::ModulusOverflow));
-        });
+            let err = F::byte_slice_into_vec(&vec![0xffu8; F::ENCODED_SIZE]).unwrap_err();
+            assert_matches!(err, FieldError::Codec(CodecError::Other(err)) => {
+                assert_matches!(err.downcast_ref::<FieldError>(), Some(FieldError::ModulusOverflow));
+            });
+        }
 
         let insufficient = vec![0u8; F::ENCODED_SIZE - 1];
         let err = F::try_from(insufficient.as_ref()).unwrap_err();

@@ -126,6 +126,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "prio2")]
+    use crate::field::encode_fieldvec;
     use crate::{
         codec::Decode,
         field::{Field64, FieldPrio2},
@@ -164,7 +166,8 @@ mod tests {
         let seed = BASE64_STANDARD.decode(seed_base64).unwrap();
         let random_data = extract_share_from_seed::<FieldPrio2>(len, &seed);
 
-        let random_bytes = FieldPrio2::slice_into_byte_vec(&random_data);
+        let mut random_bytes = Vec::new();
+        encode_fieldvec(&random_data, &mut random_bytes);
 
         let mut hasher = Sha256::new();
         hasher.update(&random_bytes);
