@@ -271,8 +271,9 @@ impl<'de> Deserialize<'de> for Field255 {
 }
 
 impl Encode for Field255 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         bytes.extend_from_slice(&<[u8; Self::ENCODED_SIZE]>::from(*self));
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -429,7 +430,7 @@ mod tests {
     #[test]
     fn encode_endianness() {
         let mut one_encoded = Vec::new();
-        Field255::one().encode(&mut one_encoded);
+        Field255::one().encode(&mut one_encoded).unwrap();
         assert_eq!(
             one_encoded,
             [

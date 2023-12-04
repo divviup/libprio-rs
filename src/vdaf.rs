@@ -135,16 +135,15 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<ShareDecodingP
 }
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
             Share::Leader(share_data) => {
                 for x in share_data {
-                    x.encode(bytes);
+                    x.encode(bytes)?;
                 }
+                Ok(())
             }
-            Share::Helper(share_seed) => {
-                share_seed.encode(bytes);
-            }
+            Share::Helper(share_seed) => share_seed.encode(bytes),
         }
     }
 
@@ -387,7 +386,7 @@ impl<F> From<Vec<F>> for OutputShare<F> {
 }
 
 impl<F: FieldElement> Encode for OutputShare<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         encode_fieldvec(&self.0, bytes)
     }
 
@@ -463,7 +462,7 @@ impl<F: FieldElement> AggregateShare<F> {
 }
 
 impl<F: FieldElement> Encode for AggregateShare<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         encode_fieldvec(&self.0, bytes)
     }
 
@@ -503,11 +502,14 @@ where
         )?;
         for (out_share, agg_share) in out_shares.into_iter().zip(agg_shares.iter_mut()) {
             // Check serialization of output shares
-            let encoded_out_share = out_share.get_encoded();
+            let encoded_out_share = out_share.get_encoded().unwrap();
             let round_trip_out_share =
                 V::OutputShare::get_decoded_with_param(&(vdaf, agg_param), &encoded_out_share)
                     .unwrap();
-            assert_eq!(round_trip_out_share.get_encoded(), encoded_out_share);
+            assert_eq!(
+                round_trip_out_share.get_encoded().unwrap(),
+                encoded_out_share
+            );
 
             let this_agg_share = V::AggregateShare::from(out_share);
             if let Some(ref mut inner) = agg_share {
@@ -520,11 +522,14 @@ where
 
     for agg_share in agg_shares.iter() {
         // Check serialization of aggregate shares
-        let encoded_agg_share = agg_share.as_ref().unwrap().get_encoded();
+        let encoded_agg_share = agg_share.as_ref().unwrap().get_encoded().unwrap();
         let round_trip_agg_share =
             V::AggregateShare::get_decoded_with_param(&(vdaf, agg_param), &encoded_agg_share)
                 .unwrap();
-        assert_eq!(round_trip_agg_share.get_encoded(), encoded_agg_share);
+        assert_eq!(
+            round_trip_agg_share.get_encoded().unwrap(),
+            encoded_agg_share
+        );
     }
 
     let res = vdaf.unshard(
@@ -549,10 +554,10 @@ where
     M: IntoIterator<Item = V::InputShare>,
 {
     let public_share =
-        V::PublicShare::get_decoded_with_param(vdaf, &public_share.get_encoded()).unwrap();
+        V::PublicShare::get_decoded_with_param(vdaf, &public_share.get_encoded().unwrap()).unwrap();
     let input_shares = input_shares
         .into_iter()
-        .map(|input_share| input_share.get_encoded());
+        .map(|input_share| input_share.get_encoded().unwrap());
 
     let mut states = Vec::new();
     let mut outbound = Vec::new();
@@ -567,7 +572,7 @@ where
                 .expect("failed to decode input share"),
         )?;
         states.push(state);
-        outbound.push(msg.get_encoded());
+        outbound.push(msg.get_encoded().unwrap());
     }
 
     let mut inbound = vdaf
@@ -578,7 +583,8 @@ where
                     .expect("failed to decode prep share")
             }),
         )?
-        .get_encoded();
+        .get_encoded()
+        .unwrap();
 
     let mut out_shares = Vec::new();
     loop {
@@ -590,7 +596,7 @@ where
                     .expect("failed to decode prep message"),
             )? {
                 PrepareTransition::Continue(new_state, msg) => {
-                    outbound.push(msg.get_encoded());
+                    outbound.push(msg.get_encoded().unwrap());
                     *state = new_state
                 }
                 PrepareTransition::Finish(out_share) => {
@@ -609,7 +615,8 @@ where
                             .expect("failed to decode prep share")
                     }),
                 )?
-                .get_encoded();
+                .get_encoded()
+                .unwrap();
         } else if outbound.is_empty() {
             // Each Aggregator recovered an output share.
             break;
@@ -634,13 +641,13 @@ where
 
     // Serialize the field element vector into a vector of bytes.
     let mut bytes = Vec::with_capacity(vec.len() * F::ENCODED_SIZE);
-    encode_fieldvec(&vec, &mut bytes);
+    encode_fieldvec(&vec, &mut bytes).unwrap();
 
     // Deserialize the type of interest from those bytes.
     let value = T::get_decoded_with_param(&(vdaf, agg_param), &bytes).unwrap();
 
     // Round-trip the value back to a vector of bytes.
-    let encoded = value.get_encoded();
+    let encoded = value.get_encoded().unwrap();
 
     assert_eq!(encoded, bytes);
 }

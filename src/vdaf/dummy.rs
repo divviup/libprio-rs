@@ -191,7 +191,7 @@ impl vdaf::Client<16> for Vdaf {
 pub struct InputShare(pub u8);
 
 impl Encode for InputShare {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.0.encode(bytes)
     }
 
@@ -211,7 +211,7 @@ impl Decode for InputShare {
 pub struct AggregationParam(pub u8);
 
 impl Encode for AggregationParam {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.0.encode(bytes)
     }
 
@@ -237,8 +237,8 @@ impl Decode for OutputShare {
 }
 
 impl Encode for OutputShare {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.0.encode(bytes);
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.0.encode(bytes)
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -254,9 +254,9 @@ pub struct PrepareState {
 }
 
 impl Encode for PrepareState {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.input_share.encode(bytes);
-        self.current_round.encode(bytes);
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.input_share.encode(bytes)?;
+        self.current_round.encode(bytes)
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -308,7 +308,7 @@ impl Decode for AggregateShare {
 }
 
 impl Encode for AggregateShare {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.0.encode(bytes)
     }
 

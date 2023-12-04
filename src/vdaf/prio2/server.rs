@@ -295,8 +295,8 @@ mod tests {
 
         let vdaf = Prio2::new(dim).unwrap();
         let (_, shares) = vdaf.shard(&data, &[0; 16]).unwrap();
-        let share1_original = shares[0].get_encoded();
-        let share2 = shares[1].get_encoded();
+        let share1_original = shares[0].get_encoded().unwrap();
+        let share2 = shares[1].get_encoded().unwrap();
 
         let mut share1_field: Vec<FieldPrio2> = assert_matches!(
             Share::get_decoded_with_param(&ShareDecodingParameter::<32>::Leader(proof_length(dim)), &share1_original),
@@ -316,7 +316,9 @@ mod tests {
         };
 
         // reserialize altered share1
-        let share1_modified = Share::<FieldPrio2, 32>::Leader(share1_field).get_encoded();
+        let share1_modified = Share::<FieldPrio2, 32>::Leader(share1_field)
+            .get_encoded()
+            .unwrap();
 
         let mut prng = Prng::from_prio2_seed(&random());
         let eval_at = vdaf.choose_eval_at(&mut prng);

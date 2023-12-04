@@ -89,9 +89,9 @@ fn main() {
 fn vdaf_input_share_size<V: Vdaf, const SEED_SIZE: usize>(
     shares: (V::PublicShare, Vec<V::InputShare>),
 ) -> usize {
-    let mut size = shares.0.get_encoded().len();
+    let mut size = shares.0.get_encoded().unwrap().len();
     for input_share in shares.1 {
-        size += input_share.get_encoded().len();
+        size += input_share.get_encoded().unwrap().len();
     }
 
     size

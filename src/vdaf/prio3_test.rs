@@ -88,7 +88,7 @@ where
             "#{test_num}"
         );
         assert_eq!(
-            input_shares[agg_id].get_encoded(),
+            input_shares[agg_id].get_encoded().unwrap(),
             want.as_ref(),
             "#{test_num}"
         )
@@ -112,14 +112,18 @@ where
                 .unwrap_or_else(|e| err!(test_num, e, "decode test vector (prep share)")),
             "#{test_num}"
         );
-        assert_eq!(prep_shares[i].get_encoded(), want.as_ref(), "#{test_num}");
+        assert_eq!(
+            prep_shares[i].get_encoded().unwrap(),
+            want.as_ref(),
+            "#{test_num}"
+        );
     }
 
     let inbound = prio3
         .prepare_shares_to_prepare_message(&(), prep_shares)
         .unwrap_or_else(|e| err!(test_num, e, "prep preprocess"));
     assert_eq!(t.prep_messages.len(), 1);
-    assert_eq!(inbound.get_encoded(), t.prep_messages[0].as_ref());
+    assert_eq!(inbound.get_encoded().unwrap(), t.prep_messages[0].as_ref());
 
     let mut out_shares = Vec::new();
     for state in states.iter_mut() {
@@ -132,7 +136,11 @@ where
     }
 
     for (got, want) in out_shares.iter().zip(t.out_shares.iter()) {
-        let got: Vec<Vec<u8>> = got.as_ref().iter().map(|x| x.get_encoded()).collect();
+        let got: Vec<Vec<u8>> = got
+            .as_ref()
+            .iter()
+            .map(|x| x.get_encoded().unwrap())
+            .collect();
         assert_eq!(got.len(), want.len());
         for (got_elem, want_elem) in got.iter().zip(want.iter()) {
             assert_eq!(got_elem.as_slice(), want_elem.as_ref());
@@ -169,7 +177,7 @@ where
         .collect::<Vec<_>>();
 
     for (got, want) in aggregate_shares.iter().zip(t.agg_shares.iter()) {
-        let got = got.get_encoded();
+        let got = got.get_encoded().unwrap();
         assert_eq!(got.as_slice(), want.as_ref());
     }
 

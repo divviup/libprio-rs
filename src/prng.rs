@@ -167,7 +167,7 @@ mod tests {
         let random_data = extract_share_from_seed::<FieldPrio2>(len, &seed);
 
         let mut random_bytes = Vec::new();
-        encode_fieldvec(&random_data, &mut random_bytes);
+        encode_fieldvec(&random_data, &mut random_bytes).unwrap();
 
         let mut hasher = Sha256::new();
         hasher.update(&random_bytes);

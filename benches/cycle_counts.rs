@@ -241,7 +241,7 @@ fn idpf_codec() {
     .unwrap();
     let bits = 4;
     let public_share = IdpfPublicShare::<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>::get_decoded_with_param(&bits, &data).unwrap();
-    let encoded = public_share.get_encoded();
+    let encoded = public_share.get_encoded().unwrap();
     let _ = black_box(encoded.len());
 }
 
