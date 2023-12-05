@@ -86,15 +86,15 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.192"
-when = "2023-11-07"
+version = "1.0.193"
+when = "2023-11-21"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.192"
-when = "2023-11-07"
+version = "1.0.193"
+when = "2023-11-21"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -402,11 +402,6 @@ delta = "0.2.0 -> 0.2.1"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.4 -> 0.2.5"
-
-[[audits.divviup.audits.itertools]]
-who = "David Cook <dcook@divviup.org>"
-criteria = "safe-to-run"
-delta = "0.10.5 -> 0.11.0"
 
 [[audits.divviup.audits.num-bigint]]
 who = "David Cook <dcook@divviup.org>"
