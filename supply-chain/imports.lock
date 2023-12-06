@@ -93,15 +93,15 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.192"
-when = "2023-11-07"
+version = "1.0.193"
+when = "2023-11-21"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.192"
-when = "2023-11-07"
+version = "1.0.193"
+when = "2023-11-21"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
