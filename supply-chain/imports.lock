@@ -100,15 +100,15 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.192"
-when = "2023-11-07"
+version = "1.0.193"
+when = "2023-11-21"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.192"
-when = "2023-11-07"
+version = "1.0.193"
+when = "2023-11-21"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -349,12 +349,6 @@ criteria = "safe-to-deploy"
 version = "0.3.3"
 notes = "I am the author of this crate."
 
-[[audits.bytecode-alliance.audits.rustix]]
-who = "Dan Gohman <dev@sunfishcode.online>"
-criteria = "safe-to-deploy"
-version = "0.37.13"
-notes = "The Bytecode Alliance is the author of this crate."
-
 [[audits.embark-studios.audits.tap]]
 who = "Johan Andersson <opensource@embark-studios.com>"
 criteria = "safe-to-deploy"
@@ -397,12 +391,6 @@ aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
 version = "0.4.1"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
-[[audits.google.audits.hex]]
-who = "ChromeOS"
-criteria = "safe-to-run"
-version = "0.4.3"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.io-lifetimes]]
