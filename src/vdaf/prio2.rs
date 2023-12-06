@@ -187,8 +187,8 @@ impl ConstantTimeEq for Prio2PrepareState {
 }
 
 impl Encode for Prio2PrepareState {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.0.encode(bytes);
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.0.encode(bytes)
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -216,10 +216,10 @@ impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
 pub struct Prio2PrepareShare(v2_server::VerificationMessage<FieldPrio2>);
 
 impl Encode for Prio2PrepareShare {
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.0.f_r.encode(bytes);
-        self.0.g_r.encode(bytes);
-        self.0.h_r.encode(bytes);
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.0.f_r.encode(bytes)?;
+        self.0.g_r.encode(bytes)?;
+        self.0.h_r.encode(bytes)
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -437,7 +437,7 @@ mod tests {
                 )
                 .unwrap();
 
-            let encoded_prepare_state = prepare_state.get_encoded();
+            let encoded_prepare_state = prepare_state.get_encoded().unwrap();
             let decoded_prepare_state = Prio2PrepareState::get_decoded_with_param(
                 &(&prio2, agg_id),
                 &encoded_prepare_state,
@@ -449,7 +449,7 @@ mod tests {
                 encoded_prepare_state.len()
             );
 
-            let encoded_prepare_share = prepare_share.get_encoded();
+            let encoded_prepare_share = prepare_share.get_encoded().unwrap();
             let decoded_prepare_share =
                 Prio2PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
                     .expect("failed to decode prepare share");

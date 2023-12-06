@@ -138,7 +138,7 @@ pub trait FieldElement:
     #[deprecated]
     fn slice_into_byte_vec(values: &[Self]) -> Vec<u8> {
         let mut vec = Vec::with_capacity(values.len() * Self::ENCODED_SIZE);
-        encode_fieldvec(values, &mut vec);
+        encode_fieldvec(values, &mut vec).unwrap();
         vec
     }
 
@@ -669,9 +669,10 @@ macro_rules! make_field {
         }
 
         impl Encode for $elem {
-            fn encode(&self, bytes: &mut Vec<u8>) {
+            fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
                 let slice = <[u8; $elem::ENCODED_SIZE]>::from(*self);
                 bytes.extend_from_slice(&slice);
+                Ok(())
             }
 
             fn encoded_len(&self) -> Option<usize> {
@@ -859,10 +860,14 @@ pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
 
 /// `encode_fieldvec` serializes a type that is equivalent to a vector of field elements.
 #[inline(always)]
-pub(crate) fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(val: T, bytes: &mut Vec<u8>) {
+pub(crate) fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(
+    val: T,
+    bytes: &mut Vec<u8>,
+) -> Result<(), CodecError> {
     for elem in val.as_ref() {
-        elem.encode(bytes);
+        elem.encode(bytes)?;
     }
+    Ok(())
 }
 
 /// `decode_fieldvec` deserializes some number of field elements from a cursor, and advances the
@@ -1021,7 +1026,7 @@ pub(crate) mod test_utils {
         ];
         for want in test_inputs.iter() {
             let mut bytes = vec![];
-            want.encode(&mut bytes);
+            want.encode(&mut bytes).unwrap();
 
             assert_eq!(bytes.len(), F::ENCODED_SIZE);
             assert_eq!(want.encoded_len().unwrap(), F::ENCODED_SIZE);

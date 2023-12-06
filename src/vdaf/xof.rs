@@ -82,8 +82,9 @@ impl<const SEED_SIZE: usize> ConstantTimeEq for Seed<SEED_SIZE> {
 }
 
 impl<const SEED_SIZE: usize> Encode for Seed<SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         bytes.extend_from_slice(&self.0[..]);
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {

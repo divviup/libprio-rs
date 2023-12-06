@@ -673,7 +673,7 @@ where
     VI: Encode,
     VL: Encode,
 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         // Control bits need to be written within each byte in LSB-to-MSB order, and assigned into
         // bytes in big-endian order. Thus, the first four levels will have their control bits
         // encoded in the last byte, and the last levels will have their control bits encoded in the
@@ -694,11 +694,11 @@ where
         bytes.append(&mut packed_control);
 
         for correction_words in self.inner_correction_words.iter() {
-            Seed(correction_words.seed).encode(bytes);
-            correction_words.value.encode(bytes);
+            Seed(correction_words.seed).encode(bytes)?;
+            correction_words.value.encode(bytes)?;
         }
-        Seed(self.leaf_correction_word.seed).encode(bytes);
-        self.leaf_correction_word.value.encode(bytes);
+        Seed(self.leaf_correction_word.seed).encode(bytes)?;
+        self.leaf_correction_word.value.encode(bytes)
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -1608,7 +1608,7 @@ mod tests {
             "f0debc9a78563412f0debc9a78563412f0debc9a78563412f0debc9a78563412", // field element correction word, continued
         ))
         .unwrap();
-        let encoded = public_share.get_encoded();
+        let encoded = public_share.get_encoded().unwrap();
         let decoded = IdpfPublicShare::get_decoded_with_param(&3, &message).unwrap();
         assert_eq!(public_share, decoded);
         assert_eq!(message, encoded);
@@ -1695,7 +1695,7 @@ mod tests {
             "0000000000000000000000000000000000000000000000000000000000000000",
         ))
         .unwrap();
-        let encoded = public_share.get_encoded();
+        let encoded = public_share.get_encoded().unwrap();
         let decoded = IdpfPublicShare::get_decoded_with_param(&9, &message).unwrap();
         assert_eq!(public_share, decoded);
         assert_eq!(message, encoded);
@@ -1764,7 +1764,7 @@ mod tests {
                 0,
             );
 
-            assert_eq!(public_share.get_encoded(), serialized_public_share);
+            assert_eq!(public_share.get_encoded().unwrap(), serialized_public_share);
             assert_eq!(
                 IdpfPublicShare::get_decoded_with_param(&idpf_bits, &serialized_public_share)
                     .unwrap(),
@@ -1943,7 +1943,7 @@ mod tests {
             public_share, expected_public_share,
             "public share did not match\n{public_share:#x?}\n{expected_public_share:#x?}"
         );
-        let encoded_public_share = public_share.get_encoded();
+        let encoded_public_share = public_share.get_encoded().unwrap();
         assert_eq!(encoded_public_share, test_vector.public_share);
     }
 
@@ -1992,7 +1992,9 @@ mod tests {
         }
 
         impl Encode for MyUnit {
-            fn encode(&self, _: &mut Vec<u8>) {}
+            fn encode(&self, _: &mut Vec<u8>) -> Result<(), CodecError> {
+                Ok(())
+            }
         }
 
         impl Decode for MyUnit {
@@ -2070,8 +2072,8 @@ mod tests {
         }
 
         impl Encode for MyVector {
-            fn encode(&self, bytes: &mut Vec<u8>) {
-                encode_u32_items(bytes, &(), &self.0);
+            fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+                encode_u32_items(bytes, &(), &self.0)
             }
         }
 

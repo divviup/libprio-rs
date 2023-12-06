@@ -547,39 +547,42 @@ where
                 &self.domain_separation_tag(DST_MEASUREMENT_SHARE),
                 &[agg_id],
             ));
-            let joint_rand_blind =
-                if let Some(helper_joint_rand_parts) = helper_joint_rand_parts.as_mut() {
-                    let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
-                    let mut joint_rand_part_xof = P::init(
-                        &joint_rand_blind,
-                        &self.domain_separation_tag(DST_JOINT_RAND_PART),
-                    );
-                    joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
-                    joint_rand_part_xof.update(nonce);
+            let joint_rand_blind = if let Some(helper_joint_rand_parts) =
+                helper_joint_rand_parts.as_mut()
+            {
+                let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
+                let mut joint_rand_part_xof = P::init(
+                    &joint_rand_blind,
+                    &self.domain_separation_tag(DST_JOINT_RAND_PART),
+                );
+                joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
+                joint_rand_part_xof.update(nonce);
 
-                    let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
-                    for (x, y) in leader_measurement_share
-                        .iter_mut()
-                        .zip(measurement_share_prng)
-                    {
-                        *x -= y;
-                        y.encode(&mut encoding_buffer);
-                        joint_rand_part_xof.update(&encoding_buffer);
-                        encoding_buffer.clear();
-                    }
+                let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
+                for (x, y) in leader_measurement_share
+                    .iter_mut()
+                    .zip(measurement_share_prng)
+                {
+                    *x -= y;
+                    y.encode(&mut encoding_buffer).map_err(|_| {
+                        VdafError::Uncategorized("failed to encode measurement share".to_string())
+                    })?;
+                    joint_rand_part_xof.update(&encoding_buffer);
+                    encoding_buffer.clear();
+                }
 
-                    helper_joint_rand_parts.push(joint_rand_part_xof.into_seed());
+                helper_joint_rand_parts.push(joint_rand_part_xof.into_seed());
 
-                    Some(joint_rand_blind)
-                } else {
-                    for (x, y) in leader_measurement_share
-                        .iter_mut()
-                        .zip(measurement_share_prng)
-                    {
-                        *x -= y;
-                    }
-                    None
-                };
+                Some(joint_rand_blind)
+            } else {
+                for (x, y) in leader_measurement_share
+                    .iter_mut()
+                    .zip(measurement_share_prng)
+                {
+                    *x -= y;
+                }
+                None
+            };
             let helper =
                 HelperShare::from_seeds(measurement_share_seed, proof_share_seed, joint_rand_blind);
             helper_shares.push(helper);
@@ -589,31 +592,38 @@ where
         let public_share = Prio3PublicShare {
             joint_rand_parts: helper_joint_rand_parts
                 .as_ref()
-                .map(|helper_joint_rand_parts| {
-                    let leader_blind_bytes = random_seeds.next().unwrap().try_into().unwrap();
-                    let leader_blind = Seed::from_bytes(leader_blind_bytes);
+                .map(
+                    |helper_joint_rand_parts| -> Result<Vec<Seed<SEED_SIZE>>, VdafError> {
+                        let leader_blind_bytes = random_seeds.next().unwrap().try_into().unwrap();
+                        let leader_blind = Seed::from_bytes(leader_blind_bytes);
 
-                    let mut joint_rand_part_xof = P::init(
-                        leader_blind.as_ref(),
-                        &self.domain_separation_tag(DST_JOINT_RAND_PART),
-                    );
-                    joint_rand_part_xof.update(&[0]); // Aggregator ID
-                    joint_rand_part_xof.update(nonce);
-                    let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
-                    for x in leader_measurement_share.iter() {
-                        x.encode(&mut encoding_buffer);
-                        joint_rand_part_xof.update(&encoding_buffer);
-                        encoding_buffer.clear();
-                    }
-                    leader_blind_opt = Some(leader_blind);
+                        let mut joint_rand_part_xof = P::init(
+                            leader_blind.as_ref(),
+                            &self.domain_separation_tag(DST_JOINT_RAND_PART),
+                        );
+                        joint_rand_part_xof.update(&[0]); // Aggregator ID
+                        joint_rand_part_xof.update(nonce);
+                        let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
+                        for x in leader_measurement_share.iter() {
+                            x.encode(&mut encoding_buffer).map_err(|_| {
+                                VdafError::Uncategorized(
+                                    "failed to encode measurement share".to_string(),
+                                )
+                            })?;
+                            joint_rand_part_xof.update(&encoding_buffer);
+                            encoding_buffer.clear();
+                        }
+                        leader_blind_opt = Some(leader_blind);
 
-                    let leader_joint_rand_seed_part = joint_rand_part_xof.into_seed();
+                        let leader_joint_rand_seed_part = joint_rand_part_xof.into_seed();
 
-                    let mut vec = Vec::with_capacity(self.num_aggregators());
-                    vec.push(leader_joint_rand_seed_part);
-                    vec.extend(helper_joint_rand_parts.iter().cloned());
-                    vec
-                }),
+                        let mut vec = Vec::with_capacity(self.num_aggregators());
+                        vec.push(leader_joint_rand_seed_part);
+                        vec.extend(helper_joint_rand_parts.iter().cloned());
+                        Ok(vec)
+                    },
+                )
+                .transpose()?,
         };
 
         // Compute the joint randomness.
@@ -713,12 +723,13 @@ pub struct Prio3PublicShare<const SEED_SIZE: usize> {
 }
 
 impl<const SEED_SIZE: usize> Encode for Prio3PublicShare<SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if let Some(joint_rand_parts) = self.joint_rand_parts.as_ref() {
             for part in joint_rand_parts.iter() {
-                part.encode(bytes);
+                part.encode(bytes)?;
             }
         }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -808,7 +819,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3InputSha
 }
 
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputShare<F, SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if matches!(
             (&self.measurement_share, &self.proofs_share),
             (Share::Leader(_), Share::Helper(_)) | (Share::Helper(_), Share::Leader(_))
@@ -816,11 +827,12 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputSh
             panic!("tried to encode input share with ambiguous encoding")
         }
 
-        self.measurement_share.encode(bytes);
-        self.proofs_share.encode(bytes);
+        self.measurement_share.encode(bytes)?;
+        self.proofs_share.encode(bytes)?;
         if let Some(ref blind) = self.joint_rand_blind {
-            blind.encode(bytes);
+            blind.encode(bytes)?;
         }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -905,13 +917,14 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
 impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
     for Prio3PrepareShare<F, SEED_SIZE>
 {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         for x in &self.verifiers {
-            x.encode(bytes);
+            x.encode(bytes)?;
         }
         if let Some(ref seed) = self.joint_rand_part {
-            seed.encode(bytes);
+            seed.encode(bytes)?;
         }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -975,10 +988,11 @@ impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareMessage<SEED_SIZE> {
 }
 
 impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if let Some(ref seed) = self.joint_rand_seed {
-            seed.encode(bytes);
+            seed.encode(bytes)?;
         }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -1077,11 +1091,12 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
     for Prio3PrepareState<F, SEED_SIZE>
 {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
-    fn encode(&self, bytes: &mut Vec<u8>) {
-        self.measurement_share.encode(bytes);
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.measurement_share.encode(bytes)?;
         if let Some(ref seed) = self.joint_rand_seed {
-            seed.encode(bytes);
+            seed.encode(bytes)?;
         }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
@@ -1199,7 +1214,9 @@ where
             joint_rand_part_xof.update(nonce);
             let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
             for x in measurement_share {
-                x.encode(&mut encoding_buffer);
+                x.encode(&mut encoding_buffer).map_err(|_| {
+                    VdafError::Uncategorized("failed to encode measurement share".to_string())
+                })?;
                 joint_rand_part_xof.update(&encoding_buffer);
                 encoding_buffer.clear();
             }
@@ -1974,7 +1991,7 @@ mod tests {
         thread_rng().fill(&mut verify_key[..]);
         let (public_share, input_shares) = prio3.shard(measurement, nonce)?;
 
-        let encoded_public_share = public_share.get_encoded();
+        let encoded_public_share = public_share.get_encoded().unwrap();
         let decoded_public_share =
             Prio3PublicShare::get_decoded_with_param(prio3, &encoded_public_share)
                 .expect("failed to decode public share");
@@ -1985,7 +2002,7 @@ mod tests {
         );
 
         for (agg_id, input_share) in input_shares.iter().enumerate() {
-            let encoded_input_share = input_share.get_encoded();
+            let encoded_input_share = input_share.get_encoded().unwrap();
             let decoded_input_share =
                 Prio3InputShare::get_decoded_with_param(&(prio3, agg_id), &encoded_input_share)
                     .expect("failed to decode input share");
@@ -2002,7 +2019,7 @@ mod tests {
             let (prepare_state, prepare_share) =
                 prio3.prepare_init(&verify_key, agg_id, &(), nonce, &public_share, input_share)?;
 
-            let encoded_prepare_state = prepare_state.get_encoded();
+            let encoded_prepare_state = prepare_state.get_encoded().unwrap();
             let decoded_prepare_state =
                 Prio3PrepareState::get_decoded_with_param(&(prio3, agg_id), &encoded_prepare_state)
                     .expect("failed to decode prepare state");
@@ -2012,7 +2029,7 @@ mod tests {
                 encoded_prepare_state.len()
             );
 
-            let encoded_prepare_share = prepare_share.get_encoded();
+            let encoded_prepare_share = prepare_share.get_encoded().unwrap();
             let decoded_prepare_share =
                 Prio3PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
                     .expect("failed to decode prepare share");
@@ -2030,7 +2047,7 @@ mod tests {
             .prepare_shares_to_prepare_message(&(), prepare_shares)
             .unwrap();
 
-        let encoded_prepare_message = prepare_message.get_encoded();
+        let encoded_prepare_message = prepare_message.get_encoded().unwrap();
         let decoded_prepare_message = Prio3PrepareMessage::get_decoded_with_param(
             &last_prepare_state.unwrap(),
             &encoded_prepare_message,
