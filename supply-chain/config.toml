@@ -70,10 +70,6 @@ criteria = "safe-to-deploy"
 version = "0.3.0"
 criteria = "safe-to-run"
 
-[[exemptions.cc]]
-version = "1.0.83"
-criteria = "safe-to-deploy"
-
 [[exemptions.cipher]]
 version = "0.4.3"
 criteria = "safe-to-deploy"
