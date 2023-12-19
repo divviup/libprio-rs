@@ -121,7 +121,10 @@ pub enum FlpError {
 /// A type. Implementations of this trait specify how a particular kind of measurement is encoded
 /// as a vector of field elements and how validity of the encoded measurement is determined.
 /// Validity is determined via an arithmetic circuit evaluated over the encoded measurement.
-pub trait Type: Sized + Eq + Clone + Debug {
+pub trait Type: Sized + Eq + Clone + Debug
+where
+    Self: Sized,
+{
     /// The type of raw measurement to be encoded.
     type Measurement: Clone + Debug;
 
