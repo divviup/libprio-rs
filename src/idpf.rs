@@ -859,12 +859,7 @@ impl IdpfCache for RingBufferCache {
 #[cfg(test)]
 mod tests {
     use std::{
-        collections::HashMap,
-        convert::{TryFrom, TryInto},
-        io::Cursor,
-        iter,
-        str::FromStr,
-        sync::Mutex,
+        collections::HashMap, convert::TryInto, io::Cursor, iter, str::FromStr, sync::Mutex,
     };
 
     use assert_matches::assert_matches;
@@ -1460,16 +1455,16 @@ mod tests {
                     seed: [0xab; 16],
                     control_bits: [Choice::from(1), Choice::from(0)],
                     value: Poplar1IdpfValue::new([
-                        Field64::try_from(83261u64).unwrap(),
-                        Field64::try_from(125159u64).unwrap(),
+                        Field64::from(83261u64),
+                        Field64::from(125159u64),
                     ]),
                 },
                 IdpfCorrectionWord{
                     seed: [0xcd;16],
                     control_bits: [Choice::from(0), Choice::from(1)],
                     value: Poplar1IdpfValue::new([
-                        Field64::try_from(17614120u64).unwrap(),
-                        Field64::try_from(20674u64).unwrap(),
+                        Field64::from(17614120u64),
+                        Field64::from(20674u64),
                     ]),
                 },
             ]),
