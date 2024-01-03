@@ -121,15 +121,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.51"
-when = "2023-12-15"
+version = "1.0.56"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.51"
-when = "2023-12-15"
+version = "1.0.56"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
