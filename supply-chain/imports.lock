@@ -93,22 +93,22 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.193"
-when = "2023-11-21"
+version = "1.0.194"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.193"
-when = "2023-11-21"
+version = "1.0.194"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.108"
-when = "2023-10-30"
+version = "1.0.110"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
