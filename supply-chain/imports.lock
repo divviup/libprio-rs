@@ -51,15 +51,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.proc-macro2]]
-version = "1.0.63"
-when = "2023-06-25"
+version = "1.0.74"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.quote]]
-version = "1.0.29"
-when = "2023-06-29"
+version = "1.0.35"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -121,22 +121,22 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.syn]]
-version = "2.0.28"
-when = "2023-07-31"
+version = "2.0.46"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.51"
-when = "2023-12-15"
+version = "1.0.56"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.51"
-when = "2023-12-15"
+version = "1.0.56"
+when = "2024-01-02"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
