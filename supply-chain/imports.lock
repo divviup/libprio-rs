@@ -100,15 +100,15 @@ user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
 [[publisher.serde]]
-version = "1.0.194"
-when = "2024-01-02"
+version = "1.0.195"
+when = "2024-01-06"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.194"
-when = "2024-01-02"
+version = "1.0.195"
+when = "2024-01-06"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
