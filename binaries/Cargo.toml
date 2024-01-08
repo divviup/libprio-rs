@@ -7,7 +7,7 @@ license = "MPL-2.0"
 repository = "https://github.com/divviup/libprio-rs"
 
 [dependencies]
-base64 = "0.21.5"
+base64 = "0.21.6"
 color-eyre = { version = "^0.6" }
 fixed-macro = "1.2.0"
 prio = { path = "..", features = ["test-util", "prio2", "experimental", "multithreaded"] }
