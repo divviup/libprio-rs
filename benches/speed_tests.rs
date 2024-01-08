@@ -164,14 +164,14 @@ fn prio3(c: &mut Criterion) {
 
     c.bench_function("prio3count_shard", |b| {
         let vdaf = Prio3::new_count(num_shares).unwrap();
-        let measurement = black_box(1);
+        let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
         b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
     });
 
     c.bench_function("prio3count_prepare_init", |b| {
         let vdaf = Prio3::new_count(num_shares).unwrap();
-        let measurement = black_box(1);
+        let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
         let verify_key = black_box([0u8; 16]);
         let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();

@@ -60,19 +60,21 @@ macro_rules! err {
 
 // TODO Generalize this method to work with any VDAF. To do so we would need to add
 // `shard_with_random()` to traits. (There may be a less invasive alternative.)
-fn check_prep_test_vec<M, T, P, const SEED_SIZE: usize>(
+fn check_prep_test_vec<MS, MP, T, P, const SEED_SIZE: usize>(
     prio3: &Prio3<T, P, SEED_SIZE>,
     verify_key: &[u8; SEED_SIZE],
     test_num: usize,
-    t: &TPrio3Prep<M>,
+    t: &TPrio3Prep<MS>,
 ) -> Vec<OutputShare<T::Field>>
 where
-    T: Type<Measurement = M>,
+    MS: Clone,
+    MP: From<MS>,
+    T: Type<Measurement = MP>,
     P: Xof<SEED_SIZE>,
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let (public_share, input_shares) = prio3
-        .shard_with_random(&t.measurement, &nonce, &t.rand)
+        .shard_with_random(&t.measurement.clone().into(), &nonce, &t.rand)
         .expect("failed to generate input shares");
 
     assert_eq!(
@@ -151,12 +153,14 @@ where
 }
 
 #[must_use]
-fn check_aggregate_test_vec<M, T, P, const SEED_SIZE: usize>(
+fn check_aggregate_test_vec<MS, MP, T, P, const SEED_SIZE: usize>(
     prio3: &Prio3<T, P, SEED_SIZE>,
-    t: &TPrio3<M>,
+    t: &TPrio3<MS>,
 ) -> T::AggregateResult
 where
-    T: Type<Measurement = M>,
+    MS: Clone,
+    MP: From<MS>,
+    T: Type<Measurement = MP>,
     P: Xof<SEED_SIZE>,
 {
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
@@ -184,23 +188,51 @@ where
     prio3.unshard(&(), aggregate_shares, 1).unwrap()
 }
 
-/// Evaluate a Prio3 test vector. The instance of Prio3 is constructed from the `new_vdaf`
-/// callback, which takes in the VDAF parameters encoded by the test vectors and the number of
-/// shares.
+/// Evaluate a Prio3 test vector. The instance of Prio3 is constructed from the `new_vdaf` callback,
+/// which takes in the VDAF parameters encoded by the test vectors and the number of shares.
+///
+/// This version allows customizing the deserialization of measurements, via an additional type
+/// parameter.
+#[cfg(feature = "test-util")]
+pub fn check_test_vec_custom_de<MS, MP, A, T, P, const SEED_SIZE: usize>(
+    test_vec_json_str: &str,
+    new_vdaf: impl Fn(&HashMap<String, serde_json::Value>, u8) -> Prio3<T, P, SEED_SIZE>,
+) where
+    MS: for<'de> Deserialize<'de> + Clone,
+    MP: From<MS>,
+    A: for<'de> Deserialize<'de> + Debug + Eq,
+    T: Type<Measurement = MP, AggregateResult = A>,
+    P: Xof<SEED_SIZE>,
+{
+    let t: TPrio3<MS> = serde_json::from_str(test_vec_json_str).unwrap();
+    let vdaf = new_vdaf(&t.other_params, t.shares);
+    let agg_result = check_aggregate_test_vec(&vdaf, &t);
+    assert_eq!(agg_result, serde_json::from_value(t.agg_result).unwrap());
+}
+
+/// Evaluate a Prio3 test vector. The instance of Prio3 is constructed from the `new_vdaf` callback,
+/// which takes in the VDAF parameters encoded by the test vectors and the number of shares.
 #[cfg(feature = "test-util")]
 pub fn check_test_vec<M, A, T, P, const SEED_SIZE: usize>(
     test_vec_json_str: &str,
     new_vdaf: impl Fn(&HashMap<String, serde_json::Value>, u8) -> Prio3<T, P, SEED_SIZE>,
 ) where
-    M: for<'de> Deserialize<'de>,
+    M: for<'de> Deserialize<'de> + Clone,
     A: for<'de> Deserialize<'de> + Debug + Eq,
     T: Type<Measurement = M, AggregateResult = A>,
     P: Xof<SEED_SIZE>,
 {
-    let t: TPrio3<M> = serde_json::from_str(test_vec_json_str).unwrap();
-    let vdaf = new_vdaf(&t.other_params, t.shares);
-    let agg_result = check_aggregate_test_vec(&vdaf, &t);
-    assert_eq!(agg_result, serde_json::from_value(t.agg_result).unwrap());
+    check_test_vec_custom_de::<M, M, _, _, _, SEED_SIZE>(test_vec_json_str, new_vdaf)
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(transparent)]
+struct Prio3CountMeasurement(u8);
+
+impl From<Prio3CountMeasurement> for bool {
+    fn from(value: Prio3CountMeasurement) -> Self {
+        value.0 != 0
+    }
 }
 
 #[test]
@@ -209,9 +241,10 @@ fn test_vec_prio3_count() {
         include_str!("test_vec/08/Prio3Count_0.json"),
         include_str!("test_vec/08/Prio3Count_1.json"),
     ] {
-        check_test_vec(test_vector_str, |_json_params, num_shares| {
-            Prio3::new_count(num_shares).unwrap()
-        });
+        check_test_vec_custom_de::<Prio3CountMeasurement, _, _, _, _, 16>(
+            test_vector_str,
+            |_json_params, num_shares| Prio3::new_count(num_shares).unwrap(),
+        );
     }
 }
 

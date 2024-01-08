@@ -24,7 +24,7 @@
 //!
 //! // The prover chooses a measurement.
 //! let count = Count::new();
-//! let input: Vec<Field64> = count.encode_measurement(&0).unwrap();
+//! let input: Vec<Field64> = count.encode_measurement(&false).unwrap();
 //!
 //! // The prover and verifier agree on "joint randomness" used to generate and
 //! // check the proof. The application needs to ensure that the prover
@@ -176,7 +176,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// use prio::field::{random_vector, FieldElement, Field64};
     ///
     /// let count = Count::new();
-    /// let input: Vec<Field64> = count.encode_measurement(&1).unwrap();
+    /// let input: Vec<Field64> = count.encode_measurement(&true).unwrap();
     /// let joint_rand = random_vector(count.joint_rand_len()).unwrap();
     /// let v = count.valid(&mut count.gadget(), &input, &joint_rand, 1).unwrap();
     /// assert_eq!(v, Field64::zero());

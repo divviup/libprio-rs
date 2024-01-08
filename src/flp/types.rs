@@ -9,6 +9,7 @@ use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
+use subtle::Choice;
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Count<F> {
@@ -37,17 +38,16 @@ impl<F: FftFriendlyFieldElement> Default for Count<F> {
 }
 
 impl<F: FftFriendlyFieldElement> Type for Count<F> {
-    type Measurement = F::Integer;
+    type Measurement = bool;
     type AggregateResult = F::Integer;
     type Field = F;
 
-    fn encode_measurement(&self, value: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let max = F::valid_integer_try_from(1)?;
-        if *value > max {
-            return Err(FlpError::Encode("Count value must be 0 or 1".to_string()));
-        }
-
-        Ok(vec![F::from(*value)])
+    fn encode_measurement(&self, value: &bool) -> Result<Vec<F>, FlpError> {
+        Ok(vec![F::conditional_select(
+            &F::zero(),
+            &F::one(),
+            Choice::from(u8::from(*value)),
+        )])
     }
 
     fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
@@ -789,7 +789,7 @@ mod tests {
             count
                 .decode_result(
                     &count
-                        .truncate(count.encode_measurement(&1).unwrap())
+                        .truncate(count.encode_measurement(&true).unwrap())
                         .unwrap(),
                     1
                 )
@@ -800,7 +800,7 @@ mod tests {
         // Test FLP on valid input.
         flp_validity_test(
             &count,
-            &count.encode_measurement(&1).unwrap(),
+            &count.encode_measurement(&true).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![one]),
@@ -811,7 +811,7 @@ mod tests {
 
         flp_validity_test(
             &count,
-            &count.encode_measurement(&0).unwrap(),
+            &count.encode_measurement(&false).unwrap(),
             &ValidityTestCase::<TestField> {
                 expect_valid: true,
                 expected_output: Some(vec![zero]),
