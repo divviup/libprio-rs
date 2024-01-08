@@ -330,7 +330,7 @@ impl Prio3Average {
 /// let mut out_shares = vec![vec![]; num_shares.into()];
 /// let mut rng = thread_rng();
 /// let verify_key = rng.gen();
-/// let measurements = [0, 1, 1, 1, 0];
+/// let measurements = [false, true, true, true, false];
 /// for measurement in measurements {
 ///     // Shard
 ///     let nonce = rng.gen::<[u8; 16]>();
@@ -1594,24 +1594,27 @@ mod tests {
     fn test_prio3_count() {
         let prio3 = Prio3::new_count(2).unwrap();
 
-        assert_eq!(run_vdaf(&prio3, &(), [1, 0, 0, 1, 1]).unwrap(), 3);
+        assert_eq!(
+            run_vdaf(&prio3, &(), [true, false, false, true, true]).unwrap(),
+            3
+        );
 
         let mut nonce = [0; 16];
         let mut verify_key = [0; 16];
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
-        let (public_share, input_shares) = prio3.shard(&0, &nonce).unwrap();
+        let (public_share, input_shares) = prio3.shard(&false, &nonce).unwrap();
         run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares).unwrap();
 
-        let (public_share, input_shares) = prio3.shard(&1, &nonce).unwrap();
+        let (public_share, input_shares) = prio3.shard(&true, &nonce).unwrap();
         run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares).unwrap();
 
-        test_serialization(&prio3, &1, &nonce).unwrap();
+        test_serialization(&prio3, &true, &nonce).unwrap();
 
         let prio3_extra_helper = Prio3::new_count(3).unwrap();
         assert_eq!(
-            run_vdaf(&prio3_extra_helper, &(), [1, 0, 0, 1, 1]).unwrap(),
+            run_vdaf(&prio3_extra_helper, &(), [true, false, false, true, true]).unwrap(),
             3,
         );
     }

@@ -97,7 +97,7 @@ fn prio2_shard_and_prepare_1000() -> Prio2PrepareShare {
 
 fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 16>> {
     let prio3 = Prio3::new_count(2).unwrap();
-    let measurement = 1;
+    let measurement = true;
     let nonce = [0; 16];
     prio3
         .shard(&black_box(measurement), &black_box(nonce))

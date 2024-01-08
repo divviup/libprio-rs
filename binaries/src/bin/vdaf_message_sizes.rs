@@ -18,7 +18,7 @@ fn main() {
     let nonce = [0; 16];
 
     let prio3 = Prio3::new_count(num_shares).unwrap();
-    let measurement = 1;
+    let measurement = true;
     println!(
         "prio3 count share size = {}",
         vdaf_input_share_size::<Prio3Count, 16>(prio3.shard(&measurement, &nonce).unwrap())
