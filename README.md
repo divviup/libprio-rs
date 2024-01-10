@@ -1,7 +1,6 @@
 # libprio-rs
 [![Latest Version]][crates.io] [![Docs badge]][docs.rs]
 
-[actions]: https://github.com/divviup/libprio-rs/actions?query=branch%3Amain
 [Latest Version]: https://img.shields.io/crates/v/prio.svg
 [crates.io]: https://crates.io/crates/prio
 [Docs badge]: https://img.shields.io/badge/docs.rs-rustdoc-green
