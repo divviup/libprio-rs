@@ -545,6 +545,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
 /// A type which supports adding noise to aggregate shares for Server Differential Privacy.
 #[cfg(feature = "experimental")]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub trait TypeWithNoise<S>: Type
 where
     S: DifferentialPrivacyStrategy,
@@ -749,11 +750,13 @@ pub(crate) fn gadget_poly_len(gadget_degree: usize, wire_poly_len: usize) -> usi
 
 /// Utilities for testing FLPs.
 #[cfg(feature = "test-util")]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod test_utils {
     use super::*;
     use crate::field::{random_vector, FieldElement, FieldElementWithInteger};
 
     /// Various tests for an FLP.
+    #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
     pub struct FlpTest<'a, T: Type> {
         /// The FLP.
         pub flp: &'a T,

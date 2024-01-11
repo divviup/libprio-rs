@@ -452,6 +452,7 @@ impl RngCore for SeedStreamFixedKeyAes128 {
 
 /// XOF based on HMAC-SHA256 and AES128. This XOF is not part of the VDAF spec.
 #[cfg(feature = "crypto-dependencies")]
+#[cfg_attr(docsrs, doc(cfg(feature = "crypto-dependencies")))]
 #[derive(Clone, Debug)]
 pub struct XofHmacSha256Aes128(Hmac<Sha256>);
 

@@ -288,6 +288,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
 
 /// Aggregator that implements differential privacy with Aggregator-side noise addition.
 #[cfg(feature = "experimental")]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub trait AggregatorWithNoise<
     const VERIFY_KEY_SIZE: usize,
     const NONCE_SIZE: usize,
@@ -700,6 +701,7 @@ mod tests {
 }
 
 #[cfg(feature = "test-util")]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod dummy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(
@@ -715,5 +717,6 @@ pub mod poplar1;
 pub mod prio2;
 pub mod prio3;
 #[cfg(any(test, feature = "test-util"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod prio3_test;
 pub mod xof;
