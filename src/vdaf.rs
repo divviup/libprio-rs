@@ -72,18 +72,6 @@ pub enum Share<F, const SEED_SIZE: usize> {
     Helper(Seed<SEED_SIZE>),
 }
 
-impl<F: Clone, const SEED_SIZE: usize> Share<F, SEED_SIZE> {
-    /// Truncate the Leader's share to the given length. If this is the Helper's share, then this
-    /// method clones the input without modifying it.
-    #[cfg(feature = "prio2")]
-    pub(crate) fn truncated(&self, len: usize) -> Self {
-        match self {
-            Self::Leader(ref data) => Self::Leader(data[..len].to_vec()),
-            Self::Helper(ref seed) => Self::Helper(seed.clone()),
-        }
-    }
-}
-
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Share<F, SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
@@ -719,8 +707,11 @@ pub mod dummy;
     doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
 )]
 pub mod poplar1;
-#[cfg(feature = "prio2")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prio2")))]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
+)]
 pub mod prio2;
 pub mod prio3;
 #[cfg(any(test, feature = "test-util"))]

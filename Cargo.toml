@@ -55,7 +55,6 @@ zipf = "7.0.1"
 default = ["crypto-dependencies"]
 experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", "num-traits", "num-integer", "num-iter", "rand"]
 multithreaded = ["rayon"]
-prio2 = ["crypto-dependencies"]
 crypto-dependencies = ["aes", "ctr", "hmac", "sha2"]
 test-util = ["hex", "rand", "serde_json"]
 

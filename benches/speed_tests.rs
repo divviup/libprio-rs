@@ -15,7 +15,7 @@ use num_rational::Ratio;
 use num_traits::ToPrimitive;
 #[cfg(feature = "experimental")]
 use prio::dp::distributions::DiscreteGaussian;
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
 use prio::{
     benchmarked::*,
@@ -116,7 +116,7 @@ fn poly_mul(c: &mut Criterion) {
 }
 
 /// Benchmark prio2.
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2(c: &mut Criterion) {
     let mut group = c.benchmark_group("prio2_shard");
     for input_length in [10, 100, 1_000] {
@@ -864,13 +864,9 @@ fn poplar1_generate_zipf_distributed_batch(
     (samples, prefix_tree)
 }
 
-#[cfg(all(feature = "prio2", feature = "experimental"))]
+#[cfg(feature = "experimental")]
 criterion_group!(benches, poplar1, prio3, prio2, poly_mul, prng, idpf, dp_noise);
-#[cfg(all(not(feature = "prio2"), feature = "experimental"))]
-criterion_group!(benches, poplar1, prio3, poly_mul, prng, idpf, dp_noise);
-#[cfg(all(feature = "prio2", not(feature = "experimental")))]
-criterion_group!(benches, prio3, prio2, prng, poly_mul);
-#[cfg(all(not(feature = "prio2"), not(feature = "experimental")))]
+#[cfg(not(feature = "experimental"))]
 criterion_group!(benches, prio3, prng, poly_mul);
 
 criterion_main!(benches);
