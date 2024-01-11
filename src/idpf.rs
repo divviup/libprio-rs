@@ -1903,7 +1903,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "VDAF-08 support is incomplete"]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
         let idpf = Idpf::new((), ());
