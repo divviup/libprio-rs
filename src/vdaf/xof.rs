@@ -27,10 +27,14 @@ use aes::{
 };
 #[cfg(feature = "crypto-dependencies")]
 use ctr::Ctr64BE;
+#[cfg(feature = "crypto-dependencies")]
+use hmac::{Hmac, Mac};
 use rand_core::{
     impls::{next_u32_via_fill, next_u64_via_fill},
     RngCore, SeedableRng,
 };
+#[cfg(feature = "crypto-dependencies")]
+use sha2::Sha256;
 use sha3::{
     digest::{ExtendableOutput, Update, XofReader},
     TurboShake128, TurboShake128Core, TurboShake128Reader,
@@ -446,6 +450,36 @@ impl RngCore for SeedStreamFixedKeyAes128 {
     }
 }
 
+/// XOF based on HMAC-SHA256 and AES128. This XOF is not part of the VDAF spec.
+#[cfg(feature = "crypto-dependencies")]
+#[derive(Clone, Debug)]
+pub struct XofHmacSha256Aes128(Hmac<Sha256>);
+
+#[cfg(feature = "crypto-dependencies")]
+impl Xof<32> for XofHmacSha256Aes128 {
+    type SeedStream = SeedStreamAes128;
+
+    fn init(seed_bytes: &[u8; 32], dst: &[u8]) -> Self {
+        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(seed_bytes).unwrap();
+        Mac::update(
+            &mut mac,
+            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
+        );
+        Mac::update(&mut mac, dst);
+        Self(mac)
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        Mac::update(&mut self.0, data);
+    }
+
+    fn into_seed_stream(self) -> SeedStreamAes128 {
+        let tag = Mac::finalize(self.0).into_bytes();
+        let (key, iv) = tag.split_at(16);
+        SeedStreamAes128::new(key, iv)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -513,6 +547,30 @@ mod tests {
         assert_eq!(got, want);
 
         test_xof::<XofTurboShake128, 16>();
+    }
+
+    #[test]
+    fn xof_hmac_sha256_aes128() {
+        let t: XofTestVector =
+            serde_json::from_str(include_str!("test_vec/XofHmacSha256Aes128.json")).unwrap();
+
+        let mut xof = XofHmacSha256Aes128::init(&t.seed.try_into().unwrap(), &t.dst);
+        xof.update(&t.binder);
+
+        assert_eq!(
+            xof.clone().into_seed(),
+            Seed(t.derived_seed.try_into().unwrap())
+        );
+
+        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut want = Vec::with_capacity(t.length);
+        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
+            want.push(Field128::decode(&mut bytes).unwrap())
+        }
+        let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);
+        assert_eq!(got, want);
+
+        test_xof::<XofHmacSha256Aes128, 32>();
     }
 
     #[cfg(feature = "experimental")]
