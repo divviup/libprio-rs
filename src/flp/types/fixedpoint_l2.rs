@@ -685,7 +685,7 @@ mod tests {
     use crate::dp::{Rational, ZCdpBudget};
     use crate::field::{random_vector, Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
-    use crate::flp::types::test_utils::{flp_validity_test, ValidityTestCase};
+    use crate::flp::test_utils::FlpTest;
     use crate::vdaf::xof::SeedStreamTurboShake128;
     use fixed::types::extra::{U127, U14, U63};
     use fixed::{FixedI128, FixedI16, FixedI64};
@@ -792,52 +792,46 @@ mod tests {
         let mut input: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
         assert_eq!(input[0], Field128::zero());
         input[0] = one; // it was zero
-        flp_validity_test(
-            &vsum,
-            &input,
-            &ValidityTestCase::<Field128> {
-                expect_valid: false,
-                expected_output: Some(vec![
-                    Field128::from(enc_vec[0] + 1), // = enc(0.25) + 2^0
-                    Field128::from(enc_vec[1]),
-                    Field128::from(enc_vec[2]),
-                ]),
-                num_shares: 3,
-            },
-        )
-        .unwrap();
+        FlpTest {
+            name: None,
+            flp: &vsum,
+            input: &input,
+            expected_output: Some(&[
+                Field128::from(enc_vec[0] + 1), // = enc(0.25) + 2^0
+                Field128::from(enc_vec[1]),
+                Field128::from(enc_vec[2]),
+            ]),
+            expect_valid: false,
+        }
+        .run::<3>();
 
         // encoding contains entries that are not zero or one
         let mut input2: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
         input2[0] = one + one;
-        flp_validity_test(
-            &vsum,
-            &input2,
-            &ValidityTestCase::<Field128> {
-                expect_valid: false,
-                expected_output: Some(vec![
-                    Field128::from(enc_vec[0] + 2), // = enc(0.25) + 2*2^0
-                    Field128::from(enc_vec[1]),
-                    Field128::from(enc_vec[2]),
-                ]),
-                num_shares: 3,
-            },
-        )
-        .unwrap();
+        FlpTest {
+            name: None,
+            flp: &vsum,
+            input: &input2,
+            expected_output: Some(&[
+                Field128::from(enc_vec[0] + 2), // = enc(0.25) + 2*2^0
+                Field128::from(enc_vec[1]),
+                Field128::from(enc_vec[2]),
+            ]),
+            expect_valid: false,
+        }
+        .run::<3>();
 
         // norm is too big
         // 2^n - 1, the field element encoded by the all-1 vector
         let one_enc = Field128::from(((2_u128) << (n - 1)) - 1);
-        flp_validity_test(
-            &vsum,
-            &vec![one; 3 * n + 2 * n - 2], // all vector entries and the norm are all-1-vectors
-            &ValidityTestCase::<Field128> {
-                expect_valid: false,
-                expected_output: Some(vec![one_enc; 3]),
-                num_shares: 3,
-            },
-        )
-        .unwrap();
+        FlpTest {
+            name: None,
+            flp: &vsum,
+            input: &vec![one; 3 * n + 2 * n - 2], // all vector entries and the norm are all-1-vectors
+            expected_output: Some(&[one_enc; 3]),
+            expect_valid: false,
+        }
+        .run::<3>();
 
         // invalid submission length, should be 3n + (2*n - 2) for a
         // 3-element n-bit vector. 3*n bits for 3 entries, (2*n-2) for norm.
