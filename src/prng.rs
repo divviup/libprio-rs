@@ -6,10 +6,9 @@
 //! NOTE: The public API for this module is a work in progress.
 
 use crate::field::{FieldElement, FieldElementExt};
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(feature = "prio2")]
 use crate::vdaf::xof::SeedStreamAes128;
-#[cfg(feature = "crypto-dependencies")]
-use getrandom::getrandom;
+use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
 use rand_core::RngCore;
 
 use std::marker::PhantomData;
@@ -36,7 +35,7 @@ pub(crate) struct Prng<F, S> {
     buffer_index: usize,
 }
 
-#[cfg(feature = "crypto-dependencies")]
+#[cfg(feature = "prio2")]
 impl<F: FieldElement> Prng<F, SeedStreamAes128> {
     /// Create a [`Prng`] from a seed for Prio 2. The first 16 bytes of the seed and the last 16
     /// bytes of the seed are used, respectively, for the key and initialization vector for AES128
@@ -45,12 +44,17 @@ impl<F: FieldElement> Prng<F, SeedStreamAes128> {
         let seed_stream = SeedStreamAes128::new(&seed[..16], &seed[16..]);
         Self::from_seed_stream(seed_stream)
     }
+}
 
+impl<F: FieldElement> Prng<F, SeedStreamTurboShake128> {
     /// Create a [`Prng`] from a randomly generated seed.
     pub(crate) fn new() -> Result<Self, PrngError> {
-        let mut seed = [0; 32];
-        getrandom(&mut seed)?;
-        Ok(Self::from_prio2_seed(&seed))
+        let seed = Seed::generate()?;
+        Ok(Prng::from_seed_stream(XofTurboShake128::seed_stream(
+            &seed,
+            &[],
+            &[],
+        )))
     }
 }
 
@@ -126,20 +130,22 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(feature = "experimental")]
+    use crate::field::Field128;
     #[cfg(feature = "prio2")]
-    use crate::field::encode_fieldvec;
+    use crate::field::{encode_fieldvec, FieldPrio2};
     use crate::{
         codec::Decode,
-        field::{Field64, FieldPrio2},
+        field::Field64,
         vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128},
     };
     #[cfg(feature = "prio2")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
     #[cfg(feature = "prio2")]
     use sha2::{Digest, Sha256};
-    use std::convert::TryInto;
 
     #[test]
+    #[cfg(feature = "prio2")]
     fn secret_sharing_interop() {
         let seed = [
             0xcd, 0x85, 0x5b, 0xd4, 0x86, 0x48, 0xa4, 0xce, 0x52, 0x5c, 0x36, 0xee, 0x5a, 0x71,
@@ -210,6 +216,7 @@ mod tests {
         );
     }
 
+    #[cfg(feature = "prio2")]
     fn extract_share_from_seed<F: FieldElement>(length: usize, seed: &[u8]) -> Vec<F> {
         assert_eq!(seed.len(), 32);
         Prng::from_prio2_seed(seed.try_into().unwrap())
@@ -269,13 +276,13 @@ mod tests {
 
     #[cfg(feature = "experimental")]
     #[test]
-    fn into_new_field() {
+    fn into_different_field() {
         let seed = Seed::generate().unwrap();
         let want: Prng<Field64, SeedStreamTurboShake128> =
             Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
         let want_buffer = want.buffer.clone();
 
-        let got: Prng<FieldPrio2, _> = want.into_new_field();
+        let got: Prng<Field128, _> = want.into_new_field();
         assert_eq!(got.buffer_index, 0);
         assert_eq!(got.buffer, want_buffer);
     }

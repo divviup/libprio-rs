@@ -7,7 +7,6 @@
 //! [`FftFriendlyFieldElement`], and have an associated element called the "generator" that
 //! generates a multiplicative subgroup of order `2^n` for some `n`.
 
-#[cfg(feature = "crypto-dependencies")]
 use crate::prng::{Prng, PrngError};
 use crate::{
     codec::{CodecError, Decode, Encode},
@@ -828,7 +827,7 @@ pub(crate) fn merge_vector<F: FieldElement>(
 }
 
 /// Outputs an additive secret sharing of the input.
-#[cfg(all(feature = "crypto-dependencies", test))]
+#[cfg(test)]
 pub(crate) fn split_vector<F: FieldElement>(
     inp: &[F],
     num_shares: usize,
@@ -852,8 +851,6 @@ pub(crate) fn split_vector<F: FieldElement>(
 }
 
 /// Generate a vector of uniformly distributed random field elements.
-#[cfg(feature = "crypto-dependencies")]
-#[cfg_attr(docsrs, doc(cfg(feature = "crypto-dependencies")))]
 pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
     Ok(Prng::new()?.take(len).collect())
 }
