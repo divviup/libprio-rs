@@ -1,8 +1,6 @@
 # libprio-rs
-[![Build Status]][actions] [![Latest Version]][crates.io] [![Docs badge]][docs.rs]
+[![Latest Version]][crates.io] [![Docs badge]][docs.rs]
 
-[Build Status]: https://github.com/divviup/libprio-rs/workflows/ci-build/badge.svg
-[actions]: https://github.com/divviup/libprio-rs/actions?query=branch%3Amain
 [Latest Version]: https://img.shields.io/crates/v/prio.svg
 [crates.io]: https://crates.io/crates/prio
 [Docs badge]: https://img.shields.io/badge/docs.rs-rustdoc-green
@@ -44,7 +42,7 @@ increases (e.g., 0.10 to 0.11).
 | 0.13 | `release/0.13` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
 | 0.14 | `release/0.14` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
 | 0.15 | `release/0.15` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-07`][dap-07] | Yes | Supported |
-| 0.16 | `main` | [`draft-irtf-cfrg-vdaf-08`][vdaf-08] | N/A | [No](https://github.com/divviup/libprio-rs/issues/839) | Supported |
+| 0.16 | `main` | [`draft-irtf-cfrg-vdaf-08`][vdaf-08] | [`draft-ietf-ppm-dap-09`][dap-09] | Yes | Supported |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
@@ -59,6 +57,7 @@ increases (e.g., 0.10 to 0.11).
 [dap-04]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/04/
 [dap-05]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/05/
 [dap-07]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/07/
+[dap-09]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/09/
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [prio-server]: https://github.com/divviup/prio-server
