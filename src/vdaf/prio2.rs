@@ -88,8 +88,13 @@ impl Prio2 {
         )
         .map_err(|e| VdafError::Uncategorized(e.to_string()))?;
 
+        let truncated_share = match input_share {
+            Share::Leader(data) => Share::Leader(data[..self.input_len].to_vec()),
+            Share::Helper(seed) => Share::Helper(seed.clone()),
+        };
+
         Ok((
-            Prio2PrepareState(input_share.truncated(self.input_len)),
+            Prio2PrepareState(truncated_share),
             Prio2PrepareShare(verifier_share),
         ))
     }

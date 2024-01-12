@@ -10,4 +10,4 @@ repository = "https://github.com/divviup/libprio-rs"
 base64 = "0.21.6"
 fixed = "1.23"
 fixed-macro = "1.2.0"
-prio = { path = "..", features = ["prio2", "experimental"] }
+prio = { path = "..", features = ["experimental"] }

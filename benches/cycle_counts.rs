@@ -5,15 +5,12 @@ use iai::black_box;
 #[cfg(feature = "experimental")]
 use prio::{
     codec::{Decode, Encode, ParameterizedDecode},
-    field::{Field255, FieldElement},
+    field::{Field255, FieldElement, FieldPrio2},
     idpf::{Idpf, IdpfInput, IdpfPublicShare, RingBufferCache},
-    vdaf::{poplar1::Poplar1IdpfValue, xof::Seed},
-};
-#[cfg(feature = "prio2")]
-use prio::{
-    field::FieldPrio2,
     vdaf::{
+        poplar1::Poplar1IdpfValue,
         prio2::{Prio2, Prio2PrepareShare},
+        xof::Seed,
         Aggregator, Share,
     },
 };
@@ -45,7 +42,7 @@ fn prng_4096() -> Vec<Field128> {
     prng(4096)
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_client(size: usize) -> Vec<Share<FieldPrio2, 32>> {
     let prio2 = Prio2::new(size).unwrap();
     let input = vec![0u32; size];
@@ -53,22 +50,22 @@ fn prio2_client(size: usize) -> Vec<Share<FieldPrio2, 32>> {
     prio2.shard(&black_box(input), &black_box(nonce)).unwrap().1
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_client_10() -> Vec<Share<FieldPrio2, 32>> {
     prio2_client(10)
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_client_100() -> Vec<Share<FieldPrio2, 32>> {
     prio2_client(100)
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_client_1000() -> Vec<Share<FieldPrio2, 32>> {
     prio2_client(1000)
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_shard_and_prepare(size: usize) -> Prio2PrepareShare {
     let prio2 = Prio2::new(size).unwrap();
     let input = vec![0u32; size];
@@ -80,17 +77,17 @@ fn prio2_shard_and_prepare(size: usize) -> Prio2PrepareShare {
         .1
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_shard_and_prepare_10() -> Prio2PrepareShare {
     prio2_shard_and_prepare(10)
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_shard_and_prepare_100() -> Prio2PrepareShare {
     prio2_shard_and_prepare(100)
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(feature = "experimental")]
 fn prio2_shard_and_prepare_1000() -> Prio2PrepareShare {
     prio2_shard_and_prepare(1000)
 }
@@ -261,34 +258,10 @@ macro_rules! main_base {
     };
 }
 
-#[cfg(feature = "prio2")]
-macro_rules! main_add_prio2 {
-    ( $( $func_name:ident ),* $(,)* ) => {
-        main_base!(
-            prio2_client_10,
-            prio2_client_100,
-            prio2_client_1000,
-            prio2_shard_and_prepare_10,
-            prio2_shard_and_prepare_100,
-            prio2_shard_and_prepare_1000,
-            $( $func_name, )*
-        );
-    };
-}
-
-#[cfg(not(feature = "prio2"))]
-macro_rules! main_add_prio2 {
-    ( $( $func_name:ident ),* $(,)* ) => {
-        main_base!(
-            $( $func_name, )*
-        );
-    };
-}
-
 #[cfg(feature = "multithreaded")]
 macro_rules! main_add_multithreaded {
     ( $( $func_name:ident ),* $(,)* ) => {
-        main_add_prio2!(
+        main_base!(
             prio3_client_count_vec_multithreaded_1000,
             $( $func_name, )*
         );
@@ -298,7 +271,7 @@ macro_rules! main_add_multithreaded {
 #[cfg(not(feature = "multithreaded"))]
 macro_rules! main_add_multithreaded {
     ( $( $func_name:ident ),* $(,)* ) => {
-        main_add_prio2!(
+        main_base!(
             $( $func_name, )*
         );
     };
@@ -308,6 +281,12 @@ macro_rules! main_add_multithreaded {
 macro_rules! main_add_experimental {
     ( $( $func_name:ident ),* $(,)* ) => {
         main_add_multithreaded!(
+            prio2_client_10,
+            prio2_client_100,
+            prio2_client_1000,
+            prio2_shard_and_prepare_10,
+            prio2_shard_and_prepare_100,
+            prio2_shard_and_prepare_1000,
             idpf_codec,
             idpf_poplar_gen_8,
             idpf_poplar_gen_128,

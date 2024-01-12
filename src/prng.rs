@@ -6,7 +6,7 @@
 //! NOTE: The public API for this module is a work in progress.
 
 use crate::field::{FieldElement, FieldElementExt};
-#[cfg(feature = "prio2")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vdaf::xof::SeedStreamAes128;
 use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
 use rand_core::RngCore;
@@ -35,7 +35,7 @@ pub(crate) struct Prng<F, S> {
     buffer_index: usize,
 }
 
-#[cfg(feature = "prio2")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 impl<F: FieldElement> Prng<F, SeedStreamAes128> {
     /// Create a [`Prng`] from a seed for Prio 2. The first 16 bytes of the seed and the last 16
     /// bytes of the seed are used, respectively, for the key and initialization vector for AES128
@@ -131,21 +131,19 @@ where
 mod tests {
     use super::*;
     #[cfg(feature = "experimental")]
-    use crate::field::Field128;
-    #[cfg(feature = "prio2")]
-    use crate::field::{encode_fieldvec, FieldPrio2};
+    use crate::field::{encode_fieldvec, Field128, FieldPrio2};
     use crate::{
         codec::Decode,
         field::Field64,
         vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128},
     };
-    #[cfg(feature = "prio2")]
+    #[cfg(feature = "experimental")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
-    #[cfg(feature = "prio2")]
+    #[cfg(feature = "experimental")]
     use sha2::{Digest, Sha256};
 
     #[test]
-    #[cfg(feature = "prio2")]
+    #[cfg(feature = "experimental")]
     fn secret_sharing_interop() {
         let seed = [
             0xcd, 0x85, 0x5b, 0xd4, 0x86, 0x48, 0xa4, 0xce, 0x52, 0x5c, 0x36, 0xee, 0x5a, 0x71,
@@ -167,7 +165,7 @@ mod tests {
     }
 
     /// takes a seed and hash as base64 encoded strings
-    #[cfg(feature = "prio2")]
+    #[cfg(feature = "experimental")]
     fn random_data_interop(seed_base64: &str, hash_base64: &str, len: usize) {
         let seed = BASE64_STANDARD.decode(seed_base64).unwrap();
         let random_data = extract_share_from_seed::<FieldPrio2>(len, &seed);
@@ -175,14 +173,14 @@ mod tests {
         let mut random_bytes = Vec::new();
         encode_fieldvec(&random_data, &mut random_bytes).unwrap();
 
-        let mut hasher = Sha256::new();
+        let mut hasher = <Sha256 as Digest>::new();
         hasher.update(&random_bytes);
         let digest = hasher.finalize();
         assert_eq!(BASE64_STANDARD.encode(digest), hash_base64);
     }
 
     #[test]
-    #[cfg(feature = "prio2")]
+    #[cfg(feature = "experimental")]
     fn test_hash_interop() {
         random_data_interop(
             "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
@@ -216,7 +214,7 @@ mod tests {
         );
     }
 
-    #[cfg(feature = "prio2")]
+    #[cfg(feature = "experimental")]
     fn extract_share_from_seed<F: FieldElement>(length: usize, seed: &[u8]) -> Vec<F> {
         assert_eq!(seed.len(), 32);
         Prng::from_prio2_seed(seed.try_into().unwrap())

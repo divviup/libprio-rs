@@ -194,6 +194,7 @@ where
 /// This version allows customizing the deserialization of measurements, via an additional type
 /// parameter.
 #[cfg(feature = "test-util")]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub fn check_test_vec_custom_de<MS, MP, A, T, P, const SEED_SIZE: usize>(
     test_vec_json_str: &str,
     new_vdaf: impl Fn(&HashMap<String, serde_json::Value>, u8) -> Prio3<T, P, SEED_SIZE>,
@@ -213,6 +214,7 @@ pub fn check_test_vec_custom_de<MS, MP, A, T, P, const SEED_SIZE: usize>(
 /// Evaluate a Prio3 test vector. The instance of Prio3 is constructed from the `new_vdaf` callback,
 /// which takes in the VDAF parameters encoded by the test vectors and the number of shares.
 #[cfg(feature = "test-util")]
+#[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub fn check_test_vec<M, A, T, P, const SEED_SIZE: usize>(
     test_vec_json_str: &str,
     new_vdaf: impl Fn(&HashMap<String, serde_json::Value>, u8) -> Prio3<T, P, SEED_SIZE>,
