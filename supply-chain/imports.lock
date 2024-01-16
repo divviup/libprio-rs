@@ -446,6 +446,11 @@ criteria = "safe-to-run"
 delta = "0.21.5 -> 0.21.6"
 notes = "sourcegraph-based diff did not see the v0.21.6 tag; I retrieved a local copy of the repo and used that for diff'ing."
 
+[[audits.isrg.audits.base64]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.21.6 -> 0.21.7"
+
 [[audits.isrg.audits.once_cell]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
