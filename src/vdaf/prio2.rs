@@ -396,7 +396,7 @@ mod tests {
     use super::*;
     use crate::vdaf::{
         equality_comparison_test, fieldvec_roundtrip_test, prio2::test_vector::Priov2TestVector,
-        run_vdaf,
+        test_utils::run_vdaf,
     };
     use assert_matches::assert_matches;
     use rand::prelude::*;

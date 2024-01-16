@@ -1500,7 +1500,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vdaf::{equality_comparison_test, run_vdaf_prepare};
+    use crate::vdaf::{equality_comparison_test, test_utils::run_vdaf_prepare};
     use assert_matches::assert_matches;
     use rand::prelude::*;
     use serde::Deserialize;
