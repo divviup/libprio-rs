@@ -409,6 +409,17 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.4 -> 0.2.5"
 
+[[audits.divviup.audits.getrandom]]
+who = "Tim Geoghegan <timg@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.9 -> 0.2.10"
+notes = "These changes include some new `unsafe` code for the `emscripten` and `psvita` targets, but all it does is call `libc::getentropy`."
+
+[[audits.divviup.audits.getrandom]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.11 -> 0.2.12"
+
 [[audits.divviup.audits.num-bigint]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -633,11 +644,7 @@ criteria = "safe-to-run"
 version = "2.3.2"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
-[[audits.isrg.audits.getrandom]]
-who = "Tim Geoghegan <timg@letsencrypt.org>"
-criteria = "safe-to-deploy"
-delta = "0.2.9 -> 0.2.10"
-notes = "These changes include some new `unsafe` code for the `emscripten` and `psvita` targets, but all it does is call `libc::getentropy`."
+[audits.isrg.audits]
 
 [[audits.mozilla.wildcard-audits.unicode-segmentation]]
 who = "Manish Goregaokar <manishsmail@gmail.com>"
