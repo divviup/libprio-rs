@@ -729,4 +729,5 @@ pub mod prio3;
 #[cfg(any(test, feature = "test-util"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod prio3_test;
+pub mod vidpf;
 pub mod xof;
