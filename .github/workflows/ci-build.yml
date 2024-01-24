@@ -12,6 +12,7 @@ env:
 
 jobs:
   docs:
+    if: github.repository_owner == 'divviup'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -23,6 +24,7 @@ jobs:
         RUSTDOCFLAGS: -Dwarnings
 
   build-binaries:
+    if: github.repository_owner == 'divviup'
     strategy:
       matrix:
         rust-toolchain: [
@@ -44,6 +46,7 @@ jobs:
       run: cargo clippy --package prio-binaries
 
   build-crate:
+    if: github.repository_owner == 'divviup'
     strategy:
       matrix:
         rust-toolchain: [

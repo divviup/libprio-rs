@@ -6,6 +6,7 @@ on:
 
 jobs:
   crate:
+    if: github.repository_owner == 'divviup'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4

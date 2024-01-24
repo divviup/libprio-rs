@@ -13,6 +13,7 @@ on:
 
 jobs:
   vet:
+    if: github.repository_owner == 'divviup'
     name: Vet Dependencies
     runs-on: ubuntu-latest
     env:
