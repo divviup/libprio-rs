@@ -6,20 +6,18 @@
 
 use std::{
     error::Error,
-    io::Cursor,
     iter::zip,
     marker::PhantomData,
-    ops::BitXor,
-    ops::Sub,
-    ops::{Add, BitAnd},
+    ops::{Add, BitAnd, BitXor, ControlFlow, Sub},
 };
 
 use rand_core::RngCore;
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 
-use crate::{codec::Decode, field::FieldElement, vdaf::xof::Seed as XofSeed};
-
-use super::xof::{Xof, XofTurboShake128};
+use super::xof::Xof;
+use crate::{
+    codec::Decode, field::FieldElement, field::FieldElementExt, vdaf::xof::Seed as XofSeed,
+};
 
 /// VERSION is a tag.
 pub static VERSION: &str = "MyVIDPF";
@@ -28,6 +26,8 @@ pub static VERSION: &str = "MyVIDPF";
 pub struct Params<
     // Field for operations.
     F: FieldElement,
+    // Primitive to construct a pseudorandom generator.
+    P: GetPRG,
 > {
     // Number of bits for alpha.
     n: usize,
@@ -35,25 +35,20 @@ pub struct Params<
     m: usize,
     // Security parameter in bytes.
     k: usize,
-    // Pseudorandom generator based on an eXtendable-Output Function.
-    prg: Box<dyn Prng>,
+    // Constructor of a pseudorandom generator.
+    get_prg: P,
 
     _pd: PhantomData<F>,
 }
 
-impl<F: FieldElement> Params<F> {
+impl<F: FieldElement, P: GetPRG> Params<F, P> {
     /// new
-    pub fn new(sec_param: usize, n: usize, m: usize, prng: impl Prng + 'static) -> Self {
-        assert!(
-            prng.size() == (sec_param / 8),
-            "security param does not match PRNG input size"
-        );
-
+    pub fn new(sec_param: usize, n: usize, m: usize, get_prg: P) -> Self {
         Self {
             n,
             m,
             k: sec_param / 8,
-            prg: Box::new(prng),
+            get_prg,
             _pd: PhantomData::<F>,
         }
     }
@@ -62,7 +57,8 @@ impl<F: FieldElement> Params<F> {
     pub fn gen(
         &self,
         alpha: &[u8],
-        beta: &VecFieldElement<F>,
+        beta: &Weight<F>,
+        binder: &[u8],
     ) -> Result<(Public<F>, Key, Key), Box<dyn Error>> {
         assert!(alpha.len() == (self.n + 7) / 8, "bad alpha size");
         assert!(beta.0.len() == self.m, "bad beta size");
@@ -80,7 +76,7 @@ impl<F: FieldElement> Params<F> {
         let mut t_i = [ControlBit(0), ControlBit(1)];
         let mut s_i = [Seed::from(&k0), Seed::from(&k1)];
         for i in 0..self.n {
-            let val = [self.prg.gen(&s_i[0])?, self.prg.gen(&s_i[1])?];
+            let val = [self.prg(&s_i[0], binder), self.prg(&s_i[1], binder)];
             let sl = [&val[0].0, &val[1].0];
             let tl = [val[0].1, val[1].1];
             let sr = [&val[0].2, &val[1].2];
@@ -106,12 +102,15 @@ impl<F: FieldElement> Params<F> {
             t_i[0] = t[diff][0] ^ (t_i[0] & t_cw[diff]);
             t_i[1] = t[diff][1] ^ (t_i[1] & t_cw[diff]);
 
-            let (s_i_0, w_i_0) = self.convert(&s_tilde_i[0]);
-            let (s_i_1, w_i_1) = self.convert(&s_tilde_i[1]);
-            s_i[0] = s_i_0;
-            s_i[1] = s_i_1;
+            let mut w_i = [
+                Weight(vec![F::zero(); self.m]),
+                Weight(vec![F::zero(); self.m]),
+            ];
 
-            let mut w_cw = beta - &(&w_i_0 + &w_i_1);
+            (s_i[0], w_i[0]) = self.convert(&s_tilde_i[0], binder);
+            (s_i[1], w_i[1]) = self.convert(&s_tilde_i[1], binder);
+
+            let mut w_cw = beta - &(&w_i[0] + &w_i[1]);
             (&mut w_cw).conditional_negate(t_i[1].into());
 
             cw.push(CorrWord {
@@ -121,8 +120,8 @@ impl<F: FieldElement> Params<F> {
                 w_cw,
             });
 
-            let pi_0 = self.hash_one(alpha, i, &s_i[0])?;
-            let pi_1 = self.hash_one(alpha, i, &s_i[1])?;
+            let pi_0 = self.hash_one(alpha, i, &s_i[0]);
+            let pi_1 = self.hash_one(alpha, i, &s_i[1]);
             let pi = &pi_0 ^ &pi_1;
             cs.push(pi);
         }
@@ -130,21 +129,74 @@ impl<F: FieldElement> Params<F> {
         Ok((Public { cw, cs }, k0, k1))
     }
 
-    fn convert(&self, _seed_in: &Seed) -> (Seed, VecFieldElement<F>) {
-        (Seed(Vec::new()), VecFieldElement(vec![F::one(); self.m]))
+    fn prg(&self, seed: &Seed, binder: &[u8]) -> Sequence {
+        let dst = "100".as_bytes();
+        let mut sl = Seed::new(self.k);
+        let mut sr = Seed::new(self.k);
+        let mut tl = ControlBit(0);
+        let mut tr = ControlBit(0);
+        let mut prg = self.get_prg.get(seed, dst, binder);
+        sl.fill(&mut prg);
+        sr.fill(&mut prg);
+        tl.fill(&mut prg);
+        tr.fill(&mut prg);
+
+        Sequence(sl, tl, sr, tr)
     }
 
-    fn hash_one(&self, alpha: &[u8], level: usize, seed: &Seed) -> Result<Proof, Box<dyn Error>> {
-        let dst = vec![0u8; 10];
+    fn convert(&self, seed: &Seed, binder: &[u8]) -> (Seed, Weight<F>) {
+        let dst = "101".as_bytes();
+        let mut out_seed = Seed::new(self.k);
+        let mut weight = Weight::new(self.m);
+        let mut prg = self.get_prg.get(seed, dst, binder);
+        out_seed.fill(&mut prg);
+        weight.fill(&mut prg);
+
+        (out_seed, weight)
+    }
+
+    fn hash_one(&self, alpha: &[u8], level: usize, seed: &Seed) -> Proof {
+        let dst = "vidpf cs proof".as_bytes();
         let mut binder = Vec::new();
         binder.extend(self.n.to_le_bytes());
         binder.extend_from_slice(alpha);
         binder.extend(level.to_le_bytes());
 
-        let seed = XofSeed::decode(&mut Cursor::new(&seed.0))?;
-        let mut pi = Proof(vec![0u8; 2 * self.k]);
-        XofTurboShake128::seed_stream(&seed, &dst, &binder).fill_bytes(&mut pi.0);
-        Ok(pi)
+        let mut proof = Proof::new(2 * self.k);
+        let mut prg = self.get_prg.get(seed, dst, &binder);
+        proof.fill(&mut prg);
+
+        proof
+    }
+}
+
+/// Sequence
+pub struct Sequence(Seed, ControlBit, Seed, ControlBit);
+
+/// Fill
+pub trait Fill {
+    /// fill
+    fn fill(&mut self, r: &mut impl RngCore);
+}
+
+/// GetPRG
+pub trait GetPRG {
+    /// get
+    fn get(&self, seed: &Seed, dst: &[u8], binder: &[u8]) -> impl RngCore;
+}
+
+struct PrngFromXof<const SEED_SIZE: usize, X: Xof<SEED_SIZE>>(PhantomData<X>);
+
+impl<const SEED_SIZE: usize, X: Xof<SEED_SIZE>> Default for PrngFromXof<SEED_SIZE, X> {
+    fn default() -> Self {
+        Self(PhantomData::<X>)
+    }
+}
+
+impl<const SEED_SIZE: usize, X: Xof<SEED_SIZE>> GetPRG for PrngFromXof<SEED_SIZE, X> {
+    fn get(&self, seed: &Seed, dst: &[u8], binder: &[u8]) -> impl RngCore {
+        let xof_seed = XofSeed::get_decoded(&seed.0).unwrap();
+        X::seed_stream(&xof_seed, dst, binder)
     }
 }
 
@@ -158,12 +210,25 @@ pub struct CorrWord<F: FieldElement> {
     /// t_cw_r
     t_cw_r: ControlBit,
     /// w_cw
-    w_cw: VecFieldElement<F>,
+    w_cw: Weight<F>,
 }
 
 #[derive(Debug)]
 /// Proof
 pub struct Proof(Vec<u8>);
+
+impl Proof {
+    /// new
+    pub fn new(n: usize) -> Self {
+        Self(vec![0; n])
+    }
+}
+
+impl Fill for Proof {
+    fn fill(&mut self, r: &mut impl RngCore) {
+        r.fill_bytes(&mut self.0)
+    }
+}
 
 impl<'a> BitXor<&'a Proof> for &'a Proof {
     type Output = Proof;
@@ -209,11 +274,11 @@ impl From<ControlBit> for Choice {
     }
 }
 
-impl<T: RngCore> From<&mut T> for ControlBit {
-    fn from(r: &mut T) -> Self {
+impl Fill for ControlBit {
+    fn fill(&mut self, r: &mut impl RngCore) {
         let mut b = [0u8; 1];
         r.fill_bytes(&mut b);
-        Self(b[0] & 0x1)
+        *self = ControlBit(b[0] & 0x1);
     }
 }
 
@@ -237,11 +302,16 @@ impl BitXor<ControlBit> for ControlBit {
 /// Seed
 pub struct Seed(Vec<u8>);
 
-impl<T: RngCore> From<(usize, &mut T)> for Seed {
-    fn from((n, r): (usize, &mut T)) -> Self {
-        let mut k = vec![0u8; n];
-        r.fill_bytes(&mut k);
-        Seed(k)
+impl Seed {
+    /// new
+    pub fn new(n: usize) -> Self {
+        Self(vec![0; n])
+    }
+}
+
+impl Fill for Seed {
+    fn fill(&mut self, r: &mut impl RngCore) {
+        r.fill_bytes(&mut self.0)
     }
 }
 
@@ -266,73 +336,48 @@ impl<'a> BitXor<(&'a Seed, ControlBit)> for &'a Seed {
 }
 
 #[derive(Debug)]
-/// VecFieldElement
-pub struct VecFieldElement<F: FieldElement>(Vec<F>);
+/// Weight
+pub struct Weight<F: FieldElement>(Vec<F>);
 
-impl<F: FieldElement> ConditionallyNegatable for &mut VecFieldElement<F> {
+impl<F: FieldElement> Weight<F> {
+    /// new
+    pub fn new(n: usize) -> Self {
+        Self(vec![F::zero(); n])
+    }
+}
+
+impl<F: FieldElement> Fill for Weight<F> {
+    fn fill(&mut self, r: &mut impl RngCore) {
+        let mut bytes = vec![0u8; F::ENCODED_SIZE];
+        self.0.iter_mut().for_each(|i| loop {
+            r.fill_bytes(&mut bytes);
+            if let ControlFlow::Break(x) = F::from_random_rejection(&bytes) {
+                *i = x;
+                break;
+            }
+        });
+    }
+}
+
+impl<F: FieldElement> ConditionallyNegatable for &mut Weight<F> {
     fn conditional_negate(&mut self, choice: Choice) {
         self.0.iter_mut().for_each(|a| a.conditional_negate(choice));
     }
 }
 
-impl<'a, F: FieldElement> Add<&'a VecFieldElement<F>> for &'a VecFieldElement<F> {
-    type Output = VecFieldElement<F>;
+impl<'a, F: FieldElement> Add<&'a Weight<F>> for &'a Weight<F> {
+    type Output = Weight<F>;
 
     fn add(self, rhs: Self) -> Self::Output {
-        VecFieldElement(zip(&self.0, &rhs.0).map(|(a, b)| *a + *b).collect())
+        Weight(zip(&self.0, &rhs.0).map(|(a, b)| *a + *b).collect())
     }
 }
 
-impl<'a, F: FieldElement> Sub<&'a VecFieldElement<F>> for &'a VecFieldElement<F> {
-    type Output = VecFieldElement<F>;
+impl<'a, F: FieldElement> Sub<&'a Weight<F>> for &'a Weight<F> {
+    type Output = Weight<F>;
 
     fn sub(self, rhs: Self) -> Self::Output {
-        VecFieldElement(zip(&self.0, &rhs.0).map(|(a, b)| *a - *b).collect())
-    }
-}
-
-/// Prng
-pub trait Prng {
-    /// size
-    fn size(&self) -> usize;
-    /// gen
-    fn gen(&self, input: &Seed) -> Result<Sequence, Box<dyn Error>>;
-}
-
-/// Sequence
-pub struct Sequence(Seed, ControlBit, Seed, ControlBit);
-
-struct PrngFromXof<const K: usize, X: Xof<K>>(PhantomData<X>);
-
-impl<const K: usize, X: Xof<K>> PrngFromXof<K, X> {
-    pub fn new() -> Self {
-        Self(PhantomData::<X>)
-    }
-}
-
-impl<const K: usize, X: Xof<K>> Prng for PrngFromXof<K, X> {
-    fn size(&self) -> usize {
-        K
-    }
-    // fn gen(&self, buffer: &mut [u8], input: &[u8]) -> Result<(), Box<dyn Error>> {
-    //     let dst = vec![0u8; K];
-    //     let binder = vec![0u8; K];
-    //     let seed = XofSeed::decode(&mut Cursor::new(input))?;
-    //     X::seed_stream(&seed, &dst, &binder).fill_bytes(buffer);
-    //     Ok(())
-    // }
-    fn gen(&self, input: &Seed) -> Result<Sequence, Box<dyn Error>> {
-        let dst = vec![0u8; K];
-        let binder = vec![0u8; K];
-        let input_seed = XofSeed::decode(&mut Cursor::new(&input.0))?;
-
-        let mut rng = X::seed_stream(&input_seed, &dst, &binder);
-        let sl = Seed::from((K, &mut rng));
-        let tl = ControlBit::from(&mut rng);
-        let sr = Seed::from((K, &mut rng));
-        let tr = ControlBit::from(&mut rng);
-
-        Ok(Sequence(sl, tl, sr, tr))
+        Weight(zip(&self.0, &rhs.0).map(|(a, b)| *a - *b).collect())
     }
 }
 
@@ -350,7 +395,7 @@ mod tests {
     use crate::{
         field::Field128,
         vdaf::{
-            vidpf::{PrngFromXof, VecFieldElement},
+            vidpf::{PrngFromXof, Weight},
             xof::XofTurboShake128,
         },
     };
@@ -362,15 +407,17 @@ mod tests {
         const SEC_PARAM: usize = 128;
         let n: usize = 2;
         let m: usize = 3;
-        let prng = PrngFromXof::<16, XofTurboShake128>::new();
-        let vidpf = Params::<Field128>::new(SEC_PARAM, n, m, prng);
-        let beta = VecFieldElement([21.into(), 22.into(), 23.into()].into());
+        let prng = PrngFromXof::<16, XofTurboShake128>::default();
+        let alpha = "1".as_bytes();
+        let beta = Weight::<Field128>([21.into(), 22.into(), 23.into()].into());
+        let binder = "protocol using a vidpf".as_bytes();
 
-        match vidpf.gen("1".as_bytes(), &beta) {
-            Ok(data) => {
-                println!("data: {:?}", data.0);
-                println!("key0: {:?}", data.1);
-                println!("key1: {:?}", data.2);
+        let vidpf = Params::new(SEC_PARAM, n, m, prng);
+        match vidpf.gen(&alpha, &beta, &binder) {
+            Ok((pp, k0, k1)) => {
+                println!("public: {:?}", pp);
+                println!("key0: {:?}", k0);
+                println!("key1: {:?}", k1);
             }
             Err(e) => println!("error: {:?}", e),
         };
