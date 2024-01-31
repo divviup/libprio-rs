@@ -5,10 +5,11 @@
 //! [draft-mouris-cfrg-mastic]: https://datatracker.ietf.org/doc/draft-mouris-cfrg-mastic/01/
 
 use std::{
+    borrow::{Borrow, BorrowMut},
     error::Error,
     iter::zip,
     marker::PhantomData,
-    ops::{Add, BitAnd, BitXor, ControlFlow, Sub},
+    ops::{Add, BitAnd, BitXor, ControlFlow, Mul, Sub},
 };
 
 use rand_core::RngCore;
@@ -64,26 +65,25 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
         assert!(beta.0.len() == self.m, "bad beta size");
 
         // Key Generation.
-        let k0 = Key::gen(self.k)?;
-        let k1 = Key::gen(self.k)?;
+        let k0 = Key::gen(ControlBit(0), self.k)?;
+        let k1 = Key::gen(ControlBit(1), self.k)?;
+
+        let mut s_i = [Seed::from(&k0), Seed::from(&k1)];
+        let mut t_i = [ControlBit(0), ControlBit(1)];
 
         let mut cw = Vec::with_capacity(self.n);
         let mut cs = Vec::with_capacity(self.n);
 
-        const L: usize = 0;
-        const R: usize = 1;
-
-        let mut t_i = [ControlBit(0), ControlBit(1)];
-        let mut s_i = [Seed::from(&k0), Seed::from(&k1)];
         for i in 0..self.n {
-            let val = [self.prg(&s_i[0], binder), self.prg(&s_i[1], binder)];
-            let sl = [&val[0].0, &val[1].0];
-            let tl = [val[0].1, val[1].1];
-            let sr = [&val[0].2, &val[1].2];
-            let tr = [val[0].3, val[1].3];
+            // let val = [self.prg(&s_i[0], binder), self.prg(&s_i[1], binder)];
+            let Sequence(sl_0, tl_0, sr_0, tr_0) = self.prg(&s_i[0], binder);
+            let Sequence(sl_1, tl_1, sr_1, tr_1) = self.prg(&s_i[1], binder);
 
-            let s = [sl, sr];
-            let t = [tl, tr];
+            let s = [[&sl_0, &sl_1], [&sr_0, &sr_1]];
+            let t = [[tl_0, tl_1], [tr_0, tr_1]];
+
+            const L: usize = 0;
+            const R: usize = 1;
 
             let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
             let (diff, same) = if alpha_i == ControlBit(0) {
@@ -93,14 +93,19 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
             };
 
             let s_cw = s[same][0] ^ s[same][1];
-            let t_cw_l = tl[0] ^ tl[1] ^ alpha_i ^ ControlBit(1);
-            let t_cw_r = tr[0] ^ tr[1] ^ alpha_i;
+            let t_cw_l = tl_0 ^ tl_1 ^ alpha_i ^ ControlBit(1);
+            let t_cw_r = tr_0 ^ tr_1 ^ alpha_i;
             let t_cw = [t_cw_l, t_cw_r];
 
-            let s_tilde_i = [s[diff][0] ^ (&s_cw, t_i[0]), s[diff][1] ^ (&s_cw, t_i[1])];
+            let s_tilde_i = [
+                s[diff][0] ^ (t_i[0] & s_cw.borrow()).borrow(),
+                s[diff][1] ^ (t_i[1] & s_cw.borrow()).borrow(),
+            ];
 
-            t_i[0] = t[diff][0] ^ (t_i[0] & t_cw[diff]);
-            t_i[1] = t[diff][1] ^ (t_i[1] & t_cw[diff]);
+            t_i = [
+                t[diff][0] ^ (t_i[0] & t_cw[diff]),
+                t[diff][1] ^ (t_i[1] & t_cw[diff]),
+            ];
 
             let mut w_i = [
                 Weight(vec![F::zero(); self.m]),
@@ -110,8 +115,8 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
             (s_i[0], w_i[0]) = self.convert(&s_tilde_i[0], binder);
             (s_i[1], w_i[1]) = self.convert(&s_tilde_i[1], binder);
 
-            let mut w_cw = beta - &(&w_i[0] + &w_i[1]);
-            (&mut w_cw).conditional_negate(t_i[1].into());
+            let mut w_cw = beta - (w_i[0].borrow() + w_i[1].borrow()).borrow();
+            w_cw.borrow_mut().conditional_negate(t_i[1].into());
 
             cw.push(CorrWord {
                 s_cw,
@@ -120,13 +125,86 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
                 w_cw,
             });
 
-            let pi_0 = self.hash_one(alpha, i, &s_i[0]);
-            let pi_1 = self.hash_one(alpha, i, &s_i[1]);
-            let pi = &pi_0 ^ &pi_1;
-            cs.push(pi);
+            let pi = [
+                &self.hash_one(alpha, i, &s_i[0]),
+                &self.hash_one(alpha, i, &s_i[1]),
+            ];
+            cs.push(pi[0] ^ pi[1]);
         }
 
         Ok((Public { cw, cs }, k0, k1))
+    }
+
+    fn eval_next(
+        &self,
+        b: ControlBit,
+        public: &Public<F>,
+        i: usize,
+        s_i_1: &Seed,
+        t_i_1: ControlBit,
+        pi: &Proof,
+        alpha: &[u8],
+        binder: &[u8],
+    ) -> (Seed, ControlBit, Weight<F>, Proof) {
+        const L: usize = 0;
+        const R: usize = 1;
+
+        let s_cw = &public.cw[i].s_cw;
+        let t_cw_l = public.cw[i].t_cw_l;
+        let t_cw_r = public.cw[i].t_cw_r;
+        let w_cw = &public.cw[i].w_cw;
+        let cs = &public.cs[i];
+
+        let seq_tilde = self.prg(s_i_1, binder);
+        let seq_cw = Sequence(s_cw.clone(), t_cw_l, s_cw.clone(), t_cw_r);
+        let tau = &seq_tilde ^ (t_i_1 & seq_cw.borrow()).borrow();
+        let Sequence(sl, tl, sr, tr) = tau;
+
+        let s = [&sl, &sr];
+        let t = [tl, tr];
+
+        let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
+        let (s_tilde_i, t_i) = if alpha_i == ControlBit(0) {
+            (s[L], t[L])
+        } else {
+            (s[R], t[R])
+        };
+
+        let (s_i, w_i) = self.convert(s_tilde_i, binder);
+
+        let mut y_i = w_i.borrow() + (t_i * w_cw).borrow();
+        y_i.borrow_mut().conditional_negate(b.into());
+
+        let pi_tilde = &self.hash_one(alpha, i, &s_i);
+        let h2_input = pi ^ (pi_tilde ^ (t_i & cs).borrow()).borrow();
+        let out_pi = pi ^ self.hash_two(&h2_input).borrow();
+
+        (s_i, t_i, y_i, out_pi)
+    }
+
+    /// eval
+    pub fn eval(&self, alpha: &[u8], public: &Public<F>, key: &Key, binder: &[u8]) -> Share<F> {
+        assert!(alpha.len() == (self.n + 7) / 8, "bad alpha size");
+        assert!(key.1.len() == self.k, "bad key size");
+        assert!(public.cw.len() == self.n, "bad public key size");
+        assert!(public.cs.len() == self.n, "bad public key size");
+
+        let b = key.0;
+        let mut s_i = Seed::from(key);
+        let mut t_i = b;
+        let mut y = Weight::new(self.m);
+        let mut pi = Proof::new(2 * self.k);
+
+        for i in 0..self.n {
+            (s_i, t_i, y, pi) = self.eval_next(b, public, i, &s_i, t_i, &pi, alpha, binder);
+        }
+
+        Share(y, pi)
+    }
+
+    /// verify
+    pub fn verify(&self, a: &Share<F>, b: &Share<F>, beta: Weight<F>) -> bool {
+        &a.0 + &b.0 == beta && a.1 .0 == b.1 .0
     }
 
     fn prg(&self, seed: &Seed, binder: &[u8]) -> Sequence {
@@ -168,10 +246,38 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
 
         proof
     }
+
+    fn hash_two(&self, proof: &Proof) -> Proof {
+        let seed = Seed::new(self.k);
+        let dst = "vidpf proof adjustment".as_bytes();
+        let binder = &proof.0;
+
+        let mut out_proof = Proof::new(2 * self.k);
+        let mut prg = self.get_prg.get(&seed, dst, binder);
+        out_proof.fill(&mut prg);
+
+        out_proof
+    }
 }
+
+/// Share
+pub struct Share<F: FieldElement>(Weight<F>, Proof);
 
 /// Sequence
 pub struct Sequence(Seed, ControlBit, Seed, ControlBit);
+
+impl<'a> BitXor<&'a Sequence> for &'a Sequence {
+    type Output = Sequence;
+
+    fn bitxor(self, rhs: Self) -> Self::Output {
+        Sequence(
+            &self.0 ^ &rhs.0,
+            self.1 ^ rhs.1,
+            &self.2 ^ &rhs.2,
+            self.3 ^ rhs.3,
+        )
+    }
+}
 
 /// Fill
 pub trait Fill {
@@ -185,7 +291,8 @@ pub trait GetPRG {
     fn get(&self, seed: &Seed, dst: &[u8], binder: &[u8]) -> impl RngCore;
 }
 
-struct PrngFromXof<const SEED_SIZE: usize, X: Xof<SEED_SIZE>>(PhantomData<X>);
+/// PrngFromXof is a helper to specify a Xof implementer.
+pub struct PrngFromXof<const SEED_SIZE: usize, X: Xof<SEED_SIZE>>(PhantomData<X>);
 
 impl<const SEED_SIZE: usize, X: Xof<SEED_SIZE>> Default for PrngFromXof<SEED_SIZE, X> {
     fn default() -> Self {
@@ -195,7 +302,7 @@ impl<const SEED_SIZE: usize, X: Xof<SEED_SIZE>> Default for PrngFromXof<SEED_SIZ
 
 impl<const SEED_SIZE: usize, X: Xof<SEED_SIZE>> GetPRG for PrngFromXof<SEED_SIZE, X> {
     fn get(&self, seed: &Seed, dst: &[u8], binder: &[u8]) -> impl RngCore {
-        let xof_seed = XofSeed::get_decoded(&seed.0).unwrap();
+        let xof_seed = XofSeed::<SEED_SIZE>::get_decoded(&seed.0).unwrap();
         X::seed_stream(&xof_seed, dst, binder)
     }
 }
@@ -247,20 +354,20 @@ pub struct Public<F: FieldElement> {
 
 #[derive(Debug)]
 /// Key is the server's private key.
-pub struct Key(Vec<u8>);
+pub struct Key(ControlBit, Vec<u8>);
 
 impl Key {
     /// gen
-    pub fn gen(n: usize) -> Result<Self, Box<dyn Error>> {
+    pub fn gen(id: ControlBit, n: usize) -> Result<Self, Box<dyn Error>> {
         let mut k = vec![0u8; n];
         getrandom::getrandom(&mut k)?;
-        Ok(Key(k))
+        Ok(Key(id, k))
     }
 }
 
 impl From<&Key> for Seed {
     fn from(k: &Key) -> Self {
-        Seed(k.0.clone())
+        Seed(k.1.clone())
     }
 }
 
@@ -282,6 +389,53 @@ impl Fill for ControlBit {
     }
 }
 
+impl BitAnd<&Seed> for ControlBit {
+    type Output = Seed;
+
+    fn bitand(self, rhs: &Seed) -> Self::Output {
+        Seed(
+            rhs.0
+                .iter()
+                .map(|x| u8::conditional_select(x, &0, self.into()))
+                .collect(),
+        )
+    }
+}
+
+impl BitAnd<&Sequence> for ControlBit {
+    type Output = Sequence;
+
+    fn bitand(self, rhs: &Sequence) -> Self::Output {
+        Sequence(self & &rhs.0, self & rhs.1, self & &rhs.2, self & rhs.3)
+    }
+}
+
+impl BitAnd<&Proof> for ControlBit {
+    type Output = Proof;
+
+    fn bitand(self, rhs: &Proof) -> Self::Output {
+        Proof(
+            rhs.0
+                .iter()
+                .map(|x| u8::conditional_select(x, &0, self.into()))
+                .collect(),
+        )
+    }
+}
+
+impl<F: FieldElement> Mul<&Weight<F>> for ControlBit {
+    type Output = Weight<F>;
+
+    fn mul(self, rhs: &Weight<F>) -> Self::Output {
+        Weight(
+            rhs.0
+                .iter()
+                .map(|x| F::conditional_select(x, &F::zero(), self.into()))
+                .collect(),
+        )
+    }
+}
+
 impl BitAnd<ControlBit> for ControlBit {
     type Output = Self;
 
@@ -298,7 +452,7 @@ impl BitXor<ControlBit> for ControlBit {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Seed
 pub struct Seed(Vec<u8>);
 
@@ -320,18 +474,6 @@ impl<'a> BitXor<&'a Seed> for &'a Seed {
 
     fn bitxor(self, rhs: Self) -> Self::Output {
         Seed(zip(&self.0, &rhs.0).map(|(a, b)| *a ^ *b).collect())
-    }
-}
-
-impl<'a> BitXor<(&'a Seed, ControlBit)> for &'a Seed {
-    type Output = Seed;
-
-    fn bitxor(self, (rhs, bit): (&'a Seed, ControlBit)) -> Self::Output {
-        Seed(
-            zip(&self.0, &rhs.0)
-                .map(|(a, b)| u8::conditional_select(&(*a ^ *b), b, bit.into()))
-                .collect(),
-        )
     }
 }
 
@@ -381,6 +523,12 @@ impl<'a, F: FieldElement> Sub<&'a Weight<F>> for &'a Weight<F> {
     }
 }
 
+impl<F: FieldElement> PartialEq for Weight<F> {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.0.len() == rhs.0.len() && zip(&self.0, &rhs.0).all(|(a, b)| a == b)
+    }
+}
+
 //
 //
 //
@@ -411,16 +559,26 @@ mod tests {
         let alpha = "1".as_bytes();
         let beta = Weight::<Field128>([21.into(), 22.into(), 23.into()].into());
         let binder = "protocol using a vidpf".as_bytes();
+        println!("alpha: {:?}", alpha);
+        println!("beta: {:?}", beta);
 
         let vidpf = Params::new(SEC_PARAM, n, m, prng);
-        match vidpf.gen(&alpha, &beta, &binder) {
-            Ok((pp, k0, k1)) => {
-                println!("public: {:?}", pp);
-                println!("key0: {:?}", k0);
-                println!("key1: {:?}", k1);
-            }
-            Err(e) => println!("error: {:?}", e),
+        let Ok((public, k0, k1)) = vidpf.gen(alpha, &beta, &binder) else {
+            panic!("error: gen");
         };
+
+        println!("public: {:?}", public);
+        println!("key0: {:?}", k0);
+        println!("key1: {:?}", k1);
+
+        let share0 = vidpf.eval(alpha, &public, &k0, binder);
+        let share1 = vidpf.eval(alpha, &public, &k1, binder);
+        println!("y0: {:?}", share0.0);
+        println!("y1: {:?}", share1.0);
+        println!("y: {:?}", &share0.0 + &share1.0);
+        println!("p0: {:?}", share0.1);
+        println!("p1: {:?}", share1.1);
+        println!("verify: {:?}", vidpf.verify(&share0, &share1, beta));
     }
 
     #[test]
