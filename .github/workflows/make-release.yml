@@ -45,10 +45,12 @@ jobs:
       - run: cargo set-version --package prio --bump patch
       - run: git diff
       - name: Push changes
+        env:
+          ACTOR: '${{ github.actor }}'
         run: |
           git config user.email "divviup-github-automation@divviup.org"
           git config user.name "divviup-github-automation"
-          git commit -am "Bump libprio-rs patch version, triggered by @${{ github.actor }}"
+          git commit -am "Bump libprio-rs patch version, triggered by @$ACTOR"
           git push
 
   # This job is kept separate from the previous one to enable retrying it without
@@ -71,11 +73,13 @@ jobs:
           toolchain: stable
 
       - name: Create release
+        env:
+          GH_TOKEN: '${{ secrets.INAHGA_TEST }}'
+          TARGET_BRANCH: '${{ matrix.target_branch }}'
+          FIRST_BRANCH: '${{ fromJSON(inputs.target_branch)[0] }}'
         run: |
           # Determine the workspace version.
-          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[0].version')
-          TARGET_BRANCH="${{ matrix.target_branch }}"
-          FIRST_BRANCH="${{ fromJSON(inputs.target_branch)[0] }}"
+          VERSION=$(cargo metadata --no-deps | jq -er '.packages[0].version')
 
           LATEST=
           if [ "$TARGET_BRANCH" == "$FIRST_BRANCH" ]; then
@@ -88,5 +92,3 @@ jobs:
               --generate-notes \
               --target "$TARGET_BRANCH" \
               $LATEST
-        env:
-          GH_TOKEN: '${{ secrets.DIVVIUP_GITHUB_AUTOMATION_RELEASE_PAT }}'
