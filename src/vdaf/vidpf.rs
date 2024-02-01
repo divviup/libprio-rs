@@ -559,14 +559,14 @@ mod tests {
     use std::iter::zip;
 
     use crate::{
-        field::Field128,
+        field::{Field128, FieldElement},
         vdaf::{
             vidpf::{PrngFromXof, Weight},
             xof::XofTurboShake128,
         },
     };
 
-    use super::{Params, VERSION};
+    use super::{GetPRG, Params, VERSION};
 
     #[test]
     fn devel() {
@@ -607,6 +607,36 @@ mod tests {
         println!("p1: {:?}", share1.1);
         println!("p: {:?}", share0.1 .0 == share1.1 .0);
         println!("verify: {:?}", vidpf.verify(&share0, &share1, &beta));
+    }
+
+    #[test]
+    fn functionality() {
+        let prng = PrngFromXof::<16, XofTurboShake128>::default();
+        let vidpf: Params<Field128, PrngFromXof<16, XofTurboShake128>> = setup(prng);
+        happy_path(vidpf);
+    }
+
+    fn setup<F: FieldElement, P: GetPRG>(get_prg: P) -> Params<F, P> {
+        const SEC_PARAM: usize = 128;
+        let n: usize = 3;
+        let m: usize = 2;
+        let vidpf = Params::new(SEC_PARAM, n, m, get_prg);
+        vidpf
+    }
+
+    fn happy_path<F: FieldElement, P: GetPRG>(vidpf: Params<F, P>) {
+        let alpha = "1".as_bytes();
+        let beta = Weight::new(vidpf.m);
+        let binder = "Mock Protocol uses a VIDPF".as_bytes();
+
+        let (public, k0, k1) = vidpf.gen(alpha, &beta, binder).unwrap();
+        let share0 = vidpf.eval(alpha, &k0, &public, binder);
+        let share1 = vidpf.eval(alpha, &k1, &public, binder);
+
+        assert!(
+            vidpf.verify(&share0.0, &share1.0, &beta),
+            "verification failed"
+        )
     }
 
     #[test]
