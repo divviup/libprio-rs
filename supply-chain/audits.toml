@@ -219,6 +219,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.23.0 -> 1.23.1"
 
+[[audits.fixed]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.23.1 -> 1.25.0"
+
 [[audits.fixed-macro]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
