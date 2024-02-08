@@ -20,9 +20,6 @@ use crate::{
     codec::Decode, field::FieldElement, field::FieldElementExt, vdaf::xof::Seed as XofSeed,
 };
 
-/// VERSION is a tag.
-pub static VERSION: &str = "MyVIDPF";
-
 /// Params defines the global parameters of VIDPF instance.
 pub struct Params<
     // Field for operations.
@@ -68,144 +65,156 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
         let k0 = Key::gen_det(0xA, ControlBit(0), self.k)?;
         let k1 = Key::gen_det(0xA, ControlBit(1), self.k)?;
 
-        let s_i = [&mut Seed::from(&k0), &mut Seed::from(&k1)];
-        let t_i = &mut [ControlBit(0), ControlBit(1)];
-        let w_i = [&mut Weight::new(self.m), &mut Weight::new(self.m)];
+        let mut s_i = [Seed::from(&k0), Seed::from(&k1)];
+        let mut t_i = [k0.0, k1.0];
+        let mut w_i = [Weight::new(self.m), Weight::new(self.m)];
 
         let mut cw = Vec::with_capacity(self.n);
         let mut cs = Vec::with_capacity(self.n);
 
         for i in 0..self.n {
-            let Sequence(sl_0, tl_0, sr_0, tr_0) = self.prg(s_i[0], binder);
-            let Sequence(sl_1, tl_1, sr_1, tr_1) = self.prg(s_i[1], binder);
-
-            let s = [[&sl_0, &sl_1], [&sr_0, &sr_1]];
-            let t = [[tl_0, tl_1], [tr_0, tr_1]];
-
-            const L: usize = 0;
-            const R: usize = 1;
-
             let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
-            let (diff, same) = if alpha_i == ControlBit(0) {
-                (L, R)
-            } else {
-                (R, L)
-            };
-
-            let s_cw = s[same][0] ^ s[same][1];
-            let t_cw_l = tl_0 ^ tl_1 ^ alpha_i ^ ControlBit(1);
-            let t_cw_r = tr_0 ^ tr_1 ^ alpha_i;
-            let t_cw = [t_cw_l, t_cw_r];
-
-            let s_tilde_i_0 = s[diff][0] ^ (t_i[0] & s_cw.borrow()).borrow();
-            let s_tilde_i_1 = s[diff][1] ^ (t_i[1] & s_cw.borrow()).borrow();
-
-            t_i[0] = t[diff][0] ^ (t_i[0] & t_cw[diff]);
-            t_i[1] = t[diff][1] ^ (t_i[1] & t_cw[diff]);
-
-            (*s_i[0], *w_i[0]) = self.convert(&s_tilde_i_0, binder);
-            (*s_i[1], *w_i[1]) = self.convert(&s_tilde_i_1, binder);
-
-            let mut w_cw = (beta - w_i[0]).borrow() + w_i[1];
-            w_cw.borrow_mut().conditional_negate(t_i[1].into());
-
-            cw.push(CorrWord {
-                s_cw,
-                t_cw_l,
-                t_cw_r,
-                w_cw,
-            });
-
-            let pi = [
-                &self.hash_one(alpha, i, s_i[0]),
-                &self.hash_one(alpha, i, s_i[1]),
-            ];
-            cs.push(pi[0] ^ pi[1]);
+            cw.push(self.gen_next(&mut s_i, &mut t_i, &mut w_i, alpha_i, beta, binder));
+            cs.push(self.gen_proof_next(alpha, i, &s_i));
         }
 
         Ok((Public { cw, cs }, k0, k1))
     }
 
-    fn eval_next(
+    fn gen_next(
         &self,
-        b: ControlBit,
-        public: &Public<F>,
-        i: usize,
-        s_i_1: Seed,
-        t_i_1: ControlBit,
-        pi: Proof,
-        alpha: &[u8],
+        s_i: &mut [Seed; 2],
+        t_i: &mut [ControlBit; 2],
+        w_i: &mut [Weight<F>; 2],
+        alpha_i: ControlBit,
+        beta: &Weight<F>,
         binder: &[u8],
-    ) -> (Seed, ControlBit, Weight<F>, Proof) {
+    ) -> CorrWord<F> {
+        let Sequence(sl_0, tl_0, sr_0, tr_0) = self.prg(&s_i[0], binder);
+        let Sequence(sl_1, tl_1, sr_1, tr_1) = self.prg(&s_i[1], binder);
+
+        let s = [[&sl_0, &sl_1], [&sr_0, &sr_1]];
+        let t = [[tl_0, tl_1], [tr_0, tr_1]];
+
         const L: usize = 0;
         const R: usize = 1;
 
-        let s_cw = &public.cw[i].s_cw;
-        let t_cw_l = public.cw[i].t_cw_l;
-        let t_cw_r = public.cw[i].t_cw_r;
-        let w_cw = &public.cw[i].w_cw;
-        let cs = &public.cs[i];
+        let (diff, same) = if alpha_i == ControlBit(0) {
+            (L, R)
+        } else {
+            (R, L)
+        };
 
-        let seq_tilde = &self.prg(&s_i_1, binder);
-        let seq_cw = Sequence(s_cw.clone(), t_cw_l, s_cw.clone(), t_cw_r);
-        let tau = seq_tilde ^ (t_i_1 & seq_cw.borrow()).borrow();
+        let s_cw = s[same][0] ^ s[same][1];
+        let t_cw_l = tl_0 ^ tl_1 ^ alpha_i ^ ControlBit(1);
+        let t_cw_r = tr_0 ^ tr_1 ^ alpha_i;
+        let t_cw = [t_cw_l, t_cw_r];
+
+        let s_tilde_i_0 = s[diff][0] ^ (t_i[0] & s_cw.borrow()).borrow();
+        let s_tilde_i_1 = s[diff][1] ^ (t_i[1] & s_cw.borrow()).borrow();
+
+        t_i[0] = t[diff][0] ^ (t_i[0] & t_cw[diff]);
+        t_i[1] = t[diff][1] ^ (t_i[1] & t_cw[diff]);
+
+        (s_i[0], w_i[0]) = self.convert(&s_tilde_i_0, binder);
+        (s_i[1], w_i[1]) = self.convert(&s_tilde_i_1, binder);
+
+        let mut w_cw = (beta - &w_i[0]).borrow() + &w_i[1];
+        w_cw.borrow_mut().conditional_negate(t_i[1].into());
+
+        CorrWord {
+            s_cw,
+            t_cw_l,
+            t_cw_r,
+            w_cw,
+        }
+    }
+
+    fn gen_proof_next(&self, alpha: &[u8], level: usize, s_i: &[Seed; 2]) -> Proof {
+        let pi_0 = &self.hash_one(alpha, level, &s_i[0]);
+        let pi_1 = &self.hash_one(alpha, level, &s_i[1]);
+        pi_0 ^ pi_1
+    }
+
+    fn eval_next(
+        &self,
+        b: ControlBit,
+        alpha_i: ControlBit,
+        s_i: &mut Seed,
+        t_i: &mut ControlBit,
+        cw: &CorrWord<F>,
+        binder: &[u8],
+    ) -> Weight<F> {
+        const L: usize = 0;
+        const R: usize = 1;
+
+        let CorrWord {
+            s_cw,
+            t_cw_l,
+            t_cw_r,
+            w_cw,
+        } = cw;
+
+        let seq_tilde = &self.prg(s_i, binder);
+        let seq_cw = &Sequence(s_cw.clone(), *t_cw_l, s_cw.clone(), *t_cw_r);
+        let tau = seq_tilde ^ (*t_i & seq_cw).borrow();
         let Sequence(sl, tl, sr, tr) = tau;
 
         let s = [&sl, &sr];
         let t = [tl, tr];
 
-        let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
-        let (s_tilde_i, t_i) = if alpha_i == ControlBit(0) {
+        let s_tilde_i;
+        (s_tilde_i, *t_i) = if alpha_i == ControlBit(0) {
             (s[L], t[L])
         } else {
             (s[R], t[R])
         };
 
-        let (s_i, w_i) = self.convert(s_tilde_i, binder);
+        let w_i;
+        (*s_i, w_i) = self.convert(s_tilde_i, binder);
 
-        let mut y_i = w_i.borrow() + (t_i * w_cw).borrow();
+        let mut y_i = w_i.borrow() + (*t_i * w_cw).borrow();
         y_i.borrow_mut().conditional_negate(b.into());
 
-        let pi_tilde = &self.hash_one(alpha, i, &s_i);
-        let h2_input = pi.borrow() ^ (pi_tilde ^ (t_i & cs).borrow()).borrow();
-        let out_pi = pi.borrow() ^ self.hash_two(&h2_input).borrow();
+        y_i
+    }
 
-        (s_i, t_i, y_i, out_pi)
+    fn proof_next(
+        &self,
+        pi: &Proof,
+        alpha: &[u8],
+        level: usize,
+        si: &Seed,
+        ti: ControlBit,
+        cs: &Proof,
+    ) -> Proof {
+        let pi_tilde = &self.hash_one(alpha, level, si);
+        let h2_input = pi ^ (pi_tilde ^ (ti & cs).borrow()).borrow();
+        let out_pi = pi ^ self.hash_two(&h2_input).borrow();
+        out_pi
     }
 
     /// eval
-    pub fn eval(
-        &self,
-        alpha: &[u8],
-        key: &Key,
-        public: &Public<F>,
-        binder: &[u8],
-    ) -> (Share<F>, Aux<F>) {
+    pub fn eval(&self, alpha: &[u8], key: &Key, public: &Public<F>, binder: &[u8]) -> Share<F> {
         assert!(alpha.len() == (self.n + 7) / 8, "bad alpha size");
         assert!(key.1.len() == self.k, "bad key size");
         assert!(public.cw.len() == self.n, "bad public key size");
         assert!(public.cs.len() == self.n, "bad public key size");
 
         let b = key.0;
-        let mut s_i_1 = Seed::from(key);
-        let mut t_i_1 = b;
-        let mut pi_i_1 = Proof::new(2 * self.k);
+        let mut s_i = Seed::from(key);
+        let mut t_i = b;
 
-        let mut list_y = Vec::<Weight<F>>::with_capacity(self.n);
+        let mut y = Weight::new(self.m);
+        let mut pi = Proof::new(2 * self.k);
 
         for i in 0..self.n {
-            let (s_i, t_i, y, pi_i) =
-                self.eval_next(b, public, i, s_i_1, t_i_1, pi_i_1, alpha, binder);
-            s_i_1 = s_i;
-            t_i_1 = t_i;
-            pi_i_1 = pi_i;
-            println!("b: {:?} y_i: {:?}", b, &y);
-            list_y.push(y);
+            let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
+            y = self.eval_next(b, alpha_i, &mut s_i, &mut t_i, &public.cw[i], binder);
+            pi = self.proof_next(&pi, alpha, i, &s_i, t_i, &public.cs[i]);
         }
-        let yy = list_y[self.n - 1].clone();
-        println!("b: {:?} y_i: {:?}\n", b, yy);
 
-        (Share(yy, pi_i_1), Aux(list_y))
+        Share(y, pi)
     }
 
     /// verify checks that the proofs are equal and that the shares of beta add up to beta.
@@ -266,9 +275,7 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
     }
 }
 
-/// Aux
-pub struct Aux<F: FieldElement>(Vec<Weight<F>>);
-
+#[derive(Debug)]
 /// Share
 pub struct Share<F: FieldElement>(Weight<F>, Proof);
 
@@ -493,7 +500,7 @@ impl<'a> BitXor<&'a Seed> for &'a Seed {
 
 #[derive(Debug, Clone)]
 /// Weight
-pub struct Weight<F: FieldElement>(Vec<F>);
+pub struct Weight<F: FieldElement>(pub Vec<F>);
 
 impl<F: FieldElement> Weight<F> {
     /// new
@@ -545,19 +552,8 @@ impl<F: FieldElement> PartialEq for Weight<F> {
     }
 }
 
-//
-//
-//
-//
-//
-//
-//
-//
-
 #[cfg(test)]
 mod tests {
-    use std::iter::zip;
-
     use crate::{
         field::{Field128, FieldElement},
         vdaf::{
@@ -566,7 +562,7 @@ mod tests {
         },
     };
 
-    use super::{GetPRG, Params, VERSION};
+    use super::Params;
 
     #[test]
     fn devel() {
@@ -589,15 +585,15 @@ mod tests {
         println!("key0: {:?}", k0);
         println!("key1: {:?}", k1);
 
-        let (share0, aux0) = vidpf.eval(alpha, &k0, &public, binder);
-        let (share1, aux1) = vidpf.eval(alpha, &k1, &public, binder);
+        let share0 = vidpf.eval(alpha, &k0, &public, binder);
+        let share1 = vidpf.eval(alpha, &k1, &public, binder);
 
-        println!(
-            "aux: {:?}",
-            zip(aux0.0, aux1.0)
-                .map(|(a, b)| &a + &b)
-                .collect::<Vec<Weight<Field128>>>()
-        );
+        // println!(
+        //     "aux: {:?}",
+        //     zip(aux0.0, aux1.0)
+        //         .map(|(a, b)| &a + &b)
+        //         .collect::<Vec<Weight<Field128>>>()
+        // );
 
         println!("y0: {:?}", share0.0);
         println!("y1: {:?}", share1.0);
@@ -609,24 +605,19 @@ mod tests {
         println!("verify: {:?}", vidpf.verify(&share0, &share1, &beta));
     }
 
-    #[test]
-    fn functionality() {
+    fn setup() -> Params<Field128, PrngFromXof<16, XofTurboShake128>> {
         let prng = PrngFromXof::<16, XofTurboShake128>::default();
-        let vidpf: Params<Field128, PrngFromXof<16, XofTurboShake128>> = setup(prng);
-        happy_path(vidpf);
-    }
-
-    fn setup<F: FieldElement, P: GetPRG>(get_prg: P) -> Params<F, P> {
         const SEC_PARAM: usize = 128;
-        let n: usize = 3;
-        let m: usize = 2;
-        let vidpf = Params::new(SEC_PARAM, n, m, get_prg);
-        vidpf
+        const N: usize = 3;
+        const M: usize = 2;
+        Params::new(SEC_PARAM, N, M, prng)
     }
 
-    fn happy_path<F: FieldElement, P: GetPRG>(vidpf: Params<F, P>) {
-        let alpha = "1".as_bytes();
-        let beta = Weight::new(vidpf.m);
+    #[test]
+    fn happy_path() {
+        let vidpf = setup();
+        let alpha: &[u8] = &[0xF];
+        let beta = Weight(vec![Field128::one(); vidpf.m]);
         let binder = "Mock Protocol uses a VIDPF".as_bytes();
 
         let (public, k0, k1) = vidpf.gen(alpha, &beta, binder).unwrap();
@@ -634,13 +625,30 @@ mod tests {
         let share1 = vidpf.eval(alpha, &k1, &public, binder);
 
         assert!(
-            vidpf.verify(&share0.0, &share1.0, &beta),
+            vidpf.verify(&share0, &share1, &beta) == true,
             "verification failed"
         )
     }
 
     #[test]
-    fn version() {
-        assert_eq!(VERSION, "MyVIDPF")
+    fn bad_query() {
+        let vidpf = setup();
+        let alpha: &[u8] = &[0xF];
+        let alpha_bad: &[u8] = &[0x0];
+        let beta = Weight(vec![Field128::one(); vidpf.m]);
+        let binder = "Mock Protocol uses a VIDPF".as_bytes();
+
+        let (public, k0, k1) = vidpf.gen(alpha, &beta, binder).unwrap();
+        let share0 = vidpf.eval(alpha_bad, &k0, &public, binder);
+        let share1 = vidpf.eval(alpha_bad, &k1, &public, binder);
+
+        assert!(
+            &share0.0 + &share1.0 == Weight::new(vidpf.m),
+            "shares must add up to zero"
+        );
+        assert!(
+            vidpf.verify(&share0, &share1, &beta) == false,
+            "verification passed, but it should failed"
+        )
     }
 }
