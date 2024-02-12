@@ -361,6 +361,11 @@ who = "Ameer Ghani <inahga@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.16 -> 0.2.17"
 
+[[audits.num-traits]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.17 -> 0.2.18"
+
 [[audits.once_cell]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
