@@ -461,6 +461,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.11 -> 0.2.12"
 
+[[audits.isrg.audits.num-integer]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.45 -> 0.1.46"
+
 [[audits.isrg.audits.num-traits]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
