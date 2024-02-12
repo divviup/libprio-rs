@@ -20,7 +20,7 @@ fixed = { version = "1.25", optional = true }
 getrandom = { version = "0.2.12", features = ["std"] }
 hmac = { version = "0.12.1", optional = true }
 num-bigint = { version = "0.4.4", optional = true, features = ["rand", "serde"] }
-num-integer = { version = "0.1.45", optional = true }
+num-integer = { version = "0.1.46", optional = true }
 num-iter = { version = "0.1.43", optional = true }
 num-rational = { version = "0.4.1", optional = true, features = ["serde"] }
 num-traits = { version = "0.2.18", optional = true }
