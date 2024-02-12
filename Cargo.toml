@@ -7,7 +7,7 @@ exclude = ["/supply-chain"]
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0"
 repository = "https://github.com/divviup/libprio-rs"
-rust-version = "1.64"
+rust-version = "1.71"
 resolver = "2"
 
 [dependencies]
@@ -18,7 +18,7 @@ cmac = { version = "0.7.2", optional = true }
 base64 = "0.21.7"
 byteorder = "1.5.0"
 fiat-crypto = { version = "0.2.6", optional = true }
-fixed = { version = "1.23", optional = true }
+fixed = { version = "1.25", optional = true }
 getrandom = { version = "0.2.12", features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
 sha3 = "0.10.8"
