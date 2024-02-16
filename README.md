@@ -69,8 +69,13 @@ increases (e.g., 0.10 to 0.11).
 
 This crate defines the following feature flags:
 
-|Name|Default feature?|Description|
-|---|---|---|
-|`crypto-dependencies`|Yes|Enables dependencies on various RustCrypto crates, and uses them to implement `XofTurboShake128` to support VDAFs.|
-|`experimental`|No|Certain experimental APIs are guarded by this feature. They may undergo breaking changes in future patch releases, as an exception to semantic versioning.|
-|`multithreaded`|No|Enables certain Prio3 VDAF implementations that use `rayon` for parallelization of gadget evaluations.|
+|Name|Default feature?|Description|Semver stable?|
+|---|---|---|---|
+|`crypto-dependencies`|Yes|Enables dependencies on various RustCrypto crates, and uses them to implement `XofTurboShake128` to support VDAFs.|✅|
+|`experimental`|No|Certain experimental APIs are guarded by this feature.|❌|
+|`multithreaded`|No|Enables certain Prio3 VDAF implementations that use `rayon` for parallelization of gadget evaluations.|✅|
+|`test-util`|No|Enables test utilities like [the `dummy::Vdaf`][dummy-vdaf].|❌|
+
+Features that are not marked as "Semver stable" may undergo breaking changes in future patch releases, as an exception to semantic versioning.
+
+[dummy-vdaf]: https://docs.rs/prio/latest/prio/vdaf/dummy/index.html
