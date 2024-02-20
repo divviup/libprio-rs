@@ -21,6 +21,16 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.8.2 -> 0.8.3"
 
+[[audits.aes]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.8.3 -> 0.8.4"
+notes = """
+Change affects some unsafe code. The only functional change is to add an
+assertion checking alignment and to change an `as *mut u32` cast to a
+call to `std::pointer::cast`.
+"""
+
 [[audits.aes-gcm]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
 criteria = "safe-to-deploy"
