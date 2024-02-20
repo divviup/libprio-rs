@@ -12,6 +12,7 @@ resolver = "2"
 
 [dependencies]
 aes = { version = "0.8.3", optional = true }
+allocation-counter = { version = "0", optional = true }
 bitvec = { version = "1.0.1", optional = true }
 byteorder = "1.5.0"
 ctr = { version = "0.9.2", optional = true }
@@ -57,6 +58,7 @@ experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", 
 multithreaded = ["rayon"]
 crypto-dependencies = ["aes", "ctr", "hmac", "sha2"]
 test-util = ["hex", "rand", "serde_json"]
+count-allocations = ["allocation-counter"]
 
 [workspace]
 members = [".", "binaries"]

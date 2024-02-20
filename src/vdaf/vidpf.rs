@@ -22,8 +22,6 @@ use crate::{
 
 /// Params defines the global parameters of VIDPF instance.
 pub struct Params<
-    // Field for operations.
-    F: FieldElement,
     // Primitive to construct a pseudorandom generator.
     P: GetPRG,
 > {
@@ -35,11 +33,9 @@ pub struct Params<
     k: usize,
     // Constructor of a pseudorandom generator.
     get_prg: P,
-
-    _pd: PhantomData<F>,
 }
 
-impl<F: FieldElement, P: GetPRG> Params<F, P> {
+impl<P: GetPRG> Params<P> {
     /// new
     pub fn new(sec_param: usize, n: usize, m: usize, get_prg: P) -> Self {
         Self {
@@ -47,12 +43,11 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
             m,
             k: sec_param / 8,
             get_prg,
-            _pd: PhantomData::<F>,
         }
     }
 
     /// gen
-    pub fn gen(
+    pub fn gen<F: FieldElement>(
         &self,
         alpha: &[u8],
         beta: &Weight<F>,
@@ -75,13 +70,13 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
         for i in 0..self.n {
             let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
             cw.push(self.gen_next(&mut s_i, &mut t_i, &mut w_i, alpha_i, beta, binder));
-            cs.push(self.gen_proof_next(alpha, i, &s_i));
+            cs.push(self.gen_proof(alpha, i, &s_i));
         }
 
         Ok((Public { cw, cs }, k0, k1))
     }
 
-    fn gen_next(
+    fn gen_next<F: FieldElement>(
         &self,
         s_i: &mut [Seed; 2],
         t_i: &mut [ControlBit; 2],
@@ -130,13 +125,13 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
         }
     }
 
-    fn gen_proof_next(&self, alpha: &[u8], level: usize, s_i: &[Seed; 2]) -> Proof {
+    fn gen_proof(&self, alpha: &[u8], level: usize, s_i: &[Seed; 2]) -> Proof {
         let pi_0 = &self.hash_one(alpha, level, &s_i[0]);
         let pi_1 = &self.hash_one(alpha, level, &s_i[1]);
         pi_0 ^ pi_1
     }
 
-    fn eval_next(
+    fn eval_next<F: FieldElement>(
         &self,
         b: ControlBit,
         alpha_i: ControlBit,
@@ -195,7 +190,13 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
     }
 
     /// eval
-    pub fn eval(&self, alpha: &[u8], key: &Key, public: &Public<F>, binder: &[u8]) -> Share<F> {
+    pub fn eval<F: FieldElement>(
+        &self,
+        alpha: &[u8],
+        key: &Key,
+        public: &Public<F>,
+        binder: &[u8],
+    ) -> Share<F> {
         assert!(alpha.len() == (self.n + 7) / 8, "bad alpha size");
         assert!(key.1.len() == self.k, "bad key size");
         assert!(public.cw.len() == self.n, "bad public key size");
@@ -218,7 +219,7 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
     }
 
     /// verify checks that the proofs are equal and that the shares of beta add up to beta.
-    pub fn verify(&self, a: &Share<F>, b: &Share<F>, beta: &Weight<F>) -> bool {
+    pub fn verify<F: FieldElement>(&self, a: &Share<F>, b: &Share<F>, beta: &Weight<F>) -> bool {
         &a.0 + &b.0 == *beta && a.1 .0 == b.1 .0
     }
 
@@ -237,7 +238,7 @@ impl<F: FieldElement, P: GetPRG> Params<F, P> {
         Sequence(sl, tl, sr, tr)
     }
 
-    fn convert(&self, seed: &Seed, binder: &[u8]) -> (Seed, Weight<F>) {
+    fn convert<F: FieldElement>(&self, seed: &Seed, binder: &[u8]) -> (Seed, Weight<F>) {
         let dst = "101".as_bytes();
         let mut out_seed = Seed::new(self.k);
         let mut weight = Weight::new(self.m);
@@ -605,7 +606,7 @@ mod tests {
         println!("verify: {:?}", vidpf.verify(&share0, &share1, &beta));
     }
 
-    fn setup() -> Params<Field128, PrngFromXof<16, XofTurboShake128>> {
+    fn setup() -> Params<PrngFromXof<16, XofTurboShake128>> {
         let prng = PrngFromXof::<16, XofTurboShake128>::default();
         const SEC_PARAM: usize = 128;
         const N: usize = 3;
@@ -649,6 +650,33 @@ mod tests {
         assert!(
             vidpf.verify(&share0, &share1, &beta) == false,
             "verification passed, but it should failed"
+        )
+    }
+
+    #[cfg(feature = "count-allocations")]
+    #[test]
+    pub fn mem_alloc() {
+        let vidpf = setup();
+        let alpha: &[u8] = &[0xF];
+        let beta = Weight(vec![Field128::one(); vidpf.m]);
+        let binder = "Mock Protocol uses a VIDPF".as_bytes();
+
+        // Gen:  AllocationInfo { count_total: 86, count_current: 0, count_max: 24, bytes_total: 2000, bytes_current: 0, bytes_max: 704 }
+        // Eval: AllocationInfo { count_total: 72, count_current: 0, count_max: 12, bytes_total: 1640, bytes_current: 0, bytes_max: 272 }
+
+        println!(
+            "Gen:  {:?}",
+            allocation_counter::measure(|| {
+                let _ = vidpf.gen(alpha, &beta, binder).unwrap();
+            })
+        );
+
+        let (public, k0, _) = vidpf.gen(alpha, &beta, binder).unwrap();
+        println!(
+            "Eval: {:?}",
+            allocation_counter::measure(|| {
+                let _ = vidpf.eval(alpha, &k0, &public, binder);
+            })
         )
     }
 }
