@@ -440,6 +440,16 @@ criteria = "safe-to-run"
 version = "2.3.2"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
+[[audits.isrg.audits.aes]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.8.3 -> 0.8.4"
+notes = """
+Change affects some unsafe code. The only functional change is to add an
+assertion checking alignment and to change an `as *mut u32` cast to a
+call to `std::pointer::cast`.
+"""
+
 [[audits.isrg.audits.base64]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
