@@ -207,6 +207,10 @@ notes = "This is only used when the \"test-util\" feature is enabled."
 version = "0.17.7"
 criteria = "safe-to-deploy"
 
+[[exemptions.ring]]
+version = "0.17.8"
+criteria = "safe-to-deploy"
+
 [[exemptions.spin]]
 version = "0.9.8"
 criteria = "safe-to-deploy"
