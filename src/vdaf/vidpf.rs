@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementations of VIDPF specified in [[draft-mouris-cfrg-mastic]].
+//! Implementation of a Verifiable Incremental Distributed Point Function (VIDPF).
+//!
+//! VIPDF is specified in [[draft-mouris-cfrg-mastic]].
 //!
 //! [draft-mouris-cfrg-mastic]: https://datatracker.ietf.org/doc/draft-mouris-cfrg-mastic/01/
 
@@ -20,8 +22,25 @@ use crate::{
     codec::Decode, field::FieldElement, field::FieldElementExt, vdaf::xof::Seed as XofSeed,
 };
 
-/// Params defines the global parameters of a VIDPF instance.
-pub struct Params<P, C>
+/// Creates a new instance of a VIDPF.
+pub fn new_vidpf<P, C>(sec_param: usize, prng_ctor: P, bind_info: Vec<u8>) -> VidpfInstance<P, C>
+where
+    P: GetPRNG,
+    C: Codomain,
+    for<'a> &'a C: CodomainOps<C>,
+{
+    VidpfInstance {
+        key_size: sec_param / 8,
+        seed_size: sec_param / 8,
+        proof_size: 2 * (sec_param / 8),
+        prng_ctor,
+        bind_info,
+        _cd: PhantomData,
+    }
+}
+
+/// VidpfInstance contains the global parameters of a VIDPF instance.
+pub struct VidpfInstance<P, C>
 where
     // Primitive to construct a pseudorandom generator.
     P: GetPRNG,
@@ -43,25 +62,18 @@ where
     _cd: PhantomData<C>,
 }
 
-impl<P: GetPRNG, C> Params<P, C>
+impl<P, C> VidpfInstance<P, C>
 where
+    P: GetPRNG,
     C: Codomain,
     for<'a> &'a C: CodomainOps<C>,
 {
-    /// new
-    pub fn new(sec_param: usize, prng_ctor: P, bind_info: Vec<u8>) -> Self {
-        Self {
-            key_size: sec_param / 8,
-            seed_size: sec_param / 8,
-            proof_size: 2 * (sec_param / 8),
-            prng_ctor,
-            bind_info,
-            _cd: PhantomData,
-        }
-    }
-
-    /// gen
+    /// The gen method splits the point function `F(alpha) = beta` in two private keys
+    /// used by the aggregation servers, and a common public key.
+    /// The beta value muist be a non-zero value.
     pub fn gen(&self, alpha: &[u8], beta: &C) -> Result<(PublicKey<C>, Key, Key), Box<dyn Error>> {
+        assert!(!beta.is_zero(), "beta cannot be zero");
+
         // Key Generation.
         let k0 = Key::gen(ServerID::S0, self.key_size)?;
         let k1 = Key::gen(ServerID::S1, self.key_size)?;
@@ -110,37 +122,34 @@ where
                 t_cw_r,
                 w_cw,
             };
-
-            let pi_i = self.gen_proof(alpha, i, &s_i);
-
             cw.push(cw_i);
+
+            let pi_0 = &self.hash_one(alpha, i, &s_i[0]);
+            let pi_1 = &self.hash_one(alpha, i, &s_i[1]);
+            let pi_i = pi_0 ^ pi_1;
             cs.push(pi_i);
         }
 
         Ok((PublicKey { cw, cs }, k0, k1))
     }
 
-    fn gen_proof(&self, alpha: &[u8], level: usize, s_i: &[Seed; 2]) -> Proof {
-        let pi_0 = &self.hash_one(alpha, level, &s_i[0]);
-        let pi_1 = &self.hash_one(alpha, level, &s_i[1]);
-        pi_0 ^ pi_1
-    }
-
-    /// eval_next
+    /// eval_next queries one bit `(alpha_i)` in the evaluation tree at the level
+    /// corresponding to the current state `(s_i,t_i,cw_i)`. This evaluation updates
+    /// the state (s_i,t_i) and returns a new secret-shared value `(y)`.
     pub fn eval_next(
         &self,
         b: ServerID,
         alpha_i: ControlBit,
         s_i: &mut Seed,
         t_i: &mut ControlBit,
-        cw: &CorrectionWord<C>,
+        cw_i: &CorrectionWord<C>,
     ) -> C {
         let CorrectionWord {
             s_cw,
             t_cw_l,
             t_cw_r,
             w_cw,
-        } = cw;
+        } = cw_i;
 
         let seq_tilde = &self.prg(s_i);
         let seq_cw = &Sequence(s_cw.clone(), *t_cw_l, s_cw.clone(), *t_cw_r);
@@ -158,7 +167,8 @@ where
         y_i
     }
 
-    /// proof_next
+    /// proof_next generates a new proof at the current level `(alpha,level)` from the
+    /// current state `(s_i,t_i,cs_i)` and current proof `(pi)`.
     pub fn proof_next(
         &self,
         pi: &Proof,
@@ -166,15 +176,15 @@ where
         level: usize,
         si: &Seed,
         ti: ControlBit,
-        cs: &Proof,
+        cs_i: &Proof,
     ) -> Proof {
         let pi_tilde = &self.hash_one(alpha, level, si);
-        let h2_input = pi ^ (pi_tilde ^ (ti & cs).borrow()).borrow();
+        let h2_input = pi ^ (pi_tilde ^ (ti & cs_i).borrow()).borrow();
         let out_pi = pi ^ self.hash_two(&h2_input).borrow();
         out_pi
     }
 
-    /// eval
+    /// Eval queries the evaluation tree with input alpha and produces a share of the output value.
     pub fn eval(&self, alpha: &[u8], key: &Key, pk: &PublicKey<C>) -> Share<C> {
         assert!(key.value.len() == self.key_size, "bad key size");
 
@@ -197,7 +207,7 @@ where
         Share { y, pi }
     }
 
-    /// verify checks that the proofs are equal and that the shares of beta add up to beta.
+    /// verify checks whether the proofs are equal and that the shares add up to beta.
     pub fn verify(&self, a: &Share<C>, b: &Share<C>, beta: &C) -> bool {
         assert!(a.pi.0.len() == self.proof_size);
         assert!(b.pi.0.len() == self.proof_size);
@@ -280,14 +290,8 @@ where
     pub pi: Proof,
 }
 
-/// Fill
-pub trait Fill {
-    /// fill
-    fn fill(&mut self, r: &mut impl RngCore);
-}
-
 /// CodomainOps
-pub trait CodomainOps<C: ?Sized>: Sized + Add<Output = C> + Sub<Output = C> {}
+pub trait CodomainOps<C>: Sized + Add<Output = C> + Sub<Output = C> {}
 
 /// Codomain
 pub trait Codomain: Fill + PartialEq + ConditionallyNegatable + ConditionallySelectable
@@ -296,6 +300,14 @@ where
 {
     /// new
     fn new() -> Self;
+    /// is_zero
+    fn is_zero(self) -> bool;
+}
+
+/// Fill populates a struct from a PRNG source.
+pub trait Fill {
+    /// fill reads as many bytes as needed from a PRNG source to fill the [Self] struct.
+    fn fill(&mut self, r: &mut impl RngCore);
 }
 
 /// GetPRG
@@ -523,13 +535,16 @@ impl BitXor for &Seed {
 
 #[derive(Debug, Clone, Copy)]
 /// Weight
-pub struct Weight<F: FieldElement, const N: usize>([F; N]);
+pub struct Weight<F: FieldElement, const N: usize>(pub [F; N]);
 
 impl<F: FieldElement, const N: usize> CodomainOps<Weight<F, N>> for &Weight<F, N> {}
 
 impl<F: FieldElement, const N: usize> Codomain for Weight<F, N> {
     fn new() -> Self {
         Self([F::zero(); N])
+    }
+    fn is_zero(self) -> bool {
+        self.0 == [F::zero(); N]
     }
 }
 
@@ -591,58 +606,16 @@ mod tests {
     use crate::{
         field::Field128,
         vdaf::{
-            vidpf::{Codomain, PrngFromXof, Weight},
+            vidpf::{new_vidpf, Codomain, PrngFromXof, VidpfInstance, Weight},
             xof::XofTurboShake128,
         },
     };
 
-    use super::Params;
-
-    #[test]
-    fn devel() {
-        const SEC_PARAM: usize = 128;
-        let prng = PrngFromXof::<16, XofTurboShake128>::default();
-        let alpha = "1".as_bytes();
-        let beta = Weight::<Field128, 3>([21.into(), 22.into(), 23.into()]);
-        let binder = "protocol using a vidpf".as_bytes().to_vec();
-        println!("alpha: {:?}", alpha);
-        println!("beta: {:?}", beta);
-
-        let vidpf: Params<PrngFromXof<16, XofTurboShake128>, Weight<Field128, 3>> =
-            Params::new(SEC_PARAM, prng, binder);
-        let Ok((public, k0, k1)) = vidpf.gen(alpha, &beta) else {
-            panic!("error: gen");
-        };
-
-        println!("public: {:?}", public);
-        println!("key0: {:?}", k0);
-        println!("key1: {:?}", k1);
-
-        let share0 = vidpf.eval(alpha, &k0, &public);
-        let share1 = vidpf.eval(alpha, &k1, &public);
-
-        // println!(
-        //     "aux: {:?}",
-        //     zip(aux0.0, aux1.0)
-        //         .map(|(a, b)| &a + &b)
-        //         .collect::<Vec<Weight<Field128>>>()
-        // );
-
-        println!("y0: {:?}", share0.y);
-        println!("y1: {:?}", share1.y);
-        println!("y: {:?}", &share0.y + &share1.y);
-        println!("y_ok: {}", beta == &share0.y + &share1.y);
-        println!("p0: {:?}", share0.pi);
-        println!("p1: {:?}", share1.pi);
-        println!("p: {:?}", share0.pi.0 == share1.pi.0);
-        println!("verify: {:?}", vidpf.verify(&share0, &share1, &beta));
-    }
-
-    fn setup() -> Params<PrngFromXof<16, XofTurboShake128>, Weight<Field128, 3>> {
+    fn setup() -> VidpfInstance<PrngFromXof<16, XofTurboShake128>, Weight<Field128, 3>> {
         let prng = PrngFromXof::<16, XofTurboShake128>::default();
         const SEC_PARAM: usize = 128;
         let binder = "Mock Protocol uses a VIDPF".as_bytes().to_vec();
-        Params::new(SEC_PARAM, prng, binder)
+        new_vidpf(SEC_PARAM, prng, binder)
     }
 
     #[test]
@@ -655,10 +628,7 @@ mod tests {
         let share0 = vidpf.eval(alpha, &k0, &public);
         let share1 = vidpf.eval(alpha, &k1, &public);
 
-        assert!(
-            vidpf.verify(&share0, &share1, &beta) == true,
-            "verification failed"
-        )
+        assert!(vidpf.verify(&share0, &share1, &beta), "verification failed")
     }
 
     #[test]
@@ -677,7 +647,7 @@ mod tests {
             "shares must add up to zero"
         );
         assert!(
-            vidpf.verify(&share0, &share1, &beta) == false,
+            !vidpf.verify(&share0, &share1, &beta),
             "verification passed, but it should failed"
         )
     }

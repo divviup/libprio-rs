@@ -880,11 +880,13 @@ fn vidpf(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let alpha = IdpfInput::from_bools(&bits).to_bytes();
-            let beta = Weight(Vec::from([Field255::one(), Field255::one()]));
+            let beta = Weight([Field255::one(), Field255::one()]);
             let prng = PrngFromXof::<16, XofFixedKeyAes128>::default();
-            let vidpf = vidpf::Params::new(128, size, 2, prng);
+            let binder = "binder".as_bytes().to_vec();
+            let vidpf = vidpf::new_vidpf(128, prng, binder);
+
             b.iter(|| {
-                vidpf.gen(&alpha, &beta, &[0; 16]).unwrap();
+                vidpf.gen(&alpha, &beta).unwrap();
             });
         });
     }
@@ -896,14 +898,15 @@ fn vidpf(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let alpha = IdpfInput::from_bools(&bits).to_bytes();
-            let beta = Weight(Vec::from([Field255::one(), Field255::one()]));
+            let beta = Weight([Field255::one(), Field255::one()]);
             let prng = PrngFromXof::<16, XofFixedKeyAes128>::default();
+            let binder = "binder".as_bytes().to_vec();
 
-            let vidpf = vidpf::Params::new(128, size, 2, prng);
-            let (public_share, key0, _) = vidpf.gen(&alpha, &beta, &[0; 16]).unwrap();
+            let vidpf = vidpf::new_vidpf(128, prng, binder);
+            let (public_share, key0, _) = vidpf.gen(&alpha, &beta).unwrap();
 
             b.iter(|| {
-                vidpf.eval(&alpha, &key0, &public_share, &[0; 16]);
+                vidpf.eval(&alpha, &key0, &public_share);
             });
         });
     }
