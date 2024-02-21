@@ -20,19 +20,21 @@ use crate::{
     codec::Decode, field::FieldElement, field::FieldElementExt, vdaf::xof::Seed as XofSeed,
 };
 
-/// Params defines the global parameters of VIDPF instance.
+/// Params defines the global parameters of a VIDPF instance.
 pub struct Params<P, C>
 where
     // Primitive to construct a pseudorandom generator.
     P: GetPRG,
-    // Type used for Codomain
+    // Type used for Codomain of a DPF.
     C: Codomain,
     for<'a> &'a C: CodomainOps<C>,
 {
-    // Number of bits for alpha.
-    n: usize,
-    // Security parameter in bytes.
-    k: usize,
+    // Key size in bytes.
+    key_size: usize,
+    // Proof size in bytes.
+    proof_size: usize,
+    // Seed size in bytes.
+    seed_size: usize,
     // Constructor of a pseudorandom generator.
     get_prg: P,
     // Used to cryptographically bind some information.
@@ -47,32 +49,33 @@ where
     for<'a> &'a C: CodomainOps<C>,
 {
     /// new
-    pub fn new(sec_param: usize, n: usize, get_prg: P, bind_info: Vec<u8>) -> Self {
+    pub fn new(sec_param: usize, get_prg: P, bind_info: Vec<u8>) -> Self {
         Self {
-            n,
-            k: sec_param / 8,
+            key_size: sec_param / 8,
+            seed_size: sec_param / 8,
+            proof_size: 2 * (sec_param / 8),
             get_prg,
             bind_info,
-            _cd: PhantomData::<C> {},
+            _cd: PhantomData,
         }
     }
 
     /// gen
     pub fn gen(&self, alpha: &[u8], beta: &C) -> Result<(Public<C>, Key, Key), Box<dyn Error>> {
-        assert!(alpha.len() == (self.n + 7) / 8, "bad alpha size");
+        let n = 8 * alpha.len();
 
         // Key Generation.
-        let k0 = Key::gen_det(0xA, ControlBit(0), self.k)?;
-        let k1 = Key::gen_det(0xA, ControlBit(1), self.k)?;
+        let k0 = Key::gen_det(0xA, ControlBit(0), self.key_size)?;
+        let k1 = Key::gen_det(0xA, ControlBit(1), self.key_size)?;
 
         let mut s_i = [Seed::from(&k0), Seed::from(&k1)];
         let mut t_i = [k0.0, k1.0];
         let mut w_i = [C::new(), C::new()];
 
-        let mut cw = Vec::with_capacity(self.n);
-        let mut cs = Vec::with_capacity(self.n);
+        let mut cw = Vec::with_capacity(n);
+        let mut cs = Vec::with_capacity(n);
 
-        for i in 0..self.n {
+        for i in 0..n {
             let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
             cw.push(self.gen_next(&mut s_i, &mut t_i, &mut w_i, alpha_i, beta));
             cs.push(self.gen_proof(alpha, i, &s_i));
@@ -194,19 +197,20 @@ where
 
     /// eval
     pub fn eval(&self, alpha: &[u8], key: &Key, public: &Public<C>) -> Share<C> {
-        assert!(alpha.len() == (self.n + 7) / 8, "bad alpha size");
-        assert!(key.1.len() == self.k, "bad key size");
-        assert!(public.cw.len() == self.n, "bad public key size");
-        assert!(public.cs.len() == self.n, "bad public key size");
+        assert!(key.1.len() == self.key_size, "bad key size");
+
+        let n = 8 * alpha.len();
+        assert!(public.cw.len() <= n, "bad public key size");
+        assert!(public.cs.len() <= n, "bad public key size");
 
         let b = key.0;
         let mut s_i = Seed::from(key);
         let mut t_i = b;
 
         let mut y = C::new();
-        let mut pi = Proof::new(2 * self.k);
+        let mut pi = Proof::new(self.proof_size);
 
-        for i in 0..self.n {
+        for i in 0..n {
             let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
             y = self.eval_next(b, alpha_i, &mut s_i, &mut t_i, &public.cw[i]);
             pi = self.proof_next(&pi, alpha, i, &s_i, t_i, &public.cs[i]);
@@ -222,8 +226,8 @@ where
 
     fn prg(&self, seed: &Seed) -> Sequence {
         let dst = "100".as_bytes();
-        let mut sl = Seed::new(self.k);
-        let mut sr = Seed::new(self.k);
+        let mut sl = Seed::new(self.seed_size);
+        let mut sr = Seed::new(self.seed_size);
         let mut tl = ControlBit(0);
         let mut tr = ControlBit(0);
         let mut prg = self.get_prg.get(seed, dst, &self.bind_info);
@@ -237,7 +241,7 @@ where
 
     fn convert(&self, seed: &Seed) -> (Seed, C) {
         let dst = "101".as_bytes();
-        let mut out_seed = Seed::new(self.k);
+        let mut out_seed = Seed::new(self.seed_size);
         let mut value = C::new();
         let mut prg = self.get_prg.get(seed, dst, &self.bind_info);
         out_seed.fill(&mut prg);
@@ -249,11 +253,10 @@ where
     fn hash_one(&self, alpha: &[u8], level: usize, seed: &Seed) -> Proof {
         let dst = "vidpf cs proof".as_bytes();
         let mut binder = Vec::new();
-        binder.extend(self.n.to_le_bytes());
         binder.extend_from_slice(alpha);
         binder.extend(level.to_le_bytes());
 
-        let mut proof = Proof::new(2 * self.k);
+        let mut proof = Proof::new(self.proof_size);
         let mut prg = self.get_prg.get(seed, dst, &binder);
         proof.fill(&mut prg);
 
@@ -261,11 +264,11 @@ where
     }
 
     fn hash_two(&self, proof: &Proof) -> Proof {
-        let seed = Seed::new(self.k);
+        let seed = Seed::new(self.seed_size);
         let dst = "vidpf proof adjustment".as_bytes();
         let binder = &proof.0;
 
-        let mut out_proof = Proof::new(2 * self.k);
+        let mut out_proof = Proof::new(self.proof_size);
         let mut prg = self.get_prg.get(&seed, dst, binder);
         out_proof.fill(&mut prg);
 
@@ -511,20 +514,15 @@ impl<'a> BitXor<&'a Seed> for &'a Seed {
 
 #[derive(Debug, Clone)]
 /// Weight
-pub struct Weight<F: FieldElement, const N: usize>(Vec<F>);
+pub struct Weight<F: FieldElement, const N: usize>(pub [F; N]);
 
-impl<F: FieldElement, const N: usize> Weight<F, N> {
-    /// from_array
-    pub fn from_array(v: &[F; N]) -> Self {
-        Self(v.to_vec())
-    }
-}
+impl<F: FieldElement, const N: usize> Weight<F, N> {}
 
 impl<'a, F: FieldElement, const N: usize> CodomainOps<Weight<F, N>> for &'a Weight<F, N> {}
 
 impl<F: FieldElement, const N: usize> Codomain for Weight<F, N> {
     fn new() -> Self {
-        Self(vec![F::zero(); N])
+        Self([F::zero(); N])
     }
 }
 
@@ -552,7 +550,9 @@ impl<'a, F: FieldElement, const N: usize> Add for &'a Weight<F, N> {
 
     fn add(self, rhs: Self) -> Self::Output {
         assert!(self.0.len() == rhs.0.len(), "Weight add");
-        Weight(zip(&self.0, &rhs.0).map(|(a, b)| *a + *b).collect())
+        let mut out = Weight::<F, N>::new();
+        zip(&mut out.0, zip(&self.0, &rhs.0)).for_each(|(c, (a, b))| *c = *a + *b);
+        out
     }
 }
 
@@ -561,20 +561,20 @@ impl<'a, F: FieldElement, const N: usize> Sub for &'a Weight<F, N> {
 
     fn sub(self, rhs: Self) -> Self::Output {
         assert!(self.0.len() == rhs.0.len(), "Weight sub");
-        Weight(zip(&self.0, &rhs.0).map(|(a, b)| *a - *b).collect())
+        let mut out = Weight::<F, N>::new();
+        zip(&mut out.0, zip(&self.0, &rhs.0)).for_each(|(c, (a, b))| *c = *a - *b);
+        out
     }
 }
 
 impl<'a, F: FieldElement, const N: usize> Mul<ControlBit> for &'a Weight<F, N> {
     type Output = Weight<F, N>;
 
-    fn mul(self, b: ControlBit) -> Self::Output {
-        Weight(
-            self.0
-                .iter()
-                .map(|a| F::conditional_select(&F::zero(), a, b.into()))
-                .collect(),
-        )
+    fn mul(self, bit: ControlBit) -> Self::Output {
+        let mut out = Weight::<F, N>::new();
+        zip(&mut out.0, &self.0)
+            .for_each(|(a, b)| *a = F::conditional_select(&F::zero(), b, bit.into()));
+        out
     }
 }
 impl<F: FieldElement, const N: usize> PartialEq for Weight<F, N> {
@@ -598,16 +598,15 @@ mod tests {
     #[test]
     fn devel() {
         const SEC_PARAM: usize = 128;
-        let n: usize = 3;
-        const M: usize = 2;
         let prng = PrngFromXof::<16, XofTurboShake128>::default();
         let alpha = "1".as_bytes();
-        let beta = Weight::<Field128, M>([21.into(), 22.into()].into());
+        let beta = Weight::<Field128, 3>([21.into(), 22.into(), 23.into()]);
         let binder = "protocol using a vidpf".as_bytes().to_vec();
         println!("alpha: {:?}", alpha);
         println!("beta: {:?}", beta);
 
-        let vidpf = Params::new(SEC_PARAM, n, prng, binder);
+        let vidpf: Params<PrngFromXof<16, XofTurboShake128>, Weight<Field128, 3>> =
+            Params::new(SEC_PARAM, prng, binder);
         let Ok((public, k0, k1)) = vidpf.gen(alpha, &beta) else {
             panic!("error: gen");
         };
@@ -639,16 +638,15 @@ mod tests {
     fn setup() -> Params<PrngFromXof<16, XofTurboShake128>, Weight<Field128, 3>> {
         let prng = PrngFromXof::<16, XofTurboShake128>::default();
         const SEC_PARAM: usize = 128;
-        const N: usize = 3;
         let binder = "Mock Protocol uses a VIDPF".as_bytes().to_vec();
-        Params::new(SEC_PARAM, N, prng, binder)
+        Params::new(SEC_PARAM, prng, binder)
     }
 
     #[test]
     fn happy_path() {
         let vidpf = setup();
         let alpha: &[u8] = &[0xF];
-        let beta = Weight::from_array(&[21.into(), 22.into(), 23.into()]);
+        let beta = Weight([21.into(), 22.into(), 23.into()]);
 
         let (public, k0, k1) = vidpf.gen(alpha, &beta).unwrap();
         let share0 = vidpf.eval(alpha, &k0, &public);
@@ -665,7 +663,7 @@ mod tests {
         let vidpf = setup();
         let alpha: &[u8] = &[0xF];
         let alpha_bad: &[u8] = &[0x0];
-        let beta = Weight::from_array(&[21.into(), 22.into(), 23.into()]);
+        let beta = Weight([21.into(), 22.into(), 23.into()]);
 
         let (public, k0, k1) = vidpf.gen(alpha, &beta).unwrap();
         let share0 = vidpf.eval(alpha_bad, &k0, &public);
@@ -686,7 +684,7 @@ mod tests {
     pub fn mem_alloc() {
         let vidpf = setup();
         let alpha: &[u8] = &[0xF];
-        let beta = Weight::from_array(&[21.into(), 22.into(), 23.into()]);
+        let beta = Weight([21.into(), 22.into(), 23.into()]);
 
         // Gen:  AllocationInfo { count_total: 86, count_current: 0, count_max: 24, bytes_total: 2000, bytes_current: 0, bytes_max: 704 }
         // Eval: AllocationInfo { count_total: 72, count_current: 0, count_max: 12, bytes_total: 1640, bytes_current: 0, bytes_max: 272 }
