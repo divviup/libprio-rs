@@ -5,7 +5,7 @@
 //! [draft-mouris-cfrg-mastic]: https://datatracker.ietf.org/doc/draft-mouris-cfrg-mastic/01/
 
 use std::{
-    borrow::{Borrow, BorrowMut},
+    borrow::Borrow,
     error::Error,
     iter::zip,
     marker::PhantomData,
@@ -65,71 +65,63 @@ where
         let n = 8 * alpha.len();
 
         // Key Generation.
-        let k0 = Key::gen_det(0xA, ControlBit(0), self.key_size)?;
-        let k1 = Key::gen_det(0xA, ControlBit(1), self.key_size)?;
+        let k0 = Key::gen_det(0xA, ServerID::S0, self.key_size)?;
+        let k1 = Key::gen_det(0xA, ServerID::S1, self.key_size)?;
 
         let mut s_i = [Seed::from(&k0), Seed::from(&k1)];
-        let mut t_i = [k0.0, k1.0];
-        let mut w_i = [C::new(), C::new()];
+        let mut t_i = [ControlBit::from(&k0), ControlBit::from(&k1)];
 
         let mut cw = Vec::with_capacity(n);
         let mut cs = Vec::with_capacity(n);
 
         for i in 0..n {
-            let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
-            cw.push(self.gen_next(&mut s_i, &mut t_i, &mut w_i, alpha_i, beta));
-            cs.push(self.gen_proof(alpha, i, &s_i));
+            let alpha_i = ControlBit::from((alpha[i / 8] >> (i % 8)) & 0x1);
+
+            let Sequence(sl_0, tl_0, sr_0, tr_0) = self.prg(&s_i[0]);
+            let Sequence(sl_1, tl_1, sr_1, tr_1) = self.prg(&s_i[1]);
+
+            let s = [[&sl_0, &sl_1], [&sr_0, &sr_1]];
+            let t = [[tl_0, tl_1], [tr_0, tr_1]];
+
+            const L: u8 = 0;
+            const R: u8 = 1;
+
+            let diff = u8::conditional_select(&L, &R, alpha_i.0) as usize;
+            let same = u8::conditional_select(&R, &L, alpha_i.0) as usize;
+
+            let s_cw = s[same][0] ^ s[same][1];
+            let t_cw_l = tl_0 ^ tl_1 ^ alpha_i ^ ControlBit::from(1);
+            let t_cw_r = tr_0 ^ tr_1 ^ alpha_i;
+            let t_cw = [t_cw_l, t_cw_r];
+
+            let s_tilde_i_0 = s[diff][0] ^ (t_i[0] & s_cw.borrow()).borrow();
+            let s_tilde_i_1 = s[diff][1] ^ (t_i[1] & s_cw.borrow()).borrow();
+
+            t_i[0] = t[diff][0] ^ (t_i[0] & t_cw[diff]);
+            t_i[1] = t[diff][1] ^ (t_i[1] & t_cw[diff]);
+
+            let w_i0: C;
+            let w_i1: C;
+            (s_i[0], w_i0) = self.convert(&s_tilde_i_0);
+            (s_i[1], w_i1) = self.convert(&s_tilde_i_1);
+
+            let mut w_cw = (beta - w_i0.borrow()).borrow() + w_i1.borrow();
+            w_cw.conditional_negate(t_i[1].0);
+
+            let cw_i = CorrectionWord {
+                s_cw,
+                t_cw_l,
+                t_cw_r,
+                w_cw,
+            };
+
+            let pi_i = self.gen_proof(alpha, i, &s_i);
+
+            cw.push(cw_i);
+            cs.push(pi_i);
         }
 
         Ok((Public { cw, cs }, k0, k1))
-    }
-
-    fn gen_next(
-        &self,
-        s_i: &mut [Seed; 2],
-        t_i: &mut [ControlBit; 2],
-        w_i: &mut [C; 2],
-        alpha_i: ControlBit,
-        beta: &C,
-    ) -> CorrWord<C> {
-        let Sequence(sl_0, tl_0, sr_0, tr_0) = self.prg(&s_i[0]);
-        let Sequence(sl_1, tl_1, sr_1, tr_1) = self.prg(&s_i[1]);
-
-        let s = [[&sl_0, &sl_1], [&sr_0, &sr_1]];
-        let t = [[tl_0, tl_1], [tr_0, tr_1]];
-
-        const L: usize = 0;
-        const R: usize = 1;
-
-        let (diff, same) = if alpha_i == ControlBit(0) {
-            (L, R)
-        } else {
-            (R, L)
-        };
-
-        let s_cw = s[same][0] ^ s[same][1];
-        let t_cw_l = tl_0 ^ tl_1 ^ alpha_i ^ ControlBit(1);
-        let t_cw_r = tr_0 ^ tr_1 ^ alpha_i;
-        let t_cw = [t_cw_l, t_cw_r];
-
-        let s_tilde_i_0 = s[diff][0] ^ (t_i[0] & s_cw.borrow()).borrow();
-        let s_tilde_i_1 = s[diff][1] ^ (t_i[1] & s_cw.borrow()).borrow();
-
-        t_i[0] = t[diff][0] ^ (t_i[0] & t_cw[diff]);
-        t_i[1] = t[diff][1] ^ (t_i[1] & t_cw[diff]);
-
-        (s_i[0], w_i[0]) = self.convert(&s_tilde_i_0);
-        (s_i[1], w_i[1]) = self.convert(&s_tilde_i_1);
-
-        let mut w_cw = (beta - w_i[0].borrow()).borrow() + w_i[1].borrow();
-        w_cw.borrow_mut().conditional_negate(t_i[1].into());
-
-        CorrWord {
-            s_cw,
-            t_cw_l,
-            t_cw_r,
-            w_cw,
-        }
     }
 
     fn gen_proof(&self, alpha: &[u8], level: usize, s_i: &[Seed; 2]) -> Proof {
@@ -140,16 +132,13 @@ where
 
     fn eval_next(
         &self,
-        b: ControlBit,
+        b: ServerID,
         alpha_i: ControlBit,
         s_i: &mut Seed,
         t_i: &mut ControlBit,
-        cw: &CorrWord<C>,
+        cw: &CorrectionWord<C>,
     ) -> C {
-        const L: usize = 0;
-        const R: usize = 1;
-
-        let CorrWord {
+        let CorrectionWord {
             s_cw,
             t_cw_l,
             t_cw_r,
@@ -158,24 +147,16 @@ where
 
         let seq_tilde = &self.prg(s_i);
         let seq_cw = &Sequence(s_cw.clone(), *t_cw_l, s_cw.clone(), *t_cw_r);
-        let tau = seq_tilde ^ (*t_i & seq_cw).borrow();
-        let Sequence(sl, tl, sr, tr) = tau;
+        let Sequence(sl, tl, sr, tr) = seq_tilde ^ (*t_i & seq_cw).borrow();
 
-        let s = [&sl, &sr];
-        let t = [tl, tr];
-
-        let s_tilde_i;
-        (s_tilde_i, *t_i) = if alpha_i == ControlBit(0) {
-            (s[L], t[L])
-        } else {
-            (s[R], t[R])
-        };
+        let s_tilde_i = Seed::conditional_select(&sl, &sr, alpha_i.0);
+        *t_i = ControlBit::conditional_select(&tl, &tr, alpha_i.0);
 
         let w_i: C;
-        (*s_i, w_i) = self.convert(s_tilde_i);
+        (*s_i, w_i) = self.convert(&s_tilde_i);
 
-        let mut y_i = &w_i + (w_cw * (*t_i)).borrow();
-        y_i.borrow_mut().conditional_negate(b.into());
+        let mut y_i = w_i.borrow() + (w_cw * (*t_i)).borrow();
+        y_i.conditional_negate(Choice::from(b as u8));
 
         y_i
     }
@@ -197,22 +178,21 @@ where
 
     /// eval
     pub fn eval(&self, alpha: &[u8], key: &Key, public: &Public<C>) -> Share<C> {
-        assert!(key.1.len() == self.key_size, "bad key size");
+        assert!(key.value.len() == self.key_size, "bad key size");
 
         let n = 8 * alpha.len();
-        assert!(public.cw.len() <= n, "bad public key size");
-        assert!(public.cs.len() <= n, "bad public key size");
+        assert!(public.cw.len() >= n, "bad public key size");
+        assert!(public.cs.len() >= n, "bad public key size");
 
-        let b = key.0;
         let mut s_i = Seed::from(key);
-        let mut t_i = b;
+        let mut t_i = ControlBit::from(key);
 
         let mut y = C::new();
         let mut pi = Proof::new(self.proof_size);
 
         for i in 0..n {
-            let alpha_i = ControlBit((alpha[i / 8] >> (i % 8)) & 0x1);
-            y = self.eval_next(b, alpha_i, &mut s_i, &mut t_i, &public.cw[i]);
+            let alpha_i = ControlBit::from((alpha[i / 8] >> (i % 8)) & 0x1);
+            y = self.eval_next(key.id, alpha_i, &mut s_i, &mut t_i, &public.cw[i]);
             pi = self.proof_next(&pi, alpha, i, &s_i, t_i, &public.cs[i]);
         }
 
@@ -228,8 +208,8 @@ where
         let dst = "100".as_bytes();
         let mut sl = Seed::new(self.seed_size);
         let mut sr = Seed::new(self.seed_size);
-        let mut tl = ControlBit(0);
-        let mut tr = ControlBit(0);
+        let mut tl = ControlBit::from(0);
+        let mut tr = ControlBit::from(0);
         let mut prg = self.get_prg.get(seed, dst, &self.bind_info);
         sl.fill(&mut prg);
         tl.fill(&mut prg);
@@ -327,8 +307,8 @@ impl<const SEED_SIZE: usize, X: Xof<SEED_SIZE>> GetPRG for PrngFromXof<SEED_SIZE
 }
 
 #[derive(Debug)]
-/// CorrWords
-pub struct CorrWord<C>
+/// CorrectionWord
+pub struct CorrectionWord<C>
 where
     C: Codomain,
     for<'a> &'a C: CodomainOps<C>,
@@ -375,31 +355,28 @@ where
     C: Codomain,
     for<'a> &'a C: CodomainOps<C>,
 {
-    cw: Vec<CorrWord<C>>,
+    cw: Vec<CorrectionWord<C>>,
     cs: Vec<Proof>,
 }
 
 #[derive(Debug)]
 /// Key is the server's private key.
-pub struct Key(ControlBit, Vec<u8>);
+pub struct Key {
+    id: ServerID,
+    value: Vec<u8>,
+}
 
 impl Key {
     /// gen
-    pub fn gen(id: ControlBit, n: usize) -> Result<Self, Box<dyn Error>> {
-        let mut k = vec![0u8; n];
-        getrandom::getrandom(&mut k)?;
-        Ok(Key(id, k))
+    pub fn gen(id: ServerID, n: usize) -> Result<Self, Box<dyn Error>> {
+        let mut value = vec![0u8; n];
+        getrandom::getrandom(&mut value)?;
+        Ok(Key { id, value })
     }
     /// gen_det
-    pub fn gen_det(t: u8, id: ControlBit, n: usize) -> Result<Self, Box<dyn Error>> {
-        let k = vec![t + id.0; n];
-        Ok(Key(id, k))
-    }
-}
-
-impl From<&Key> for Seed {
-    fn from(k: &Key) -> Self {
-        Seed(k.1.clone())
+    pub fn gen_det(t: u8, id: ServerID, n: usize) -> Result<Self, Box<dyn Error>> {
+        let value = vec![t + id as u8; n];
+        Ok(Key { id, value })
     }
 }
 
@@ -419,13 +396,34 @@ impl<'a> BitXor<&'a Sequence> for &'a Sequence {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-/// ControlBit
-pub struct ControlBit(u8);
+#[derive(Debug, Clone, Copy)]
+/// ServerID
+pub enum ServerID {
+    /// S0
+    S0 = 0,
+    /// S1
+    S1 = 1,
+}
 
-impl From<ControlBit> for Choice {
-    fn from(value: ControlBit) -> Self {
-        Choice::from(value.0)
+#[derive(Debug, Clone, Copy)]
+/// ControlBit
+pub struct ControlBit(Choice);
+
+impl From<u8> for ControlBit {
+    fn from(b: u8) -> Self {
+        ControlBit(Choice::from(b))
+    }
+}
+
+impl ConditionallySelectable for ControlBit {
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        ControlBit((a.0 & !choice) | (b.0 & choice))
+    }
+}
+
+impl From<&Key> for ControlBit {
+    fn from(k: &Key) -> Self {
+        ControlBit::from(k.id as u8)
     }
 }
 
@@ -433,18 +431,29 @@ impl Fill for ControlBit {
     fn fill(&mut self, r: &mut impl RngCore) {
         let mut b = [0u8; 1];
         r.fill_bytes(&mut b);
-        *self = ControlBit(b[0] & 0x1);
+        *self = ControlBit::from(b[0] & 0x1)
     }
 }
 
 impl BitAnd<&Seed> for ControlBit {
     type Output = Seed;
-
     fn bitand(self, rhs: &Seed) -> Self::Output {
         Seed(
             rhs.0
                 .iter()
-                .map(|x| u8::conditional_select(&0, x, self.into()))
+                .map(|x| u8::conditional_select(&0, x, self.0))
+                .collect(),
+        )
+    }
+}
+
+impl BitAnd<&Proof> for ControlBit {
+    type Output = Proof;
+    fn bitand(self, rhs: &Proof) -> Self::Output {
+        Proof(
+            rhs.0
+                .iter()
+                .map(|x| u8::conditional_select(&0, x, self.0))
                 .collect(),
         )
     }
@@ -458,30 +467,19 @@ impl BitAnd<&Sequence> for ControlBit {
     }
 }
 
-impl BitAnd<&Proof> for ControlBit {
-    type Output = Proof;
-
-    fn bitand(self, rhs: &Proof) -> Self::Output {
-        Proof(
-            rhs.0
-                .iter()
-                .map(|x| u8::conditional_select(&0, x, self.into()))
-                .collect(),
-        )
-    }
-}
-
-impl BitAnd<ControlBit> for ControlBit {
+impl BitAnd for ControlBit {
     type Output = Self;
 
+    #[inline]
     fn bitand(self, rhs: Self) -> Self::Output {
         ControlBit(self.0 & rhs.0)
     }
 }
 
-impl BitXor<ControlBit> for ControlBit {
+impl BitXor for ControlBit {
     type Output = Self;
 
+    #[inline]
     fn bitxor(self, rhs: Self) -> Self::Output {
         ControlBit(self.0 ^ rhs.0)
     }
@@ -495,6 +493,20 @@ impl Seed {
     /// new
     pub fn new(n: usize) -> Self {
         Self(vec![0; n])
+    }
+
+    fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
+        Seed(
+            zip(&a.0, &b.0)
+                .map(|(a, b)| u8::conditional_select(a, b, choice))
+                .collect(),
+        )
+    }
+}
+
+impl From<&Key> for Seed {
+    fn from(k: &Key) -> Self {
+        Seed(k.value.clone())
     }
 }
 
@@ -573,7 +585,7 @@ impl<'a, F: FieldElement, const N: usize> Mul<ControlBit> for &'a Weight<F, N> {
     fn mul(self, bit: ControlBit) -> Self::Output {
         let mut out = Weight::<F, N>::new();
         zip(&mut out.0, &self.0)
-            .for_each(|(a, b)| *a = F::conditional_select(&F::zero(), b, bit.into()));
+            .for_each(|(a, b)| *a = F::conditional_select(&F::zero(), b, bit.0));
         out
     }
 }
@@ -685,9 +697,8 @@ mod tests {
         let vidpf = setup();
         let alpha: &[u8] = &[0xF];
         let beta = Weight([21.into(), 22.into(), 23.into()]);
-
-        // Gen:  AllocationInfo { count_total: 86, count_current: 0, count_max: 24, bytes_total: 2000, bytes_current: 0, bytes_max: 704 }
-        // Eval: AllocationInfo { count_total: 72, count_current: 0, count_max: 12, bytes_total: 1640, bytes_current: 0, bytes_max: 272 }
+        // Gen:  AllocationInfo { count_total: 166, count_current: 0, count_max: 29, bytes_total: 3712, bytes_current: 0, bytes_max: 1376 }
+        // Eval: AllocationInfo { count_total: 154, count_current: 0, count_max: 10, bytes_total: 3184, bytes_current: 0, bytes_max: 176 }
 
         println!(
             "Gen:  {:?}",
