@@ -99,7 +99,7 @@ impl Default for Vdaf {
 
 impl vdaf::Vdaf for Vdaf {
     type Measurement = u8;
-    type AggregateResult = u8;
+    type AggregateResult = u64;
     type AggregationParam = AggregationParam;
     type PublicShare = ();
     type InputShare = InputShare;
@@ -183,6 +183,21 @@ impl vdaf::Client<16> for Vdaf {
                 InputShare(second_input_share),
             ]),
         ))
+    }
+}
+
+impl vdaf::Collector for Vdaf {
+    fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
+        &self,
+        _agg_param: &Self::AggregationParam,
+        agg_shares: M,
+        _num_measurements: usize,
+    ) -> Result<Self::AggregateResult, VdafError> {
+        agg_shares
+            .into_iter()
+            .map(|share| share.0)
+            .reduce(|sum, share| sum + share)
+            .ok_or_else(|| VdafError::Uncategorized("aggregate shares iterator is empty".into()))
     }
 }
 

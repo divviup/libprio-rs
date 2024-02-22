@@ -7,18 +7,29 @@ criteria = "safe-to-deploy"
 user-id = 101233
 start = "2020-09-28"
 end = "2024-03-23"
+renew = false
 
 [[wildcard-audits.prio]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 user-id = 213776
 start = "2020-09-28"
-end = "2024-03-23"
+end = "2025-02-12"
 
 [[audits.aes]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.8.2 -> 0.8.3"
+
+[[audits.aes]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.8.3 -> 0.8.4"
+notes = """
+Change affects some unsafe code. The only functional change is to add an
+assertion checking alignment and to change an `as *mut u32` cast to a
+call to `std::pointer::cast`.
+"""
 
 [[audits.aes-gcm]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
@@ -205,6 +216,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.4 -> 0.2.5"
 
+[[audits.fiat-crypto]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.2.5 -> 0.2.6"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -224,6 +240,16 @@ delta = "1.22.1 -> 1.23.0"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.23.0 -> 1.23.1"
+
+[[audits.fixed]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.23.1 -> 1.25.0"
+
+[[audits.fixed]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.25.0 -> 1.25.1"
 
 [[audits.fixed-macro]]
 who = "David Cook <dcook@divviup.org>"
@@ -341,6 +367,16 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.4.3 -> 0.4.4"
 
+[[audits.num-integer]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.45 -> 0.1.46"
+
+[[audits.num-iter]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.43 -> 0.1.44"
+
 [[audits.num-traits]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -350,6 +386,11 @@ delta = "0.2.15 -> 0.2.16"
 who = "Ameer Ghani <inahga@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.16 -> 0.2.17"
+
+[[audits.num-traits]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.17 -> 0.2.18"
 
 [[audits.once_cell]]
 who = "David Cook <dcook@divviup.org>"
@@ -445,6 +486,16 @@ delta = "1.6.1 -> 1.7.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.7.0 -> 1.8.0"
+
+[[audits.rayon]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.8.0 -> 1.8.1"
+
+[[audits.rayon-core]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+version = "1.12.1"
 
 [[audits.rayon-core]]
 who = "Brandon Pitman <bran@bran.land>"
