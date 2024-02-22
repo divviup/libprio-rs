@@ -794,8 +794,53 @@ fn poplar1(c: &mut Criterion) {
     group.finish();
 }
 
+/// Benchmark VIDPF performance.
 #[cfg(feature = "experimental")]
-criterion_group!(benches, poplar1, prio3, prio2, poly_mul, prng, idpf, dp_noise);
+fn vidpf(c: &mut Criterion) {
+    use prio::vidpf::{Vidpf, VidpfInput, VidpfWeight};
+
+    let test_sizes = [8usize, 8 * 16, 8 * 256];
+    const NONCE_SIZE: usize = 16;
+    const NONCE: &[u8; NONCE_SIZE] = b"Test Nonce VIDPF";
+
+    let mut group = c.benchmark_group("vidpf_gen");
+    for size in test_sizes.iter() {
+        group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let input = VidpfInput::from_bools(&bits);
+            let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
+
+            let vidpf = Vidpf::<VidpfWeight<Field255>, NONCE_SIZE>::new(2);
+
+            b.iter(|| {
+                let _ = vidpf.gen(&input, &weight, NONCE).unwrap();
+            });
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("vidpf_eval");
+    for size in test_sizes.iter() {
+        group.throughput(Throughput::Bytes(*size as u64 / 8));
+        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
+            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let input = VidpfInput::from_bools(&bits);
+            let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
+            let vidpf = Vidpf::<VidpfWeight<Field255>, NONCE_SIZE>::new(2);
+
+            let (public, keys) = vidpf.gen(&input, &weight, NONCE).unwrap();
+
+            b.iter(|| {
+                let _ = vidpf.eval(&keys[0], &public, &input, NONCE).unwrap();
+            });
+        });
+    }
+    group.finish();
+}
+
+#[cfg(feature = "experimental")]
+criterion_group!(benches, poplar1, prio3, prio2, poly_mul, prng, idpf, dp_noise, vidpf);
 #[cfg(not(feature = "experimental"))]
 criterion_group!(benches, prio3, prng, poly_mul);
 
