@@ -464,9 +464,9 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
 #[cfg(feature = "test-util")]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod test_utils {
-    use crate::codec::{Encode, ParameterizedDecode};
-
     use super::{Aggregatable, Aggregator, Client, Collector, PrepareTransition, VdafError};
+    use crate::codec::{Encode, ParameterizedDecode};
+    use rand::prelude::*;
 
     /// Execute the VDAF end-to-end and return the aggregate result.
     pub fn run_vdaf<V, M, const SEED_SIZE: usize>(
@@ -478,14 +478,9 @@ pub mod test_utils {
         V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
         M: IntoIterator<Item = V::Measurement>,
     {
-        use rand::prelude::*;
-        let mut rng = thread_rng();
-        let mut verify_key = [0; SEED_SIZE];
-        rng.fill(&mut verify_key[..]);
-
         let mut sharded_measurements = Vec::new();
         for measurement in measurements.into_iter() {
-            let nonce = rng.gen();
+            let nonce = random();
             let (public_share, input_shares) = vdaf.shard(&measurement, &nonce)?;
 
             sharded_measurements.push((public_share, nonce, input_shares));
@@ -505,7 +500,6 @@ pub mod test_utils {
         M: IntoIterator<Item = (V::PublicShare, [u8; 16], I)>,
         I: IntoIterator<Item = V::InputShare>,
     {
-        use rand::prelude::*;
         let mut rng = thread_rng();
         let mut verify_key = [0; SEED_SIZE];
         rng.fill(&mut verify_key[..]);

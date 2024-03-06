@@ -12,6 +12,9 @@ use crate::{
 use rand::random;
 use std::{fmt::Debug, io::Cursor, sync::Arc};
 
+/// The Dummy VDAF does summation modulus 256 so we can predict aggregation results.
+const MODULUS: u64 = u8::MAX as u64 + 1;
+
 type ArcPrepInitFn =
     Arc<dyn Fn(&AggregationParam) -> Result<(), VdafError> + 'static + Send + Sync>;
 type ArcPrepStepFn = Arc<
@@ -197,7 +200,7 @@ impl vdaf::Collector for Vdaf {
     ) -> Result<Self::AggregateResult, VdafError> {
         Ok(agg_shares
             .into_iter()
-            .fold(0, |acc, share| (acc + share.0) % (u64::from(u8::MAX) + 1))
+            .fold(0, |acc, share| (acc + share.0) % MODULUS)
             // Sum in the aggregation parameter so that collections over the same measurements with
             // varying parameters will yield predictable but distinct results.
             + u64::from(aggregation_param.0))
@@ -302,12 +305,12 @@ impl Aggregatable for AggregateShare {
     type OutputShare = OutputShare;
 
     fn merge(&mut self, other: &Self) -> Result<(), VdafError> {
-        self.0 = (self.0 + other.0) % (u64::from(u8::MAX) + 1);
+        self.0 = (self.0 + other.0) % MODULUS;
         Ok(())
     }
 
     fn accumulate(&mut self, out_share: &Self::OutputShare) -> Result<(), VdafError> {
-        self.0 = (self.0 + out_share.0) % (u64::from(u8::MAX) + 1);
+        self.0 = (self.0 + out_share.0) % MODULUS;
         Ok(())
     }
 }
@@ -340,7 +343,7 @@ pub fn expected_aggregate_result<M>(aggregation_parameter: u8, measurements: M) 
 where
     M: IntoIterator<Item = u8>,
 {
-    (measurements.into_iter().map(u64::from).sum::<u64>()) % u64::from(u8::MAX)
+    (measurements.into_iter().map(u64::from).sum::<u64>()) % MODULUS
         + u64::from(aggregation_parameter)
 }
 
@@ -354,7 +357,7 @@ mod tests {
         let vdaf = Vdaf::new(rounds);
         let mut verify_key = [0; 0];
         thread_rng().fill(&mut verify_key[..]);
-        let measurements = [1, 2, 3, 4, 5];
+        let measurements = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
         let mut sharded_measurements = Vec::new();
         for measurement in measurements {
