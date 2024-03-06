@@ -464,9 +464,9 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
 #[cfg(feature = "test-util")]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod test_utils {
-    use crate::codec::{Encode, ParameterizedDecode};
-
     use super::{Aggregatable, Aggregator, Client, Collector, PrepareTransition, VdafError};
+    use crate::codec::{Encode, ParameterizedDecode};
+    use rand::prelude::*;
 
     /// Execute the VDAF end-to-end and return the aggregate result.
     pub fn run_vdaf<V, M, const SEED_SIZE: usize>(
@@ -478,17 +478,36 @@ pub mod test_utils {
         V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
         M: IntoIterator<Item = V::Measurement>,
     {
-        use rand::prelude::*;
+        let mut sharded_measurements = Vec::new();
+        for measurement in measurements.into_iter() {
+            let nonce = random();
+            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce)?;
+
+            sharded_measurements.push((public_share, nonce, input_shares));
+        }
+
+        run_vdaf_sharded(vdaf, agg_param, sharded_measurements)
+    }
+
+    /// Execute the VDAF on sharded measurements and return the aggregate result.
+    pub fn run_vdaf_sharded<V, M, I, const SEED_SIZE: usize>(
+        vdaf: &V,
+        agg_param: &V::AggregationParam,
+        sharded_measurements: M,
+    ) -> Result<V::AggregateResult, VdafError>
+    where
+        V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
+        M: IntoIterator<Item = (V::PublicShare, [u8; 16], I)>,
+        I: IntoIterator<Item = V::InputShare>,
+    {
         let mut rng = thread_rng();
         let mut verify_key = [0; SEED_SIZE];
         rng.fill(&mut verify_key[..]);
 
         let mut agg_shares: Vec<Option<V::AggregateShare>> = vec![None; vdaf.num_aggregators()];
         let mut num_measurements: usize = 0;
-        for measurement in measurements.into_iter() {
+        for (public_share, nonce, input_shares) in sharded_measurements.into_iter() {
             num_measurements += 1;
-            let nonce = rng.gen();
-            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce)?;
             let out_shares = run_vdaf_prepare(
                 vdaf,
                 &verify_key,

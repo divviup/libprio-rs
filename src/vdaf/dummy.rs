@@ -12,6 +12,9 @@ use crate::{
 use rand::random;
 use std::{fmt::Debug, io::Cursor, sync::Arc};
 
+/// The Dummy VDAF does summation modulus 256 so we can predict aggregation results.
+const MODULUS: u64 = u8::MAX as u64 + 1;
+
 type ArcPrepInitFn =
     Arc<dyn Fn(&AggregationParam) -> Result<(), VdafError> + 'static + Send + Sync>;
 type ArcPrepStepFn = Arc<
@@ -49,7 +52,9 @@ impl Vdaf {
                 move |state| -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
                     let new_round = state.current_round + 1;
                     if new_round == rounds {
-                        Ok(PrepareTransition::Finish(OutputShare(state.input_share)))
+                        Ok(PrepareTransition::Finish(OutputShare(u64::from(
+                            state.input_share,
+                        ))))
                     } else {
                         Ok(PrepareTransition::Continue(
                             PrepareState {
@@ -157,7 +162,7 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
 
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
         &self,
-        _: &Self::AggregationParam,
+        _aggregation_param: &Self::AggregationParam,
         output_shares: M,
     ) -> Result<Self::AggregateShare, VdafError> {
         let mut aggregate_share = AggregateShare(0);
@@ -189,15 +194,16 @@ impl vdaf::Client<16> for Vdaf {
 impl vdaf::Collector for Vdaf {
     fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
         &self,
-        _agg_param: &Self::AggregationParam,
+        aggregation_param: &Self::AggregationParam,
         agg_shares: M,
         _num_measurements: usize,
     ) -> Result<Self::AggregateResult, VdafError> {
-        agg_shares
+        Ok(agg_shares
             .into_iter()
-            .map(|share| share.0)
-            .reduce(|sum, share| sum + share)
-            .ok_or_else(|| VdafError::Uncategorized("aggregate shares iterator is empty".into()))
+            .fold(0, |acc, share| (acc + share.0) % MODULUS)
+            // Sum in the aggregation parameter so that collections over the same measurements with
+            // varying parameters will yield predictable but distinct results.
+            + u64::from(aggregation_param.0))
     }
 }
 
@@ -243,11 +249,11 @@ impl Decode for AggregationParam {
 
 /// Dummy output share.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct OutputShare(pub u8);
+pub struct OutputShare(pub u64);
 
 impl Decode for OutputShare {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(Self(u8::decode(bytes)?))
+        Ok(Self(u64::decode(bytes)?))
     }
 }
 
@@ -299,26 +305,25 @@ impl Aggregatable for AggregateShare {
     type OutputShare = OutputShare;
 
     fn merge(&mut self, other: &Self) -> Result<(), VdafError> {
-        self.0 += other.0;
+        self.0 = (self.0 + other.0) % MODULUS;
         Ok(())
     }
 
     fn accumulate(&mut self, out_share: &Self::OutputShare) -> Result<(), VdafError> {
-        self.0 += u64::from(out_share.0);
+        self.0 = (self.0 + out_share.0) % MODULUS;
         Ok(())
     }
 }
 
 impl From<OutputShare> for AggregateShare {
     fn from(out_share: OutputShare) -> Self {
-        Self(u64::from(out_share.0))
+        Self(out_share.0)
     }
 }
 
 impl Decode for AggregateShare {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let val = u64::decode(bytes)?;
-        Ok(Self(val))
+        Ok(Self(u64::decode(bytes)?))
     }
 }
 
@@ -329,5 +334,88 @@ impl Encode for AggregateShare {
 
     fn encoded_len(&self) -> Option<usize> {
         self.0.encoded_len()
+    }
+}
+
+/// Returns the aggregate result that the dummy VDAF would compute over the provided measurements,
+/// for the provided aggregation parameter.
+pub fn expected_aggregate_result<M>(aggregation_parameter: u8, measurements: M) -> u64
+where
+    M: IntoIterator<Item = u8>,
+{
+    (measurements.into_iter().map(u64::from).sum::<u64>()) % MODULUS
+        + u64::from(aggregation_parameter)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::vdaf::{test_utils::run_vdaf_sharded, Client};
+    use rand::prelude::*;
+
+    fn run_test(rounds: u32, aggregation_parameter: u8) {
+        let vdaf = Vdaf::new(rounds);
+        let mut verify_key = [0; 0];
+        thread_rng().fill(&mut verify_key[..]);
+        let measurements = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+        let mut sharded_measurements = Vec::new();
+        for measurement in measurements {
+            let nonce = thread_rng().gen();
+            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+
+            sharded_measurements.push((public_share, nonce, input_shares));
+        }
+
+        let result = run_vdaf_sharded(
+            &vdaf,
+            &AggregationParam(aggregation_parameter),
+            sharded_measurements.clone(),
+        )
+        .unwrap();
+        assert_eq!(
+            result,
+            expected_aggregate_result(aggregation_parameter, measurements)
+        );
+    }
+
+    #[test]
+    fn single_round_agg_param_10() {
+        run_test(1, 10)
+    }
+
+    #[test]
+    fn single_round_agg_param_20() {
+        run_test(1, 20)
+    }
+
+    #[test]
+    fn single_round_agg_param_32() {
+        run_test(1, 32)
+    }
+
+    #[test]
+    fn single_round_agg_param_u8_max() {
+        run_test(1, u8::MAX)
+    }
+
+    #[test]
+    fn two_round_agg_param_10() {
+        run_test(2, 10)
+    }
+
+    #[test]
+    fn two_round_agg_param_20() {
+        run_test(2, 20)
+    }
+
+    #[test]
+    fn two_round_agg_param_32() {
+        run_test(2, 32)
+    }
+
+    #[test]
+    fn two_round_agg_param_u8_max() {
+        run_test(2, u8::MAX)
     }
 }
