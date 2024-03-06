@@ -92,6 +92,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.21.6 -> 0.21.7"
 
+[[audits.base64]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.21.7 -> 0.22.0"
+
 [[audits.block-buffer]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
