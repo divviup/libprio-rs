@@ -24,6 +24,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     io::{Cursor, Read},
+    iter::zip,
     ops::{Add, AddAssign, ControlFlow, Index, Sub},
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -108,6 +109,11 @@ impl IdpfInput {
             index: self.index[..=level].to_owned().into(),
         }
     }
+
+    /// Return the bit at the specified level if the level is in bounds.
+    pub fn get(&self, level: usize) -> Option<bool> {
+        self.index.get(level).as_deref().copied()
+    }
 }
 
 impl From<BitVec<usize, Lsb0>> for IdpfInput {
@@ -147,7 +153,7 @@ pub trait IdpfValue:
     + Sub<Output = Self>
     + ConditionallyNegatable
     + Encode
-    + Decode
+    + ParameterizedDecode<Self::ValueParameter>
     + Sized
 {
     /// Any run-time parameters needed to produce a value.
@@ -788,7 +794,7 @@ where
 
 impl<V> Eq for IdpfCorrectionWord<V> where V: ConstantTimeEq {}
 
-fn xor_seeds(left: &[u8; 16], right: &[u8; 16]) -> [u8; 16] {
+pub(crate) fn xor_seeds(left: &[u8; 16], right: &[u8; 16]) -> [u8; 16] {
     let mut seed = [0u8; 16];
     for (a, (b, c)) in left.iter().zip(right.iter().zip(seed.iter_mut())) {
         *c = a ^ b;
@@ -822,7 +828,7 @@ fn control_bit_to_seed_mask(control: Choice) -> [u8; 16] {
 
 /// Take two seeds and a control bit, and return the first seed if the control bit is zero, or the
 /// XOR of the two seeds if the control bit is one. This does not branch on the control bit.
-fn conditional_xor_seeds(
+pub(crate) fn conditional_xor_seeds(
     normal_input: &[u8; 16],
     switched_input: &[u8; 16],
     control: Choice,
@@ -835,11 +841,16 @@ fn conditional_xor_seeds(
 
 /// Returns one of two seeds, depending on the value of a selector bit. Does not branch on the
 /// selector input or make selector-dependent memory accesses.
-fn conditional_select_seed(select: Choice, seeds: &[[u8; 16]; 2]) -> [u8; 16] {
+pub(crate) fn conditional_select_seed(select: Choice, seeds: &[[u8; 16]; 2]) -> [u8; 16] {
     or_seeds(
         &and_seeds(&control_bit_to_seed_mask(!select), &seeds[0]),
         &and_seeds(&control_bit_to_seed_mask(select), &seeds[1]),
     )
+}
+
+/// Interchange the contents of seeds if the choice is 1, otherwise seeds remain unchanged.
+pub(crate) fn conditional_swap_seed(lhs: &mut [u8; 16], rhs: &mut [u8; 16], choice: Choice) {
+    zip(lhs, rhs).for_each(|(a, b)| u8::conditional_swap(a, b, choice));
 }
 
 /// An interface that provides memoization of IDPF computations.

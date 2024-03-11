@@ -9,6 +9,8 @@
 use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
@@ -56,6 +58,11 @@ pub enum VdafError {
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("idpf error: {0}")]
     Idpf(#[from] IdpfError),
+
+    /// VIDPF error.
+    #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+    #[error("vidpf error: {0}")]
+    Vidpf(#[from] VidpfError),
 
     /// Errors from other VDAFs.
     #[error(transparent)]

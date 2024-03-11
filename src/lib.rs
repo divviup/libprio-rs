@@ -33,3 +33,9 @@ mod polynomial;
 mod prng;
 pub mod topology;
 pub mod vdaf;
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg_attr(
+    docsrs,
+    doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
+)]
+pub mod vidpf;
