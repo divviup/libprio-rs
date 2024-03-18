@@ -122,6 +122,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.7.1 -> 0.7.2"
 
+[[audits.color-eyre]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.6.2 -> 0.6.3"
+
 [[audits.criterion]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
