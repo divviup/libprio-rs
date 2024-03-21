@@ -14,12 +14,13 @@ use core::{
     ops::{Add, AddAssign, BitXor, BitXorAssign, Index, Sub},
 };
 
-use bitvec::field::BitField;
+use bitvec::{field::BitField, order::Lsb0, vec::BitVec, view::BitView};
 use rand_core::RngCore;
 use std::io::Cursor;
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 
 use crate::{
+    bt::BinaryTree,
     codec::{CodecError, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{
@@ -337,6 +338,41 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
         proof
     }
+
+    /// Evaluates multiple user reports.
+    pub fn multi_eval(
+        &self,
+        reports: &Vec<ClientReport<W>>,
+        max_length: usize,
+    ) -> Result<(), VidpfError> {
+        let gen_prefixes = |n| -> Vec<BitVec> {
+            (0..(1usize << n))
+                .map(|i| i.view_bits::<Lsb0>()[..n].to_bitvec())
+                .collect()
+        };
+
+        for k in 1..max_length {
+            let hh_k = gen_prefixes(k);
+            for prefix in hh_k {
+                for ClientReport { key, public, nonce } in reports {
+                    let mut state = VidpfEvalState::init_from_key(key);
+                    // Creates a tree with root equal to the first state.
+                    let mut tree = BinaryTree::new(state.clone());
+
+                    let input = VidpfInput::from(prefix.clone());
+                    let nonce_array = &nonce[..NONCE_SIZE].try_into().unwrap(); // todo: make this conversion reliable
+
+                    (state, _) =
+                        self.eval_next(key.id, public, &input, k - 1, &state, nonce_array)?;
+
+                    // State is cached in the path indicated by the prefix.
+                    tree.insert(&prefix, state);
+                }
+            }
+        }
+
+        Ok(())
+    }
 }
 
 /// Contains the domain separation tags for invoking different oracles.
@@ -401,6 +437,7 @@ pub struct VidpfPublicShare<W: VidpfValue> {
 }
 
 /// Contains the values produced during input evaluation at a given level.
+#[derive(Clone)]
 pub struct VidpfEvalState {
     seed: VidpfSeed,
     control_bit: Choice,
@@ -450,6 +487,13 @@ struct VidpfPrgOutput {
     left_control_bit: Choice,
     right_seed: VidpfSeed,
     right_control_bit: Choice,
+}
+
+/// Clients use this structure to send reports to each of the Servers.
+pub struct ClientReport<V: VidpfValue> {
+    key: VidpfKey,
+    public: VidpfPublicShare<V>,
+    nonce: Vec<u8>,
 }
 
 /// Represents an array of field elements that implements the [`VidpfValue`] trait.
@@ -588,11 +632,13 @@ mod tests {
     const TEST_NONCE: &[u8; TEST_NONCE_SIZE] = b"Test Nonce VIDPF";
 
     mod vidpf {
+        use bitvec::{order::Lsb0, view::BitView};
+
         use crate::{
             idpf::IdpfValue,
             vidpf::{
-                Vidpf, VidpfError, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare,
-                VidpfServerId,
+                ClientReport, Vidpf, VidpfError, VidpfEvalState, VidpfInput, VidpfKey,
+                VidpfPublicShare, VidpfServerId,
             },
         };
 
@@ -715,6 +761,27 @@ mod tests {
                     level
                 );
             }
+        }
+
+        #[test]
+        fn multi_eval() {
+            let vidpf = Vidpf::new(TEST_WEIGHT_LEN);
+            let mut reports = Vec::new();
+            const N: usize = 3;
+
+            for i in 0..8usize {
+                let input = VidpfInput::from(i.view_bits::<Lsb0>()[0..=N].to_bitvec());
+                let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
+                let (public, [key, _]) = vidpf.gen(&input, &weight, TEST_NONCE).unwrap();
+
+                reports.push(ClientReport {
+                    key,
+                    public,
+                    nonce: Vec::from(TEST_NONCE.as_slice()),
+                });
+            }
+
+            vidpf.multi_eval(&reports, N).unwrap();
         }
     }
 
