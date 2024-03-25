@@ -31,7 +31,7 @@ rand = { version = "0.8", optional = true }
 serde_json = { version = "1.0", optional = true }
 
 # dependencies required if feature "multithreaded" is enabled
-rayon = { version = "1.9.0", optional = true }
+rayon = { version = "1.10.0", optional = true }
 
 # dependencies required if feature "prio2" is enabled
 aes-gcm = { version = "^0.10", optional = true }
