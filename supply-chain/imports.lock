@@ -100,8 +100,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.114"
-when = "2024-02-20"
+version = "1.0.115"
+when = "2024-03-26"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -121,22 +121,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.57"
-when = "2024-02-11"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.thiserror]]
 version = "1.0.58"
 when = "2024-03-12"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
-[[publisher.thiserror-impl]]
-version = "1.0.57"
-when = "2024-02-11"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
