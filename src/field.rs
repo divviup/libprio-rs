@@ -7,11 +7,16 @@
 //! [`FftFriendlyFieldElement`], and have an associated element called the "generator" that
 //! generates a multiplicative subgroup of order `2^n` for some `n`.
 
-use crate::prng::{Prng, PrngError};
 use crate::{
     codec::{CodecError, Decode, Encode},
     fp::{FP128, FP32, FP64},
+    prng::{Prng, PrngError},
 };
+use rand::{
+    distributions::{Distribution, Standard},
+    Rng,
+};
+use rand_core::RngCore;
 use serde::{
     de::{DeserializeOwned, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -337,6 +342,25 @@ pub(crate) trait FieldElementExt: FieldElement {
             Ok(x) => ControlFlow::Break(x),
             Err(FieldError::ModulusOverflow) => ControlFlow::Continue(()),
             Err(err) => panic!("unexpected error: {err}"),
+        }
+    }
+
+    /// Generate a uniformly random field element from the provided source of random bytes using
+    /// rejection sampling.
+    fn generate_random<S: RngCore + ?Sized>(seed_stream: &mut S) -> Self {
+        // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
+        // output.
+        let mut buffer = [0u8; 64];
+        assert!(
+            buffer.len() >= Self::ENCODED_SIZE,
+            "field is too big for buffer"
+        );
+        loop {
+            seed_stream.fill_bytes(&mut buffer[..Self::ENCODED_SIZE]);
+            match Self::from_random_rejection(&buffer[..Self::ENCODED_SIZE]) {
+                ControlFlow::Break(x) => return x,
+                ControlFlow::Continue(()) => continue,
+            }
         }
     }
 }
@@ -739,6 +763,12 @@ macro_rules! make_field {
                 } else {
                     None
                 }
+            }
+        }
+
+        impl Distribution<$elem> for Standard {
+            fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> $elem {
+                $elem::generate_random(rng)
             }
         }
     };
