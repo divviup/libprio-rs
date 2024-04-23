@@ -86,7 +86,7 @@ pub fn dp_noise(c: &mut Criterion) {
 /// for small polynomials. The result is used to pick the `FFT_THRESHOLD` constant in
 /// `src/flp/gadgets.rs`.
 fn poly_mul(c: &mut Criterion) {
-    let test_sizes = [1_usize, 30, 60, 90, 120, 150];
+    let test_sizes = [1_usize, 30, 60, 90, 120, 150, 255];
 
     let mut group = c.benchmark_group("poly_mul");
     for size in test_sizes {

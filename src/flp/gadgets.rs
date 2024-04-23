@@ -17,7 +17,7 @@ use std::marker::PhantomData;
 
 /// For input polynomials larger than or equal to this threshold, gadgets will use FFT for
 /// polynomial multiplication. Otherwise, the gadget uses direct multiplication.
-const FFT_THRESHOLD: usize = 60;
+const FFT_THRESHOLD: usize = 30;
 
 /// An arity-2 gadget that multiples its inputs.
 #[derive(Clone, Debug, Eq, PartialEq)]

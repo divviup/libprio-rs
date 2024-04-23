@@ -48,9 +48,13 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
         return Err(FftError::SizeInvalid);
     }
 
-    for (i, outp_val) in outp[..size].iter_mut().enumerate() {
-        let j = bitrev(d, i);
-        *outp_val = if j < inp.len() { inp[j] } else { F::zero() };
+    if d > 0 {
+        for (i, outp_val) in outp[..size].iter_mut().enumerate() {
+            let j = bitrev(d, i);
+            *outp_val = if j < inp.len() { inp[j] } else { F::zero() };
+        }
+    } else {
+        outp[0] = inp[0];
     }
 
     let mut w: F;
@@ -116,11 +120,7 @@ pub(crate) fn discrete_fourier_transform_inv_finish<F: FftFriendlyFieldElement>(
 
 // bitrev returns the first d bits of x in reverse order. (Thanks, OEIS! https://oeis.org/A030109)
 fn bitrev(d: usize, x: usize) -> usize {
-    let mut y = 0;
-    for i in 0..d {
-        y += ((x >> i) & 1) << (d - i);
-    }
-    y >> 1
+    x.reverse_bits() >> (usize::BITS - d as u32)
 }
 
 #[cfg(test)]
