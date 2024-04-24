@@ -25,7 +25,7 @@ use std::{
     fmt::Debug,
     io::{Cursor, Read},
     iter::zip,
-    ops::{Add, AddAssign, ControlFlow, Index, Sub},
+    ops::{Add, AddAssign, Index, Sub},
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
@@ -184,20 +184,7 @@ where
     where
         S: RngCore,
     {
-        // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
-        // output.
-        let mut buffer = [0u8; 64];
-        assert!(
-            buffer.len() >= F::ENCODED_SIZE,
-            "field is too big for buffer"
-        );
-        loop {
-            seed_stream.fill_bytes(&mut buffer[..F::ENCODED_SIZE]);
-            match F::from_random_rejection(&buffer[..F::ENCODED_SIZE]) {
-                ControlFlow::Break(x) => return x,
-                ControlFlow::Continue(()) => continue,
-            }
-        }
+        F::generate_random(seed_stream)
     }
 
     fn zero(_: &()) -> Self {
