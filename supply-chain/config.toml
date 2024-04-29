@@ -224,10 +224,6 @@ criteria = "safe-to-run"
 version = "0.4.18"
 criteria = "safe-to-run"
 
-[[exemptions.tinytemplate]]
-version = "1.2.1"
-criteria = "safe-to-run"
-
 [[exemptions.tracing-error]]
 version = "0.2.0"
 criteria = "safe-to-run"
