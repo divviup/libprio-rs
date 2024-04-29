@@ -203,10 +203,6 @@ criteria = "safe-to-run"
 version = "0.16.0"
 criteria = "safe-to-run"
 
-[[exemptions.tinytemplate]]
-version = "1.2.1"
-criteria = "safe-to-run"
-
 [[exemptions.typenum]]
 version = "1.15.0"
 criteria = "safe-to-deploy"
