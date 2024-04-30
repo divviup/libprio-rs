@@ -55,15 +55,14 @@ impl FieldParameters {
     /// Subtraction. The result will be in [0, p), so long as both x and y are as well.
     #[inline(always)]
     pub fn sub(&self, x: u128, y: u128) -> u128 {
-        //     0, x
-        // -   0, y
+        //        x
+        // -      y
         // ========
-        // b1,z1,z0
+        //    b0,z0
         let (z0, b0) = x.overflowing_sub(y);
-        let (_z1, b1) = 0u128.overflowing_sub(b0 as u128);
-        let m = 0u128.wrapping_sub(b1 as u128);
-        //   z1,z0
-        // +  0, p
+        let m = 0u128.wrapping_sub(b0 as u128);
+        //      z0
+        // +     p
         // ========
         //   s1,s0
         z0.wrapping_add(m & self.p)
