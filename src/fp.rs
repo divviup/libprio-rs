@@ -199,7 +199,7 @@ impl FieldParameters {
         // Final subtraction
         // If z >= p, then z = z - p
 
-        //     0, z
+        //    cc, z
         // -   0, p
         // ========
         // b1,s1,s0
