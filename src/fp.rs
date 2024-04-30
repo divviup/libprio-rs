@@ -71,14 +71,14 @@ impl FieldParameters {
     }
 
     /// Multiplication of field elements in the Montgomery domain. This uses the REDC algorithm
-    /// described
-    /// [here](https://www.ams.org/journals/mcom/1985-44-170/S0025-5718-1985-0777282-X/S0025-5718-1985-0777282-X.pdf).
-    /// The result will be in [0, p).
+    /// described [here][montgomery]. The result will be in [0, p).
     ///
     /// # Example usage
     /// ```text
     /// assert_eq!(fp.residue(fp.mul(fp.montgomery(23), fp.montgomery(2))), 46);
     /// ```
+    ///
+    /// [montgomery]: https://www.ams.org/journals/mcom/1985-44-170/S0025-5718-1985-0777282-X/S0025-5718-1985-0777282-X.pdf
     #[inline(always)]
     pub fn mul(&self, x: u128, y: u128) -> u128 {
         let x = [lo64(x), hi64(x)];
