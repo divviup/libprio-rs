@@ -56,6 +56,7 @@ use crate::vdaf::{
 };
 #[cfg(feature = "experimental")]
 use fixed::traits::Fixed;
+use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::io::Cursor;
@@ -1173,10 +1174,9 @@ where
     > {
         let agg_id = self.role_try_from(agg_id)?;
 
-        // Create a reference to the (expanded) measurement share.
-        let expanded_measurement_share: Option<Vec<T::Field>> = match msg.measurement_share {
-            Share::Leader(_) => None,
-            Share::Helper(ref seed) => Some(
+        let measurement_share = match msg.measurement_share {
+            Share::Leader(ref data) => Cow::Borrowed(data),
+            Share::Helper(ref seed) => Cow::Owned(
                 P::seed_stream(
                     seed,
                     &self.domain_separation_tag(DST_MEASUREMENT_SHARE),
@@ -1185,23 +1185,14 @@ where
                 .into_field_vec(self.typ.input_len()),
             ),
         };
-        let measurement_share = match msg.measurement_share {
-            Share::Leader(ref data) => data,
-            Share::Helper(_) => expanded_measurement_share.as_ref().unwrap(),
-        };
 
-        // Create a reference to the (expanded) proof share.
-        let expanded_proofs_share: Option<Vec<T::Field>> = match msg.proofs_share {
-            Share::Leader(_) => None,
-            Share::Helper(ref proof_shares_seed) => Some(
-                self.derive_helper_proofs_share(proof_shares_seed, agg_id)
-                    .take(self.typ.proof_len() * self.num_proofs())
-                    .collect(),
-            ),
-        };
         let proofs_share = match msg.proofs_share {
-            Share::Leader(ref data) => data,
-            Share::Helper(_) => expanded_proofs_share.as_ref().unwrap(),
+            Share::Leader(ref data) => Cow::Borrowed(data),
+            Share::Helper(ref seed) => Cow::Owned(
+                self.derive_helper_proofs_share(seed, agg_id)
+                    .take(self.typ.proof_len() * self.num_proofs())
+                    .collect::<Vec<_>>(),
+            ),
         };
 
         // Compute the joint randomness.
@@ -1213,7 +1204,7 @@ where
             joint_rand_part_xof.update(&[agg_id]);
             joint_rand_part_xof.update(nonce);
             let mut encoding_buffer = Vec::with_capacity(T::Field::ENCODED_SIZE);
-            for x in measurement_share {
+            for x in measurement_share.iter() {
                 x.encode(&mut encoding_buffer).map_err(|_| {
                     VdafError::Uncategorized("failed to encode measurement share".to_string())
                 })?;
@@ -1267,7 +1258,7 @@ where
                 &proofs_share[p * self.typ.proof_len()..(p + 1) * self.typ.proof_len()];
 
             verifiers_share.append(&mut self.typ.query(
-                measurement_share,
+                measurement_share.as_ref(),
                 proof_share,
                 query_rand,
                 joint_rand,
