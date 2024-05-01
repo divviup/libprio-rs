@@ -9,7 +9,8 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode},
-    fp::{FP128, FP32, FP64},
+    fp::{FP128, FP32},
+    fp64::FP64,
     prng::{Prng, PrngError},
 };
 use rand::{
@@ -420,7 +421,7 @@ pub trait FftFriendlyFieldElement: FieldElementWithInteger {
 macro_rules! make_field {
     (
         $(#[$meta:meta])*
-        $elem:ident, $int:ident, $fp:ident, $encoding_size:literal,
+        $elem:ident, $int_internal:ident, $int_conversion:ident, $fp:ident, $encoding_size:literal,
     ) => {
         $(#[$meta])*
         ///
@@ -435,7 +436,7 @@ macro_rules! make_field {
         /// As an invariant, this integer representing the field element in the Montgomery domain
         /// must be less than the field modulus, `p`.
         #[derive(Clone, Copy, Default)]
-        pub struct $elem(u128);
+        pub struct $elem($int_internal);
 
         impl $elem {
             /// Attempts to instantiate an `$elem` from the first `Self::ENCODED_SIZE` bytes in the
@@ -452,14 +453,14 @@ macro_rules! make_field {
             /// We cannot use `u128::from_le_bytes` or `u128::from_be_bytes` because those functions
             /// expect inputs to be exactly 16 bytes long. Our encoding of most field elements is
             /// more compact.
-            fn try_from_bytes(bytes: &[u8], mask: u128) -> Result<Self, FieldError> {
+            fn try_from_bytes(bytes: &[u8], mask: $int_internal) -> Result<Self, FieldError> {
                 if Self::ENCODED_SIZE > bytes.len() {
                     return Err(FieldError::ShortRead);
                 }
 
                 let mut int = 0;
                 for i in 0..Self::ENCODED_SIZE {
-                    int |= (bytes[i] as u128) << (i << 3);
+                    int |= (bytes[i] as $int_internal) << (i << 3);
                 }
 
                 int &= mask;
@@ -495,7 +496,7 @@ macro_rules! make_field {
 
         impl ConditionallySelectable for $elem {
             fn conditional_select(a: &Self, b: &Self, choice: subtle::Choice) -> Self {
-                Self(u128::conditional_select(&a.0, &b.0, choice))
+                Self($int_internal::conditional_select(&a.0, &b.0, choice))
             }
         }
 
@@ -617,23 +618,23 @@ macro_rules! make_field {
             }
         }
 
-        impl From<$int> for $elem {
-            fn from(x: $int) -> Self {
+        impl From<$int_conversion> for $elem {
+            fn from(x: $int_conversion) -> Self {
                 // FieldParameters::montgomery() will return a value that has been fully reduced
                 // mod p, satisfying the invariant on Self.
-                Self($fp.montgomery(u128::try_from(x).unwrap()))
+                Self($fp.montgomery($int_internal::try_from(x).unwrap()))
             }
         }
 
-        impl From<$elem> for $int {
+        impl From<$elem> for $int_conversion {
             fn from(x: $elem) -> Self {
-                $int::try_from($fp.residue(x.0)).unwrap()
+                $int_conversion::try_from($fp.residue(x.0)).unwrap()
             }
         }
 
-        impl PartialEq<$int> for $elem {
-            fn eq(&self, rhs: &$int) -> bool {
-                $fp.residue(self.0) == u128::try_from(*rhs).unwrap()
+        impl PartialEq<$int_conversion> for $elem {
+            fn eq(&self, rhs: &$int_conversion) -> bool {
+                $fp.residue(self.0) == $int_internal::try_from(*rhs).unwrap()
             }
         }
 
@@ -641,7 +642,7 @@ macro_rules! make_field {
             type Error = FieldError;
 
             fn try_from(bytes: &[u8]) -> Result<Self, FieldError> {
-                Self::try_from_bytes(bytes, u128::MAX)
+                Self::try_from_bytes(bytes, $int_internal::MAX)
             }
         }
 
@@ -675,7 +676,7 @@ macro_rules! make_field {
         }
 
         // We provide custom [`serde::Serialize`] and [`serde::Deserialize`] implementations because
-        // the derived implementations would represent `FieldElement` values as the backing `u128`,
+        // the derived implementations would represent `FieldElement` values as the backing integer,
         // which is not what we want because (1) we can be more efficient in all cases and (2) in
         // some circumstances, [some serializers don't support `u128`](https://github.com/serde-rs/json/issues/625).
         impl Serialize for $elem {
@@ -707,7 +708,7 @@ macro_rules! make_field {
             fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
                 let mut value = [0u8; $elem::ENCODED_SIZE];
                 bytes.read_exact(&mut value)?;
-                $elem::try_from_bytes(&value, u128::MAX).map_err(|e| {
+                $elem::try_from_bytes(&value, $int_internal::MAX).map_err(|e| {
                     CodecError::Other(Box::new(e) as Box<dyn std::error::Error + 'static + Send + Sync>)
                 })
             }
@@ -735,16 +736,16 @@ macro_rules! make_field {
         }
 
         impl FieldElementWithInteger for $elem {
-            type Integer = $int;
+            type Integer = $int_conversion;
 
             fn pow(&self, exp: Self::Integer) -> Self {
                 // FieldParameters::pow() relies on mul(), and will always return a value less
                 // than p.
-                Self($fp.pow(self.0, u128::try_from(exp).unwrap()))
+                Self($fp.pow(self.0, $int_internal::try_from(exp).unwrap()))
             }
 
             fn modulus() -> Self::Integer {
-                $fp.p as $int
+                $fp.p as $int_conversion
             }
         }
 
@@ -816,6 +817,7 @@ impl Integer for u128 {
 make_field!(
     /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
     FieldPrio2,
+    u128,
     u32,
     FP32,
     4,
@@ -825,6 +827,7 @@ make_field!(
     /// `GF(18446744069414584321)`, a 64-bit field.
     Field64,
     u64,
+    u64,
     FP64,
     8,
 );
@@ -832,6 +835,7 @@ make_field!(
 make_field!(
     /// `GF(340282366920938462946865773367900766209)`, a 128-bit field.
     Field128,
+    u128,
     u128,
     FP128,
     16,
