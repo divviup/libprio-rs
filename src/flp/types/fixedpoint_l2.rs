@@ -662,9 +662,9 @@ mod tests {
         );
     }
 
-    fn test_fixed<F: Fixed>(fp_vec: Vec<F>, enc_vec: Vec<u128>)
+    fn test_fixed<F>(fp_vec: Vec<F>, enc_vec: Vec<u128>)
     where
-        F: CompatibleFloat<Field128>,
+        F: Fixed + CompatibleFloat<Field128>,
     {
         let n: usize = (F::INT_NBITS + F::FRAC_NBITS).try_into().unwrap();
 
