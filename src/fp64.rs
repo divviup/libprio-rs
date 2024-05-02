@@ -222,7 +222,6 @@ pub(crate) const FP64: FieldParameters64 = FieldParameters64 {
 #[cfg(test)]
 mod tests {
     use num_bigint::BigInt;
-    use rand::{distributions::Distribution, thread_rng};
 
     use crate::fp::tests::{
         all_field_parameters_tests, TestFieldParameters, TestFieldParametersData,
@@ -289,11 +288,6 @@ mod tests {
 
         fn inv(&self, x: u128) -> u128 {
             FieldParameters64::inv(self, x.try_into().unwrap()).into()
-        }
-
-        fn rand_elem(&self) -> u128 {
-            let uniform = rand::distributions::Uniform::from(0..self.p);
-            self.montgomery(uniform.sample(&mut thread_rng())).into()
         }
 
         fn radix(&self) -> BigInt {

@@ -357,7 +357,6 @@ pub(crate) mod tests {
         fn mul(&self, x: u128, y: u128) -> u128;
         fn pow(&self, x: u128, exp: u128) -> u128;
         fn inv(&self, x: u128) -> u128;
-        fn rand_elem(&self) -> u128;
         fn radix(&self) -> BigInt;
     }
 
@@ -420,11 +419,6 @@ pub(crate) mod tests {
 
         fn inv(&self, x: u128) -> u128 {
             FieldParameters::inv(self, x)
-        }
-
-        fn rand_elem(&self) -> u128 {
-            let uniform = rand::distributions::Uniform::from(0..self.p);
-            self.montgomery(uniform.sample(&mut thread_rng()))
         }
 
         fn radix(&self) -> BigInt {
@@ -534,12 +528,16 @@ pub(crate) mod tests {
 
     fn arithmetic_test(fp: &dyn TestFieldParameters) {
         let big_p = &fp.p().to_bigint().unwrap();
+        let uniform = rand::distributions::Uniform::from(0..fp.p());
+        let mut rng = thread_rng();
 
         for _ in 0..100 {
-            let x = fp.rand_elem();
-            let y = fp.rand_elem();
-            let big_x = &fp.residue(x).to_bigint().unwrap();
-            let big_y = &fp.residue(y).to_bigint().unwrap();
+            let int_x = uniform.sample(&mut rng);
+            let int_y = uniform.sample(&mut rng);
+            let big_x = &int_x.to_bigint().unwrap();
+            let big_y = &int_y.to_bigint().unwrap();
+            let x = fp.montgomery(int_x);
+            let y = fp.montgomery(int_y);
 
             // Test addition.
             let got = fp.add(x, y);
