@@ -70,26 +70,21 @@ impl Vdaf {
     }
 
     /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_init`].
-    pub fn with_prep_init_fn<F: Fn(&AggregationParam) -> Result<(), VdafError>>(
-        mut self,
-        f: F,
-    ) -> Self
+    pub fn with_prep_init_fn<F>(mut self, f: F) -> Self
     where
-        F: 'static + Send + Sync,
+        F: Fn(&AggregationParam) -> Result<(), VdafError> + Send + Sync + 'static,
     {
         self.prep_init_fn = Arc::new(f);
         self
     }
 
     /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_next`].
-    pub fn with_prep_step_fn<
-        F: Fn(&PrepareState) -> Result<PrepareTransition<Self, 0, 16>, VdafError>,
-    >(
-        mut self,
-        f: F,
-    ) -> Self
+    pub fn with_prep_step_fn<F>(mut self, f: F) -> Self
     where
-        F: 'static + Send + Sync,
+        F: Fn(&PrepareState) -> Result<PrepareTransition<Self, 0, 16>, VdafError>
+            + Send
+            + Sync
+            + 'static,
     {
         self.prep_step_fn = Arc::new(f);
         self

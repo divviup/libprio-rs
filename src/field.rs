@@ -944,8 +944,6 @@ pub(crate) mod test_utils {
         type TryIntoU64Error: std::error::Error;
         type TestInteger: Integer + From<Self> + Clone;
 
-        fn pow(&self, exp: Self::TestInteger) -> Self;
-
         fn modulus() -> Self::TestInteger;
     }
 
@@ -956,10 +954,6 @@ pub(crate) mod test_utils {
         type IntegerTryFromError = <F::Integer as Integer>::TryFromUsizeError;
         type TryIntoU64Error = <F::Integer as Integer>::TryIntoU64Error;
         type TestInteger = F::Integer;
-
-        fn pow(&self, exp: Self::TestInteger) -> Self {
-            <F as FieldElementWithInteger>::pow(self, exp)
-        }
 
         fn modulus() -> Self::TestInteger {
             <F as FieldElementWithInteger>::modulus()
