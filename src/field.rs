@@ -883,8 +883,6 @@ pub(crate) mod test_utils {
             + TryFrom<usize, Error = Self::IntegerTryFromError>
             + TryInto<u64, Error = Self::TryIntoU64Error>;
 
-        fn pow(&self, exp: Self::Integer) -> Self;
-
         fn modulus() -> Self::Integer;
     }
 
@@ -895,10 +893,6 @@ pub(crate) mod test_utils {
         type IntegerTryFromError = <F as FieldElementWithInteger>::IntegerTryFromError;
         type TryIntoU64Error = <F as FieldElementWithInteger>::TryIntoU64Error;
         type Integer = <F as FieldElementWithInteger>::Integer;
-
-        fn pow(&self, exp: Self::Integer) -> Self {
-            <F as FieldElementWithInteger>::pow(self, exp)
-        }
 
         fn modulus() -> Self::Integer {
             <F as FieldElementWithInteger>::modulus()
