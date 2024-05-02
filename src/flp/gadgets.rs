@@ -436,10 +436,7 @@ fn gadget_call_poly_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     outp: &[F],
     inp: &[Vec<F>],
-) -> Result<(), FlpError>
-where
-    G: Gadget<F>,
-{
+) -> Result<(), FlpError> {
     gadget_call_check(gadget, inp.len())?;
 
     for i in 1..inp.len() {

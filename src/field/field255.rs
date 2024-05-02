@@ -395,10 +395,6 @@ mod tests {
         type IntegerTryFromError = <Self::TestInteger as TryFrom<usize>>::Error;
         type TryIntoU64Error = <Self::TestInteger as TryInto<u64>>::Error;
 
-        fn pow(&self, _exp: Self::TestInteger) -> Self {
-            unimplemented!("Field255::pow() is not implemented because it's not needed yet")
-        }
-
         fn modulus() -> Self::TestInteger {
             MODULUS.clone()
         }
