@@ -336,7 +336,7 @@ pub(crate) mod tests {
     use super::*;
     use modinverse::modinverse;
     use num_bigint::{BigInt, ToBigInt};
-    use rand::{distributions::Distribution, thread_rng};
+    use rand::{distributions::Distribution, thread_rng, Rng};
     use std::cmp::max;
 
     /// This trait abstracts over the details of [`FieldParameters`] and
@@ -532,8 +532,30 @@ pub(crate) mod tests {
         let uniform = rand::distributions::Uniform::from(0..fp.p());
         let mut rng = thread_rng();
 
+        let mut weird_ints = Vec::from([
+            0,
+            1,
+            fp.bit_mask() - fp.p(),
+            fp.bit_mask() - fp.p() + 1,
+            fp.p() - 1,
+        ]);
+        if fp.p() > u64::MAX as u128 {
+            weird_ints.extend_from_slice(&[
+                u64::MAX as u128,
+                1 << 64,
+                fp.p() & u64::MAX as u128,
+                fp.p() & !u64::MAX as u128,
+                fp.p() & !u64::MAX as u128 | 1,
+            ]);
+        }
+
         let mut generate_random = || -> (u128, BigInt) {
-            let int = uniform.sample(&mut rng);
+            // Add bias to random element generation, to explore "interesting" inputs.
+            let int = if rng.gen_ratio(1, 4) {
+                weird_ints[rng.gen_range(0..weird_ints.len())]
+            } else {
+                uniform.sample(&mut rng)
+            };
             let bigint = int.to_bigint().unwrap();
             let montgomery_domain = fp.montgomery(int);
             (montgomery_domain, bigint)
