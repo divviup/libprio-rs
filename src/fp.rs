@@ -561,7 +561,7 @@ pub(crate) mod tests {
             (montgomery_domain, bigint)
         };
 
-        for _ in 0..100 {
+        for _ in 0..1000 {
             let (x, ref big_x) = generate_random();
             let (y, ref big_y) = generate_random();
 
