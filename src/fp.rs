@@ -528,6 +528,7 @@ pub(crate) mod tests {
 
     fn arithmetic_test(fp: &dyn TestFieldParameters) {
         let big_p = &fp.p().to_bigint().unwrap();
+        let big_zero = &BigInt::from(0);
         let uniform = rand::distributions::Uniform::from(0..fp.p());
         let mut rng = thread_rng();
 
@@ -565,7 +566,11 @@ pub(crate) mod tests {
             let got = fp.inv(x);
             let want = big_x.modpow(&(big_p - 2u128), big_p);
             assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
-            assert_eq!(fp.residue(fp.mul(got, x)), 1);
+            if big_x == big_zero {
+                assert_eq!(fp.residue(fp.mul(got, x)), 0);
+            } else {
+                assert_eq!(fp.residue(fp.mul(got, x)), 1);
+            }
 
             // Test negation.
             let got = fp.neg(x);
