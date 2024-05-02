@@ -531,13 +531,16 @@ pub(crate) mod tests {
         let uniform = rand::distributions::Uniform::from(0..fp.p());
         let mut rng = thread_rng();
 
+        let mut generate_random = || -> (u128, BigInt) {
+            let int = uniform.sample(&mut rng);
+            let bigint = int.to_bigint().unwrap();
+            let montgomery_domain = fp.montgomery(int);
+            (montgomery_domain, bigint)
+        };
+
         for _ in 0..100 {
-            let int_x = uniform.sample(&mut rng);
-            let int_y = uniform.sample(&mut rng);
-            let big_x = &int_x.to_bigint().unwrap();
-            let big_y = &int_y.to_bigint().unwrap();
-            let x = fp.montgomery(int_x);
-            let y = fp.montgomery(int_y);
+            let (x, ref big_x) = generate_random();
+            let (y, ref big_y) = generate_random();
 
             // Test addition.
             let got = fp.add(x, y);
