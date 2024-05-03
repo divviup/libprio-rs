@@ -488,7 +488,7 @@ where
         self.valid_call_check(input, joint_rand)?;
 
         let f_num_shares = Field128::from(Field128::valid_integer_try_from::<usize>(num_shares)?);
-        let num_shares_inverse = Field128::one() / f_num_shares;
+        let num_shares_inverse = f_num_shares.inv();
 
         // Ensure that all submitted field elements are either 0 or 1.
         // This is done for:
