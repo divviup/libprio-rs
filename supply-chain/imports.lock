@@ -468,15 +468,9 @@ call to `std::pointer::cast`.
 """
 
 [[audits.isrg.audits.base64]]
-who = "Brandon Pitman <bran@bran.land>"
-criteria = "safe-to-run"
-delta = "0.21.5 -> 0.21.6"
-notes = "sourcegraph-based diff did not see the v0.21.6 tag; I retrieved a local copy of the repo and used that for diff'ing."
-
-[[audits.isrg.audits.base64]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
-delta = "0.21.6 -> 0.21.7"
+delta = "0.22.0 -> 0.22.1"
 
 [[audits.isrg.audits.fiat-crypto]]
 who = "David Cook <dcook@divviup.org>"
@@ -660,6 +654,12 @@ criteria = "safe-to-deploy"
 version = "2.5.0"
 notes = "The goal is to provide some constant-time correctness for cryptographic implementations. The approach is reasonable, it is known to be insufficient but this is pointed out in the documentation."
 aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
+
+[[audits.zcash.audits.base64]]
+who = "Daira-Emma Hopwood <daira@jacaranda.org>"
+criteria = "safe-to-deploy"
+delta = "0.21.5 -> 0.21.7"
+aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.inout]]
 who = "Daira Hopwood <daira@jacaranda.org>"
