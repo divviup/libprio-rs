@@ -312,6 +312,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.12 -> 0.2.14"
 
+[[audits.getrandom]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.14 -> 0.2.15"
+
 [[audits.ghash]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
