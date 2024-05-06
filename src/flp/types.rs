@@ -422,7 +422,7 @@ where
         )?;
 
         // Check that the elements of `input` sum to 1.
-        let mut sum_check = -(F::one() / F::from(F::valid_integer_try_from(num_shares)?));
+        let mut sum_check = -F::from(F::valid_integer_try_from(num_shares)?).inv();
         for val in input.iter() {
             sum_check += *val;
         }
