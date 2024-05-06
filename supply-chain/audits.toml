@@ -692,6 +692,12 @@ user-id = 2915 # Amanieu d'Antras (Amanieu)
 start = "2021-01-27"
 end = "2024-06-08"
 
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+user-id = 51017 # Yuki Okushi (JohnTitor)
+start = "2020-03-17"
+end = "2025-05-06"
+
 [[trusted.libm]]
 criteria = "safe-to-deploy"
 user-id = 2915 # Amanieu d'Antras (Amanieu)
