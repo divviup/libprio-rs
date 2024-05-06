@@ -29,6 +29,13 @@ user-id = 2915
 user-login = "Amanieu"
 user-name = "Amanieu d'Antras"
 
+[[publisher.libc]]
+version = "0.2.154"
+when = "2024-04-29"
+user-id = 51017
+user-login = "JohnTitor"
+user-name = "Yuki Okushi"
+
 [[publisher.memchr]]
 version = "2.5.0"
 when = "2022-04-30"
