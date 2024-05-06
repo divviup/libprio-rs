@@ -523,6 +523,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.17 -> 0.2.18"
 
+[[audits.isrg.audits.num-traits]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.18 -> 0.2.19"
+
 [[audits.isrg.audits.once_cell]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
