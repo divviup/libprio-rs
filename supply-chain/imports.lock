@@ -23,11 +23,11 @@ user-login = "alexcrichton"
 user-name = "Alex Crichton"
 
 [[publisher.libc]]
-version = "0.2.146"
-when = "2023-06-06"
-user-id = 2915
-user-login = "Amanieu"
-user-name = "Amanieu d'Antras"
+version = "0.2.154"
+when = "2024-04-29"
+user-id = 51017
+user-login = "JohnTitor"
+user-name = "Yuki Okushi"
 
 [[publisher.libm]]
 version = "0.2.7"
@@ -331,18 +331,6 @@ The is-terminal implementation code is now sync'd up with the prototype
 implementation in the Rust standard library.
 """
 
-[[audits.bytecode-alliance.audits.libc]]
-who = "Alex Crichton <alex@alexcrichton.com>"
-criteria = "safe-to-deploy"
-delta = "0.2.146 -> 0.2.147"
-notes = "Only new type definitions and updating others for some platforms, no major changes"
-
-[[audits.bytecode-alliance.audits.libc]]
-who = "Alex Crichton <alex@alexcrichton.com>"
-criteria = "safe-to-deploy"
-delta = "0.2.148 -> 0.2.149"
-notes = "Lots of new functions and constants for new platforms and nothing out of the ordinary for what one would expect of the `libc` crate."
-
 [[audits.bytecode-alliance.audits.linux-raw-sys]]
 who = "Dan Gohman <dev@sunfishcode.online>"
 criteria = "safe-to-deploy"
@@ -512,12 +500,6 @@ aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-ch
 who = "Simon Friedberger <simon@mozilla.com>"
 criteria = "safe-to-deploy"
 version = "0.4.3"
-aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
-
-[[audits.mozilla.audits.libc]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-delta = "0.2.147 -> 0.2.148"
 aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
 [[audits.mozilla.audits.num-bigint]]
