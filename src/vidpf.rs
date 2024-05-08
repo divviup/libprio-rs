@@ -16,8 +16,9 @@ use core::{
 
 use bitvec::field::BitField;
 use rand_core::RngCore;
+use std::fmt::Debug;
 use std::io::Cursor;
-use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
+use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 use crate::{
     codec::{CodecError, Encode, ParameterizedDecode},
@@ -45,6 +46,11 @@ pub enum VidpfError {
     #[error("level index out of bounds")]
     IndexLevel,
 
+    /// Error when input attribute has too few or many bits to be a path in an initialized
+    /// VIDPF tree.
+    #[error("invalid attribute length")]
+    InvalidAttributeLength,
+
     /// Error when weight's length mismatches the length in weight's parameter.
     #[error("invalid weight length")]
     InvalidWeightLength,
@@ -58,12 +64,13 @@ pub enum VidpfError {
 pub type VidpfInput = IdpfInput;
 
 /// Represents the codomain of an incremental point function.
-pub trait VidpfValue: IdpfValue + Clone {}
+pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 
+#[derive(Clone, Debug)]
 /// A VIDPF instance.
 pub struct Vidpf<W: VidpfValue, const NONCE_SIZE: usize> {
     /// Any parameters required to instantiate a weight value.
-    weight_parameter: W::ValueParameter,
+    pub(crate) weight_parameter: W::ValueParameter,
 }
 
 impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
@@ -108,7 +115,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
     /// [`Vidpf::gen_with_keys`] works as the [`Vidpf::gen`] method, except that two different
     /// keys must be provided.
-    fn gen_with_keys(
+    pub(crate) fn gen_with_keys(
         &self,
         keys: &[VidpfKey; 2],
         input: &VidpfInput,
@@ -206,6 +213,9 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         let mut share = W::zero(&self.weight_parameter);
 
         let n = input.len();
+        if n > public.cw.len() {
+            return Err(VidpfError::InvalidAttributeLength);
+        }
         for level in 0..n {
             (state, share) = self.eval_next(key.id, public, input, level, &state, nonce)?;
         }
@@ -264,6 +274,20 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         };
 
         Ok((next_state, y))
+    }
+
+    pub(crate) fn eval_root(
+        &self,
+        key: &VidpfKey,
+        public_share: &VidpfPublicShare<W>,
+        nonce: &[u8; NONCE_SIZE],
+    ) -> Result<W, VidpfError> {
+        Ok(self
+            .eval(key, public_share, &VidpfInput::from_bools(&[false]), nonce)?
+            .share
+            + self
+                .eval(key, public_share, &VidpfInput::from_bools(&[true]), nonce)?
+                .share)
     }
 
     fn prg(seed: &VidpfSeed, nonce: &[u8]) -> VidpfPrgOutput {
@@ -339,6 +363,8 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     }
 }
 
+/// Vidpf domain separation tag
+///
 /// Contains the domain separation tags for invoking different oracles.
 struct VidpfDomainSepTag;
 impl VidpfDomainSepTag {
@@ -348,10 +374,13 @@ impl VidpfDomainSepTag {
     const NODE_PROOF_ADJUST: &'static [u8] = b"NodeProofAdjust";
 }
 
+#[derive(Clone, Debug)]
+/// Vidpf key
+///
 /// Private key of an aggregation server.
 pub struct VidpfKey {
     id: VidpfServerId,
-    value: [u8; 16],
+    pub(crate) value: [u8; 16],
 }
 
 impl VidpfKey {
@@ -364,10 +393,32 @@ impl VidpfKey {
         getrandom::getrandom(&mut value)?;
         Ok(Self { id, value })
     }
+
+    pub(crate) fn new(id: VidpfServerId, value: [u8; 16]) -> Self {
+        Self { id, value }
+    }
 }
 
+impl ConstantTimeEq for VidpfKey {
+    fn ct_eq(&self, other: &VidpfKey) -> Choice {
+        if self.id != other.id {
+            Choice::from(0)
+        } else {
+            self.value.ct_eq(&other.value)
+        }
+    }
+}
+
+impl PartialEq for VidpfKey {
+    fn eq(&self, other: &VidpfKey) -> bool {
+        bool::from(self.ct_eq(other))
+    }
+}
+
+/// Vidpf server ID
+///
 /// Identifies the two aggregation servers.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum VidpfServerId {
     /// S0 is the first server.
     S0,
@@ -384,8 +435,10 @@ impl From<VidpfServerId> for Choice {
     }
 }
 
-/// Adjusts values of shares during the VIDPF evaluation.
-#[derive(Debug)]
+/// Vidpf correction word
+///
+///  Adjusts values of shares during the VIDPF evaluation.
+#[derive(Clone, Debug)]
 struct VidpfCorrectionWord<W: VidpfValue> {
     seed: VidpfSeed,
     left_control_bit: Choice,
@@ -393,13 +446,73 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
+impl<W: VidpfValue> ConstantTimeEq for VidpfCorrectionWord<W> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.seed.ct_eq(&other.seed)
+            & self.left_control_bit.ct_eq(&other.left_control_bit)
+            & self.right_control_bit.ct_eq(&other.right_control_bit)
+            & self.weight.ct_eq(&other.weight)
+    }
+}
+
+impl<W: VidpfValue> PartialEq for VidpfCorrectionWord<W>
+where
+    W: ConstantTimeEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
+    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        todo!();
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        todo!();
+    }
+}
+
+impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWord<W> {
+    fn decode_with_param(
+        _decoding_parameter: &W::ValueParameter,
+        _bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        todo!();
+    }
+}
+
+/// Vidpf public share
+///
 /// Common public information used by aggregation servers.
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VidpfPublicShare<W: VidpfValue> {
     cw: Vec<VidpfCorrectionWord<W>>,
     cs: Vec<VidpfProof>,
 }
 
+impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
+    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        todo!()
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        todo!()
+    }
+}
+
+impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
+    fn decode_with_param(
+        (_bits, _weight_parameter): &(usize, W::ValueParameter),
+        _bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        todo!()
+    }
+}
+
+/// Vidpf evaluation state
+///
 /// Contains the values produced during input evaluation at a given level.
 pub struct VidpfEvalState {
     seed: VidpfSeed,
@@ -454,11 +567,17 @@ struct VidpfPrgOutput {
 
 /// Represents an array of field elements that implements the [`VidpfValue`] trait.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct VidpfWeight<F: FieldElement>(Vec<F>);
+pub struct VidpfWeight<F: FieldElement>(pub(crate) Vec<F>);
 
 impl<F: FieldElement> From<Vec<F>> for VidpfWeight<F> {
     fn from(value: Vec<F>) -> Self {
         Self(value)
+    }
+}
+
+impl<F: FieldElement> AsRef<[F]> for VidpfWeight<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
     }
 }
 
@@ -546,6 +665,12 @@ impl<F: FieldElement> Sub for VidpfWeight<F> {
         );
 
         Self(zip(self.0, rhs.0).map(|(a, b)| a.sub(b)).collect())
+    }
+}
+
+impl<F: FieldElement> ConstantTimeEq for VidpfWeight<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.0[..].ct_eq(&other.0[..])
     }
 }
 
