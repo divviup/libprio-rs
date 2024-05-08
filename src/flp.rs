@@ -57,6 +57,8 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 
 pub mod gadgets;
+#[cfg(all(feature = "experimental", test))]
+pub mod szk;
 pub mod types;
 
 /// Errors propagated by methods in this module.
