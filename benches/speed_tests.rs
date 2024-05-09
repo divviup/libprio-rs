@@ -14,9 +14,11 @@ use num_rational::Ratio;
 #[cfg(feature = "experimental")]
 use num_traits::ToPrimitive;
 #[cfg(feature = "experimental")]
+use prio::bt::BinaryTree;
+#[cfg(feature = "experimental")]
 use prio::dp::distributions::DiscreteGaussian;
 #[cfg(feature = "experimental")]
-use prio::idpf::test_utils::generate_zipf_distributed_batch;
+use prio::idpf::{test_utils::generate_zipf_distributed_batch, HashMapCache, IdpfCache};
 #[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
 use prio::{
@@ -771,6 +773,73 @@ fn poplar1(c: &mut Criterion) {
                 .unwrap();
             });
         });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("poplar1_prepare_cached");
+    type BoxedCacheConstructor = fn() -> Box<dyn IdpfCache>;
+    let cache_impls: [(&'static str, BoxedCacheConstructor); 5] = [
+        ("ringbuffer_10", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCache::new(10))
+        }),
+        ("ringbuffer_100", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCache::new(100))
+        }),
+        ("ringbuffer_1000", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCache::new(1000))
+        }),
+        ("hashmap", || -> Box<dyn IdpfCache> {
+            Box::new(HashMapCache::new())
+        }),
+        ("binarytree", || -> Box<dyn IdpfCache> {
+            let mut tree = Box::<BinaryTree<_>>::default();
+            // Insert a bogus value at the root node. This is necessary for later nodes to be
+            // inserted, and the IDPF implementation won't try to read it.
+            tree.insert(bitvec::bits!(usize, bitvec::prelude::Lsb0;), ([0; 16], 0))
+                .unwrap();
+            tree
+        }),
+    ];
+    for size in test_sizes.iter() {
+        for (cache_name, cache_constructor) in cache_impls {
+            group.measurement_time(Duration::from_secs(30)); // slower benchmark
+            group.bench_with_input(BenchmarkId::new(cache_name, size), size, |b, &size| {
+                let vdaf = Poplar1::new_turboshake128(size);
+                let mut rng = StdRng::seed_from_u64(RNG_SEED);
+                let verify_key: [u8; 16] = rng.gen();
+                let nonce: [u8; 16] = rng.gen();
+                let (measurements, prefix_tree) = generate_zipf_distributed_batch(
+                    &mut rng, // rng
+                    size,     // bits
+                    10,       // threshold
+                    1000,     // number of measurements
+                    128,      // Zipf support
+                    1.03,     // Zipf exponent
+                );
+                let (public_share, input_shares) = vdaf.shard(&measurements[0], &nonce).unwrap();
+                let input_share = input_shares.into_iter().next().unwrap();
+                let agg_params = prefix_tree
+                    .into_iter()
+                    .map(|prefixes| Poplar1AggregationParam::try_from_prefixes(prefixes).unwrap())
+                    .collect::<Vec<_>>();
+
+                b.iter(|| {
+                    let mut cache = cache_constructor();
+                    for agg_param in agg_params.iter() {
+                        vdaf.prepare_init_with_cache(
+                            &verify_key,
+                            0,
+                            agg_param,
+                            &nonce,
+                            &public_share,
+                            &input_share,
+                            cache.as_mut(),
+                        )
+                        .unwrap();
+                    }
+                });
+            });
+        }
     }
     group.finish();
 }
