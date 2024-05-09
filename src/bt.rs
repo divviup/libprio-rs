@@ -58,6 +58,8 @@ use std::io::Cursor;
 use bitvec::slice::BitSlice;
 
 use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
+#[cfg(feature = "crypto-dependencies")]
+use crate::idpf::IdpfCache;
 
 /// Errors triggered by binary tree operations.
 #[derive(Debug, thiserror::Error)]
@@ -392,6 +394,18 @@ impl Decode for CodecMarker {
             1u8 => Ok(CodecMarker::Inner),
             _ => Err(CodecError::UnexpectedValue),
         }
+    }
+}
+
+#[cfg(feature = "crypto-dependencies")]
+impl IdpfCache for BinaryTree<([u8; 16], u8)> {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
+        self.get(input).cloned()
+    }
+
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
+        // Fail silently if the value cannot be inserted because not all parent nodes exist.
+        let _ = self.insert(input, *values);
     }
 }
 
