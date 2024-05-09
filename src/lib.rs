@@ -16,7 +16,7 @@
 
 pub mod benchmarked;
 #[cfg(feature = "experimental")]
-mod bt;
+pub mod bt;
 pub mod codec;
 #[cfg(feature = "experimental")]
 #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
