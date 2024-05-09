@@ -21,11 +21,26 @@ class Field:
     # subgroup. The generator element will be a 2^num_roots-th root of unity.
     num_roots: Integer
 
-    def __init__(self, name, modulus, generator_element):
+    # The base used for multiprecision arithmetic. This should be a power of
+    # two, and it should ideally be the machine word size of the target
+    # architecture.
+    r: Integer
+
+    # The radix. This must be a multiple of the base "r", and must be coprime
+    # to the prime "p".
+    R: Integer
+
+    def __init__(self, name, modulus, generator_element, r, R):
         assert is_prime(modulus)
+        assert R % r == 0
+        assert R % modulus != 0
+        assert modulus % R != 0
+
         self.name = name
         self.modulus = modulus
         self.generator_element = generator_element
+        self.r = r
+        self.R = R
 
         self.num_roots = None
         for (prime, power) in factor(modulus - 1):
@@ -43,8 +58,7 @@ class Field:
         mu = (-p)^-1 mod r, where r is the modulus implicitly used in wrapping
         machine word operations.
         """
-        r = 2 ^ 64
-        return (-self.modulus).inverse_mod(r)
+        return (-self.modulus).inverse_mod(self.r)
 
     def r2(self):
         """
@@ -52,15 +66,14 @@ class Field:
         Montgomery representation. R is the machine word-friendly modulus
         used in the Montgomery representation.
         """
-        R = 2 ^ 128
-        return R ^ 2 % self.modulus
+        return self.R ^ 2 % self.modulus
 
     def to_montgomery(self, element):
         """
         Transforms an element into its Montgomery representation.
         """
-        R = 2 ^ 128
-        return element * R % self.modulus
+
+        return element * self.R % self.modulus
 
     def bit_mask(self):
         """
@@ -89,19 +102,32 @@ class Field:
 
 FIELDS = [
     Field(
-        "FieldPrio2",
+        "FieldPrio2, u128",
         2 ^ 20 * 4095 + 1,
         3925978153,
+        2 ^ 64,
+        2 ^ 128,
     ),
     Field(
-        "Field64",
+        "Field64, u128",
         2 ^ 32 * 4294967295 + 1,
         pow(7, 4294967295, 2 ^ 32 * 4294967295 + 1),
+        2 ^ 64,
+        2 ^ 128,
     ),
     Field(
-        "Field128",
+        "Field64, u64",
+        2 ^ 32 * 4294967295 + 1,
+        pow(7, 4294967295, 2 ^ 32 * 4294967295 + 1),
+        2 ^ 64,
+        2 ^ 64,
+    ),
+    Field(
+        "Field128, u128",
         2 ^ 66 * 4611686018427387897 + 1,
         pow(7, 4611686018427387897, 2 ^ 66 * 4611686018427387897 + 1),
+        2 ^ 64,
+        2 ^ 128,
     ),
 ]
 for field in FIELDS:
