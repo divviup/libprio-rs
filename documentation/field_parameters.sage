@@ -32,6 +32,10 @@ class Field:
 
     def __init__(self, name, modulus, generator_element, r, R):
         assert is_prime(modulus)
+        assert R % r == 0
+        assert R % modulus != 0
+        assert modulus % R != 0
+
         self.name = name
         self.modulus = modulus
         self.generator_element = generator_element
