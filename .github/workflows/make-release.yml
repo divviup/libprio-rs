@@ -79,7 +79,7 @@ jobs:
           FIRST_BRANCH: '${{ fromJSON(inputs.target_branch)[0] }}'
         run: |
           # Determine the workspace version.
-          VERSION=$(cargo metadata --no-deps | jq -er '.packages[0].version')
+          VERSION=$(cargo metadata --no-deps --format-version 1 | jq -er '.packages[0].version')
 
           LATEST=
           if [ "$TARGET_BRANCH" == "$FIRST_BRANCH" ]; then
