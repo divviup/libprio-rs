@@ -23,9 +23,9 @@ use bitvec::{
 use hashbrown::raw::RawTable;
 use rand_core::RngCore;
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{hash_map::DefaultHasher, HashMap, VecDeque},
     fmt::Debug,
-    hash::{DefaultHasher, Hash, Hasher},
+    hash::{Hash, Hasher},
     io::{Cursor, Read},
     iter::zip,
     ops::{Add, AddAssign, Index, Sub},
