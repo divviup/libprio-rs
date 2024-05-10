@@ -18,7 +18,7 @@ use prio::bt::BinaryTree;
 #[cfg(feature = "experimental")]
 use prio::dp::distributions::DiscreteGaussian;
 #[cfg(feature = "experimental")]
-use prio::idpf::{test_utils::generate_zipf_distributed_batch, HashMapCache, IdpfCache};
+use prio::idpf::test_utils::generate_zipf_distributed_batch;
 #[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
 use prio::{
@@ -31,7 +31,10 @@ use prio::{
 use prio::{
     field::{Field255, Field64},
     flp::types::fixedpoint_l2::FixedPointBoundedL2VecSum,
-    idpf::{Idpf, IdpfInput, RingBufferCache},
+    idpf::{
+        HashMapCache, HashMapCacheA, HashMapCacheB, Idpf, IdpfCache, IdpfInput, RingBufferCache,
+        RingBufferCacheA, RingBufferCacheB,
+    },
     vdaf::poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
 };
 #[cfg(feature = "experimental")]
@@ -778,18 +781,24 @@ fn poplar1(c: &mut Criterion) {
 
     let mut group = c.benchmark_group("poplar1_prepare_cached");
     type BoxedCacheConstructor = fn() -> Box<dyn IdpfCache>;
-    let cache_impls: [(&'static str, BoxedCacheConstructor); 5] = [
-        ("ringbuffer_10", || -> Box<dyn IdpfCache> {
-            Box::new(RingBufferCache::new(10))
-        }),
+    let cache_impls: [(&'static str, BoxedCacheConstructor); 7] = [
         ("ringbuffer_100", || -> Box<dyn IdpfCache> {
             Box::new(RingBufferCache::new(100))
         }),
-        ("ringbuffer_1000", || -> Box<dyn IdpfCache> {
-            Box::new(RingBufferCache::new(1000))
+        ("ringbuffer_a_100", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCacheA::new(100))
+        }),
+        ("ringbuffer_b_100", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCacheB::new(100))
         }),
         ("hashmap", || -> Box<dyn IdpfCache> {
             Box::new(HashMapCache::new())
+        }),
+        ("hashmap_a", || -> Box<dyn IdpfCache> {
+            Box::new(HashMapCacheA::new())
+        }),
+        ("hashmap_b", || -> Box<dyn IdpfCache> {
+            Box::new(HashMapCacheB::new())
         }),
         ("binarytree", || -> Box<dyn IdpfCache> {
             let mut tree = Box::<BinaryTree<_>>::default();

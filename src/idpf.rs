@@ -14,15 +14,18 @@ use crate::{
 use bitvec::{
     bitvec,
     boxed::BitBox,
+    domain::Domain,
     prelude::{Lsb0, Msb0},
     slice::BitSlice,
     vec::BitVec,
     view::BitView,
 };
+use hashbrown::raw::RawTable;
 use rand_core::RngCore;
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
+    hash::{DefaultHasher, Hash, Hasher},
     io::{Cursor, Read},
     iter::zip,
     ops::{Add, AddAssign, Index, Sub},
@@ -932,6 +935,288 @@ impl IdpfCache for RingBufferCache {
         // iterate back-to-front, so that we check the most recently pushed entry first.
         for entry in self.ring.iter().rev() {
             if input == entry.0 {
+                return Some((entry.1, entry.2));
+            }
+        }
+        None
+    }
+
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
+        // evict first (to avoid growing the storage)
+        if self.ring.len() == self.ring.capacity() {
+            self.ring.pop_front();
+        }
+        self.ring
+            .push_back((input.to_owned().into_boxed_bitslice(), values.0, values.1));
+    }
+}
+
+struct NormalizedBitVec(BitVec);
+
+impl From<BitVec> for NormalizedBitVec {
+    fn from(mut value: BitVec) -> Self {
+        value.force_align();
+        value.set_uninitialized(false);
+        Self(value)
+    }
+}
+
+impl PartialEq for NormalizedBitVec {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.as_raw_slice() == other.0.as_raw_slice() && self.0.len() == other.0.len()
+    }
+}
+
+impl Eq for NormalizedBitVec {}
+
+impl Hash for NormalizedBitVec {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // We can hash the raw slice directly because the bit vector is aligned and has its
+        // uninitialized bits cleared.
+        self.0.as_raw_slice().hash(state);
+        self.0.len().hash(state);
+    }
+}
+
+/// A simple [`IdpfCache`] implementation that caches intermediate results in an in-memory hash map,
+/// with no eviction.
+#[derive(Default)]
+pub struct HashMapCacheA {
+    map: HashMap<NormalizedBitVec, ([u8; 16], u8)>,
+}
+
+impl HashMapCacheA {
+    /// Create a new unpopulated `HashMapCacheA`.
+    pub fn new() -> HashMapCacheA {
+        HashMapCacheA::default()
+    }
+
+    /// Create a new unpopulated `HashMapCacheA`, with a set pre-allocated capacity.
+    pub fn with_capacity(capacity: usize) -> HashMapCacheA {
+        Self {
+            map: HashMap::with_capacity(capacity),
+        }
+    }
+}
+
+impl IdpfCache for HashMapCacheA {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
+        self.map.get(&normalized).cloned()
+    }
+
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
+        self.map.entry(normalized).or_insert(*values);
+    }
+}
+
+/// A simple [`IdpfCache`] implementation that caches intermediate results in memory, with
+/// first-in-first-out eviction, and lookups via linear probing.
+pub struct RingBufferCacheA {
+    ring: VecDeque<(NormalizedBitVec, [u8; 16], u8)>,
+}
+
+impl RingBufferCacheA {
+    /// Create a new unpopulated `RingBufferCacheA`.
+    pub fn new(capacity: usize) -> RingBufferCacheA {
+        Self {
+            ring: VecDeque::with_capacity(std::cmp::max(capacity, 1)),
+        }
+    }
+}
+
+impl IdpfCache for RingBufferCacheA {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
+        // iterate back-to-front, so that we check the most recently pushed entry first.
+        for entry in self.ring.iter().rev() {
+            if normalized == entry.0 {
+                return Some((entry.1, entry.2));
+            }
+        }
+        None
+    }
+
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
+        // evict first (to avoid growing the storage)
+        if self.ring.len() == self.ring.capacity() {
+            self.ring.pop_front();
+        }
+        self.ring.push_back((normalized, values.0, values.1));
+    }
+}
+
+fn bitslice_elementwise_eq(left: &BitSlice, right: &BitSlice) -> bool {
+    // Optimistically try to do comparisons on machine words, if the bit slices line up right.
+    // If that fails, fall back to the provided implementation on BitSlice.
+    match (left.domain(), right.domain()) {
+        (Domain::Enclave(left), Domain::Enclave(right)) => {
+            if left.bounds() == right.bounds() {
+                return left.load_value() == right.load_value();
+            }
+        }
+        (
+            Domain::Region {
+                head: None,
+                body: left_body,
+                tail: None,
+            },
+            Domain::Region {
+                head: None,
+                body: right_body,
+                tail: None,
+            },
+        ) => return left_body == right_body,
+        (
+            Domain::Region {
+                head: None,
+                body: left_body,
+                tail: Some(left_tail),
+            },
+            Domain::Region {
+                head: None,
+                body: right_body,
+                tail: Some(right_tail),
+            },
+        ) => {
+            return left_body == right_body
+                && left_tail.load_value() == right_tail.load_value()
+                && left_tail.bounds() == right_tail.bounds()
+        }
+        (Domain::Enclave(_), Domain::Region { .. })
+        | (Domain::Region { .. }, Domain::Enclave(_))
+        | (Domain::Region { head: Some(_), .. }, Domain::Region { .. })
+        | (Domain::Region { .. }, Domain::Region { head: Some(_), .. }) => {}
+        (
+            Domain::Region {
+                head: None,
+                body: _,
+                tail: None,
+            },
+            Domain::Region {
+                head: None,
+                body: _,
+                tail: Some(_),
+            },
+        )
+        | (
+            Domain::Region {
+                head: None,
+                body: _,
+                tail: Some(_),
+            },
+            Domain::Region {
+                head: None,
+                body: _,
+                tail: None,
+            },
+        ) => return false,
+    }
+    left == right
+}
+
+fn bitslice_elementwise_hash<H: Hasher>(bitslice: &BitSlice, state: &mut H) {
+    // Hash a machine word at a time instead of a bool at a time. The hope is that, since the
+    // bitslices will tend to start in the first bit, the copies should be cheap, and making
+    // fewer hash calls, on usizes instead of bools, will reduce unneccessary work.
+    let mut iter = bitslice.chunks_exact(usize::BITS as usize);
+
+    let mut word = 0usize;
+    for chunk in &mut iter {
+        let word_bitslice = BitSlice::<usize, Lsb0>::from_element_mut(&mut word);
+        word_bitslice.copy_from_bitslice(chunk);
+        word.hash(state);
+    }
+
+    word = 0;
+    let remainder_bitslice = iter.remainder();
+    let word_bitslice = BitSlice::<usize, Lsb0>::from_element_mut(&mut word);
+    word_bitslice[..remainder_bitslice.len()].copy_from_bitslice(remainder_bitslice);
+    word.hash(state);
+
+    bitslice.len().hash(state);
+}
+
+/// A simple [`IdpfCache`] implementation that caches intermediate results in an in-memory hash map,
+/// with no eviction.
+#[derive(Default)]
+pub struct HashMapCacheB {
+    map: RawTable<(BitBox, [u8; 16], u8)>,
+}
+
+impl HashMapCacheB {
+    /// Create a new unpopulated `HashMapCacheB`.
+    pub fn new() -> HashMapCacheB {
+        HashMapCacheB::default()
+    }
+
+    /// Create a new unpopulated `HashMapCacheB`, with a set pre-allocated capacity.
+    pub fn with_capacity(capacity: usize) -> HashMapCacheB {
+        Self {
+            map: RawTable::with_capacity(capacity),
+        }
+    }
+}
+
+impl IdpfCache for HashMapCacheB {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
+        let mut hasher = DefaultHasher::new();
+        bitslice_elementwise_hash(input, &mut hasher);
+        let hash = hasher.finish();
+
+        let (_, seed, control_bit) = self
+            .map
+            .get(hash, |entry| bitslice_elementwise_eq(input, &entry.0))?;
+        Some((*seed, *control_bit))
+    }
+
+    fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
+        let mut hasher = DefaultHasher::new();
+        bitslice_elementwise_hash(input, &mut hasher);
+        let hash = hasher.finish();
+
+        let result = self.map.find_or_find_insert_slot(
+            hash,
+            |entry| bitslice_elementwise_eq(input, &entry.0),
+            |entry| {
+                let mut hasher = DefaultHasher::new();
+                bitslice_elementwise_hash(&entry.0, &mut hasher);
+                hasher.finish()
+            },
+        );
+        if let Err(slot) = result {
+            let value = (input.to_owned().into_boxed_bitslice(), values.0, values.1);
+            // Safety: `slot` is indeed a slot returned from `find_or_find_insert_slot()`, and the
+            // table hasn't been mutated since that call.
+            unsafe {
+                self.map.insert_in_slot(hash, slot, value);
+            }
+        }
+    }
+}
+
+/// A simple [`IdpfCache`] implementation that caches intermediate results in memory, with
+/// first-in-first-out eviction, and lookups via linear probing.
+pub struct RingBufferCacheB {
+    ring: VecDeque<(BitBox, [u8; 16], u8)>,
+}
+
+impl RingBufferCacheB {
+    /// Create a new unpopulated `RingBufferCacheB`.
+    pub fn new(capacity: usize) -> RingBufferCacheB {
+        Self {
+            ring: VecDeque::with_capacity(std::cmp::max(capacity, 1)),
+        }
+    }
+}
+
+impl IdpfCache for RingBufferCacheB {
+    fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
+        // iterate back-to-front, so that we check the most recently pushed entry first.
+        for entry in self.ring.iter().rev() {
+            if bitslice_elementwise_eq(input, &entry.0) {
                 return Some((entry.1, entry.2));
             }
         }
