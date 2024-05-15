@@ -710,6 +710,12 @@ user-id = 189 # Andrew Gallant (BurntSushi)
 start = "2019-07-07"
 end = "2024-06-08"
 
+[[trusted.num-bigint]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-09-04"
+end = "2025-05-15"
+
 [[trusted.num-complex]]
 criteria = "safe-to-run"
 user-id = 539 # Josh Stone (cuviper)
@@ -721,6 +727,12 @@ criteria = "safe-to-run"
 user-id = 539 # Josh Stone (cuviper)
 start = "2019-06-11"
 end = "2024-07-13"
+
+[[trusted.num-rational]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-06-11"
+end = "2025-05-15"
 
 [[trusted.num_cpus]]
 criteria = "safe-to-deploy"
