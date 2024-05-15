@@ -241,6 +241,12 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.7 -> 0.2.8"
 
+[[audits.fiat-crypto]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.8 -> 0.2.9"
+notes = "No changes to Rust code between 0.2.8 and 0.2.9"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -804,6 +810,12 @@ criteria = "safe-to-deploy"
 user-id = 189 # Andrew Gallant (BurntSushi)
 start = "2019-07-07"
 end = "2024-06-08"
+
+[[trusted.num-bigint]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2019-09-04"
+end = "2025-05-15"
 
 [[trusted.num-complex]]
 criteria = "safe-to-run"
