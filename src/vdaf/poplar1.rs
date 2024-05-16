@@ -7,7 +7,9 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, merge_vector, Field255, Field64, FieldElement},
-    idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
+    idpf::{
+        Idpf, IdpfCache, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache,
+    },
     prng::Prng,
     vdaf::{
         xof::{Seed, Xof, XofTurboShake128},
@@ -972,6 +974,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         public_share: &Poplar1PublicShare,
         idpf_key: &Seed<16>,
         corr_prng: &mut Prng<F, P::SeedStream>,
+        idpf_eval_cache: &mut dyn IdpfCache,
     ) -> Result<(Vec<F>, Vec<F>), VdafError>
     where
         P: Xof<SEED_SIZE>,
@@ -992,7 +995,6 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
             corr_prng.get(), // c_share
         ];
 
-        let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
         let idpf = Idpf::<Poplar1IdpfValue<Field64>, Poplar1IdpfValue<Field255>>::new((), ());
         for prefix in agg_param.prefixes.iter() {
             let share = Poplar1IdpfValue::<F>::from(idpf.eval(
@@ -1001,7 +1003,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
                 idpf_key,
                 prefix,
                 nonce,
-                &mut idpf_eval_cache,
+                idpf_eval_cache,
             )?);
 
             let r = verify_prng.get();
@@ -1034,15 +1036,14 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
     }
 }
 
-impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
-    for Poplar1<P, SEED_SIZE>
-{
-    type PrepareState = Poplar1PrepareState;
-    type PrepareShare = Poplar1FieldVec;
-    type PrepareMessage = Poplar1PrepareMessage;
-
-    #[allow(clippy::type_complexity)]
-    fn prepare_init(
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
+    /// This is akin to [`Poplar1::prepare_init`], but allows reading from and writing to a separate
+    /// cache of IDPF nodes.
+    ///
+    /// Any one cache instance should only be used with one report, and the cache's contents should
+    /// be kept secret just as the input share is.
+    #[allow(clippy::too_many_arguments)]
+    pub fn prepare_init_with_cache(
         &self,
         verify_key: &[u8; SEED_SIZE],
         agg_id: usize,
@@ -1050,6 +1051,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         nonce: &[u8; 16],
         public_share: &Poplar1PublicShare,
         input_share: &Poplar1InputShare<SEED_SIZE>,
+        idpf_eval_cache: &mut dyn IdpfCache,
     ) -> Result<(Poplar1PrepareState, Poplar1FieldVec), VdafError> {
         let is_leader = match agg_id {
             0 => true,
@@ -1081,6 +1083,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                 public_share,
                 &input_share.idpf_key,
                 &mut corr_prng,
+                idpf_eval_cache,
             )?;
 
             Ok((
@@ -1109,6 +1112,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                 public_share,
                 &input_share.idpf_key,
                 &mut corr_prng.into_new_field(),
+                idpf_eval_cache,
             )?;
 
             Ok((
@@ -1123,6 +1127,36 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                 Poplar1FieldVec::Leaf(sketch_share),
             ))
         }
+    }
+}
+
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
+    for Poplar1<P, SEED_SIZE>
+{
+    type PrepareState = Poplar1PrepareState;
+    type PrepareShare = Poplar1FieldVec;
+    type PrepareMessage = Poplar1PrepareMessage;
+
+    #[allow(clippy::type_complexity)]
+    fn prepare_init(
+        &self,
+        verify_key: &[u8; SEED_SIZE],
+        agg_id: usize,
+        agg_param: &Poplar1AggregationParam,
+        nonce: &[u8; 16],
+        public_share: &Poplar1PublicShare,
+        input_share: &Poplar1InputShare<SEED_SIZE>,
+    ) -> Result<(Poplar1PrepareState, Poplar1FieldVec), VdafError> {
+        let mut idpf_eval_cache = RingBufferCache::new(agg_param.prefixes.len());
+        self.prepare_init_with_cache(
+            verify_key,
+            agg_id,
+            agg_param,
+            nonce,
+            public_share,
+            input_share,
+            &mut idpf_eval_cache,
+        )
     }
 
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Poplar1FieldVec>>(

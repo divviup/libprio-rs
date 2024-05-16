@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 #[cfg(feature = "experimental")]
-use criterion::{BatchSize, Throughput};
+use criterion::Throughput;
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 #[cfg(feature = "experimental")]
 use fixed::types::{I1F15, I1F31};
 #[cfg(feature = "experimental")]
@@ -13,6 +13,8 @@ use num_bigint::BigUint;
 use num_rational::Ratio;
 #[cfg(feature = "experimental")]
 use num_traits::ToPrimitive;
+#[cfg(feature = "experimental")]
+use prio::bt::BinaryTree;
 #[cfg(feature = "experimental")]
 use prio::dp::distributions::DiscreteGaussian;
 #[cfg(feature = "experimental")]
@@ -29,7 +31,10 @@ use prio::{
 use prio::{
     field::{Field255, Field64},
     flp::types::fixedpoint_l2::FixedPointBoundedL2VecSum,
-    idpf::{Idpf, IdpfInput, RingBufferCache},
+    idpf::{
+        HashMapCache, HashMapCacheA, HashMapCacheB, Idpf, IdpfCache, IdpfInput, RingBufferCache,
+        RingBufferCacheA, RingBufferCacheB,
+    },
     vdaf::poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
 };
 #[cfg(feature = "experimental")]
@@ -715,19 +720,14 @@ fn poplar1(c: &mut Criterion) {
             let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
             let nonce = rng.gen::<[u8; 16]>();
+            let bits = iter::repeat_with(|| rng.gen())
+                .take(size)
+                .collect::<Vec<bool>>();
+            let measurement = IdpfInput::from_bools(&bits);
 
-            b.iter_batched(
-                || {
-                    let bits = iter::repeat_with(|| rng.gen())
-                        .take(size)
-                        .collect::<Vec<bool>>();
-                    IdpfInput::from_bools(&bits)
-                },
-                |measurement| {
-                    vdaf.shard(&measurement, &nonce).unwrap();
-                },
-                BatchSize::SmallInput,
-            );
+            b.iter(|| {
+                vdaf.shard(&measurement, &nonce).unwrap();
+            });
         });
     }
     group.finish();
@@ -738,58 +738,117 @@ fn poplar1(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
+            let verify_key: [u8; 16] = rng.gen();
+            let nonce: [u8; 16] = rng.gen();
 
-            b.iter_batched(
-                || {
-                    let verify_key: [u8; 16] = rng.gen();
-                    let nonce: [u8; 16] = rng.gen();
-
-                    // Parameters are chosen to match Chris Wood's experimental setup:
-                    // https://github.com/chris-wood/heavy-hitter-comparison
-                    let (measurements, prefix_tree) = generate_zipf_distributed_batch(
-                        &mut rng, // rng
-                        size,     // bits
-                        10,       // threshold
-                        1000,     // number of measurements
-                        128,      // Zipf support
-                        1.03,     // Zipf exponent
-                    );
-
-                    // We are benchmarking preparation of a single report. For this test, it doesn't matter
-                    // which measurement we generate a report for, so pick the first measurement
-                    // arbitrarily.
-                    let (public_share, input_shares) =
-                        vdaf.shard(&measurements[0], &nonce).unwrap();
-
-                    // For the aggregation paramter, we use the candidate prefixes from the prefix tree
-                    // for the sampled measurements. Run preparation for the last step, which ought to
-                    // represent the worst-case performance.
-                    let agg_param =
-                        Poplar1AggregationParam::try_from_prefixes(prefix_tree[size - 1].clone())
-                            .unwrap();
-
-                    (
-                        verify_key,
-                        nonce,
-                        agg_param,
-                        public_share,
-                        input_shares.into_iter().next().unwrap(),
-                    )
-                },
-                |(verify_key, nonce, agg_param, public_share, input_share)| {
-                    vdaf.prepare_init(
-                        &verify_key,
-                        0,
-                        &agg_param,
-                        &nonce,
-                        &public_share,
-                        &input_share,
-                    )
-                    .unwrap();
-                },
-                BatchSize::SmallInput,
+            // Parameters are chosen to match Chris Wood's experimental setup:
+            // https://github.com/chris-wood/heavy-hitter-comparison
+            let (measurements, prefix_tree) = generate_zipf_distributed_batch(
+                &mut rng, // rng
+                size,     // bits
+                10,       // threshold
+                1000,     // number of measurements
+                128,      // Zipf support
+                1.03,     // Zipf exponent
             );
+
+            // We are benchmarking preparation of a single report. For this test, it doesn't matter
+            // which measurement we generate a report for, so pick the first measurement
+            // arbitrarily.
+            let (public_share, input_shares) = vdaf.shard(&measurements[0], &nonce).unwrap();
+            let input_share = input_shares.into_iter().next().unwrap();
+
+            // For the aggregation paramter, we use the candidate prefixes from the prefix tree for
+            // the sampled measurements. Run preparation for the last step, which ought to represent
+            // the worst-case performance.
+            let agg_param =
+                Poplar1AggregationParam::try_from_prefixes(prefix_tree[size - 1].clone()).unwrap();
+
+            b.iter(|| {
+                vdaf.prepare_init(
+                    &verify_key,
+                    0,
+                    &agg_param,
+                    &nonce,
+                    &public_share,
+                    &input_share,
+                )
+                .unwrap();
+            });
         });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("poplar1_prepare_cached");
+    type BoxedCacheConstructor = fn() -> Box<dyn IdpfCache>;
+    let cache_impls: [(&'static str, BoxedCacheConstructor); 7] = [
+        ("ringbuffer_100", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCache::new(100))
+        }),
+        ("ringbuffer_a_100", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCacheA::new(100))
+        }),
+        ("ringbuffer_b_100", || -> Box<dyn IdpfCache> {
+            Box::new(RingBufferCacheB::new(100))
+        }),
+        ("hashmap", || -> Box<dyn IdpfCache> {
+            Box::new(HashMapCache::new())
+        }),
+        ("hashmap_a", || -> Box<dyn IdpfCache> {
+            Box::new(HashMapCacheA::new())
+        }),
+        ("hashmap_b", || -> Box<dyn IdpfCache> {
+            Box::new(HashMapCacheB::new())
+        }),
+        ("binarytree", || -> Box<dyn IdpfCache> {
+            let mut tree = Box::<BinaryTree<_>>::default();
+            // Insert a bogus value at the root node. This is necessary for later nodes to be
+            // inserted, and the IDPF implementation won't try to read it.
+            tree.insert(bitvec::bits!(usize, bitvec::prelude::Lsb0;), ([0; 16], 0))
+                .unwrap();
+            tree
+        }),
+    ];
+    for size in test_sizes.iter() {
+        for (cache_name, cache_constructor) in cache_impls {
+            group.measurement_time(Duration::from_secs(30)); // slower benchmark
+            group.bench_with_input(BenchmarkId::new(cache_name, size), size, |b, &size| {
+                let vdaf = Poplar1::new_turboshake128(size);
+                let mut rng = StdRng::seed_from_u64(RNG_SEED);
+                let verify_key: [u8; 16] = rng.gen();
+                let nonce: [u8; 16] = rng.gen();
+                let (measurements, prefix_tree) = generate_zipf_distributed_batch(
+                    &mut rng, // rng
+                    size,     // bits
+                    10,       // threshold
+                    1000,     // number of measurements
+                    128,      // Zipf support
+                    1.03,     // Zipf exponent
+                );
+                let (public_share, input_shares) = vdaf.shard(&measurements[0], &nonce).unwrap();
+                let input_share = input_shares.into_iter().next().unwrap();
+                let agg_params = prefix_tree
+                    .into_iter()
+                    .map(|prefixes| Poplar1AggregationParam::try_from_prefixes(prefixes).unwrap())
+                    .collect::<Vec<_>>();
+
+                b.iter(|| {
+                    let mut cache = cache_constructor();
+                    for agg_param in agg_params.iter() {
+                        vdaf.prepare_init_with_cache(
+                            &verify_key,
+                            0,
+                            agg_param,
+                            &nonce,
+                            &public_share,
+                            &input_share,
+                            cache.as_mut(),
+                        )
+                        .unwrap();
+                    }
+                });
+            });
+        }
     }
     group.finish();
 }
