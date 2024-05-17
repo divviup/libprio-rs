@@ -23,6 +23,7 @@ use rand_core::RngCore;
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
+    hash::{Hash, Hasher},
     io::{Cursor, Read},
     iter::zip,
     ops::{Add, AddAssign, Index, Sub},
@@ -882,7 +883,7 @@ impl IdpfCache for NoCache {
 /// with no eviction.
 #[derive(Default)]
 pub struct HashMapCache {
-    map: HashMap<BitBox, ([u8; 16], u8)>,
+    map: HashMap<NormalizedBitVec, ([u8; 16], u8)>,
 }
 
 impl HashMapCache {
@@ -901,21 +902,55 @@ impl HashMapCache {
 
 impl IdpfCache for HashMapCache {
     fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
-        self.map.get(input).cloned()
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
+        self.map.get(&normalized).cloned()
     }
 
     fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
-        if !self.map.contains_key(input) {
-            self.map
-                .insert(input.to_owned().into_boxed_bitslice(), *values);
-        }
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
+        self.map.entry(normalized).or_insert(*values);
+    }
+}
+
+/// A normalized array of bits, with a fixed alignment in the underlying storage and all unused bits cleared.
+///
+/// This type can be cheaply compared with itself by comparing whole storage words at a time.
+struct NormalizedBitVec(
+    /// The inner bit vector. This must not be mutated after construction.
+    BitVec,
+);
+
+impl From<BitVec> for NormalizedBitVec {
+    fn from(mut value: BitVec) -> Self {
+        value.force_align();
+        value.set_uninitialized(false);
+        Self(value)
+    }
+}
+
+impl PartialEq for NormalizedBitVec {
+    fn eq(&self, other: &Self) -> bool {
+        // We can compare the raw slice directly because the bit vector is aligned and has its
+        // uninitialized bits cleared.
+        self.0.as_raw_slice() == other.0.as_raw_slice() && self.0.len() == other.0.len()
+    }
+}
+
+impl Eq for NormalizedBitVec {}
+
+impl Hash for NormalizedBitVec {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        // We can hash the raw slice directly because the bit vector is aligned and has its
+        // uninitialized bits cleared.
+        self.0.as_raw_slice().hash(state);
+        self.0.len().hash(state);
     }
 }
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in memory, with
 /// first-in-first-out eviction, and lookups via linear probing.
 pub struct RingBufferCache {
-    ring: VecDeque<(BitBox, [u8; 16], u8)>,
+    ring: VecDeque<(NormalizedBitVec, [u8; 16], u8)>,
 }
 
 impl RingBufferCache {
@@ -929,9 +964,10 @@ impl RingBufferCache {
 
 impl IdpfCache for RingBufferCache {
     fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
         // iterate back-to-front, so that we check the most recently pushed entry first.
         for entry in self.ring.iter().rev() {
-            if input == entry.0 {
+            if normalized == entry.0 {
                 return Some((entry.1, entry.2));
             }
         }
@@ -939,12 +975,12 @@ impl IdpfCache for RingBufferCache {
     }
 
     fn insert(&mut self, input: &BitSlice, values: &([u8; 16], u8)) {
+        let normalized = NormalizedBitVec::from(input.to_bitvec());
         // evict first (to avoid growing the storage)
         if self.ring.len() == self.ring.capacity() {
             self.ring.pop_front();
         }
-        self.ring
-            .push_back((input.to_owned().into_boxed_bitslice(), values.0, values.1));
+        self.ring.push_back((normalized, values.0, values.1));
     }
 }
 
