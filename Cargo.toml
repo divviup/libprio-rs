@@ -56,6 +56,7 @@ experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", 
 multithreaded = ["rayon"]
 crypto-dependencies = ["aes", "ctr", "hmac", "sha2"]
 test-util = ["hex", "serde_json", "zipf"]
+wasm-compat = ["getrandom/js"]
 
 [workspace]
 members = [".", "binaries"]

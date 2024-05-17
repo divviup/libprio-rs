@@ -75,5 +75,6 @@ This crate defines the following feature flags:
 |`experimental`|No|Certain experimental APIs are guarded by this feature.|❌|
 |`multithreaded`|No|Enables certain Prio3 VDAF implementations that use `rayon` for parallelization of gadget evaluations.|✅|
 |`test-util`|No|Enables test utilities for VDAF users and VDAF implementers.|❌|
+|`wasm-compat`|No|Enables the `getrandom/js` feature. This is necessary for `wasm32-unknown-unknown` targets, when in a JavaScript environment.|✅|
 
 Features that are not marked as "Semver stable" may undergo breaking changes in future patch releases, as an exception to semantic versioning.
