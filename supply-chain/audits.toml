@@ -428,6 +428,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.1.44 -> 0.1.45"
 
+[[audits.num-rational]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "0.4.1 -> 0.4.2"
+
 [[audits.num-traits]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
