@@ -689,6 +689,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "0.2.2"
 
+[[audits.statrs]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.16.0 -> 0.16.1"
+
 [[audits.subtle]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
