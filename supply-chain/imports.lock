@@ -551,6 +551,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.18.0 -> 1.19.0"
 
+[[audits.isrg.audits.statrs]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.16.0 -> 0.16.1"
+
 [[audits.mozilla.audits.autocfg]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
