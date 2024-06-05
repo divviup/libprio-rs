@@ -11,6 +11,9 @@ use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 use subtle::Choice;
 
+#[cfg(feature = "experimental")]
+mod dp;
+
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the
 /// measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
