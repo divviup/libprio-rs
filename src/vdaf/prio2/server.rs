@@ -199,7 +199,7 @@ mod tests {
     use super::*;
     use crate::{
         codec::{Encode, ParameterizedDecode},
-        field::{FieldElement, FieldPrio2},
+        field::{split_vector, FieldPrio2},
         prng::Prng,
         vdaf::{
             prio2::{
@@ -211,18 +211,7 @@ mod tests {
         },
     };
     use assert_matches::assert_matches;
-    use rand::{random, Rng};
-
-    fn secret_share(share: &mut [FieldPrio2]) -> Vec<FieldPrio2> {
-        let mut rng = rand::thread_rng();
-        let mut share2 = vec![FieldPrio2::zero(); share.len()];
-        for (f1, f2) in share.iter_mut().zip(share2.iter_mut()) {
-            let f = FieldPrio2::from(rng.gen::<u32>());
-            *f2 = f;
-            *f1 -= f;
-        }
-        share2
-    }
+    use rand::random;
 
     #[test]
     fn test_validation() {
@@ -233,11 +222,11 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
-        let share2 = secret_share(&mut proof);
+        let proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
+        let [share1, share2] = split_vector(&proof, 2).unwrap().try_into().unwrap();
         let eval_at = FieldPrio2::from(12313);
 
-        let v1 = generate_verification_message(dim, eval_at, &proof, true).unwrap();
+        let v1 = generate_verification_message(dim, eval_at, &share1, true).unwrap();
         let v2 = generate_verification_message(dim, eval_at, &share2, false).unwrap();
         assert!(is_valid_share(&v1, &v2));
     }
@@ -251,11 +240,11 @@ mod tests {
             2567182742, 3542857140, 124017604, 4201373647, 431621210, 1618555683, 267689149,
         ];
 
-        let mut proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
-        let share2 = secret_share(&mut proof);
+        let proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
+        let [share1, share2] = split_vector(&proof, 2).unwrap().try_into().unwrap();
         let eval_at = FieldPrio2::from(12313);
 
-        let v1 = generate_verification_message(dim, eval_at, &proof, true).unwrap();
+        let v1 = generate_verification_message(dim, eval_at, &share1, true).unwrap();
         let v2 = generate_verification_message(dim, eval_at, &share2, false).unwrap();
 
         // serialize and deserialize the first verification message
