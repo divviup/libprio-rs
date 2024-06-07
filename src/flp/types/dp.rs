@@ -187,3 +187,138 @@ where
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::{
+        dp::{
+            distributions::PureDpDiscreteLaplace, DifferentialPrivacyStrategy, PureDpBudget,
+            Rational,
+        },
+        field::{merge_vector, split_vector, Field128, FieldElement},
+        flp::{
+            gadgets::ParallelSum,
+            types::{Histogram, SumVec},
+        },
+        vdaf::xof::{Xof, XofTurboShake128},
+    };
+
+    #[test]
+    fn sumvec_laplace_noise() {
+        let dp_strategy = PureDpDiscreteLaplace::from_budget(PureDpBudget::new(
+            Rational::from_unsigned(2u8, 1u8).unwrap(),
+        ));
+        const SIZE: usize = 10;
+
+        {
+            let mut rng = XofTurboShake128::init(&[0; 16], &[]).into_seed_stream();
+            let [mut share1, mut share2] = split_vector(&[Field128::zero(); SIZE], 2)
+                .unwrap()
+                .try_into()
+                .unwrap();
+
+            let sumvec: SumVec<_, ParallelSum<_, _>> = SumVec::new(1, SIZE, 1).unwrap();
+            sumvec
+                .add_noise(&dp_strategy, share1.as_mut_slice(), &mut rng)
+                .unwrap();
+            sumvec
+                .add_noise(&dp_strategy, share2.as_mut_slice(), &mut rng)
+                .unwrap();
+
+            let mut aggregate_result = share1;
+            merge_vector(&mut aggregate_result, &share2).unwrap();
+
+            assert_eq!(
+                aggregate_result,
+                [
+                    -Field128::from(7),
+                    Field128::from(3),
+                    -Field128::from(9),
+                    -Field128::from(17),
+                    -Field128::from(1),
+                    -Field128::from(7),
+                    -Field128::from(9),
+                    Field128::from(0),
+                    -Field128::from(6),
+                    -Field128::from(4),
+                ]
+            );
+        }
+
+        {
+            let mut rng = XofTurboShake128::init(&[1; 16], &[]).into_seed_stream();
+            let [mut share1, mut share2] = split_vector(&[Field128::zero(); SIZE], 2)
+                .unwrap()
+                .try_into()
+                .unwrap();
+
+            let sumvec: SumVec<_, ParallelSum<_, _>> = SumVec::new(2, SIZE, 1).unwrap();
+            sumvec
+                .add_noise(&dp_strategy, &mut share1, &mut rng)
+                .unwrap();
+            sumvec
+                .add_noise(&dp_strategy, &mut share2, &mut rng)
+                .unwrap();
+
+            let mut aggregate_result = share1;
+            merge_vector(&mut aggregate_result, &share2).unwrap();
+
+            assert_eq!(
+                aggregate_result,
+                [
+                    Field128::from(81),
+                    Field128::from(33),
+                    -Field128::from(26),
+                    Field128::from(19),
+                    Field128::from(18),
+                    -Field128::from(1),
+                    -Field128::from(28),
+                    Field128::from(31),
+                    Field128::from(40),
+                    Field128::from(38),
+                ]
+            );
+        }
+    }
+
+    #[test]
+    fn histogram_laplace_noise() {
+        let dp_strategy = PureDpDiscreteLaplace::from_budget(PureDpBudget::new(
+            Rational::from_unsigned(2u8, 1u8).unwrap(),
+        ));
+        const SIZE: usize = 10;
+
+        let mut rng = XofTurboShake128::init(&[2; 16], &[]).into_seed_stream();
+        let [mut share1, mut share2] = split_vector(&[Field128::zero(); SIZE], 2)
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        let histogram: Histogram<_, ParallelSum<_, _>> = Histogram::new(SIZE, 1).unwrap();
+        histogram
+            .add_noise(&dp_strategy, &mut share1, &mut rng)
+            .unwrap();
+        histogram
+            .add_noise(&dp_strategy, &mut share2, &mut rng)
+            .unwrap();
+
+        let mut aggregate_result = share1;
+        merge_vector(&mut aggregate_result, &share2).unwrap();
+
+        assert_eq!(
+            aggregate_result,
+            [
+                Field128::from(2),
+                Field128::from(1),
+                Field128::from(0),
+                -Field128::from(1),
+                -Field128::from(1),
+                Field128::from(3),
+                Field128::from(1),
+                -Field128::from(1),
+                -Field128::from(2),
+                Field128::from(1),
+            ]
+        );
+    }
+}
