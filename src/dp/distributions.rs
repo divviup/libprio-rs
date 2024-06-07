@@ -343,9 +343,22 @@ impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
 
     /// Create a new sampler for the discrete Laplace distribution with a scale parameter calibrated
     /// to provide `epsilon`-differential privacy when added to the result of an integer-valued
-    /// function with l1-sensitivity `sensitivity`, following Lemma 29 from [[CKS20]]
+    /// function with l1-sensitivity `sensitivity`.
     ///
+    /// A mechanism is defined for 1-dimensional query results in [[GRS12]], and restated in Lemma
+    /// 29 from [[CKS20]]. However, most VDAF instances will produce query results of higher
+    /// dimensions. Proposition 1 of [[DMNS06]] gives a mechanism for multidimensional queries using
+    /// the continuous Laplace distribution. In both cases, the scale parameter of the respective
+    /// distribution is set to the sensitivity divided by epsilon, and independent samples from the
+    /// distribution are added to each component of the query result. Intuitively, adding discrete
+    /// Laplace noise using this scale parameter to each vector element of the query result should
+    /// provide epsilon-DP, since continuous Laplce noise can be used in the multi-dimensional case,
+    /// and discrete and continuous Laplace noise provide the same pure DP with the same parameters
+    /// in the one-dimensional case.
+    ///
+    /// [GRS12]: https://theory.stanford.edu/~tim/papers/priv.pdf
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
+    /// [DMNS06]: https://people.csail.mit.edu/asmith/PS/sensitivity-tcc-final.pdf
     fn create_distribution(
         &self,
         sensitivity: Self::Sensitivity,
