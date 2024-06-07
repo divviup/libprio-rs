@@ -212,10 +212,11 @@ mod tests {
 
         {
             let mut rng = XofTurboShake128::init(&[0; 16], &[]).into_seed_stream();
-            let [mut share1, mut share2] = split_vector(&[Field128::zero(); SIZE], 2)
-                .unwrap()
-                .try_into()
-                .unwrap();
+            let [mut share1, mut share2]: [Vec<Field128>; 2] =
+                split_vector(&[Field128::zero(); SIZE], 2)
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
 
             let sumvec: SumVec<_, ParallelSum<_, _>> = SumVec::new(1, SIZE, 1).unwrap();
             sumvec
@@ -247,10 +248,11 @@ mod tests {
 
         {
             let mut rng = XofTurboShake128::init(&[1; 16], &[]).into_seed_stream();
-            let [mut share1, mut share2] = split_vector(&[Field128::zero(); SIZE], 2)
-                .unwrap()
-                .try_into()
-                .unwrap();
+            let [mut share1, mut share2]: [Vec<Field128>; 2] =
+                split_vector(&[Field128::zero(); SIZE], 2)
+                    .unwrap()
+                    .try_into()
+                    .unwrap();
 
             let sumvec: SumVec<_, ParallelSum<_, _>> = SumVec::new(2, SIZE, 1).unwrap();
             sumvec
@@ -289,10 +291,11 @@ mod tests {
         const SIZE: usize = 10;
 
         let mut rng = XofTurboShake128::init(&[2; 16], &[]).into_seed_stream();
-        let [mut share1, mut share2] = split_vector(&[Field128::zero(); SIZE], 2)
-            .unwrap()
-            .try_into()
-            .unwrap();
+        let [mut share1, mut share2]: [Vec<Field128>; 2] =
+            split_vector(&[Field128::zero(); SIZE], 2)
+                .unwrap()
+                .try_into()
+                .unwrap();
 
         let histogram: Histogram<_, ParallelSum<_, _>> = Histogram::new(SIZE, 1).unwrap();
         histogram
