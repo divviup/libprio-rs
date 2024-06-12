@@ -117,6 +117,26 @@ impl IdpfInput {
     }
 }
 
+impl Decode for IdpfInput {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        Ok(IdpfInput::from_bytes(bytes))
+    }
+}
+
+impl Encode for IdpfInput {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        let encoded = self.to_bytes();
+        for byte in encoded {
+            bytes.push(byte);
+        }
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some((self.len()+7)/8)
+    }
+}
+
 impl From<BitVec<usize, Lsb0>> for IdpfInput {
     fn from(bit_vec: BitVec<usize, Lsb0>) -> Self {
         IdpfInput {

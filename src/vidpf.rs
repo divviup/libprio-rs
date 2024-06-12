@@ -20,7 +20,7 @@ use std::io::Cursor;
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 
 use crate::{
-    codec::{CodecError, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{
         conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
@@ -348,6 +348,7 @@ impl VidpfDomainSepTag {
     const NODE_PROOF_ADJUST: &'static [u8] = b"NodeProofAdjust";
 }
 
+#[derive(Clone, Debug)]
 /// Private key of an aggregation server.
 pub struct VidpfKey {
     id: VidpfServerId,
@@ -366,8 +367,45 @@ impl VidpfKey {
     }
 }
 
+impl Decode for VidpfKey{
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let id = u8::decode(bytes)?;
+        let mut value = [0; 16];
+        for i in 0..16 {
+            value[i] = u8::decode(bytes)?;
+        }
+        Ok(
+            VidpfKey{
+                id: match id {
+                    0 => VidpfServerId::S0,
+                    1 => VidpfServerId::S1,
+                    _ => return Err(CodecError::UnexpectedValue)
+                },
+                value,
+            }
+        )
+    }
+}
+
+impl Encode for VidpfKey {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        bytes.push(match self.id {
+            VidpfServerId::S0 => 0u8,
+            VidpfServerId::S1 => 1u8
+        });
+        for byte in self.value {
+            byte.encode(bytes)?
+        };
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(17)
+    }
+}
+
 /// Identifies the two aggregation servers.
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum VidpfServerId {
     /// S0 is the first server.
     S0,
@@ -393,6 +431,44 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
+impl<W: VidpfValue> Decode for VidpfCorrectionWord<W>{
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let seed = Seed::decode(bytes);
+        let control_bits = u8::decode(bytes);
+        let (left_control_bit, right_control_bit) = match control_bits {
+            0 => (Choice::from(0), Choice::from(0)),
+            1 => (Choice::from(0), Choice::from(1)),
+            2 => (Choice::from(1), Choice::from(0)),
+            3 => (Choice::from(1), Choice::from(1)),
+        };
+        let weight = W::decode(bytes);
+        Ok(Self {
+            seed,
+            left_control_bit,
+            right_control_bit,
+            weight,
+        })
+    }
+}
+
+impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        bytes.push(self.seed)?;
+        bytes.push(match (self.left_control_bit, self.right_control_bit) {
+            (Choice::from(0), Choice::from(0)) => 0,
+            (Choice::from(0), Choice::from(1)) => 1,
+            (Choice::from(1), Choice::from(0)) => 2,
+            (Choice::from(1), Choice::from(1)) => 3,
+        });
+        self.weight.encode(bytes)?;
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(self.seed.encoded_len()? + 1 + self.weight.encoded_len()?)
+    }
+}
+
 /// Common public information used by aggregation servers.
 #[derive(Debug)]
 pub struct VidpfPublicShare<W: VidpfValue> {
@@ -400,6 +476,28 @@ pub struct VidpfPublicShare<W: VidpfValue> {
     cs: Vec<VidpfProof>,
 }
 
+impl<W: VidpfValue> Decode for VidpfPublicShare<W>{
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let cw = Vec::VidpfCorrectionWord::W::decode(bytes);
+        let cs = Vec::VidpfProof::decode(bytes);
+        Ok(Self {
+            cw,
+            cs,
+        })
+    }
+}
+
+impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.cw.encode(bytes)?;
+        self.cs.encode(bytes)?;
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(self.seed.encoded_len()? + 1 + self.weight.encoded_len()?)
+    }
+}
 /// Contains the values produced during input evaluation at a given level.
 pub struct VidpfEvalState {
     seed: VidpfSeed,

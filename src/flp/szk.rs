@@ -12,7 +12,7 @@
 //! following a strategy similar to [`Prio3`](crate::vdaf::prio3::Prio3).
 
 use crate::{
-    codec::{CodecError, Encode},
+    codec::{CodecError, Decode, Encode},
     field::{FftFriendlyFieldElement, FieldElement},
     flp::{FlpError, Type},
     prng::{Prng, PrngError},
@@ -63,15 +63,85 @@ pub enum SzkProofShare<F: FftFriendlyFieldElement, const SEED_SIZE: usize> {
     /// is a joint randomness part.
     Leader {
         uncompressed_proof_share: Vec<F>,
-        leader_blind_and_helper_joint_rand_part: Option<(Seed<SEED_SIZE>, Seed<SEED_SIZE>)>,
+        leader_blind_and_helper_joint_rand_part_opt: Option<(Seed<SEED_SIZE>, Seed<SEED_SIZE>)>,
     },
     /// The Helper uses one seed for both its compressed proof share and as the blind for its joint
     /// randomness.
     Helper {
         proof_share_seed_and_blind: Seed<SEED_SIZE>,
-        leader_joint_rand_part: Option<Seed<SEED_SIZE>>,
+        leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     },
 }
+
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Decode for SzkProofShare<F, SEED_SIZE> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let role = u8::decode(bytes)?;
+        match role {
+            0 => Ok(SzkProofShare::Leader {
+                uncompressed_proof_share: Vec::<F>::decode(bytes)?,
+                leader_blind_and_helper_joint_rand_part_opt: match u8::decode(bytes)? {
+                    0 => None,
+                    1 => Some((Seed::<SEED_SIZE>::decode(bytes)?, Seed::<SEED_SIZE>::decode(bytes)?))
+                }
+            }),
+            1 => Ok(SzkProofShare::Helper {
+                proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
+                leader_joint_rand_part_opt: match u8::decode(bytes)? {
+                    0 => None,
+                    1 => Some(Seed::<SEED_SIZE>::decode(bytes)?)
+                },
+            })
+        }
+    }
+}
+
+impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        match self {
+            SzkProofShare::Leader { uncompressed_proof_share,
+                leader_blind_and_helper_joint_rand_part_opt
+            } => (
+                0u8.encode(bytes)?, uncompressed_proof_share.encode(bytes)?,
+            if let Some((blind, helper_joint_rand_part)) = leader_blind_and_helper_joint_rand_part_opt {
+                1u8.encode(bytes)?;
+                blind.encode(bytes)?;
+                helper_joint_rand_part.encode(bytes)?;
+            } else {
+                0u8.encode(bytes)?;
+            }),
+            SzkProofShare::Helper { proof_share_seed_and_blind,
+            leader_joint_rand_part_opt } => (
+                1u8.encode(bytes)?,
+                proof_share_seed_and_blind.encode(bytes)?,
+        if let Some(leader_joint_rand_part) = leader_joint_rand_part_opt {
+            1u8.encode(bytes)?;
+            leader_joint_rand_part.encode(bytes)?;
+        } else { 0u8.encode(bytes)?; }),
+        };
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        match self {
+            SzkProofShare::Leader { uncompressed_proof_share,
+                leader_blind_and_helper_joint_rand_part_opt
+            } => Some(uncompressed_proof_share.encoded_len()? +
+            if let Some((blind, helper_joint_rand_part)) = leader_blind_and_helper_joint_rand_part_opt {
+                blind.encoded_len()?+
+                helper_joint_rand_part.encoded_len()?
+            } else {
+                0
+            }),
+            SzkProofShare::Helper { proof_share_seed_and_blind,
+            leader_joint_rand_part_opt } =>
+            Some ( proof_share_seed_and_blind.encoded_len()? +
+        if let Some(leader_joint_rand_part) = leader_joint_rand_part_opt {
+            leader_joint_rand_part.encoded_len()?
+        } else { 0 }),
+        }
+    }
+}
+
 
 /// A tuple containing the state and messages produced by an SZK query.
 #[derive(Clone)]
@@ -221,7 +291,7 @@ where
         self.typ.joint_rand_len() > 0
     }
 
-    fn prove(
+    pub fn prove(
         &self,
         leader_input_share: &[T::Field],
         helper_input_share: &[T::Field],
@@ -269,16 +339,16 @@ where
         // Construct the output messages.
         let leader_proof_share = SzkProofShare::Leader {
             uncompressed_proof_share: leader_proof_share,
-            leader_blind_and_helper_joint_rand_part,
+            leader_blind_and_helper_joint_rand_part_opt,
         };
         let helper_proof_share = SzkProofShare::Helper {
             proof_share_seed_and_blind: helper_seed.clone(),
-            leader_joint_rand_part,
+            leader_joint_rand_part_opt,
         };
         Ok([leader_proof_share, helper_proof_share])
     }
 
-    fn query(
+    pub fn query(
         &self,
         input_share: &[T::Field],
         proof_share: SzkProofShare<T::Field, SEED_SIZE>,
@@ -301,8 +371,8 @@ where
             let ((joint_rand_seed, joint_rand), host_joint_rand_part) = match proof_share {
                 SzkProofShare::Leader {
                     uncompressed_proof_share: _,
-                    leader_blind_and_helper_joint_rand_part,
-                } => match leader_blind_and_helper_joint_rand_part {
+                    leader_blind_and_helper_joint_rand_part_opt,
+                } => match leader_blind_and_helper_joint_rand_part_opt {
                     Some((seed, helper_joint_rand_part)) => {
                         match self.derive_joint_rand_part(&seed, input_share, nonce) {
                             Ok(leader_joint_rand_part) => (
@@ -323,8 +393,8 @@ where
                 },
                 SzkProofShare::Helper {
                     proof_share_seed_and_blind,
-                    leader_joint_rand_part,
-                } => match leader_joint_rand_part {
+                    leader_joint_rand_part_opt,
+                } => match leader_joint_rand_part_opt {
                     Some(leader_joint_rand_part) => match self.derive_joint_rand_part(
                         &proof_share_seed_and_blind,
                         input_share,
@@ -372,7 +442,7 @@ where
 
     /// Returns true if the verifier message indicates that the input from which
     /// it was generated is valid.
-    fn decide(
+    pub fn decide(
         &self,
         verifier: &[T::Field],
         leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
@@ -550,10 +620,10 @@ mod tests {
         let (mut mutated_proof, leader_blind_and_helper_joint_rand_part) = match l_proof_share {
             SzkProofShare::Leader {
                 uncompressed_proof_share,
-                leader_blind_and_helper_joint_rand_part,
+                leader_blind_and_helper_joint_rand_part_opt,
             } => (
                 uncompressed_proof_share.clone(),
-                leader_blind_and_helper_joint_rand_part,
+                leader_blind_and_helper_joint_rand_part_opt,
             ),
             _ => (vec![], None),
         };
@@ -561,7 +631,7 @@ mod tests {
             T::Field::from(<T::Field as FieldElementWithInteger>::Integer::try_from(23).unwrap());
         let mutated_proof_share = SzkProofShare::Leader {
             uncompressed_proof_share: mutated_proof,
-            leader_blind_and_helper_joint_rand_part,
+            leader_blind_and_helper_joint_rand_part_opt,
         };
         let (l_query_share, l_query_state) = szk_typ
             .query(
