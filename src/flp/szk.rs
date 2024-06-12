@@ -18,7 +18,6 @@ use crate::{
     prng::{Prng, PrngError},
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
-#[cfg(test)]
 use std::borrow::Cow;
 use std::ops::BitAnd;
 use std::{io::Cursor, marker::PhantomData};
@@ -209,18 +208,59 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
-#[cfg(test)]
 #[derive(Clone, Debug)]
 pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
     joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     flp_verifier: Vec<F>,
 }
 
-/// The state that needs to be stored by an Szk verifier between query() and decide()
-pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
+impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkQueryShare<F, SEED_SIZE> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        if let Some(ref part) = self.joint_rand_part_opt {
+            part.encode(bytes)?
+        };
 
-#[cfg(test)]
+        self.flp_verifier.encode(bytes)?;
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(
+            self.flp_verifier.encoded_len()?
+                + match self.joint_rand_part_opt {
+                    Some(ref part) => part.encoded_len()?,
+                    None => 0,
+                },
+        )
+    }
+}
+
+impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize)>
+    for SzkQueryShare<F, SEED_SIZE>
+{
+    fn decode_with_param(
+        (requires_joint_rand, verifier_len): &(bool, usize),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        if *requires_joint_rand {
+            Ok(SzkQueryShare {
+                joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
+                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+            })
+        } else {
+            Ok(SzkQueryShare {
+                joint_rand_part_opt: None,
+                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+            })
+        }
+    }
+}
+
 impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
+    pub(crate) fn verifier_len(&self) -> usize {
+        self.flp_verifier.len()
+    }
+
     pub(crate) fn merge_verifiers(
         mut leader_share: SzkQueryShare<F, SEED_SIZE>,
         helper_share: SzkQueryShare<F, SEED_SIZE>,
@@ -239,6 +279,9 @@ impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
         }
     }
 }
+
+/// The state that needs to be stored by an Szk verifier between query() and decide()
+pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
 /// Verifier type for the SZK proof.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -333,6 +376,10 @@ where
             algorithm_id,
             phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn typ(&self) -> &T {
+        &self.typ
     }
 
     fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
@@ -498,7 +545,6 @@ where
         Ok([leader_proof_share, helper_proof_share])
     }
 
-    #[cfg(test)]
     pub(crate) fn query(
         &self,
         input_share: &[T::Field],

@@ -32,8 +32,6 @@ mod fp64;
     doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
 )]
 pub mod idpf;
-#[cfg(feature = "experimental")]
-pub mod mastic;
 mod polynomial;
 mod prng;
 pub mod topology;

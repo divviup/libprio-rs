@@ -12,6 +12,7 @@ use crate::flp::szk::SzkError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},

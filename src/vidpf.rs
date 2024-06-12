@@ -11,17 +11,18 @@
 
 use core::{
     iter::zip,
-    ops::{Add, AddAssign, BitXor, BitXorAssign, Index, Sub},
+    ops::{Add, AddAssign, BitAnd, BitXor, BitXorAssign, Index, Sub},
 };
 
 use bitvec::field::BitField;
+use bitvec::prelude::{BitVec, Lsb0};
 use rand_core::RngCore;
 use std::fmt::Debug;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 use crate::{
-    codec::{CodecError, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{
         conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
@@ -415,7 +416,7 @@ impl PartialEq for VidpfKey {
     }
 }
 
-/// Vidpf server ID
+/// Vidpf server ID.
 ///
 /// Identifies the two aggregation servers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -435,7 +436,7 @@ impl From<VidpfServerId> for Choice {
     }
 }
 
-/// Vidpf correction word
+/// Vidpf correction word.
 ///
 ///  Adjusts values of shares during the VIDPF evaluation.
 #[derive(Clone, Debug)]
@@ -464,25 +465,6 @@ where
     }
 }
 
-impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
-    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        todo!();
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        todo!();
-    }
-}
-
-impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWord<W> {
-    fn decode_with_param(
-        _decoding_parameter: &W::ValueParameter,
-        _bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        todo!();
-    }
-}
-
 /// Vidpf public share
 ///
 /// Common public information used by aggregation servers.
@@ -493,21 +475,74 @@ pub struct VidpfPublicShare<W: VidpfValue> {
 }
 
 impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
-    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        todo!()
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        // Control bits need to be written within each byte in LSB-to-MSB order, and assigned into
+        // bytes in big-endian order. Thus, the first four levels will have their control bits
+        // encoded in the last byte, and the last levels will have their control bits encoded in the
+        // first byte.
+        let mut control_bits: BitVec<u8, Lsb0> = BitVec::with_capacity(self.cw.len() * 2);
+        for correction_words in self.cw.iter() {
+            control_bits.extend(
+                [
+                    bool::from(correction_words.left_control_bit),
+                    bool::from(correction_words.right_control_bit),
+                ]
+                .iter(),
+            );
+        }
+        control_bits.set_uninitialized(false);
+        let mut packed_control = control_bits.into_vec();
+        bytes.append(&mut packed_control);
+
+        for correction_words in self.cw.iter() {
+            Seed(correction_words.seed).encode(bytes)?;
+            correction_words.weight.encode(bytes)?;
+        }
+
+        for proof in &self.cs {
+            bytes.extend_from_slice(proof);
+        }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        todo!()
+        let control_bits_count = (self.cw.len()) * 2;
+        let mut len = (control_bits_count + 7) / 8 + (self.cw.len()) * 16;
+        for correction_words in self.cw.iter() {
+            len += correction_words.weight.encoded_len()?;
+        }
+        len += self.cs.len() * 32;
+        Some(len)
     }
 }
 
 impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
     fn decode_with_param(
-        (_bits, _weight_parameter): &(usize, W::ValueParameter),
-        _bytes: &mut Cursor<&[u8]>,
+        (bits, weight_parameter): &(usize, W::ValueParameter),
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        let packed_control_len = (bits + 3) / 4;
+        let mut packed = vec![0u8; packed_control_len];
+        bytes.read_exact(&mut packed)?;
+        let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed);
+
+        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
+        for chunk in unpacked_control_bits[0..(bits) * 2].chunks(2) {
+            let left_control_bit = (chunk[0] as u8).into();
+            let right_control_bit = (chunk[1] as u8).into();
+            let seed = Seed::decode(bytes)?.0;
+            cw.push(VidpfCorrectionWord {
+                seed,
+                left_control_bit,
+                right_control_bit,
+                weight: W::decode_with_param(weight_parameter, bytes)?,
+            })
+        }
+        let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
+        for _ in 0..*bits {
+            cs.push(VidpfProof::decode(bytes)?);
+        }
+        Ok(Self { cw, cs })
     }
 }
 
