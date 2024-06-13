@@ -5,7 +5,7 @@
 use crate::{
     encrypt::{decrypt_share, EncryptError, PrivateKey},
     field::{merge_vector, FftFriendlyFieldElement, FieldError},
-    polynomial::{poly_interpret_eval, PolyAuxMemory},
+    polynomial::{fft_get_roots, poly_interpret_eval, PolyFFTTempMemory},
     prng::{Prng, PrngError},
     util::{proof_length, unpack_proof, SerializeError},
     vdaf::prg::SeedStreamAes128,
@@ -43,7 +43,11 @@ pub struct ValidationMemory<F> {
     points_f: Vec<F>,
     points_g: Vec<F>,
     points_h: Vec<F>,
-    poly_mem: PolyAuxMemory<F>,
+    roots_2n: Vec<F>,
+    roots_2n_inverted: Vec<F>,
+    roots_n_inverted: Vec<F>,
+    fft_memory: PolyFFTTempMemory<F>,
+    coeffs: Vec<F>,
 }
 
 impl<F: FftFriendlyFieldElement> ValidationMemory<F> {
@@ -55,7 +59,11 @@ impl<F: FftFriendlyFieldElement> ValidationMemory<F> {
             points_f: vec![F::zero(); n],
             points_g: vec![F::zero(); n],
             points_h: vec![F::zero(); 2 * n],
-            poly_mem: PolyAuxMemory::new(n),
+            roots_2n: fft_get_roots(2 * n, false),
+            roots_2n_inverted: fft_get_roots(2 * n, true),
+            roots_n_inverted: fft_get_roots(n, true),
+            fft_memory: PolyFFTTempMemory::new(2 * n),
+            coeffs: vec![F::zero(); 2 * n],
         }
     }
 }
@@ -180,7 +188,7 @@ impl<F: FftFriendlyFieldElement> Server<F> {
     pub fn choose_eval_at(&mut self) -> F {
         loop {
             let eval_at = self.prng.get();
-            if !self.validation_mem.poly_mem.roots_2n.contains(&eval_at) {
+            if !self.validation_mem.roots_2n.contains(&eval_at) {
                 break eval_at;
             }
         }
@@ -239,24 +247,24 @@ pub fn generate_verification_message<F: FftFriendlyFieldElement>(
     // evaluate polynomials at random point
     let f_r = poly_interpret_eval(
         &mem.points_f,
-        &mem.poly_mem.roots_n_inverted,
+        &mem.roots_n_inverted,
         eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
+        &mut mem.coeffs,
+        &mut mem.fft_memory,
     );
     let g_r = poly_interpret_eval(
         &mem.points_g,
-        &mem.poly_mem.roots_n_inverted,
+        &mem.roots_n_inverted,
         eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
+        &mut mem.coeffs,
+        &mut mem.fft_memory,
     );
     let h_r = poly_interpret_eval(
         &mem.points_h,
-        &mem.poly_mem.roots_2n_inverted,
+        &mem.roots_2n_inverted,
         eval_at,
-        &mut mem.poly_mem.coeffs,
-        &mut mem.poly_mem.fft_memory,
+        &mut mem.coeffs,
+        &mut mem.fft_memory,
     );
 
     Ok(VerificationMessage { f_r, g_r, h_r })
