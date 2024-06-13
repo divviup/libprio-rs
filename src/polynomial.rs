@@ -18,7 +18,7 @@ pub struct PolyFFTTempMemory<F> {
 }
 
 impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
-    fn new(length: usize) -> Self {
+    pub(crate) fn new(length: usize) -> Self {
         PolyFFTTempMemory {
             fft_tmp: vec![F::zero(); length],
             fft_y_sub: vec![F::zero(); length],
@@ -27,25 +27,20 @@ impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
     }
 }
 
-/// Auxiliary memory for polynomial interpolation and evaluation
+#[cfg(test)]
 #[derive(Clone, Debug)]
-pub struct PolyAuxMemory<F> {
+pub(crate) struct TestPolyAuxMemory<F> {
     pub roots_2n: Vec<F>,
     pub roots_2n_inverted: Vec<F>,
-    pub roots_n: Vec<F>,
-    pub roots_n_inverted: Vec<F>,
-    pub coeffs: Vec<F>,
     pub fft_memory: PolyFFTTempMemory<F>,
 }
 
-impl<F: FftFriendlyFieldElement> PolyAuxMemory<F> {
-    pub fn new(n: usize) -> Self {
-        PolyAuxMemory {
+#[cfg(test)]
+impl<F: FftFriendlyFieldElement> TestPolyAuxMemory<F> {
+    pub(crate) fn new(n: usize) -> Self {
+        Self {
             roots_2n: fft_get_roots(2 * n, false),
             roots_2n_inverted: fft_get_roots(2 * n, true),
-            roots_n: fft_get_roots(n, false),
-            roots_n_inverted: fft_get_roots(n, true),
-            coeffs: vec![F::zero(); 2 * n],
             fft_memory: PolyFFTTempMemory::new(2 * n),
         }
     }
@@ -109,7 +104,7 @@ fn fft_recurse<F: FftFriendlyFieldElement>(
 }
 
 /// Calculate `count` number of roots of unity of order `count`
-fn fft_get_roots<F: FftFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
+pub(crate) fn fft_get_roots<F: FftFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
     let mut roots = vec![F::zero(); count];
     let mut gen = F::generator();
     if invert {
@@ -236,7 +231,8 @@ mod tests {
             FftFriendlyFieldElement, Field64, FieldElement, FieldElementWithInteger, FieldPrio2,
         },
         polynomial::{
-            fft_get_roots, poly_deg, poly_eval, poly_fft, poly_mul, poly_range_check, PolyAuxMemory,
+            fft_get_roots, poly_deg, poly_eval, poly_fft, poly_mul, poly_range_check,
+            TestPolyAuxMemory,
         },
     };
     use rand::prelude::*;
@@ -333,7 +329,7 @@ mod tests {
     #[test]
     fn test_fft() {
         let count = 128;
-        let mut mem = PolyAuxMemory::new(count / 2);
+        let mut mem = TestPolyAuxMemory::new(count / 2);
 
         let mut poly = vec![FieldPrio2::from(0); count];
         let mut points2 = vec![FieldPrio2::from(0); count];
