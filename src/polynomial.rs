@@ -18,7 +18,7 @@ pub struct PolyFFTTempMemory<F> {
 }
 
 impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
-    fn new(length: usize) -> Self {
+    pub(crate) fn new(length: usize) -> Self {
         PolyFFTTempMemory {
             fft_tmp: vec![F::zero(); length],
             fft_y_sub: vec![F::zero(); length],
@@ -27,37 +27,21 @@ impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
     }
 }
 
-/// Auxiliary memory for polynomial interpolation and evaluation
-#[derive(Clone, Debug)]
-pub struct PolyAuxMemory<F> {
-    pub roots_2n: Vec<F>,
-    pub roots_n_inverted: Vec<F>,
-    pub fft_memory: PolyFFTTempMemory<F>,
-}
-
-impl<F: FftFriendlyFieldElement> PolyAuxMemory<F> {
-    pub fn new(n: usize) -> Self {
-        PolyAuxMemory {
-            roots_2n: fft_get_roots(2 * n, false),
-            roots_n_inverted: fft_get_roots(n, true),
-            fft_memory: PolyFFTTempMemory::new(2 * n),
-        }
-    }
-}
-
 #[cfg(test)]
 #[derive(Clone, Debug)]
-struct TestPolyAuxMemory<F> {
-    inner: PolyAuxMemory<F>,
-    roots_2n_inverted: Vec<F>,
+pub(crate) struct TestPolyAuxMemory<F> {
+    pub roots_2n: Vec<F>,
+    pub roots_2n_inverted: Vec<F>,
+    pub fft_memory: PolyFFTTempMemory<F>,
 }
 
 #[cfg(test)]
 impl<F: FftFriendlyFieldElement> TestPolyAuxMemory<F> {
-    fn new(n: usize) -> Self {
+    pub(crate) fn new(n: usize) -> Self {
         Self {
-            inner: PolyAuxMemory::new(n),
+            roots_2n: fft_get_roots(2 * n, false),
             roots_2n_inverted: fft_get_roots(2 * n, true),
+            fft_memory: PolyFFTTempMemory::new(2 * n),
         }
     }
 }
@@ -120,7 +104,7 @@ fn fft_recurse<F: FftFriendlyFieldElement>(
 }
 
 /// Calculate `count` number of roots of unity of order `count`
-fn fft_get_roots<F: FftFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
+pub(crate) fn fft_get_roots<F: FftFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
     let mut roots = vec![F::zero(); count];
     let mut gen = F::generator();
     if invert {
@@ -358,10 +342,10 @@ mod tests {
         poly_fft(
             &mut poly,
             &points,
-            &mem.inner.roots_2n,
+            &mem.roots_2n,
             count,
             false,
-            &mut mem.inner.fft_memory,
+            &mut mem.fft_memory,
         );
         poly_fft(
             &mut points2,
@@ -369,7 +353,7 @@ mod tests {
             &mem.roots_2n_inverted,
             count,
             true,
-            &mut mem.inner.fft_memory,
+            &mut mem.fft_memory,
         );
 
         assert_eq!(points, points2);
@@ -378,13 +362,13 @@ mod tests {
         poly_fft(
             &mut poly,
             &points,
-            &mem.inner.roots_2n,
+            &mem.roots_2n,
             count,
             false,
-            &mut mem.inner.fft_memory,
+            &mut mem.fft_memory,
         );
 
-        for (poly_coeff, root) in poly[..count].iter().zip(mem.inner.roots_2n[..count].iter()) {
+        for (poly_coeff, root) in poly[..count].iter().zip(mem.roots_2n[..count].iter()) {
             let mut should_be = FieldPrio2::from(0);
             for (j, point_j) in points[..count].iter().enumerate() {
                 should_be = root.pow(u32::try_from(j).unwrap()) * *point_j + should_be;
