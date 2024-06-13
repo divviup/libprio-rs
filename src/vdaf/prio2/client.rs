@@ -45,6 +45,7 @@ pub(crate) struct ClientMemory<F> {
     evals_f: Vec<F>,
     evals_g: Vec<F>,
     poly_mem: PolyAuxMemory<F>,
+    coeffs: Vec<F>,
 }
 
 impl<F: FftFriendlyFieldElement> ClientMemory<F> {
@@ -69,6 +70,7 @@ impl<F: FftFriendlyFieldElement> ClientMemory<F> {
             evals_f: vec![F::zero(); 2 * n],
             evals_g: vec![F::zero(); 2 * n],
             poly_mem: PolyAuxMemory::new(n),
+            coeffs: vec![F::zero(); 2 * n],
         })
     }
 }
@@ -187,15 +189,28 @@ pub(crate) fn unpack_proof_mut<F: FftFriendlyFieldElement>(
     }
 }
 
+/// Interpolate a polynomial at the nth roots of unity, and then evaluate it at the 2nth roots of
+/// unity.
+///
+/// # Arguments
+///
+/// * `n` - The number of points to interpolate a polynomial through.
+/// * `points_in` - The values that the polynomial must take on when evaluated at the nth roots of
+///   unity. This must have length n.
+/// * `evals_out` - The values that the polynomial takes on when evaluated at the 2nth roots of
+///   unity. This must have length 2 * n.
+/// * `mem` - Precomputed roots of unity and scratch space for the FFT algorithm.
+/// * `coeffs` - Scratch space. This must have length 2 * n.
 fn interpolate_and_evaluate_at_2n<F: FftFriendlyFieldElement>(
     n: usize,
     points_in: &[F],
     evals_out: &mut [F],
     mem: &mut PolyAuxMemory<F>,
+    coeffs: &mut [F],
 ) {
     // interpolate through roots of unity
     poly_fft(
-        &mut mem.coeffs,
+        coeffs,
         points_in,
         &mem.roots_n_inverted,
         n,
@@ -205,7 +220,7 @@ fn interpolate_and_evaluate_at_2n<F: FftFriendlyFieldElement>(
     // evaluate at 2N roots of unity
     poly_fft(
         evals_out,
-        &mem.coeffs,
+        coeffs,
         &mem.roots_2n,
         2 * n,
         false,
@@ -249,8 +264,20 @@ fn construct_proof<F: FftFriendlyFieldElement>(
     }
 
     // interpolate and evaluate at roots of unity
-    interpolate_and_evaluate_at_2n(n, &mem.points_f, &mut mem.evals_f, &mut mem.poly_mem);
-    interpolate_and_evaluate_at_2n(n, &mem.points_g, &mut mem.evals_g, &mut mem.poly_mem);
+    interpolate_and_evaluate_at_2n(
+        n,
+        &mem.points_f,
+        &mut mem.evals_f,
+        &mut mem.poly_mem,
+        &mut mem.coeffs,
+    );
+    interpolate_and_evaluate_at_2n(
+        n,
+        &mem.points_g,
+        &mut mem.evals_g,
+        &mut mem.poly_mem,
+        &mut mem.coeffs,
+    );
 
     // calculate the proof polynomial as evals_f(r) * evals_g(r)
     // only add non-zero points

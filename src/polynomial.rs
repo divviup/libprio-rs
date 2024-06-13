@@ -32,7 +32,6 @@ impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
 pub struct PolyAuxMemory<F> {
     pub roots_2n: Vec<F>,
     pub roots_n_inverted: Vec<F>,
-    pub coeffs: Vec<F>,
     pub fft_memory: PolyFFTTempMemory<F>,
 }
 
@@ -41,7 +40,6 @@ impl<F: FftFriendlyFieldElement> PolyAuxMemory<F> {
         PolyAuxMemory {
             roots_2n: fft_get_roots(2 * n, false),
             roots_n_inverted: fft_get_roots(n, true),
-            coeffs: vec![F::zero(); 2 * n],
             fft_memory: PolyFFTTempMemory::new(2 * n),
         }
     }
