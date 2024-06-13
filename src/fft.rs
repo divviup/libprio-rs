@@ -127,7 +127,7 @@ fn bitrev(d: usize, x: usize) -> usize {
 mod tests {
     use super::*;
     use crate::field::{random_vector, split_vector, Field128, Field64, FieldElement, FieldPrio2};
-    use crate::polynomial::{poly_fft, PolyAuxMemory};
+    use crate::polynomial::{poly_fft, TestPolyAuxMemory};
 
     fn discrete_fourier_transform_then_inv_test<F: FftFriendlyFieldElement>() -> Result<(), FftError>
     {
@@ -164,7 +164,7 @@ mod tests {
     #[test]
     fn test_recursive_fft() {
         let size = 128;
-        let mut mem = PolyAuxMemory::new(size / 2);
+        let mut mem = TestPolyAuxMemory::new(size / 2);
 
         let inp = random_vector(size).unwrap();
         let mut want = vec![FieldPrio2::zero(); size];
