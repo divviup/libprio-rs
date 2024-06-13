@@ -9,7 +9,7 @@ use crate::fft::discrete_fourier_transform;
 use crate::field::FftFriendlyFieldElement;
 use crate::flp::gadgets::Mul;
 use crate::flp::FlpError;
-use crate::polynomial::{poly_fft, PolyAuxMemory};
+use crate::polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory};
 
 /// Sets `outp` to the Discrete Fourier Transform (DFT) using an iterative FFT algorithm.
 pub fn benchmarked_iterative_fft<F: FftFriendlyFieldElement>(outp: &mut [F], inp: &[F]) {
@@ -18,15 +18,9 @@ pub fn benchmarked_iterative_fft<F: FftFriendlyFieldElement>(outp: &mut [F], inp
 
 /// Sets `outp` to the Discrete Fourier Transform (DFT) using a recursive FFT algorithm.
 pub fn benchmarked_recursive_fft<F: FftFriendlyFieldElement>(outp: &mut [F], inp: &[F]) {
-    let mut mem = PolyAuxMemory::new(inp.len() / 2);
-    poly_fft(
-        outp,
-        inp,
-        &mem.roots_2n,
-        inp.len(),
-        false,
-        &mut mem.fft_memory,
-    )
+    let roots_2n = fft_get_roots(inp.len(), false);
+    let mut fft_memory = PolyFFTTempMemory::new(inp.len());
+    poly_fft(outp, inp, &roots_2n, inp.len(), false, &mut fft_memory)
 }
 
 /// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function

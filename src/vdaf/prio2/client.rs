@@ -5,7 +5,7 @@
 
 use crate::{
     field::{FftFriendlyFieldElement, FieldError},
-    polynomial::{poly_fft, PolyAuxMemory},
+    polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory},
     prng::{Prng, PrngError},
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
@@ -44,7 +44,10 @@ pub(crate) struct ClientMemory<F> {
     points_g: Vec<F>,
     evals_f: Vec<F>,
     evals_g: Vec<F>,
-    poly_mem: PolyAuxMemory<F>,
+    roots_2n: Vec<F>,
+    roots_n_inverted: Vec<F>,
+    fft_memory: PolyFFTTempMemory<F>,
+    coeffs: Vec<F>,
 }
 
 impl<F: FftFriendlyFieldElement> ClientMemory<F> {
@@ -68,7 +71,10 @@ impl<F: FftFriendlyFieldElement> ClientMemory<F> {
             points_g: vec![F::zero(); n],
             evals_f: vec![F::zero(); 2 * n],
             evals_g: vec![F::zero(); 2 * n],
-            poly_mem: PolyAuxMemory::new(n),
+            roots_2n: fft_get_roots(2 * n, false),
+            roots_n_inverted: fft_get_roots(n, true),
+            fft_memory: PolyFFTTempMemory::new(2 * n),
+            coeffs: vec![F::zero(); 2 * n],
         })
     }
 }
@@ -187,30 +193,33 @@ pub(crate) fn unpack_proof_mut<F: FftFriendlyFieldElement>(
     }
 }
 
+/// Interpolate a polynomial at the nth roots of unity, and then evaluate it at the 2nth roots of
+/// unity.
+///
+/// # Arguments
+///
+/// * `n` - The number of points to interpolate a polynomial through.
+/// * `points_in` - The values that the polynomial must take on when evaluated at the nth roots of
+///   unity. This must have length n.
+/// * `evals_out` - The values that the polynomial takes on when evaluated at the 2nth roots of
+///   unity. This must have length 2 * n.
+/// * `roots_n_inverted` - Precomputed inverses of the nth roots of unity.
+/// * `roots_2n` - Precomputed 2nth roots of unity.
+/// * `fft_memory` - Scratch space for the FFT algorithm.
+/// * `coeffs` - Scratch space. This must have length 2 * n.
 fn interpolate_and_evaluate_at_2n<F: FftFriendlyFieldElement>(
     n: usize,
     points_in: &[F],
     evals_out: &mut [F],
-    mem: &mut PolyAuxMemory<F>,
+    roots_n_inverted: &[F],
+    roots_2n: &[F],
+    fft_memory: &mut PolyFFTTempMemory<F>,
+    coeffs: &mut [F],
 ) {
     // interpolate through roots of unity
-    poly_fft(
-        &mut mem.coeffs,
-        points_in,
-        &mem.roots_n_inverted,
-        n,
-        true,
-        &mut mem.fft_memory,
-    );
+    poly_fft(coeffs, points_in, roots_n_inverted, n, true, fft_memory);
     // evaluate at 2N roots of unity
-    poly_fft(
-        evals_out,
-        &mem.coeffs,
-        &mem.roots_2n,
-        2 * n,
-        false,
-        &mut mem.fft_memory,
-    );
+    poly_fft(evals_out, coeffs, roots_2n, 2 * n, false, fft_memory);
 }
 
 /// Proof construction
@@ -249,8 +258,24 @@ fn construct_proof<F: FftFriendlyFieldElement>(
     }
 
     // interpolate and evaluate at roots of unity
-    interpolate_and_evaluate_at_2n(n, &mem.points_f, &mut mem.evals_f, &mut mem.poly_mem);
-    interpolate_and_evaluate_at_2n(n, &mem.points_g, &mut mem.evals_g, &mut mem.poly_mem);
+    interpolate_and_evaluate_at_2n(
+        n,
+        &mem.points_f,
+        &mut mem.evals_f,
+        &mem.roots_n_inverted,
+        &mem.roots_2n,
+        &mut mem.fft_memory,
+        &mut mem.coeffs,
+    );
+    interpolate_and_evaluate_at_2n(
+        n,
+        &mem.points_g,
+        &mut mem.evals_g,
+        &mem.roots_n_inverted,
+        &mem.roots_2n,
+        &mut mem.fft_memory,
+        &mut mem.coeffs,
+    );
 
     // calculate the proof polynomial as evals_f(r) * evals_g(r)
     // only add non-zero points
