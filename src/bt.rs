@@ -23,8 +23,7 @@
 //!
 //! ## Serialization
 //! A tree can be serializad to and from bytes using [`BinaryTree::encode`]
-//! and [`BinaryTree::decode_with_param`] functions, respectively. One-byte
-//! markers are used allowing to store sparse trees with a lower overhead.
+//! and [`BinaryTree::decode`] functions, respectively.
 //!
 //! ## Example
 //! This binary tree can be created with the following code:
@@ -57,7 +56,7 @@ use std::io::Cursor;
 
 use bitvec::slice::BitSlice;
 
-use crate::codec::{CodecError, Decode, Encode, ParameterizedDecode};
+use crate::codec::{CodecError, Decode, Encode};
 
 /// Errors triggered by binary tree operations.
 #[derive(Debug, thiserror::Error)]
@@ -74,117 +73,23 @@ pub enum BinaryTreeError<V> {
 /// Used to indicate a traversal path on the binary tree.
 pub type Path = BitSlice;
 
-type SubTree<V> = Option<Box<Node<V>>>;
-
 /// Represents a node of a binary tree.
 pub struct Node<V> {
     value: V,
-    left: SubTree<V>,
-    right: SubTree<V>,
-}
-
-impl<V> Node<V> {
-    fn new(value: V) -> Self {
-        Self {
-            value,
-            left: None,
-            right: None,
-        }
-    }
-
-    /// Inserts the value at the end of the path.
-    ///
-    /// This function traverses the tree from this node (`self`) until reaching the
-    /// node at the end of the path. If the node is unreachable or already
-    /// contains a value, an error wrapping the value is returned. Otherwise,
-    /// a new node containing the value is inserted.
-    ///
-    /// # Returns
-    /// - `Ok(())` when the node is inserted at the end of the path.
-    /// - `Err(InsertNonEmptyNode(value))` when the subtree already contains a
-    /// value at the end of the path.
-    /// - `Err(UnreachablePath(value))` when the end of the path is unreachable.
-    ///
-    /// In the error cases, no insertion occurs and the value is returned to
-    /// the caller of this function.
-    pub fn insert(&mut self, path: &Path, value: V) -> Result<(), BinaryTreeError<V>> {
-        enum Ref<'a, V> {
-            This(&'a mut Node<V>),
-            Other(&'a mut Option<Box<Node<V>>>),
-        }
-
-        // Finds the node at the end of the path.
-        let mut node = Ref::This(self);
-        for bit in path.iter() {
-            node = match node {
-                Ref::This(n) => Ref::Other(if !bit { &mut n.left } else { &mut n.right }),
-                Ref::Other(Some(n)) => Ref::Other(if !bit { &mut n.left } else { &mut n.right }),
-                Ref::Other(None) => {
-                    return Err(BinaryTreeError::UnreachableNode(value));
-                }
-            };
-        }
-
-        // Checks whether the node already has a value,
-        // If so, returns an error wrapping the value that could not be inserted.
-        // otherwise, a new node is created containing the value to be inserted.
-        match node {
-            Ref::This(_) | Ref::Other(Some(_)) => {
-                return Err(BinaryTreeError::InsertNonEmptyNode(value))
-            }
-            Ref::Other(empty_node) => {
-                *empty_node = Some(Box::new(Node::new(value)));
-            }
-        }
-
-        Ok(())
-    }
-
-    /// Gets a reference to the value located at the end of the path.
-    ///
-    /// This function traverses the tree from this node (`self`) until reaching the
-    /// node at the end of the path. It returns [None], if the node is
-    /// unreachable or nonexistent. Otherwise, it returns a reference to the
-    /// value stored in the node.
-    pub fn get(&self, path: &Path) -> Option<&V> {
-        let mut node = self;
-        for bit in path {
-            match if !bit { &node.left } else { &node.right } {
-                None => return None,
-                Some(next_node) => node = next_node,
-            };
-        }
-        Some(&node.value)
-    }
-
-    /// Gets a mutable reference to the node located at the end of the path.
-    ///
-    /// This function traverses the tree from this node (`self`) until reaching the
-    /// node at the end of the path. It returns [None], if the node is
-    /// unreachable or nonexistent. Otherwise, it returns a mutable reference
-    /// to the node.
-    pub fn get_node(&mut self, path: &Path) -> Option<&mut Node<V>> {
-        let mut node = self;
-        for bit in path {
-            match if !bit {
-                &mut node.left
-            } else {
-                &mut node.right
-            } {
-                None => return None,
-                Some(next_node) => node = next_node,
-            };
-        }
-        Some(node)
-    }
+    left: Option<usize>,
+    right: Option<usize>,
 }
 
 /// Represents an append-only binary tree.
 pub struct BinaryTree<V> {
-    root: SubTree<V>,
+    nodes: Vec<Node<V>>,
+    root: Option<usize>,
 }
 
 impl<V> BinaryTree<V> {
+    /// Number of nodes pre-allocated each time the tree grows.
+    const NODES_CAPACITY: usize = 256;
+
     /// Inserts the value at the end of the path.
     ///
     /// This function traverses the tree from the root node until reaching the
@@ -201,14 +106,35 @@ impl<V> BinaryTree<V> {
     /// In the error cases, no insertion occurs and the value is returned to
     /// the caller of this function.
     pub fn insert(&mut self, path: &Path, value: V) -> Result<(), BinaryTreeError<V>> {
-        if let Some(node) = &mut self.root {
-            node.insert(path, value)
-        } else if path.is_empty() {
-            self.root = Some(Box::new(Node::new(value)));
-            Ok(())
-        } else {
-            Err(BinaryTreeError::UnreachableNode(value))
+        let last = self.nodes.len();
+        let mut node = &mut self.root;
+        for bit in path.iter() {
+            match *node {
+                None => return Err(BinaryTreeError::UnreachableNode(value)),
+                Some(next) => {
+                    let n = &mut self.nodes[next];
+                    node = if !bit { &mut n.left } else { &mut n.right };
+                }
+            }
         }
+
+        if node.is_some() {
+            return Err(BinaryTreeError::InsertNonEmptyNode(value));
+        } else {
+            *node = Some(last);
+
+            if self.nodes.len() == self.nodes.capacity() {
+                self.nodes.reserve(Self::NODES_CAPACITY);
+            }
+
+            self.nodes.push(Node {
+                value,
+                left: None,
+                right: None,
+            });
+        }
+
+        Ok(())
     }
 
     /// Gets a reference to the value located at the end of the path.
@@ -218,7 +144,13 @@ impl<V> BinaryTree<V> {
     /// unreachable or nonexistent. Otherwise, it returns a reference to the
     /// value stored in the node.
     pub fn get(&self, path: &Path) -> Option<&V> {
-        self.root.as_ref().and_then(|node| node.get(path))
+        let mut node = self.root;
+        for bit in path {
+            let next = &self.nodes[node?];
+            node = if !bit { next.left } else { next.right };
+        }
+
+        Some(&self.nodes[node?].value)
     }
 
     /// Gets a mutable reference to the node located at the end of the path.
@@ -228,7 +160,13 @@ impl<V> BinaryTree<V> {
     /// unreachable or nonexistent. Otherwise, it returns a mutable reference
     /// to the node.
     pub fn get_node(&mut self, path: &Path) -> Option<&mut Node<V>> {
-        self.root.as_mut().and_then(|node| node.get_node(path))
+        let mut node = self.root;
+        for bit in path {
+            let next = &self.nodes[node?];
+            node = if !bit { next.left } else { next.right };
+        }
+
+        Some(&mut self.nodes[node?])
     }
 }
 
@@ -236,162 +174,116 @@ impl<V> Default for BinaryTree<V> {
     fn default() -> Self {
         Self {
             root: Option::default(),
+            nodes: Vec::with_capacity(Self::NODES_CAPACITY),
         }
+    }
+}
+
+// Indicates the datatype used to serialize usize values.
+type UsizeType = u16;
+
+impl Encode for Option<usize> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        match *self {
+            None => UsizeType::encode(&0, bytes),
+            Some(n) => UsizeType::try_from(n)
+                .map_err(|_| CodecError::UnexpectedValue)?
+                .encode(bytes),
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        UsizeType::encoded_len(&0)
+    }
+}
+
+impl Decode for Option<usize> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let value = UsizeType::decode(bytes)?.into();
+
+        Ok((value != 0).then_some(value))
     }
 }
 
 impl<V: Encode> Encode for Node<V> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.value.encode(bytes)?;
+        self.left.encode(bytes)?;
+        self.right.encode(bytes)
+    }
 
-        let mut stack = Vec::new();
-        stack.push(&self.right);
-        stack.push(&self.left);
-
-        // Nodes are stored following a pre-order traversal.
-        while let Some(elem) = stack.pop() {
-            match elem {
-                None => CodecMarker::Leaf.encode(bytes)?,
-                Some(node) => {
-                    CodecMarker::Inner.encode(bytes)?;
-                    node.value.encode(bytes)?;
-                    stack.push(&node.right);
-                    stack.push(&node.left);
-                }
-            }
-        }
-
-        Ok(())
+    fn encoded_len(&self) -> Option<usize> {
+        self.value
+            .encoded_len()
+            .zip(self.left.encoded_len())
+            .zip(self.right.encoded_len())
+            .map(|((v, l), r)| v + l + r)
     }
 }
 
-impl<P, V: ParameterizedDecode<P>> ParameterizedDecode<P> for Node<V> {
-    fn decode_with_param(param: &P, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut out = Node::new(V::decode_with_param(param, bytes)?);
-
-        let mut stack = Vec::new();
-        stack.push(&mut out.right);
-        stack.push(&mut out.left);
-
-        // Decode nodes in a pre-order traversal.
-        while let Some(elem) = stack.pop() {
-            match CodecMarker::decode(bytes)? {
-                CodecMarker::Leaf => (),
-                CodecMarker::Inner => {
-                    *elem = Some(Box::new(Node::new(V::decode_with_param(param, bytes)?)));
-                    let node = elem.as_mut().unwrap();
-                    stack.push(&mut node.right);
-                    stack.push(&mut node.left);
-                }
-            };
-        }
-
-        Ok(out)
-    }
-}
-
-#[cfg(feature = "test-util")]
-impl<V: core::fmt::Display> core::fmt::Display for Node<V> {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
-        struct Item<'a, V> {
-            name: String,
-            level: usize,
-            node: Option<&'a Node<V>>,
-        }
-
-        let mut stack = vec![Item {
-            name: String::default(),
-            level: 0,
-            node: Some(self),
-        }];
-
-        while let Some(Item { name, level, node }) = stack.pop() {
-            if let Some(Node { value, left, right }) = node {
-                let prefix = "  ".repeat(level);
-                writeln!(f, "{name}\n{prefix}node: {value}")?;
-
-                stack.push(Item {
-                    name: format!("{prefix}right:"),
-                    level: level + 1,
-                    node: right.as_deref(),
-                });
-
-                stack.push(Item {
-                    name: format!("{prefix}left:"),
-                    level: level + 1,
-                    node: left.as_deref(),
-                });
-            } else {
-                writeln!(f, "{name} <None>")?
-            };
-        }
-
-        Ok(())
+impl<V: Decode> Decode for Node<V> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        Ok(Self {
+            value: V::decode(bytes)?,
+            left: Option::<usize>::decode(bytes)?,
+            right: Option::<usize>::decode(bytes)?,
+        })
     }
 }
 
 impl<V: Encode> Encode for BinaryTree<V> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        match &self.root {
-            None => CodecMarker::Leaf.encode(bytes),
-            Some(node) => {
-                CodecMarker::Inner.encode(bytes)?;
-                node.encode(bytes)
-            }
+        let len = self.nodes.len();
+        UsizeType::try_from(len)
+            .map_err(|_| CodecError::UnexpectedValue)?
+            .encode(bytes)?;
+
+        for node in self.nodes.iter() {
+            node.encode(bytes)?;
         }
+
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        UsizeType::encoded_len(&0)
+            .zip(self.nodes.first().map_or(Some(0), Encode::encoded_len))
+            .map(|(header_len, node_len)| header_len + node_len * self.nodes.len())
     }
 }
 
-impl<P, V: ParameterizedDecode<P>> ParameterizedDecode<P> for BinaryTree<V> {
-    fn decode_with_param(param: &P, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(match CodecMarker::decode(bytes)? {
-            CodecMarker::Leaf => Self::default(),
-            CodecMarker::Inner => Self {
-                root: Some(Box::new(Node::decode_with_param(param, bytes)?)),
-            },
-        })
+impl<V: Decode> Decode for BinaryTree<V> {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let mut tree = Self::default();
+        let header = UsizeType::decode(bytes)?;
+        if header != 0 {
+            let len = header.into();
+            tree.nodes = Vec::with_capacity(len + Self::NODES_CAPACITY);
+            for _ in 0..len {
+                tree.nodes.push(Node::decode(bytes)?);
+            }
+            tree.root = Some(0);
+        }
+
+        Ok(tree)
     }
 }
 
 #[cfg(feature = "test-util")]
-impl<V> core::fmt::Display for BinaryTree<V>
-where
-    V: core::fmt::Display,
-    Node<V>: core::fmt::Display,
-{
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "---")?;
-        if let Some(node) = &self.root {
-            writeln!(f, "{node}")?
-        };
-        Ok(())
+impl<V: core::fmt::Display> core::fmt::Display for Node<V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{} L: {:?} R: {:?}", self.value, self.left, self.right)
     }
 }
 
-/// Marker used to distinguish between full and empty nodes.
-#[repr(u8)]
-#[derive(Debug)]
-enum CodecMarker {
-    Leaf,
-    Inner,
-}
-
-impl Encode for CodecMarker {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        match self {
-            CodecMarker::Leaf => 0u8.encode(bytes),
-            CodecMarker::Inner => 1u8.encode(bytes),
+#[cfg(feature = "test-util")]
+impl<V: core::fmt::Display> core::fmt::Display for BinaryTree<V> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        writeln!(f, "--- Begin Tree ---")?;
+        for node in self.nodes.iter() {
+            writeln!(f, "{node}")?;
         }
-    }
-}
-
-impl Decode for CodecMarker {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        match u8::decode(bytes)? {
-            0u8 => Ok(CodecMarker::Leaf),
-            1u8 => Ok(CodecMarker::Inner),
-            _ => Err(CodecError::UnexpectedValue),
-        }
+        write!(f, "--- End Tree ---")
     }
 }
 
@@ -405,7 +297,7 @@ mod tests {
 
     use crate::{
         bt::{BinaryTree, BinaryTreeError},
-        codec::{Encode, ParameterizedDecode},
+        codec::{Decode, Encode},
     };
 
     #[test]
@@ -418,7 +310,7 @@ mod tests {
     #[test]
     fn serialize_root() {
         let tree = BinaryTree::<u32>::default();
-        check_serialize(tree, &());
+        check_serialize(tree);
     }
 
     #[test]
@@ -428,13 +320,13 @@ mod tests {
             let mut tree = BinaryTree::<u32>::default();
 
             insert_prefixes(&mut tree, &prefixes).unwrap();
-            check_serialize(tree, &());
+            check_serialize(tree);
         }
     }
 
-    fn check_serialize<T: Encode + ParameterizedDecode<P>, P>(first: T, param: &P) {
+    fn check_serialize<T: Encode + Decode>(first: T) {
         let bytes_first = first.get_encoded().unwrap();
-        let second = T::decode_with_param(param, &mut Cursor::new(&bytes_first)).unwrap();
+        let second = T::decode(&mut Cursor::new(&bytes_first)).unwrap();
         let bytes_second = second.get_encoded().unwrap();
 
         assert_eq!(bytes_first, bytes_second);
