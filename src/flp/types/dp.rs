@@ -7,7 +7,6 @@ use crate::flp::{FlpError, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
-use num_traits::{One, Pow};
 use rand::{distributions::Distribution, Rng, SeedableRng};
 
 // TODO(#1071): This is implemented for the concrete fields `Field64` and `Field128` in order to
@@ -69,10 +68,15 @@ where
         // model). The worst case is when one individual's measurement changes such that each vector
         // element flips from 0 to 2^bits - 1, or vice versa. Then, the l1 distance from the initial
         // query result to the new query result will be (2^bits - 1) * length.
-        let two = BigUint::from(2u64);
-        let bits = BigUint::from(self.bits);
         let length = BigUint::from(self.len);
-        let sensitivity = (Pow::pow(two, &bits) - BigUint::one()) * length;
+        let sensitivity = BigUint::from(
+            1u128
+                .checked_shl(self.bits as u32)
+                .ok_or(FlpError::InvalidParameter(
+                    "bits must be less than 128".into(),
+                ))?
+                - 1,
+        ) * length;
 
         // Initialize sampler.
         let sampler = dp_strategy.create_distribution(sensitivity.into())?;
