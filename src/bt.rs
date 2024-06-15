@@ -8,18 +8,22 @@
 //! - Serializable: tree can be coverted to and from bytes.
 //!
 //! ## Creation
-//! Use [`BinaryTree::default`] to create a binary tree, note that there must be
-//! one value at the root node.
+//! Use [`BinaryTree::default`] to create a binary tree.
 //!
 //! ## Insertion
-//! Given a value and a binary path, [`BinaryTree::insert`] stores the value
-//! at the end of the path.
+//! Given a value and a binary path, [`BinaryTree::insert`] traverses the
+//! tree along the path starting from the root and inserts the value at the
+//! end of the path. [`BinaryTree::insert_at`] additionally takes a node
+//! reference that indicates the start of the traversal. No insertion occurs
+//! when the end of the path is unreachable or when the tree already contains
+//! a value at the specified location.
 //!
 //! ## Query
-//! Given a binary path, [`BinaryTree::get`] returns a reference to the value
-//! stored in the node located at the end of the path. The empty path returns
-//! the value at the root node. No value is returned if the end of the path
-//! is unreachable.
+//! Given a binary path, [`BinaryTree::get_node`] traverses the tree along
+//! the path starting from the root and returns a reference to the node
+//! located at the end of the path. No value is returned if the end of the
+//! path is unreachable. [`BinaryTree::get_value`] behaves similarly but
+//! instead returns a reference to the value stored in the node.
 //!
 //! ## Serialization
 //! A tree can be serializad to and from bytes using [`BinaryTree::encode`]
@@ -36,6 +40,7 @@
 //! (00)=c  (01)=d   (10)=e  (11)=f
 //! ```
 //!
+//! ```txt
 //! use prio::bt::BinaryTree;
 //! use bitvec::{bits,prelude::Lsb0};
 //! let mut tree = BinaryTree::default();
@@ -46,6 +51,7 @@
 //! tree.insert(bits!(0, 1), 'd');
 //! tree.insert(bits!(1, 0), 'e');
 //! tree.insert(bits!(1, 1), 'f');
+//! ```
 
 // TODO(#947): Remove these lines once the module gets used by Mastic implementation.
 #![allow(dead_code)]
@@ -68,204 +74,298 @@ pub enum BinaryTreeError<V> {
     /// Error when an operation cannot reach the node at the end of a path.
     #[error("unreachable node in the tree")]
     UnreachableNode(V),
+    /// Error when a node reference is invalid.
+    #[error("invalid reference to a node in the tree")]
+    InvalidNodeRef(V),
 }
 
 /// Used to indicate a traversal path on the binary tree.
 pub type Path = BitSlice;
 
 /// Represents a node of a binary tree.
-pub struct Node<V> {
+struct Node<V> {
     value: V,
     left: Option<usize>,
     right: Option<usize>,
 }
 
+impl<V> Node<V> {
+    fn new(value: V) -> Self {
+        Self {
+            value,
+            left: None,
+            right: None,
+        }
+    }
+}
+
+/// NodeRef is a reference to a node of the tree.
+#[derive(PartialEq, Clone, Copy, Debug)]
+pub struct NodeRef(usize);
+
+impl NodeRef {
+    const ROOT: NodeRef = NodeRef(0);
+}
+
 /// Represents an append-only binary tree.
 pub struct BinaryTree<V> {
     nodes: Vec<Node<V>>,
-    root: Option<usize>,
 }
 
 impl<V> BinaryTree<V> {
-    /// Number of nodes pre-allocated each time the tree grows.
-    const NODES_CAPACITY: usize = 256;
-
-    /// Inserts the value at the end of the path.
+    /// Inserts the value at the location reached by traversing the tree
+    /// along the path starting from the root node.
     ///
-    /// This function traverses the tree from the root node until reaching the
+    /// This function traverses the tree from the root until reaching the
     /// node at the end of the path. If the node is unreachable or already
-    /// contains a value, an error wrapping the value is returned. Otherwise,
-    /// a new node containing the value is inserted.
+    /// contains a value, the function returns an error wrapping the value;
+    /// otherwise, it stores the value in a new node and returns a reference
+    /// to the node.
     ///
     /// # Returns
-    /// - `Ok(())` when the node is inserted at the end of the path.
+    /// - `Ok(NodeRef)` a reference is returned when the node is inserted
+    /// at the end of the path.
     /// - `Err(InsertNonEmptyNode(value))` when the tree already contains a
     /// value at the end of the path.
-    /// - `Err(UnreachablePath(value))` when the end of the path is unreachable.
+    /// - `Err(UnreachableNode(value))` when the end of the path is unreachable.
     ///
     /// In the error cases, no insertion occurs and the value is returned to
     /// the caller of this function.
-    pub fn insert(&mut self, path: &Path, value: V) -> Result<(), BinaryTreeError<V>> {
-        let last = self.nodes.len();
-        let mut node = &mut self.root;
+    pub fn insert(&mut self, path: &Path, value: V) -> Result<NodeRef, BinaryTreeError<V>> {
+        if self.nodes.is_empty() {
+            if path.is_empty() {
+                self.nodes.push(Node::new(value));
+                Ok(NodeRef::ROOT)
+            } else {
+                Err(BinaryTreeError::UnreachableNode(value))
+            }
+        } else {
+            self.insert_at(NodeRef::ROOT, path, value)
+        }
+    }
+
+    /// Inserts the value at the location reached by traversing the tree
+    /// along the path starting from the specified node reference.
+    ///
+    /// This function traverses the tree from the node specified until
+    /// reaching the node at the end of the path. If the node is unreachable
+    /// or already contains a value, the function returns an error wrapping
+    /// the value; otherwise, it stores the value in a new node and returns
+    /// a reference to the node.
+    ///
+    /// # Returns
+    /// - `Ok(NodeRef)` a reference is returned when the node is inserted
+    /// at the end of the path.
+    /// - `Err(InsertNonEmptyNode(value))` when the tree already contains a
+    /// value at the end of the path.
+    /// - `Err(UnreachableNode(value))` when the end of the path is unreachable.
+    /// - `Err(InvalidNodeRef(value))` when the node reference is invalid.
+    ///
+    /// In the error cases, no insertion occurs and the value is returned to
+    /// the caller of this function.
+    pub fn insert_at(
+        &mut self,
+        node_ref: NodeRef,
+        path: &Path,
+        value: V,
+    ) -> Result<NodeRef, BinaryTreeError<V>> {
+        if !self.is_valid_node_ref(node_ref) {
+            return Err(BinaryTreeError::InvalidNodeRef(value));
+        }
+
+        let new_index = self.nodes.len();
+        let mut node = &mut Some(node_ref.0);
         for bit in path.iter() {
             match *node {
                 None => return Err(BinaryTreeError::UnreachableNode(value)),
                 Some(next) => {
                     let n = &mut self.nodes[next];
-                    node = if !bit { &mut n.left } else { &mut n.right };
+                    node = if !bit { &mut n.left } else { &mut n.right }
                 }
             }
         }
 
         if node.is_some() {
             return Err(BinaryTreeError::InsertNonEmptyNode(value));
-        } else {
-            *node = Some(last);
-
-            if self.nodes.len() == self.nodes.capacity() {
-                self.nodes.reserve(Self::NODES_CAPACITY);
-            }
-
-            self.nodes.push(Node {
-                value,
-                left: None,
-                right: None,
-            });
         }
 
-        Ok(())
+        *node = Some(new_index);
+        self.nodes.push(Node::new(value));
+
+        Ok(NodeRef(new_index))
     }
 
-    /// Gets a reference to the value located at the end of the path.
+    /// Gets a reference to the value stored in the node located at the end
+    /// of the path traversing the tree from the root node.
     ///
-    /// This function traverses the tree from the root node until reaching the
-    /// node at the end of the path. It returns [None], if the node is
-    /// unreachable or nonexistent. Otherwise, it returns a reference to the
+    /// This function traverses the tree from the root node until reaching
+    /// the node at the end of the path. It returns [None], if the node is
+    /// unreachable or nonexistent; otherwise, it returns a reference to the
     /// value stored in the node.
-    pub fn get(&self, path: &Path) -> Option<&V> {
-        let mut node = self.root;
-        for bit in path {
-            let next = &self.nodes[node?];
-            node = if !bit { next.left } else { next.right };
-        }
-
-        Some(&self.nodes[node?].value)
+    pub fn get_value(&self, path: &Path) -> Option<&V> {
+        let NodeRef(node) = self.get_node_at(NodeRef::ROOT, path)?;
+        Some(&self.nodes[node].value)
     }
 
-    /// Gets a mutable reference to the node located at the end of the path.
+    /// Gets a reference to the node located at the end of the path
+    /// traversing the tree from the root node.
     ///
-    /// This function traverses the tree from the root node until reaching the
-    /// node at the end of the path. It returns [None], if the node is
-    /// unreachable or nonexistent. Otherwise, it returns a mutable reference
-    /// to the node.
-    pub fn get_node(&mut self, path: &Path) -> Option<&mut Node<V>> {
-        let mut node = self.root;
-        for bit in path {
+    /// This function traverses the tree from the root node until reaching
+    /// the node at the end of the path. It returns [None], if the node is
+    /// unreachable or nonexistent; otherwise, it returns a reference to the
+    /// node.
+    pub fn get_node(&self, path: &Path) -> Option<NodeRef> {
+        self.get_node_at(NodeRef::ROOT, path)
+    }
+
+    /// Gets a reference to the node located at the end of the path
+    /// traversing the tree from the specified node reference.
+    ///
+    /// This function traverses the tree from the specified node until
+    /// reaching the node at the end of the path. It returns [None],
+    /// if the node is unreachable or nonexistent; otherwise, it returns
+    /// a reference to the node.
+    pub fn get_node_at(&self, node_ref: NodeRef, path: &Path) -> Option<NodeRef> {
+        self.is_valid_node_ref(node_ref).then_some(())?;
+
+        let new_index = self.nodes.len();
+        let mut node = (!self.nodes.is_empty()).then_some(node_ref.0);
+        for bit in path.iter() {
             let next = &self.nodes[node?];
             node = if !bit { next.left } else { next.right };
         }
 
-        Some(&mut self.nodes[node?])
+        node.map(NodeRef)
+    }
+
+    /// Checks whether the node reference is valid with respect to the tree.
+    fn is_valid_node_ref(&self, node_ref: NodeRef) -> bool {
+        !self.nodes.is_empty() && node_ref.0 < self.nodes.len()
     }
 }
 
 impl<V> Default for BinaryTree<V> {
     fn default() -> Self {
+        // Number of pre-allocated nodes at tree creation.
+        const NODES_CAPACITY: usize = 256;
         Self {
-            root: Option::default(),
-            nodes: Vec::with_capacity(Self::NODES_CAPACITY),
+            nodes: Vec::with_capacity(NODES_CAPACITY),
         }
-    }
-}
-
-// Indicates the datatype used to serialize usize values.
-type UsizeType = u16;
-
-impl Encode for Option<usize> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        match *self {
-            None => UsizeType::encode(&0, bytes),
-            Some(n) => UsizeType::try_from(n)
-                .map_err(|_| CodecError::UnexpectedValue)?
-                .encode(bytes),
-        }
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        UsizeType::encoded_len(&0)
-    }
-}
-
-impl Decode for Option<usize> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let value = UsizeType::decode(bytes)?.into();
-
-        Ok((value != 0).then_some(value))
-    }
-}
-
-impl<V: Encode> Encode for Node<V> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.value.encode(bytes)?;
-        self.left.encode(bytes)?;
-        self.right.encode(bytes)
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        self.value
-            .encoded_len()
-            .zip(self.left.encoded_len())
-            .zip(self.right.encoded_len())
-            .map(|((v, l), r)| v + l + r)
-    }
-}
-
-impl<V: Decode> Decode for Node<V> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(Self {
-            value: V::decode(bytes)?,
-            left: Option::<usize>::decode(bytes)?,
-            right: Option::<usize>::decode(bytes)?,
-        })
     }
 }
 
 impl<V: Encode> Encode for BinaryTree<V> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        let len = self.nodes.len();
-        UsizeType::try_from(len)
-            .map_err(|_| CodecError::UnexpectedValue)?
-            .encode(bytes)?;
+        let mut stack = vec![(!self.nodes.is_empty()).then_some(NodeRef::ROOT.0)];
 
-        for node in self.nodes.iter() {
-            node.encode(bytes)?;
+        // Nodes are stored following a pre-order traversal.
+        while let Some(item) = stack.pop() {
+            match item {
+                None => NodeMarker::Leaf.encode(bytes)?,
+                Some(next) => {
+                    NodeMarker::Inner.encode(bytes)?;
+                    let node = &self.nodes[next];
+                    node.value.encode(bytes)?;
+                    stack.push(node.right);
+                    stack.push(node.left);
+                }
+            }
         }
 
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        UsizeType::encoded_len(&0)
-            .zip(self.nodes.first().map_or(Some(0), Encode::encoded_len))
-            .map(|(header_len, node_len)| header_len + node_len * self.nodes.len())
+        let leaf_len = NodeMarker::Leaf.encoded_len()?;
+        let mut len = if self.nodes.is_empty() {
+            leaf_len
+        } else {
+            self.nodes.len() * NodeMarker::Inner.encoded_len()?
+        };
+
+        for node in self.nodes.iter() {
+            len += node.value.encoded_len()?;
+            if node.left.is_none() {
+                len += leaf_len;
+            }
+            if node.right.is_none() {
+                len += leaf_len;
+            }
+        }
+
+        Some(len)
     }
 }
 
 impl<V: Decode> Decode for BinaryTree<V> {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        #[derive(Default)]
+        struct Item {
+            index: Option<usize>,
+            is_left: bool,
+        }
+
         let mut tree = Self::default();
-        let header = UsizeType::decode(bytes)?;
-        if header != 0 {
-            let len = header.into();
-            tree.nodes = Vec::with_capacity(len + Self::NODES_CAPACITY);
-            for _ in 0..len {
-                tree.nodes.push(Node::decode(bytes)?);
+        let mut stack = vec![Item::default()];
+
+        // Decode nodes in a pre-order traversal.
+        while let Some(item) = stack.pop() {
+            match NodeMarker::decode(bytes)? {
+                NodeMarker::Leaf => (),
+                NodeMarker::Inner => {
+                    let index = Some(tree.nodes.len());
+                    tree.nodes.push(Node::new(V::decode(bytes)?));
+
+                    stack.push(Item {
+                        is_left: false,
+                        index,
+                    });
+                    stack.push(Item {
+                        is_left: true,
+                        index,
+                    });
+
+                    let Some(node) = item.index else { continue };
+                    if item.is_left {
+                        tree.nodes[node].left = index;
+                    } else {
+                        tree.nodes[node].right = index;
+                    }
+                }
             }
-            tree.root = Some(0);
         }
 
         Ok(tree)
+    }
+}
+
+/// Marker used to distinguish between full and empty nodes.
+#[repr(u8)]
+enum NodeMarker {
+    Leaf,
+    Inner,
+}
+
+impl Encode for NodeMarker {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        match self {
+            NodeMarker::Leaf => 0u8.encode(bytes),
+            NodeMarker::Inner => 1u8.encode(bytes),
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        u8::encoded_len(&0)
+    }
+}
+
+impl Decode for NodeMarker {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        match u8::decode(bytes)? {
+            0u8 => Ok(NodeMarker::Leaf),
+            1u8 => Ok(NodeMarker::Inner),
+            _ => Err(CodecError::UnexpectedValue),
+        }
     }
 }
 
@@ -296,15 +396,16 @@ mod tests {
     use num_traits::Num;
 
     use crate::{
-        bt::{BinaryTree, BinaryTreeError},
+        bt::{BinaryTree, BinaryTreeError, NodeRef},
         codec::{Decode, Encode},
     };
 
     #[test]
     fn empty_tree() {
-        let mut tree = BinaryTree::<u32>::default();
-        assert!(tree.get(bits!()).is_none());
+        let tree = BinaryTree::<u32>::default();
+        assert!(tree.get_value(bits!()).is_none());
         assert!(tree.get_node(bits!()).is_none());
+        assert!(tree.nodes.is_empty());
     }
 
     #[test]
@@ -330,6 +431,7 @@ mod tests {
         let bytes_second = second.get_encoded().unwrap();
 
         assert_eq!(bytes_first, bytes_second);
+        assert_eq!(Some(bytes_first.len()), first.encoded_len());
     }
 
     #[test]
@@ -338,7 +440,7 @@ mod tests {
             let prefixes = gen_prefixes(size);
             let mut tree = BinaryTree::<u32>::default();
             insert_prefixes(&mut tree, &prefixes).unwrap();
-            verify_prefixes(&tree, &prefixes)
+            verify_prefixes(&tree, &prefixes);
         }
     }
 
@@ -375,10 +477,48 @@ mod tests {
         let mut ctr = T::zero();
         for prefixes_size_i in prefixes {
             for path in prefixes_size_i {
-                let value = tree.get(path).unwrap();
+                let value = tree.get_value(path).unwrap();
                 assert_eq!(*value, ctr, "path: {}", path);
                 ctr = ctr + T::one();
             }
         }
+    }
+
+    #[test]
+    fn is_valid_node_ref() {
+        let mut tree = BinaryTree::<u32>::default();
+        assert!(!tree.is_valid_node_ref(NodeRef(0)));
+        assert!(!tree.is_valid_node_ref(NodeRef(1)));
+        assert!(tree.get_node_at(NodeRef(0), bits!()).is_none());
+        assert!(tree.get_node_at(NodeRef(1), bits!()).is_none());
+
+        let node_ref = tree.insert(bits!(), 1111).unwrap();
+        assert!(tree.is_valid_node_ref(node_ref));
+        assert!(tree.is_valid_node_ref(NodeRef(0)));
+        assert!(!tree.is_valid_node_ref(NodeRef(1)));
+        assert_eq!(tree.get_node_at(node_ref, bits!()), Some(NodeRef::ROOT));
+        assert_eq!(tree.get_node_at(NodeRef(0), bits!()), Some(NodeRef::ROOT));
+        assert_eq!(tree.get_node_at(NodeRef(1), bits!()), None);
+    }
+
+    #[test]
+    fn insert_at() {
+        let mut t0 = BinaryTree::<u32>::default();
+        t0.insert(bits!(), 1).unwrap();
+        t0.insert(bits!(1), 10).unwrap();
+        t0.insert(bits!(1, 1), 100).unwrap();
+        t0.insert(bits!(1, 1, 1), 1000).unwrap();
+        t0.insert(bits!(1, 1, 1, 1), 10000).unwrap();
+
+        let mut t1 = BinaryTree::<u32>::default();
+        let mut node_ref;
+        node_ref = t1.insert(bits!(), 1).unwrap();
+        node_ref = t1.insert_at(node_ref, bits!(1), 10).unwrap();
+        node_ref = t1.insert_at(node_ref, bits!(1), 100).unwrap();
+        node_ref = t1.insert_at(node_ref, bits!(1), 1000).unwrap();
+        node_ref = t1.insert_at(node_ref, bits!(1), 10000).unwrap();
+
+        assert_eq!(node_ref, NodeRef(4));
+        assert_eq!(t0.get_encoded().unwrap(), t1.get_encoded().unwrap());
     }
 }
