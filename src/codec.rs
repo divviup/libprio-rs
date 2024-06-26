@@ -298,6 +298,34 @@ impl<E: Encode, const BUFFER_SIZE: usize> Encode for [E; BUFFER_SIZE] {
         Some(total)
     }
 }
+impl<D: Decode> ParameterizedDecode<usize> for Vec<D> {
+    fn decode_with_param (
+        decoding_parameter: &usize,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let mut out = Vec::with_capacity(*decoding_parameter);
+        for _ in [0..*decoding_parameter] {
+            out.push(<D>::decode(bytes)?)
+        };
+        Ok(out)
+    }
+}
+impl<E: Encode> Encode for Vec<E> {
+    fn encode (&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        for input in self {
+            input.encode(bytes)?
+        };
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let mut total = 0;
+        for item in self {
+            total = total + item.encoded_len()?
+        };
+        Some(total)
+    }
+}
 
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
 ///

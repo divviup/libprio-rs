@@ -29,7 +29,7 @@ where
     P: Xof<SEED_SIZE>,
 {
     algorithm_id: u32,
-    szk: Szk<T, P>,
+    szk: Szk<T, P, SEED_SIZE>,
     vpf: Vidpf<V, 16>,
     pub bits: usize,
     phantom: PhantomData<P>,
@@ -249,6 +249,14 @@ where
     };
     Ok((public_share, vec![leader_share, helper_share]))
     }
+
+    pub fn is_randomized(&self) -> bool {
+        self.szk.has_joint_rand()
+    }
+
+    pub fn proof_len(&self) -> usize {
+        self.szk.typ.proof_len()
+    }
 }
 
 impl<T, P, V,  const SEED_SIZE: usize> Client<16> for Mastic<T, P, V, SEED_SIZE>
@@ -283,4 +291,34 @@ where
         )
     }
 
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type TestWeight = VidpfWeight<Field128>;
+    const TEST_WEIGHT_LEN: usize = 1;
+    const TEST_NONCE_SIZE: usize = 16;
+    const TEST_NONCE: &[u8; TEST_NONCE_SIZE] = b"Mastic Nonce 000";
+
+    #[test]
+    fn test_mastic_shard_sum() {
+        let algorithm_id = 6;
+        let sum_typ = Sum::<TestWeight>::new(5).unwrap();
+        let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
+        let sum_vpf = Vidpf::<TestWeight, TEST_NONCE_SIZE>::new(TEST_WEIGHT_LEN);
+
+
+        let mut nonce = [0; 16];
+        let mut verify_key = [0; 16];
+                thread_rng().fill(&mut verify_key[..]);
+        thread_rng().fill(&mut nonce[..]);
+
+        let first_input = VidpfInput::from_bytes([0xFF, 0x00]);
+        let first_weight = TestWeight::from(vec![24.into(), 25.into(), 26.into()]);
+
+        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vpf, 16);
+        let (public, input_shares) = mastic.shard(&(first_input, first_weight), nonce).unwrap();
+    }
 }

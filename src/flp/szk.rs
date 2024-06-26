@@ -12,13 +12,15 @@
 //! following a strategy similar to [`Prio3`](crate::vdaf::prio3::Prio3).
 
 use crate::{
-    codec::{CodecError, ParameterizedDecode, Encode},
+    codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{FftFriendlyFieldElement, FieldElement},
     flp::{FlpError, Type},
     prng::{Prng, PrngError},
+    mastic::Mastic,
+    vidpf::VidpfValue,
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
-use std::{borrow::Cow, marker::PhantomData};
+use std::{borrow::Cow, io::Cursor, marker::PhantomData};
 
 // Domain separation tags
 const DST_PROVE_RANDOMNESS: u16 = 0;
@@ -77,16 +79,16 @@ impl<T, P, V, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, V, SEED_S
 where
 T: Type<Measurement = V>,
 P: Xof<SEED_SIZE>,
-V: VidpfValue + Debug + FftFriendlyFieldElement {
+V: VidpfValue + FftFriendlyFieldElement {
     fn decode_with_param(
         decoding_parameter: &Mastic<T, P, V, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let role = u8::decode(bytes)?;
+        let role = <u8>::decode(bytes)?;
         match role {
             0 => Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<F>::decode(bytes)?,
-                leader_blind_and_helper_joint_rand_part_opt: if decoding_parameter.szk.has_joint_rand() {
+                uncompressed_proof_share: Vec::<V>::decode_with_param(&decoding_parameter.proof_len(), bytes)?,
+                leader_blind_and_helper_joint_rand_part_opt: if decoding_parameter.is_randomized() {
                     Some((Seed::<SEED_SIZE>::decode(bytes)?, Seed::<SEED_SIZE>::decode(bytes)?))
                 } else {
                     None
@@ -94,7 +96,7 @@ V: VidpfValue + Debug + FftFriendlyFieldElement {
             }),
             1 => Ok(SzkProofShare::Helper {
                 proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: if decoding_parameter.szk.has_joint_rand() {
+                leader_joint_rand_part_opt: if decoding_parameter.is_randomized() {
                     Some(Seed::<SEED_SIZE>::decode(bytes)?)
                 } else {
                     None
@@ -171,12 +173,11 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    typ: T,
+    pub typ: T,
     algorithm_id: u32,
     phantom: PhantomData<P>,
 }
 
-#[cfg(test)]
 impl<T: Type> Szk<T, XofTurboShake128, 16> {
     /// Create an instance of [`Szk`] using [`XofTurboShake128`].
     pub fn new_turboshake128(typ: T, algorithm_id: u32) -> Self {
@@ -311,7 +312,7 @@ where
         // leader its blinding seed and the helper's joint randomness part, and
         // pass the helper the leader's joint randomness part. (The seed used to
         // derive the helper's proof share is reused as the helper's blind.)
-        let (leader_blind_and_helper_joint_rand_part, leader_joint_rand_part, joint_rand) =
+        let (leader_blind_and_helper_joint_rand_part_opt, leader_joint_rand_part_opt, joint_rand) =
             if let Some(leader_seed) = leader_seed_opt.clone() {
                 let leader_joint_rand_part =
                     self.derive_joint_rand_part(&leader_seed, leader_input_share, nonce)?;
@@ -622,7 +623,7 @@ mod tests {
         };
 
         // test mutated proof share
-        let (mut mutated_proof, leader_blind_and_helper_joint_rand_part) = match l_proof_share {
+        let (mut mutated_proof, leader_blind_and_helper_joint_rand_part_opt) = match l_proof_share {
             SzkProofShare::Leader {
                 uncompressed_proof_share,
                 leader_blind_and_helper_joint_rand_part_opt,
