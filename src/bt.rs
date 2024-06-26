@@ -228,7 +228,6 @@ impl<V> BinaryTree<V> {
     pub fn get_node_at(&self, node_ref: NodeRef, path: &Path) -> Option<NodeRef> {
         self.is_valid_node_ref(node_ref).then_some(())?;
 
-        let new_index = self.nodes.len();
         let mut node = (!self.nodes.is_empty()).then_some(node_ref.0);
         for bit in path.iter() {
             let next = &self.nodes[node?];
@@ -301,7 +300,7 @@ impl<V: Decode> Decode for BinaryTree<V> {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         #[derive(Default)]
         struct Item {
-            index: Option<usize>,
+            parent_index: Option<usize>,
             is_left: bool,
         }
 
@@ -313,23 +312,23 @@ impl<V: Decode> Decode for BinaryTree<V> {
             match NodeMarker::decode(bytes)? {
                 NodeMarker::Leaf => (),
                 NodeMarker::Inner => {
-                    let index = Some(tree.nodes.len());
+                    let parent_index = Some(tree.nodes.len());
                     tree.nodes.push(Node::new(V::decode(bytes)?));
 
                     stack.push(Item {
                         is_left: false,
-                        index,
+                        parent_index,
                     });
                     stack.push(Item {
                         is_left: true,
-                        index,
+                        parent_index,
                     });
 
-                    let Some(node) = item.index else { continue };
+                    let Some(node) = item.parent_index else { continue };
                     if item.is_left {
-                        tree.nodes[node].left = index;
+                        tree.nodes[node].left = parent_index;
                     } else {
-                        tree.nodes[node].right = index;
+                        tree.nodes[node].right = parent_index;
                     }
                 }
             }
