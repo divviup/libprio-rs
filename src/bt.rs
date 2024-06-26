@@ -317,7 +317,9 @@ impl<V: Decode> Decode for BinaryTree<V> {
                         parent_index,
                     });
 
-                    let Some(node) = item.parent_index else { continue };
+                    let Some(node) = item.parent_index else {
+                        continue;
+                    };
                     if item.is_left {
                         tree.nodes[node].left = parent_index;
                     } else {
