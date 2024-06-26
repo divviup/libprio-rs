@@ -16,16 +16,19 @@ use core::{
 
 use bitvec::field::BitField;
 use rand_core::RngCore;
-use std::io::Cursor;
+use std::fmt::Debug;
+use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
+    flp::Type,
     idpf::{
         conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
         IdpfInput, IdpfValue,
     },
+    mastic::Mastic,
     vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
 };
 
@@ -57,9 +60,35 @@ pub enum VidpfError {
 /// Represents the domain of an incremental point function.
 pub type VidpfInput = IdpfInput;
 
-/// Represents the codomain of an incremental point function.
-pub trait VidpfValue: IdpfValue + Clone {}
+impl Decode for VidpfInput {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let unwrapped_bytes = bytes.bytes();
+        let mut vec_of_bytes = Vec::with_capacity(unwrapped_bytes.size_hint().1.ok_or(CodecError::UnexpectedValue)?);
+        for b in unwrapped_bytes {
+            vec_of_bytes.push(b?);
+        }
+        Ok(VidpfInput::from_bytes(&vec_of_bytes[..]))
+    }
+}
 
+impl Encode for VidpfInput {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        let encoded = self.to_bytes();
+        for byte in encoded {
+            bytes.push(byte);
+        }
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some((self.len()+7)/8)
+    }
+}
+
+/// Represents the codomain of an incremental point function.
+pub trait VidpfValue: IdpfValue + Clone + Debug {}
+
+#[derive(Clone, Debug)]
 /// A VIDPF instance.
 pub struct Vidpf<W: VidpfValue, const NONCE_SIZE: usize> {
     /// Any parameters required to instantiate a weight value.
@@ -108,7 +137,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
     /// [`Vidpf::gen_with_keys`] works as the [`Vidpf::gen`] method, except that two different
     /// keys must be provided.
-    fn gen_with_keys(
+    pub fn gen_with_keys(
         &self,
         keys: &[VidpfKey; 2],
         input: &VidpfInput,
@@ -423,7 +452,7 @@ impl From<VidpfServerId> for Choice {
 }
 
 /// Adjusts values of shares during the VIDPF evaluation.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct VidpfCorrectionWord<W: VidpfValue> {
     seed: VidpfSeed,
     left_control_bit: Choice,
@@ -431,19 +460,20 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
-impl<W: VidpfValue> Decode for VidpfCorrectionWord<W>{
+impl<W: VidpfValue + Decode> Decode for VidpfCorrectionWord<W>{
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let seed = Seed::decode(bytes);
-        let control_bits = u8::decode(bytes);
+        let seed =<[u8; 16]>::decode(bytes)?;
+        let control_bits = u8::decode(bytes)?;
         let (left_control_bit, right_control_bit) = match control_bits {
             0 => (Choice::from(0), Choice::from(0)),
             1 => (Choice::from(0), Choice::from(1)),
             2 => (Choice::from(1), Choice::from(0)),
             3 => (Choice::from(1), Choice::from(1)),
+            _ => return Err(CodecError::UnexpectedValue),
         };
-        let weight = W::decode(bytes);
+        let weight = W::decode(bytes)?;
         Ok(Self {
-            seed,
+            seed: seed,
             left_control_bit,
             right_control_bit,
             weight,
@@ -453,49 +483,79 @@ impl<W: VidpfValue> Decode for VidpfCorrectionWord<W>{
 
 impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.push(self.seed)?;
-        bytes.push(match (self.left_control_bit, self.right_control_bit) {
-            (Choice::from(0), Choice::from(0)) => 0,
-            (Choice::from(0), Choice::from(1)) => 1,
-            (Choice::from(1), Choice::from(0)) => 2,
-            (Choice::from(1), Choice::from(1)) => 3,
-        });
+        for byte in self.seed {
+            bytes.push(byte);
+        }
+        let both_control_bits = if bool::from(self.left_control_bit) {
+            if bool::from(self.right_control_bit) {
+                3
+            } else {
+                2
+            }} else {
+            if bool::from(self.right_control_bit) {
+                1
+            } else {
+                0
+            }
+        };
+        bytes.push(both_control_bits);
         self.weight.encode(bytes)?;
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(self.seed.encoded_len()? + 1 + self.weight.encoded_len()?)
+        Some(17 + self.weight.encoded_len()?)
     }
 }
 
 /// Common public information used by aggregation servers.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct VidpfPublicShare<W: VidpfValue> {
     cw: Vec<VidpfCorrectionWord<W>>,
     cs: Vec<VidpfProof>,
 }
 
-impl<W: VidpfValue> Decode for VidpfPublicShare<W>{
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let cw = Vec::VidpfCorrectionWord::W::decode(bytes);
-        let cs = Vec::VidpfProof::decode(bytes);
-        Ok(Self {
-            cw,
-            cs,
-        })
+impl<T, P, V, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, V, SEED_SIZE>> for VidpfPublicShare<V>
+where
+    T: Type<Measurement = V>,
+    P: Xof<SEED_SIZE>,
+    V: VidpfValue + Decode {
+    fn decode_with_param(
+        decoding_parameter: &Mastic<T, P, V, SEED_SIZE>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let mut cw = Vec::<VidpfCorrectionWord<V>>::with_capacity(decoding_parameter.bits);
+        let mut cs = Vec::<VidpfProof>::with_capacity(decoding_parameter.bits);
+        for _ in [0..decoding_parameter.bits] {
+            cw.push(VidpfCorrectionWord::<V>::decode(bytes)?);
+        }
+        for _ in [0..decoding_parameter.bits] {
+            cs.push(VidpfProof::decode(bytes)?);
+        }
+        Ok(Self{cw, cs})
     }
 }
 
 impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.cw.encode(bytes)?;
-        self.cs.encode(bytes)?;
+        for word in &self.cw {
+            word.encode(bytes)?;
+        }
+        for proof in &self.cs {
+            proof.encode(bytes)?;
+        }
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(self.seed.encoded_len()? + 1 + self.weight.encoded_len()?)
+        let mut total = 0;
+        for word in &self.cw {
+            total = total + word.encoded_len()?;
+        }
+        for proof in &self.cs {
+            total = total + proof.encoded_len()?;
+        }
+        Some(total)
     }
 }
 /// Contains the values produced during input evaluation at a given level.
@@ -561,6 +621,7 @@ impl<F: FieldElement> From<Vec<F>> for VidpfWeight<F> {
 }
 
 impl<F: FieldElement> VidpfValue for VidpfWeight<F> {}
+
 
 impl<F: FieldElement> IdpfValue for VidpfWeight<F> {
     /// The parameter determines the number of field elements in the vector.

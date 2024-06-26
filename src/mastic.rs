@@ -1,12 +1,11 @@
 use crate::{
 
-    codec::{CodecError, Decode, Encode},
-    field::FieldElement,
+    codec::{CodecError, Decode, Encode, ParameterizedDecode,},
     flp::{
         szk::{Szk, SzkProofShare}, Type
     },
     vdaf::{
-        poplar1::Poplar1AggregationParam, xof::{Seed, Xof}, Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError
+        poplar1::Poplar1AggregationParam, xof::{Seed, Xof}, Aggregatable, Client, Vdaf, VdafError
     }, vidpf::{
         Vidpf,
         VidpfInput,
@@ -26,26 +25,26 @@ use std::{
 pub struct Mastic<T, P, V,  const SEED_SIZE: usize>
 where
     T: Type<Measurement = V>,
-    V: VidpfValue,
+    V: VidpfValue + Debug + Decode,
     P: Xof<SEED_SIZE>,
 {
     algorithm_id: u32,
     szk: Szk<T, P>,
-    vpf: V,
-    bits: usize,
+    vpf: Vidpf<V, 16>,
+    pub bits: usize,
     phantom: PhantomData<P>,
 }
 
 impl<T, P, V, const SEED_SIZE: usize> Mastic<T, P, V, SEED_SIZE>
 where
     T: Type<Measurement = V>,
-    V: VidpfValue,
+    V: VidpfValue + Debug + Decode,
     P: Xof<SEED_SIZE>,
 {
 pub fn new(
     algorithm_id: u32,
     szk: Szk<T, P, SEED_SIZE>,
-    vpf: Vidpf<V, SEED_SIZE>,
+    vpf: Vidpf<V, 16>,
     bits: usize) -> Self {
     Self {
         algorithm_id,
@@ -64,23 +63,6 @@ pub type MasticAggregationParam = Poplar1AggregationParam;
 
 pub type MasticPublicShare<V> = VidpfPublicShare<V>;
 
-impl<V: VidpfValue> Decode for MasticPublicShare<V> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        todo!();
-    }
-}
-
-impl<V: VidpfValue, const SEED_SIZE: usize> Encode for MasticPublicShare<V, SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        todo!();
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        todo!();
-    }
-}
-
-
 /// Add necessary traits for MasticPublicShare here
 
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
@@ -92,8 +74,15 @@ pub struct MasticInputShare<W: VidpfValue, const SEED_SIZE: usize> {
     /// The proof share.
     proofs_share: SzkProofShare<W, SEED_SIZE>,
 }
-impl<V: VidpfValue, const SEED_SIZE: usize> Decode for MasticInputShare<V, SEED_SIZE> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+impl<'a, T, P, V, const SEED_SIZE: usize> ParameterizedDecode<(&'a Mastic<T, P, V, SEED_SIZE>, usize)> for MasticInputShare<V, SEED_SIZE>
+where
+    T: Type<Measurement = V>,
+    P: Xof<SEED_SIZE>,
+    V: VidpfValue + Debug + Decode {
+    fn decode_with_param(
+        decoding_parameter: &(&'a Mastic<T, P, V, SEED_SIZE>, usize),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
         let vidpf_key = VidpfKey::decode(bytes)?;
         let proofs_share = SzkProofShare::<V, SEED_SIZE>::decode(bytes)?;
         Ok(Self { vidpf_key, proofs_share })
@@ -108,7 +97,7 @@ impl<V: VidpfValue, const SEED_SIZE: usize> Encode for MasticInputShare<V, SEED_
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        self.vidpf_key.encoded_len()? + self.proofs_share.encoded_len()?
+        Some(self.vidpf_key.encoded_len()? + self.proofs_share.encoded_len()?)
     }
 }
 
@@ -120,40 +109,72 @@ impl <V: VidpfValue + Debug> Aggregatable for MasticOutputShare<V> {
     type OutputShare = MasticOutputShare<V>;
     /// Update an aggregate share by merging it with another (`agg_share`).
     fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError>{
-        todo!();
+        if self.result.len() != agg_share.result.len() {
+            return Err(VdafError::Uncategorized("Attempted to merge two output shares with different agg_params".to_string()));
+        };
+        // Would love to get rid of the below clone if possible.
+        for (a, o) in self.result.iter_mut().zip(agg_share.result.iter()){
+            *a += o.clone();
+        }
+        Ok(())
     }
 
     /// Update an aggregate share by adding `output_share`.
     fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError>{
-        todo!();
+        if self.result.len() != output_share.result.len() {
+            return Err(VdafError::Uncategorized("Attempted to accumulate two output shares with different agg_params".to_string()));
+        };
+        // Would love to get rid of the below clone if possible.
+        for (a, o) in self.result.iter_mut().zip(output_share.result.iter()){
+            *a += o.clone();
+        }
+        Ok(())
     }
 }
 
-impl<V: VidpfValue> Decode for MasticOutputShare<V> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let v = Vec::V::decode(bytes)?;
-        Ok(Self { result: v })
+impl<'a, T, P, V, const SEED_SIZE: usize> ParameterizedDecode<(&'a Mastic<T, P, V, SEED_SIZE>, &'a MasticAggregationParam)> for MasticOutputShare<V>
+where
+    T: Type<Measurement = V>,
+    P: Xof<SEED_SIZE>,
+    V: VidpfValue + Decode {
+    fn decode_with_param(
+        decoding_parameter: &(&Mastic<T, P, V, SEED_SIZE>, &MasticAggregationParam),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let (_, agg_param) = decoding_parameter;
+        let l = agg_param.prefixes().len();
+        let mut result = Vec::<V>::with_capacity(l);
+        for _ in [0..l] {
+            result.push(V::decode(bytes)?);
+        }
+        Ok(MasticOutputShare{result})
     }
 }
 
 impl<V: VidpfValue> Encode for MasticOutputShare<V> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.result.encode(bytes)?;
+        for elem in &self.result{
+            elem.encode(bytes)?;
+        }
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        self.result.encoded_len()
+        let mut total = 0;
+        for elem in &self.result {
+            total = total + elem.encoded_len()?
+        };
+        Some(total)
     }
 }
 
 impl<T, P, V, const SEED_SIZE: usize> Vdaf for Mastic<T, P, V, SEED_SIZE>
 where
     T: Type<Measurement = V>,
-    V: VidpfValue + Debug,
+    V: VidpfValue + Debug + Decode,
     P: Xof<SEED_SIZE>,
 {
-    type Measurement = T::Measurement;
+    type Measurement = (VidpfInput, T::Measurement);
     type AggregateResult = T::AggregateResult;
     type AggregationParam = MasticAggregationParam;
     type PublicShare = MasticPublicShare<V>;
@@ -174,7 +195,7 @@ impl<T, P, V, const SEED_SIZE: usize> Mastic<T, P, V, SEED_SIZE>
 where
     T: Type<Measurement = V>,
     P: Xof<SEED_SIZE>,
-    V: VidpfValue + Debug {
+    V: VidpfValue + Debug + Decode {
 
     fn shard_with_random(
         &self,
@@ -193,9 +214,9 @@ where
         }
     // Compute the measurement shares for each aggregator by generating VIDPF
     // keys for the measurement and evaluating each of them.
-    let (public_share, keys) = self.vpf.gen_with_keys(vidpf_keys, measurement_label, measurement_weight, nonce);
-    let leader_measurement_share = self.vpf.eval(keys[0], public, measurement_label.prefix(1), nonce);
-    let helper_measurement_share = self.vpf.eval(keys[1], public, measurement_label.prefix(1), nonce);
+    let public_share = self.vpf.gen_with_keys(vidpf_keys, measurement_label, &measurement_weight, nonce)?;
+    let leader_measurement_share = self.vpf.eval(&vidpf_keys[0], &public_share, &measurement_label.prefix(1), nonce);
+    let helper_measurement_share = self.vpf.eval(&vidpf_keys[1], &public_share, &measurement_label.prefix(1), nonce);
     match (self.szk.has_joint_rand(), szk_random.len()){
         (true, 3) => (),
         (false, 2) => (),
@@ -219,11 +240,11 @@ where
         nonce,
     )?;
     let leader_share = MasticInputShare::<V, SEED_SIZE> {
-        vidpf_key: keys[0],
+        vidpf_key: vidpf_keys[0],
         proofs_share: szk_proof_shares[0],
     };
     let helper_share = MasticInputShare::<V, SEED_SIZE> {
-        vidpf_key: keys[1],
+        vidpf_key: vidpf_keys[1],
         proofs_share: szk_proof_shares[1],
     };
     Ok((public_share, vec![leader_share, helper_share]))
@@ -234,23 +255,32 @@ impl<T, P, V,  const SEED_SIZE: usize> Client<16> for Mastic<T, P, V, SEED_SIZE>
 where
     T: Type<Measurement = V>,
     P: Xof<SEED_SIZE>,
-    V: VidpfValue + Debug,
+    V: VidpfValue + Debug + Decode,
     {
 
     fn shard(
         &self,
-        measurement: (&VidpfInput, &V),
+        measurement: &(VidpfInput, V),
         nonce: &[u8; 16],
-    ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError>{
+    ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
         let vidpf_keys = [
             VidpfKey::gen(VidpfServerId::S0)?,
             VidpfKey::gen(VidpfServerId::S1)?,
         ];
-        self.shard_with_random(measurement.0,
+        let num_seeds = match self.szk.has_joint_rand() {
+                true => 3,
+                false => 2
+            };
+        let mut szk_random = Vec::with_capacity(num_seeds);
+        for i in [0..num_seeds] {
+            szk_random.push(Seed::<SEED_SIZE>::generate()?)
+        }
+        self.shard_with_random(&measurement.0,
             measurement.1,
             nonce,
             &vidpf_keys,
-            )
+            &szk_random,
+        )
     }
 
 }

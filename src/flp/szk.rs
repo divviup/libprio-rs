@@ -12,7 +12,7 @@
 //! following a strategy similar to [`Prio3`](crate::vdaf::prio3::Prio3).
 
 use crate::{
-    codec::{CodecError, Decode, Encode},
+    codec::{CodecError, ParameterizedDecode, Encode},
     field::{FftFriendlyFieldElement, FieldElement},
     flp::{FlpError, Type},
     prng::{Prng, PrngError},
@@ -73,22 +73,31 @@ pub enum SzkProofShare<F: FftFriendlyFieldElement, const SEED_SIZE: usize> {
     },
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Decode for SzkProofShare<F, SEED_SIZE> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+impl<T, P, V, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, V, SEED_SIZE>> for SzkProofShare<V, SEED_SIZE>
+where
+T: Type<Measurement = V>,
+P: Xof<SEED_SIZE>,
+V: VidpfValue + Debug + FftFriendlyFieldElement {
+    fn decode_with_param(
+        decoding_parameter: &Mastic<T, P, V, SEED_SIZE>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
         let role = u8::decode(bytes)?;
         match role {
             0 => Ok(SzkProofShare::Leader {
                 uncompressed_proof_share: Vec::<F>::decode(bytes)?,
-                leader_blind_and_helper_joint_rand_part_opt: match u8::decode(bytes)? {
-                    0 => None,
-                    1 => Some((Seed::<SEED_SIZE>::decode(bytes)?, Seed::<SEED_SIZE>::decode(bytes)?))
-                }
+                leader_blind_and_helper_joint_rand_part_opt: if decoding_parameter.szk.has_joint_rand() {
+                    Some((Seed::<SEED_SIZE>::decode(bytes)?, Seed::<SEED_SIZE>::decode(bytes)?))
+                } else {
+                    None
+                },
             }),
             1 => Ok(SzkProofShare::Helper {
                 proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: match u8::decode(bytes)? {
-                    0 => None,
-                    1 => Some(Seed::<SEED_SIZE>::decode(bytes)?)
+                leader_joint_rand_part_opt: if decoding_parameter.szk.has_joint_rand() {
+                    Some(Seed::<SEED_SIZE>::decode(bytes)?)
+                } else {
+                    None
                 },
             })
         }
@@ -103,20 +112,16 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for SzkProofShar
             } => (
                 0u8.encode(bytes)?, uncompressed_proof_share.encode(bytes)?,
             if let Some((blind, helper_joint_rand_part)) = leader_blind_and_helper_joint_rand_part_opt {
-                1u8.encode(bytes)?;
                 blind.encode(bytes)?;
                 helper_joint_rand_part.encode(bytes)?;
-            } else {
-                0u8.encode(bytes)?;
             }),
             SzkProofShare::Helper { proof_share_seed_and_blind,
             leader_joint_rand_part_opt } => (
                 1u8.encode(bytes)?,
                 proof_share_seed_and_blind.encode(bytes)?,
         if let Some(leader_joint_rand_part) = leader_joint_rand_part_opt {
-            1u8.encode(bytes)?;
             leader_joint_rand_part.encode(bytes)?;
-        } else { 0u8.encode(bytes)?; }),
+        }),
         };
         Ok(())
     }

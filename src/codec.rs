@@ -269,6 +269,35 @@ impl Encode for u64 {
         Some(8)
     }
 }
+impl<D: Decode, const BUFFER_SIZE: usize> Decode for [D; BUFFER_SIZE] {
+    fn decode (bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let mut v = Vec::with_capacity(BUFFER_SIZE);
+        for i in 0..BUFFER_SIZE {
+            v[i] = D::decode(bytes)?
+        };
+        match v.try_into() {
+            Ok(a) => Ok(a),
+            Err(e) => Err(CodecError::BytesLeftOver(e.len())),
+        }
+    }
+}
+
+impl<E: Encode, const BUFFER_SIZE: usize> Encode for [E; BUFFER_SIZE] {
+    fn encode (&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        for input in self {
+            input.encode(bytes)?
+        };
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        let mut total = 0;
+        for item in self {
+            total = total + item.encoded_len()?
+        };
+        Some(total)
+    }
+}
 
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
 ///
