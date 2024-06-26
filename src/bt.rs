@@ -132,16 +132,7 @@ impl<V> BinaryTree<V> {
     /// In the error cases, no insertion occurs and the value is returned to
     /// the caller of this function.
     pub fn insert(&mut self, path: &Path, value: V) -> Result<NodeRef, BinaryTreeError<V>> {
-        if self.nodes.is_empty() {
-            if path.is_empty() {
-                self.nodes.push(Node::new(value));
-                Ok(NodeRef::ROOT)
-            } else {
-                Err(BinaryTreeError::UnreachableNode(value))
-            }
-        } else {
-            self.insert_at(NodeRef::ROOT, path, value)
-        }
+        self.insert_at(NodeRef::ROOT, path, value)
     }
 
     /// Inserts the value at the location reached by traversing the tree
@@ -169,12 +160,14 @@ impl<V> BinaryTree<V> {
         path: &Path,
         value: V,
     ) -> Result<NodeRef, BinaryTreeError<V>> {
-        if !self.is_valid_node_ref(node_ref) {
+        if !(self.is_valid_node_ref(node_ref)
+            || (self.nodes.is_empty() && node_ref == NodeRef::ROOT))
+        {
             return Err(BinaryTreeError::InvalidNodeRef(value));
         }
 
         let new_index = self.nodes.len();
-        let mut node = &mut Some(node_ref.0);
+        let mut node = &mut (!self.nodes.is_empty()).then_some(node_ref.0);
         for bit in path.iter() {
             match *node {
                 None => return Err(BinaryTreeError::UnreachableNode(value)),
@@ -239,7 +232,7 @@ impl<V> BinaryTree<V> {
 
     /// Checks whether the node reference is valid with respect to the tree.
     fn is_valid_node_ref(&self, node_ref: NodeRef) -> bool {
-        !self.nodes.is_empty() && node_ref.0 < self.nodes.len()
+        node_ref.0 < self.nodes.len()
     }
 }
 
@@ -510,8 +503,8 @@ mod tests {
         t0.insert(bits!(1, 1, 1, 1), 10000).unwrap();
 
         let mut t1 = BinaryTree::<u32>::default();
-        let mut node_ref;
-        node_ref = t1.insert(bits!(), 1).unwrap();
+        let mut node_ref = NodeRef::ROOT;
+        node_ref = t1.insert_at(node_ref, bits!(), 1).unwrap();
         node_ref = t1.insert_at(node_ref, bits!(1), 10).unwrap();
         node_ref = t1.insert_at(node_ref, bits!(1), 100).unwrap();
         node_ref = t1.insert_at(node_ref, bits!(1), 1000).unwrap();
@@ -519,5 +512,31 @@ mod tests {
 
         assert_eq!(node_ref, NodeRef(4));
         assert_eq!(t0.get_encoded().unwrap(), t1.get_encoded().unwrap());
+    }
+
+    #[test]
+    fn insert_at_invalid_node_ref() {
+        // `insert_at` does not accept invalid node references, when the tree is empty.
+        let mut tree = BinaryTree::<u32>::default();
+        let invalid_node_ref = NodeRef(77);
+        assert!(!tree.is_valid_node_ref(invalid_node_ref));
+        assert_eq!(
+            tree.insert_at(invalid_node_ref, bits!(), 1)
+                .unwrap_err()
+                .to_string(),
+            BinaryTreeError::InvalidNodeRef(1).to_string()
+        );
+    }
+
+    #[test]
+    fn insert_at_root_ok() {
+        // `insert_at` does accept `NodeRef::ROOT`, when the tree is empty.
+        let mut tree = BinaryTree::<u32>::default();
+        let invalid_node_ref = NodeRef::ROOT;
+        assert!(!tree.is_valid_node_ref(invalid_node_ref));
+        assert_eq!(
+            tree.insert_at(invalid_node_ref, bits!(), 1).unwrap(),
+            NodeRef::ROOT
+        );
     }
 }
