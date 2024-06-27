@@ -38,10 +38,10 @@ increases (e.g., 0.10 to 0.11).
 | 0.9 | `release/0.9` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | [`draft-ietf-ppm-dap-02`][dap-02] and [`draft-ietf-ppm-dap-03`][dap-03] | Yes | Unmaintained as of September 22, 2022 |
 | 0.10 | `release/0.10` | [`draft-irtf-cfrg-vdaf-03`][vdaf-03] | [`draft-ietf-ppm-dap-02`][dap-02] and [`draft-ietf-ppm-dap-03`][dap-03] | Yes | Unmaintained as of November 14, 2023 |
 | 0.11 | `release/0.11` | [`draft-irtf-cfrg-vdaf-04`][vdaf-04] | N/A | Yes | Unmaintained |
-| 0.12 | `release/0.12` | [`draft-irtf-cfrg-vdaf-05`][vdaf-05] | [`draft-ietf-ppm-dap-04`][dap-04] | Yes | Supported |
+| 0.12 | `release/0.12` | [`draft-irtf-cfrg-vdaf-05`][vdaf-05] | [`draft-ietf-ppm-dap-04`][dap-04] | Yes | Unmaintained as of June 24, 2024 |
 | 0.13 | `release/0.13` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
 | 0.14 | `release/0.14` | [`draft-irtf-cfrg-vdaf-06`][vdaf-06] | [`draft-ietf-ppm-dap-05`][dap-05] | Yes | Unmaintained |
-| 0.15 | `release/0.15` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-07`][dap-07] | Yes | Supported |
+| 0.15 | `release/0.15` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-07`][dap-07] | Yes | Unmaintained as of June 24, 2024 |
 | 0.16 | `main` | [`draft-irtf-cfrg-vdaf-08`][vdaf-08] | [`draft-ietf-ppm-dap-09`][dap-09] | Yes | Supported |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/

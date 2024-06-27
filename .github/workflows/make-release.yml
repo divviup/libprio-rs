@@ -9,7 +9,7 @@ on:
           be marked as the latest release.
         required: false
         type: string
-        default: '["main","release/0.15","release/0.12"]'
+        default: '["main"]'
 
 jobs:
   bump-version:
