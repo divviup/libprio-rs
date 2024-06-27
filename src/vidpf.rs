@@ -460,8 +460,15 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
-impl<W: VidpfValue + Decode> Decode for VidpfCorrectionWord<W>{
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<&'a Mastic<T, P, SEED_SIZE>> for VidpfCorrectionWord<VidpfWeight<T::Field>>
+where
+    T: Type,
+    P: Xof<SEED_SIZE>,
+{
+    fn decode_with_param(
+        decoding_parameter: &&'a Mastic<T, P, SEED_SIZE>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
         let seed =<[u8; 16]>::decode(bytes)?;
         let control_bits = u8::decode(bytes)?;
         let (left_control_bit, right_control_bit) = match control_bits {
@@ -471,7 +478,7 @@ impl<W: VidpfValue + Decode> Decode for VidpfCorrectionWord<W>{
             3 => (Choice::from(1), Choice::from(1)),
             _ => return Err(CodecError::UnexpectedValue),
         };
-        let weight = W::decode(bytes)?;
+        let weight = VidpfWeight::<T::Field>::decode_with_param(&decoding_parameter.vpf.weight_parameter, bytes)?;
         Ok(Self {
             seed: seed,
             left_control_bit,
@@ -515,19 +522,19 @@ pub struct VidpfPublicShare<W: VidpfValue> {
     cs: Vec<VidpfProof>,
 }
 
-impl<T, P, V, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, V, SEED_SIZE>> for VidpfPublicShare<V>
+impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>> for VidpfPublicShare<VidpfWeight<T::Field>>
 where
-    T: Type<Measurement = V>,
+    T: Type,
     P: Xof<SEED_SIZE>,
-    V: VidpfValue + Decode {
+{
     fn decode_with_param(
-        decoding_parameter: &Mastic<T, P, V, SEED_SIZE>,
+        decoding_parameter: &Mastic<T, P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut cw = Vec::<VidpfCorrectionWord<V>>::with_capacity(decoding_parameter.bits);
+        let mut cw = Vec::<VidpfCorrectionWord<VidpfWeight<T::Field>>>::with_capacity(decoding_parameter.bits);
         let mut cs = Vec::<VidpfProof>::with_capacity(decoding_parameter.bits);
         for _ in [0..decoding_parameter.bits] {
-            cw.push(VidpfCorrectionWord::<V>::decode(bytes)?);
+            cw.push(VidpfCorrectionWord::<VidpfWeight<T::Field>>::decode_with_param(&decoding_parameter, bytes)?);
         }
         for _ in [0..decoding_parameter.bits] {
             cs.push(VidpfProof::decode(bytes)?);
@@ -617,6 +624,12 @@ pub struct VidpfWeight<F: FieldElement>(Vec<F>);
 impl<F: FieldElement> From<Vec<F>> for VidpfWeight<F> {
     fn from(value: Vec<F>) -> Self {
         Self(value)
+    }
+}
+
+impl<F: FieldElement> VidpfWeight<F> {
+    pub(crate) fn slice(&self) -> &[F] {
+        &self.0[..]
     }
 }
 
@@ -732,6 +745,19 @@ impl<F: FieldElement> ParameterizedDecode<<Self as IdpfValue>::ValueParameter> f
         }
 
         Ok(Self(v))
+    }
+}
+
+impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>> for VidpfWeight<T::Field>
+where
+    T: Type,
+    P: Xof<SEED_SIZE>,
+{
+    fn decode_with_param(
+        decoding_parameter: &Mastic<T, P, SEED_SIZE>,
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        VidpfWeight::<T::Field>::decode_with_param(&decoding_parameter.vpf.weight_parameter, bytes)
     }
 }
 

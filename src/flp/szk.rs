@@ -13,11 +13,10 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{FftFriendlyFieldElement, FieldElement},
+    field::FieldElement,
     flp::{FlpError, Type},
     prng::{Prng, PrngError},
     mastic::Mastic,
-    vidpf::VidpfValue,
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
 use std::{borrow::Cow, io::Cursor, marker::PhantomData};
@@ -57,10 +56,11 @@ pub enum SzkError {
     Codec(#[from] CodecError),
 }
 
+
 /// Contains an FLP proof share, and if joint randomness is needed, the blind
 /// used to derive it and the other party's joint randomness part.
-#[derive(Clone)]
-pub enum SzkProofShare<F: FftFriendlyFieldElement, const SEED_SIZE: usize> {
+#[derive(Debug, Clone)]
+pub enum SzkProofShare<F, const SEED_SIZE: usize> {
     /// Leader's proof share is uncompressed. The first Seed is a blind, second
     /// is a joint randomness part.
     Leader {
@@ -75,19 +75,18 @@ pub enum SzkProofShare<F: FftFriendlyFieldElement, const SEED_SIZE: usize> {
     },
 }
 
-impl<T, P, V, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, V, SEED_SIZE>> for SzkProofShare<V, SEED_SIZE>
+impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>> for SzkProofShare<T::Field, SEED_SIZE>
 where
-T: Type<Measurement = V>,
-P: Xof<SEED_SIZE>,
-V: VidpfValue + FftFriendlyFieldElement {
+T: Type,
+P: Xof<SEED_SIZE> {
     fn decode_with_param(
-        decoding_parameter: &Mastic<T, P, V, SEED_SIZE>,
+        decoding_parameter: &Mastic<T, P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let role = <u8>::decode(bytes)?;
         match role {
             0 => Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<V>::decode_with_param(&decoding_parameter.proof_len(), bytes)?,
+                uncompressed_proof_share: Vec::<T::Field>::decode_with_param(&(decoding_parameter.proof_len(),()), bytes)?,
                 leader_blind_and_helper_joint_rand_part_opt: if decoding_parameter.is_randomized() {
                     Some((Seed::<SEED_SIZE>::decode(bytes)?, Seed::<SEED_SIZE>::decode(bytes)?))
                 } else {
@@ -101,12 +100,13 @@ V: VidpfValue + FftFriendlyFieldElement {
                 } else {
                     None
                 },
-            })
+            }),
+            _ => return Err(CodecError::UnexpectedValue),
         }
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
+impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
             SzkProofShare::Leader { uncompressed_proof_share,
@@ -168,6 +168,7 @@ pub type SzkVerifier<F> = Vec<F>;
 /// Main struct encapsulating the shared zero-knowledge functionality. The type
 /// T is the underlying FLP proof system. P is the XOF used to derive all random
 /// coins (it should be indifferentiable from a random oracle for security.)
+#[derive(Clone, Debug)]
 pub struct Szk<T, P, const SEED_SIZE: usize>
 where
     T: Type,
@@ -178,7 +179,8 @@ where
     phantom: PhantomData<P>,
 }
 
-impl<T: Type> Szk<T, XofTurboShake128, 16> {
+impl<T: Type> Szk<T, XofTurboShake128, 16>
+{
     /// Create an instance of [`Szk`] using [`XofTurboShake128`].
     pub fn new_turboshake128(typ: T, algorithm_id: u32) -> Self {
         Szk::new(typ, algorithm_id)
@@ -295,6 +297,10 @@ where
 
     pub(crate) fn has_joint_rand(&self) -> bool {
         self.typ.joint_rand_len() > 0
+    }
+
+    pub(crate) fn proof_len(&self) -> usize {
+        self.typ.proof_len()
     }
 
     pub fn prove(
@@ -480,15 +486,20 @@ where
     }
 }
 
+#[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field128 as TestField;
-    use crate::field::{random_vector, FieldElementWithInteger};
+    use crate::field::Field128;
+    use crate::field::{random_vector, FftFriendlyFieldElement, FieldElementWithInteger};
     use crate::flp::types::{Count, Sum};
     use crate::flp::Type;
     use rand::{thread_rng, Rng};
 
-    fn generic_szk_test<T: Type>(typ: T, encoded_measurement: &[T::Field], valid: bool) {
+    fn generic_szk_test<T, V>(typ: T, encoded_measurement: &[T::Field], valid: bool)
+    where
+        T: Type<Measurement = V>,
+        V: FftFriendlyFieldElement
+    {
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
         let algorithm_id = 5;
@@ -667,9 +678,9 @@ mod tests {
 
     #[test]
     fn test_sum() {
-        let sum = Sum::<TestField>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(5).unwrap();
 
-        let five = TestField::from(5);
+        let five = Field128::from(5);
         let nine = sum.encode_measurement(&9).unwrap();
         let bad_encoding = &vec![five; sum.input_len()];
         generic_szk_test(sum.clone(), &nine, true);
@@ -678,7 +689,7 @@ mod tests {
 
     #[test]
     fn test_count() {
-        let count = Count::<TestField>::new();
+        let count = Count::<Field128>::new();
         let encoded_true = count.encode_measurement(&true).unwrap();
         generic_szk_test(count, &encoded_true, true);
     }

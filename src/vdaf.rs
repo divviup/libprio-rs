@@ -14,7 +14,7 @@ use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
-    flp::FlpError,
+    flp::{FlpError, szk::SzkError},
     prng::PrngError,
     vdaf::xof::Seed,
 };
@@ -45,6 +45,10 @@ pub enum VdafError {
     /// FLP error.
     #[error("flp error: {0}")]
     Flp(#[from] FlpError),
+
+    /// SZK error.
+    #[error("Szk error: {0}")]
+    Szk(#[from] SzkError),
 
     /// PRNG error.
     #[error("prng error: {0}")]

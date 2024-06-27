@@ -310,6 +310,21 @@ impl<D: Decode> ParameterizedDecode<usize> for Vec<D> {
         Ok(out)
     }
 }
+
+impl<P, D: ParameterizedDecode<P>> ParameterizedDecode<(usize, P)> for Vec<D> {
+    fn decode_with_param (
+        decoding_parameter: &(usize, P),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let (len, param) = decoding_parameter;
+        let mut out = Vec::with_capacity(*len);
+        for _ in [0.. *len] {
+            out.push(<D>::decode_with_param(param, bytes)?)
+        };
+        Ok(out)
+    }
+}
+
 impl<E: Encode> Encode for Vec<E> {
     fn encode (&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         for input in self {
