@@ -14,7 +14,7 @@ use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
-    flp::{FlpError, szk::SzkError},
+    flp::{szk::SzkError, FlpError},
     prng::PrngError,
     vdaf::xof::Seed,
 };
