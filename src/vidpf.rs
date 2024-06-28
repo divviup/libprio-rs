@@ -405,8 +405,8 @@ impl Decode for VidpfKey {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let id = u8::decode(bytes)?;
         let mut value = [0; 16];
-        for i in 0..16 {
-            value[i] = u8::decode(bytes)?;
+        for item in &mut value {
+            *item = u8::decode(bytes)?;
         }
         Ok(VidpfKey {
             id: match id {
@@ -487,7 +487,7 @@ where
             bytes,
         )?;
         Ok(Self {
-            seed: seed,
+            seed,
             left_control_bit,
             right_control_bit,
             weight,
@@ -506,12 +506,10 @@ impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
             } else {
                 2
             }
+        } else if bool::from(self.right_control_bit) {
+            1
         } else {
-            if bool::from(self.right_control_bit) {
-                1
-            } else {
-                0
-            }
+            0
         };
         bytes.push(both_control_bits);
         self.weight.encode(bytes)?;
@@ -544,7 +542,7 @@ where
             decoding_parameter.bits,
         );
         let mut cs = Vec::<VidpfProof>::with_capacity(decoding_parameter.bits);
-        for _ in [0..decoding_parameter.bits] {
+        for _ in 0..decoding_parameter.bits {
             cw.push(
                 VidpfCorrectionWord::<VidpfWeight<T::Field>>::decode_with_param(
                     &decoding_parameter,
@@ -552,7 +550,7 @@ where
                 )?,
             );
         }
-        for _ in [0..decoding_parameter.bits] {
+        for _ in 0..decoding_parameter.bits {
             cs.push(VidpfProof::decode(bytes)?);
         }
         Ok(Self { cw, cs })
@@ -573,10 +571,10 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
     fn encoded_len(&self) -> Option<usize> {
         let mut total = 0;
         for word in &self.cw {
-            total = total + word.encoded_len()?;
+            total += word.encoded_len()?;
         }
         for proof in &self.cs {
-            total = total + proof.encoded_len()?;
+            total += proof.encoded_len()?;
         }
         Some(total)
     }

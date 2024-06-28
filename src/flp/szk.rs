@@ -112,7 +112,7 @@ where
                     None
                 },
             }),
-            _ => return Err(CodecError::UnexpectedValue),
+            _ => Err(CodecError::UnexpectedValue),
         }
     }
 }
@@ -352,7 +352,7 @@ where
         // pass the helper the leader's joint randomness part. (The seed used to
         // derive the helper's proof share is reused as the helper's blind.)
         let (leader_blind_and_helper_joint_rand_part_opt, leader_joint_rand_part_opt, joint_rand) =
-            if let Some(leader_seed) = leader_seed_opt.clone() {
+            if let Some(leader_seed) = leader_seed_opt {
                 let leader_joint_rand_part =
                     self.derive_joint_rand_part(&leader_seed, leader_input_share, nonce)?;
                 let helper_joint_rand_part =
@@ -387,7 +387,7 @@ where
             leader_blind_and_helper_joint_rand_part_opt,
         };
         let helper_proof_share = SzkProofShare::Helper {
-            proof_share_seed_and_blind: helper_seed.clone(),
+            proof_share_seed_and_blind: helper_seed,
             leader_joint_rand_part_opt,
         };
         Ok([leader_proof_share, helper_proof_share])
@@ -579,12 +579,7 @@ mod tests {
         let h_jr_seed = h_query_state.joint_rand_seed;
         let l_jr_part = l_query_share.joint_rand_part;
         let l_jr_seed = l_query_state.joint_rand_seed;
-        if let Ok(leader_decision) = szk_typ.decide(
-            &verifier,
-            l_jr_part.clone(),
-            h_jr_part.clone(),
-            l_jr_seed.clone(),
-        ) {
+        if let Ok(leader_decision) = szk_typ.decide(&verifier, l_jr_part, h_jr_part, l_jr_seed) {
             assert_eq!(
                 leader_decision, valid,
                 "Leader incorrectly determined validity",
@@ -592,12 +587,7 @@ mod tests {
         } else {
             panic!("Leader failed during decision");
         };
-        if let Ok(helper_decision) = szk_typ.decide(
-            &verifier,
-            l_jr_part.clone(),
-            h_jr_part.clone(),
-            h_jr_seed.clone(),
-        ) {
+        if let Ok(helper_decision) = szk_typ.decide(&verifier, l_jr_part, h_jr_part, h_jr_seed) {
             assert_eq!(
                 helper_decision, valid,
                 "Helper incorrectly determined validity",
@@ -609,12 +599,9 @@ mod tests {
         //test mutated jr seed
         if szk_typ.has_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
-            if let Ok(leader_decision) = szk_typ.decide(
-                &verifier,
-                l_jr_part.clone(),
-                h_jr_part.clone(),
-                joint_rand_seed_opt,
-            ) {
+            if let Ok(leader_decision) =
+                szk_typ.decide(&verifier, l_jr_part, h_jr_part, joint_rand_seed_opt)
+            {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
             };
         };
@@ -629,12 +616,7 @@ mod tests {
         }
 
         let leader_decision = szk_typ
-            .decide(
-                &verifier,
-                l_jr_part.clone(),
-                h_jr_part.clone(),
-                l_jr_seed.clone(),
-            )
+            .decide(&verifier, l_jr_part, h_jr_part, l_jr_seed)
             .unwrap();
         assert!(!leader_decision, "Leader validated after proof mutation");
 
@@ -653,12 +635,9 @@ mod tests {
 
         let mutated_jr_seed = mutated_query_state.joint_rand_seed;
         let mutated_jr_part = mutated_query_share.joint_rand_part;
-        if let Ok(leader_decision) = szk_typ.decide(
-            &verifier,
-            mutated_jr_part.clone(),
-            h_jr_part.clone(),
-            mutated_jr_seed,
-        ) {
+        if let Ok(leader_decision) =
+            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part, mutated_jr_seed)
+        {
             assert!(!leader_decision, "Leader validated after input mutation");
         };
 
@@ -695,12 +674,9 @@ mod tests {
 
         let mutated_jr_seed = l_query_state.joint_rand_seed;
         let mutated_jr_part = l_query_share.joint_rand_part;
-        if let Ok(leader_decision) = szk_typ.decide(
-            &verifier,
-            mutated_jr_part.clone(),
-            h_jr_part.clone(),
-            mutated_jr_seed,
-        ) {
+        if let Ok(leader_decision) =
+            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part, mutated_jr_seed)
+        {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
     }

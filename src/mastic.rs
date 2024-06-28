@@ -154,7 +154,7 @@ where
         let (mastic, agg_param) = decoding_parameter;
         let l = agg_param.prefixes().len();
         let mut result = Vec::<VidpfWeight<T::Field>>::with_capacity(l);
-        for _ in [0..l] {
+        for _ in 0..l {
             result.push(VidpfWeight::<T::Field>::decode_with_param(*mastic, bytes)?);
         }
         Ok(MasticOutputShare { result })
@@ -172,7 +172,7 @@ impl<V: VidpfValue> Encode for MasticOutputShare<V> {
     fn encoded_len(&self) -> Option<usize> {
         let mut total = 0;
         for elem in &self.result {
-            total = total + elem.encoded_len()?
+            total += elem.encoded_len()?
         }
         Some(total)
     }
@@ -220,12 +220,6 @@ where
         ),
         VdafError,
     > {
-        if measurement_label.len() != self.bits {
-            return Err(VdafError::Uncategorized(format!(
-                "unexpected input length ({})",
-                measurement_label.len()
-            )));
-        }
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
         let public_share =
@@ -313,9 +307,8 @@ mod tests {
     use crate::flp::types::Sum;
     use rand::{thread_rng, Rng};
 
-    const TEST_WEIGHT_LEN: usize = 1;
+    const TEST_WEIGHT_LEN: usize = 5;
     const TEST_NONCE_SIZE: usize = 16;
-    const TEST_NONCE: &[u8; TEST_NONCE_SIZE] = b"Mastic Nonce 000";
 
     #[test]
     fn test_mastic_shard_sum() {
@@ -329,10 +322,16 @@ mod tests {
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8][..]);
-        let first_weight = VidpfWeight::<Field128>::from(vec![24.into(), 25.into(), 26.into()]);
+        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8][..]);
+        let first_weight = VidpfWeight::<Field128>::from(vec![
+            24.into(),
+            25.into(),
+            26.into(),
+            27.into(),
+            28.into(),
+        ]);
 
         let mastic = Mastic::new(algorithm_id, sum_szk, sum_vpf, 16);
-        let (public, input_shares) = mastic.shard(&(first_input, first_weight), &nonce).unwrap();
+        let (_public, _input_shares) = mastic.shard(&(first_input, first_weight), &nonce).unwrap();
     }
 }

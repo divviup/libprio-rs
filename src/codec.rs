@@ -272,8 +272,8 @@ impl Encode for u64 {
 impl<D: Decode, const BUFFER_SIZE: usize> Decode for [D; BUFFER_SIZE] {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let mut v = Vec::with_capacity(BUFFER_SIZE);
-        for i in 0..BUFFER_SIZE {
-            v[i] = D::decode(bytes)?
+        for elem in v.iter_mut().take(BUFFER_SIZE) {
+            *elem = D::decode(bytes)?
         }
         match v.try_into() {
             Ok(a) => Ok(a),
@@ -293,7 +293,7 @@ impl<E: Encode, const BUFFER_SIZE: usize> Encode for [E; BUFFER_SIZE] {
     fn encoded_len(&self) -> Option<usize> {
         let mut total = 0;
         for item in self {
-            total = total + item.encoded_len()?
+            total += item.encoded_len()?
         }
         Some(total)
     }
@@ -304,7 +304,7 @@ impl<D: Decode> ParameterizedDecode<usize> for Vec<D> {
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let mut out = Vec::with_capacity(*decoding_parameter);
-        for _ in [0..*decoding_parameter] {
+        for _ in 0..*decoding_parameter {
             out.push(<D>::decode(bytes)?)
         }
         Ok(out)
@@ -318,7 +318,7 @@ impl<P, D: ParameterizedDecode<P>> ParameterizedDecode<(usize, P)> for Vec<D> {
     ) -> Result<Self, CodecError> {
         let (len, param) = decoding_parameter;
         let mut out = Vec::with_capacity(*len);
-        for _ in [0..*len] {
+        for _ in 0..*len {
             out.push(<D>::decode_with_param(param, bytes)?)
         }
         Ok(out)
@@ -336,7 +336,7 @@ impl<E: Encode> Encode for Vec<E> {
     fn encoded_len(&self) -> Option<usize> {
         let mut total = 0;
         for item in self {
-            total = total + item.encoded_len()?
+            total += item.encoded_len()?
         }
         Some(total)
     }
