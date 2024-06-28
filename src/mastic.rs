@@ -213,13 +213,7 @@ where
         vidpf_keys: [VidpfKey; 2],
         szk_random: [Seed<SEED_SIZE>; 2],
         opt_random: Option<Seed<SEED_SIZE>>,
-    ) -> Result<
-        (
-            MasticPublicShare<VidpfWeight<T::Field>>,
-            Vec<MasticInputShare<T::Field, SEED_SIZE>>,
-        ),
-        VdafError,
-    > {
+    ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
         let public_share =
