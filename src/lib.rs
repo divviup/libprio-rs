@@ -33,6 +33,7 @@ mod fp64;
 )]
 pub mod idpf;
 #[cfg(feature = "experimental")]
+#[allow(dead_code)]
 /// Implements the Mastic VDAF for weighted heavy hitters and attribute-based metrics.
 pub mod mastic;
 mod polynomial;

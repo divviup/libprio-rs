@@ -19,11 +19,14 @@ use crate::{
     prng::{Prng, PrngError},
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
-use std::{borrow::Cow, io::Cursor, marker::PhantomData};
+#[cfg(test)]
+use std::borrow::Cow;
+use std::{io::Cursor, marker::PhantomData};
 
 // Domain separation tags
 const DST_PROVE_RANDOMNESS: u16 = 0;
 const DST_PROOF_SHARE: u16 = 1;
+#[allow(dead_code)]
 const DST_QUERY_RANDOMNESS: u16 = 2;
 const DST_JOINT_RAND_SEED: u16 = 3;
 const DST_JOINT_RAND_PART: u16 = 4;
@@ -178,12 +181,13 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
+#[cfg(test)]
 #[derive(Clone)]
 pub(crate) struct SzkQueryShare<F, const SEED_SIZE: usize> {
     joint_rand_part: Option<Seed<SEED_SIZE>>,
     verifier: SzkVerifier<F>,
 }
-
+#[cfg(test)]
 /// The state that needs to be stored by an Szk verifier between query() and decide()
 pub(crate) struct SzkQueryState<const SEED_SIZE: usize> {
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
@@ -311,7 +315,7 @@ where
         .take(self.typ.proof_len())
         .collect()
     }
-
+    #[cfg(test)]
     fn derive_query_rand(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
@@ -393,6 +397,7 @@ where
         Ok([leader_proof_share, helper_proof_share])
     }
 
+    #[cfg(test)]
     pub(crate) fn query(
         &self,
         input_share: &[T::Field],

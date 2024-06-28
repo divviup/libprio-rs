@@ -64,7 +64,7 @@ pub type MasticPublicShare<V> = VidpfPublicShare<V>;
 
 /// Add necessary traits for MasticPublicShare here
 
-/// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
+/// Message sent by the [`Client`] to each Aggregator during the Sharding phase.
 #[derive(Clone, Debug)]
 pub struct MasticInputShare<F: FieldElement, const SEED_SIZE: usize> {
     /// VIDPF key share.
