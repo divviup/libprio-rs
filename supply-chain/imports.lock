@@ -366,6 +366,12 @@ who = "Radu Matei <radu.matei@fermyon.com>"
 criteria = "safe-to-run"
 version = "0.3.3"
 
+[[audits.google.audits.cast]]
+who = "George Burgess IV <gbiv@google.com>"
+criteria = "safe-to-run"
+version = "0.3.0"
+aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+
 [[audits.google.audits.clap]]
 who = "George Burgess IV <gbiv@google.com>"
 criteria = "safe-to-run"
@@ -555,6 +561,11 @@ delta = "1.18.0 -> 1.19.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.16.0 -> 0.16.1"
+
+[[audits.isrg.audits.subtle]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "2.5.0 -> 2.6.1"
 
 [[audits.mozilla.audits.autocfg]]
 who = "Josh Stone <jistone@redhat.com>"
