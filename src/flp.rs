@@ -57,7 +57,7 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 
 pub mod gadgets;
-#[cfg(all(feature = "experimental", test))]
+#[cfg(feature = "experimental")]
 pub mod szk;
 pub mod types;
 
