@@ -699,6 +699,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "2.4.1 -> 2.5.0"
 
+[[audits.subtle]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "2.5.0 -> 2.6.1"
+
 [[audits.syn]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
