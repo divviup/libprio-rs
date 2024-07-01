@@ -36,6 +36,10 @@ pub enum DpError {
     /// Tried to convert BigInt into something incompatible.
     #[error("DP error: {0}")]
     BigIntConversion(#[from] TryFromBigIntError<BigInt>),
+
+    /// Invalid parameter value.
+    #[error("invalid parameter: {0}")]
+    InvalidParameter(String),
 }
 
 /// Positive arbitrary precision rational number to represent DP and noise distribution parameters in
@@ -101,6 +105,21 @@ impl ZCdpBudget {
 }
 
 impl DifferentialPrivacyBudget for ZCdpBudget {}
+
+/// Pure differential privacy budget. (&epsilon;-DP or (&epsilon;, 0)-DP)
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
+pub struct PureDpBudget {
+    epsilon: Ratio<BigUint>,
+}
+
+impl PureDpBudget {
+    /// Create a budget for parameter `epsilon`.
+    pub fn new(epsilon: Rational) -> Self {
+        Self { epsilon: epsilon.0 }
+    }
+}
+
+impl DifferentialPrivacyBudget for PureDpBudget {}
 
 /// Strategy to make aggregate results differentially private, e.g. by adding noise from a specific
 /// type of distribution instantiated with a given DP budget.
