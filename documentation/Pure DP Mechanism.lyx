@@ -1,0 +1,652 @@
+#LyX 2.4 created this file. For more info see https://www.lyx.org/
+\lyxformat 620
+\begin_document
+\begin_header
+\save_transient_properties true
+\origin unavailable
+\textclass article
+\use_default_options true
+\begin_modules
+theorems-std
+\end_modules
+\maintain_unincluded_children no
+\language american
+\language_package default
+\inputencoding utf8
+\fontencoding auto
+\font_roman "default" "default"
+\font_sans "default" "default"
+\font_typewriter "default" "default"
+\font_math "auto" "auto"
+\font_default_family default
+\use_non_tex_fonts false
+\font_sc false
+\font_roman_osf false
+\font_sans_osf false
+\font_typewriter_osf false
+\font_sf_scale 100 100
+\font_tt_scale 100 100
+\use_microtype false
+\use_dash_ligatures true
+\graphics default
+\default_output_format default
+\output_sync 0
+\bibtex_command default
+\index_command default
+\float_placement class
+\float_alignment class
+\paperfontsize default
+\spacing single
+\use_hyperref false
+\papersize default
+\use_geometry false
+\use_package amsmath 1
+\use_package amssymb 1
+\use_package cancel 1
+\use_package esint 1
+\use_package mathdots 1
+\use_package mathtools 1
+\use_package mhchem 1
+\use_package stackrel 1
+\use_package stmaryrd 1
+\use_package undertilde 1
+\cite_engine basic
+\cite_engine_type default
+\biblio_style plain
+\use_bibtopic false
+\use_indices false
+\paperorientation portrait
+\suppress_date false
+\justification true
+\use_refstyle 1
+\use_formatted_ref 0
+\use_minted 0
+\use_lineno 0
+\index Index
+\shortcut idx
+\color #008000
+\end_index
+\secnumdepth 3
+\tocdepth 3
+\paragraph_separation indent
+\paragraph_indentation default
+\is_math_indent 0
+\math_numbering_side default
+\quotes_style english
+\dynamic_quotes 0
+\papercolumns 1
+\papersides 1
+\paperpagestyle default
+\tablestyle default
+\tracking_changes false
+\output_changes false
+\change_bars false
+\postpone_fragile_content true
+\html_math_output 0
+\html_css_as_file 0
+\html_be_strict false
+\docbook_table_output 0
+\docbook_mathml_prefix 1
+\end_header
+
+\begin_body
+
+\begin_layout Title
+Differential Privacy Mechanism for 
+\family typewriter
+Prio3
+\family default
+ and 
+\family typewriter
+PureDpDiscreteLaplace
+\end_layout
+
+\begin_layout Standard
+Recall the definitions of pure differential privacy and the discrete Laplace distribution from 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "CKS20"
+literal "false"
+
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Definition
+A randomized algorithm 
+\begin_inset Formula $M:\mathcal{X}^{n}\rightarrow\mathcal{Y}$
+\end_inset
+
+ satisfies 
+\begin_inset Formula $\varepsilon$
+\end_inset
+
+-differential privacy if,
+ for all 
+\begin_inset Formula $x,x^{\prime}\in\mathcal{X}^{n}$
+\end_inset
+
+ differing on a single element and all events 
+\begin_inset Formula $E\subset\mathcal{Y}$
+\end_inset
+
+,
+ we have 
+\begin_inset Formula $\mathbb{P}\left[M\left(x\right)\in E\right]\leq e^{\varepsilon}\cdot\mathbb{P}\left[M\left(x^{\prime}\right)\in E\right]$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Standard
+\begin_inset Separator plain
+\end_inset
+
+
+\end_layout
+
+\begin_layout Definition
+The discrete Laplace distribution,
+ with scale parameter 
+\begin_inset Formula $t$
+\end_inset
+
+,
+ is defined by the following probability density function,
+ supported on the integers.
+\begin_inset Formula 
+\[
+\forall x\in\mathbb{Z},\underset{X\leftarrow\mathrm{Lap}_{\mathbb{Z}}\left(t\right)}{\mathbb{P}}\left[X=x\right]=\frac{e^{\nicefrac{1}{t}}-1}{e^{\nicefrac{1}{t}}+1}\cdot e^{\nicefrac{-\left|x\right|}{t}}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+The following differential privacy mechanism is implemented for the combination of the 
+\family typewriter
+PureDpDiscreteLaplace
+\family default
+ strategy and the 
+\family typewriter
+Prio3Histogram
+\family default
+ or 
+\family typewriter
+Prio3SumVec
+\family default
+ VDAFs.
+ Let 
+\begin_inset Formula $f\left(x\right)$
+\end_inset
+
+ be the VDAF's aggregation function,
+ operating over the integers.
+ The aggregation function produces a query result 
+\begin_inset Formula $q=f\left(x\right)\in\mathcal{Y}$
+\end_inset
+
+.
+ Without loss of generality,
+ we assume the domain 
+\begin_inset Formula $\mathcal{Y}$
+\end_inset
+
+ is a vector of integers,
+ 
+\begin_inset Formula $\mathcal{Y}=\mathbb{Z}^{d}$
+\end_inset
+
+.
+ Let 
+\begin_inset Formula $GS_{f}$
+\end_inset
+
+ be the global sensitivity of 
+\begin_inset Formula $f\left(x\right)$
+\end_inset
+
+,
+ using the replacement definition of neighboring datasets.
+ Let 
+\begin_inset Formula $\mathbb{F}_{p}$
+\end_inset
+
+ be field of prime order over which Prio3 operates.
+ Noise is sampled from the discrete Laplace distribution 
+\begin_inset Formula $\mathrm{Lap}_{\mathbb{Z}}\left(\nicefrac{GS_{f}}{\varepsilon}\right)$
+\end_inset
+
+,
+ projected into the field,
+ and added to each coordinate of aggregate share field element vectors.
+ Let 
+\begin_inset Formula $\pi_{\mathbb{F}_{p}}:\mathbb{Z}\rightarrow\mathbb{F}_{p}$
+\end_inset
+
+ and 
+\begin_inset Formula $\pi_{\mathbb{Z}}:\mathbb{F}_{p}\rightarrow\mathbb{Z}$
+\end_inset
+
+ be the natural projections between the integers and field elements,
+ where 
+\family roman
+\series medium
+\shape up
+\size normal
+\emph off
+\nospellcheck off
+\bar no
+\strikeout off
+\xout off
+\uuline off
+\uwave off
+\noun off
+\color none
+
+\begin_inset Formula $\pi_{\mathbb{Z}}$
+\end_inset
+
+
+\family default
+\series default
+\shape default
+\size default
+\emph default
+\nospellcheck default
+\bar default
+\strikeout default
+\xout default
+\uuline default
+\uwave default
+\noun default
+\color inherit
+ maps field elements to 
+\begin_inset Formula $\left[0,p\right)$
+\end_inset
+
+.
+ Let 
+\begin_inset Formula $q^{*}=f^{*}\left(x\right)\in\mathbb{F}_{p}^{d}$
+\end_inset
+
+ be the element-wise projections of 
+\begin_inset Formula $q$
+\end_inset
+
+ and 
+\begin_inset Formula $f$
+\end_inset
+
+ into the field using 
+\begin_inset Formula $\pi_{\mathbb{F}_{p}}$
+\end_inset
+
+.
+ The un-noised aggregate shares produced by Prio3 are secret shares of the query result,
+ 
+\begin_inset Formula $q^{*}=q^{\left(0\right)}+q^{\left(1\right)}$
+\end_inset
+
+.
+ Each aggregator samples noise from the discrete Laplace distribution and adds it to the un-noised aggregate shares,
+ and then sends the sum as their aggregate share to the collector.
+ If we pessimistically assume that only one honest aggregator out of the two aggregators is adding differential privacy noise,
+ then the mechanism produces 
+\begin_inset Formula $M\left(x\right)=q^{\left(0\right)}+q^{\left(1\right)}+\pi_{\mathbb{F}_{p}}\left(Z\right)=q^{*}+\pi_{\mathbb{F}_{p}}\left(Z\right)$
+\end_inset
+
+,
+ where 
+\begin_inset Formula $Z_{j}\leftarrow\mathrm{Lap}_{\mathbb{Z}}\left(\nicefrac{GS_{f}}{\varepsilon}\right)$
+\end_inset
+
+ is drawn independently for all 
+\begin_inset Formula $1\leq j\le d$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Theorem
+\begin_inset Formula $M\left(x\right)=\pi_{\mathbb{F}_{p}}\left(f\left(x\right)\right)+\pi_{\mathbb{F}_{p}}\left(Z\right),Z_{j}\leftarrow Lap_{\mathbb{Z}}\left(\nicefrac{GS_{f}}{\varepsilon}\right)$
+\end_inset
+
+ satisfies 
+\begin_inset Formula $\varepsilon$
+\end_inset
+
+-differential privacy.
+\end_layout
+
+\begin_layout Proof
+We will show Definition 1 holds for singleton events,
+ where 
+\begin_inset Formula $E$
+\end_inset
+
+ is a set of cardinality one,
+ then other events will follow by a union bound.
+\end_layout
+
+\begin_layout Proof
+Let 
+\begin_inset Formula $q=f\left(x\right)$
+\end_inset
+
+,
+ 
+\begin_inset Formula $q^{\prime}=f\left(x^{\prime}\right)$
+\end_inset
+
+,
+ and 
+\begin_inset Formula $q^{*}=\vec{\pi}_{\mathbb{F}_{p}}\left(f\left(x\right)\right)$
+\end_inset
+
+,
+ and let 
+\begin_inset Formula $q_{j}$
+\end_inset
+
+,
+ 
+\begin_inset Formula $q_{j}^{*}$
+\end_inset
+
+,
+ and 
+\begin_inset Formula $Z_{j}$
+\end_inset
+
+ denote the 
+\begin_inset Formula $j$
+\end_inset
+
+-th component of the respective vectors.
+ Then 
+\begin_inset Formula $M_{j}\left(x\right)=q_{j}^{*}+\pi_{\mathbb{F}_{p}}\left(Z_{j}\right)$
+\end_inset
+
+.
+ Applying the probability density function of the discrete Laplace distribution,
+ we have:
+\begin_inset Formula 
+\[
+\forall j\in\left[d\right],y_{j}\in\mathbb{F}_{p},\mathbb{P}\left[M_{j}\left(x\right)=y_{j}\right]=\mathbb{P}\left[\pi_{\mathbb{F}_{p}}\left(Z_{j}\right)=y_{j}-q_{j}^{*}\right]
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+=\stackrel[k=-\infty]{\infty}{\sum}\mathbb{P}\left[Z_{j}=\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right]
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+=\stackrel[k=-\infty]{\infty}{\sum}\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+=\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\stackrel[k=-\infty]{\infty}{\sum}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Proof
+Since each 
+\begin_inset Formula $Z_{j}$
+\end_inset
+
+ is drawn independently,
+ the probability of the mechanism returning some result can be found by taking the product of the probabilities for each dimension of the result vector.
+\begin_inset Formula 
+\[
+\mathbb{P}\left[M\left(x\right)=y\right]=\left(\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\right)^{d}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\mathbb{P}\left[M\left(x^{\prime}\right)=y\right]=\left(\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\right)^{d}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}{GS_{f}}}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Proof
+By the definition of global sensitivity,
+ we know 
+\begin_inset Formula $\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\le GS_{f}$
+\end_inset
+
+.
+ We can break up the 
+\begin_inset Formula $\ell_{1}$
+\end_inset
+
+ distance between 
+\begin_inset Formula $q$
+\end_inset
+
+ and 
+\begin_inset Formula $q^{\prime}$
+\end_inset
+
+ by dimension,
+ and relate this sum of absolute values of differences to the product of multiplicative factors of 
+\begin_inset Formula $e^{\left|q_{j}-q_{j}^{\prime}\right|}$
+\end_inset
+
+,
+ in order to get the bound we need.
+ Let 
+\begin_inset Formula $\delta_{j}=q_{j}-q_{j}^{\prime}$
+\end_inset
+
+.
+ By the triangle inequality,
+ 
+\begin_inset Formula $\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\le\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|+\left|\delta_{j}\right|$
+\end_inset
+
+.
+ Since 
+\begin_inset Formula $\varepsilon>0$
+\end_inset
+
+ and 
+\begin_inset Formula $GS_{f}>0$
+\end_inset
+
+,
+ then,
+\begin_inset Formula 
+\[
+-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\ge-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|-\frac{\varepsilon}{GS_{f}}\left|\delta_{j}\right|
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}\ge e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}\ge e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Proof
+Since the above holds for a fixed 
+\begin_inset Formula $y$
+\end_inset
+
+,
+ 
+\begin_inset Formula $q$
+\end_inset
+
+ and 
+\begin_inset Formula $q^{\prime}$
+\end_inset
+
+,
+ and any 
+\begin_inset Formula $j$
+\end_inset
+
+ and 
+\begin_inset Formula $k$
+\end_inset
+
+,
+ we can first add and then multiply inequalities together.
+\begin_inset Formula 
+\[
+\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le\stackrel[j=1]{d}{\prod}e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon\stackrel[j=1]{d}{\sum}\left|\delta_{j}\right|}{GS_{f}}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon}{GS_{f}}\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+Then,
+ since 
+\begin_inset Formula $\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\le GS_{f}$
+\end_inset
+
+,
+\begin_inset Formula 
+\[
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon}{GS_{f}}GS_{f}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\varepsilon}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\]
+
+\end_inset
+
+This shows that 
+\begin_inset Formula $\mathbb{P}\left[M\left(x^{\prime}\right)=y\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[M\left(x\right)=y\right]$
+\end_inset
+
+.
+ By applying union bounds,
+ then 
+\begin_inset Formula $\mathbb{P}\left[M\left(x^{\prime}\right)\in E\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[M\left(x\right)\in E\right]$
+\end_inset
+
+ as well,
+ and thus 
+\begin_inset Formula $M\left(x\right)$
+\end_inset
+
+ satisfies 
+\begin_inset Formula $\varepsilon$
+\end_inset
+
+-differential privacy.
+\end_layout
+
+\begin_layout Bibliography
+\begin_inset CommandInset bibitem
+LatexCommand bibitem
+key "CKS20"
+literal "false"
+
+\end_inset
+
+Canonne,
+ C.
+ L.,
+ Kamath,
+ G.,
+ and Steinke,
+ T.,
+ 
+\begin_inset Quotes eld
+\end_inset
+
+The Discrete Gaussian for Differential Privacy
+\begin_inset Quotes erd
+\end_inset
+
+,
+ 2020,
+ <
+\begin_inset CommandInset href
+LatexCommand href
+target "https://arxiv.org/abs/2004.00010"
+
+\end_inset
+
+>.
+\end_layout
+
+\end_body
+\end_document
