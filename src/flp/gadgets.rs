@@ -43,7 +43,7 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
         }
     }
 
-    // Multiply input polynomials directly.
+    /// Multiply input polynomials directly.
     pub(crate) fn call_poly_direct(
         &mut self,
         outp: &mut [F],
@@ -54,7 +54,7 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
         Ok(())
     }
 
-    // Multiply input polynomials using FFT.
+    /// Multiply input polynomials using FFT.
     pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
@@ -411,6 +411,120 @@ where
     }
 }
 
+/// An arity-1 gadget that evaluates the polynomial `x^2 - x` on its input. This is used to permit
+/// input values of 0 and 1.
+///
+/// Note that this is a specialized gadget, equivalent to instantiating PolyEval with `x^2 - x`.
+/// This implementation avoids extra field multiplications by positive and negative one.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct Range2<F> {
+    /// Size of buffer for FFT operations.
+    n: usize,
+    /// Inverse of `n` in `F`.
+    n_inv: F,
+    /// The number of times this gadget will be called.
+    num_calls: usize,
+}
+
+impl<F: FftFriendlyFieldElement> Range2<F> {
+    /// Return a new range check gadget. `num_calls` is the number of times this gadget will be called by the validity circuit.
+    pub fn new(num_calls: usize) -> Self {
+        let n = gadget_poly_fft_mem_len(2, num_calls);
+        let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
+        Self {
+            n,
+            n_inv,
+            num_calls,
+        }
+    }
+
+    /// Evaluate on an input polynomial directly.
+    pub(crate) fn call_poly_direct(
+        &mut self,
+        outp: &mut [F],
+        inp: &[Vec<F>],
+    ) -> Result<(), FlpError> {
+        let input_poly_len = inp[0].len();
+        // Square the input polynomial.
+        let squared = poly_mul(&inp[0], &inp[0]);
+
+        // Subtract the input polynomial from the squared polynomial, and write the result to the
+        // output buffer. Finish up with a copy of coefficients that appear in the squared
+        // polynomial only.
+        for (out_coeff, (inp_coeff, squared_coeff)) in
+            outp.iter_mut().zip(inp[0].iter().zip(squared.iter()))
+        {
+            *out_coeff = *squared_coeff - *inp_coeff;
+        }
+        outp[input_poly_len..squared.len()]
+            .copy_from_slice(&squared[input_poly_len..squared.len()]);
+        Ok(())
+    }
+
+    /// Evaluate on an input polynomial using FFT.
+    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+        let input_poly_len = inp[0].len();
+        let n = self.n;
+        let mut buf = vec![F::zero(); n];
+
+        // Square the input polynomial using FFT (with a forward transform, an elementwise squaring,
+        // and an inverse transform).
+
+        discrete_fourier_transform(&mut buf, &inp[0], n)?;
+
+        for buf_fft_coeff in buf[0..n].iter_mut() {
+            *buf_fft_coeff *= *buf_fft_coeff;
+        }
+
+        discrete_fourier_transform(outp, &buf, n)?;
+        discrete_fourier_transform_inv_finish(outp, n, self.n_inv);
+
+        // Subtract the input to get the evaluation of x^2 - x on the input polynomial.
+        for (outp_coeff, inp_coeff) in outp[0..input_poly_len]
+            .iter_mut()
+            .zip(inp[0][0..input_poly_len].iter())
+        {
+            *outp_coeff -= *inp_coeff;
+        }
+
+        Ok(())
+    }
+}
+
+impl<F: FftFriendlyFieldElement> Gadget<F> for Range2<F> {
+    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
+        gadget_call_check(self, inp.len())?;
+        let x = inp[0];
+        let x_squared = x * x;
+        Ok(x_squared - x)
+    }
+
+    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+        gadget_call_poly_check(self, outp, inp)?;
+        if inp[0].len() >= FFT_THRESHOLD {
+            self.call_poly_fft(outp, inp)
+        } else {
+            self.call_poly_direct(outp, inp)
+        }
+    }
+
+    fn arity(&self) -> usize {
+        1
+    }
+
+    fn degree(&self) -> usize {
+        2
+    }
+
+    fn calls(&self) -> usize {
+        self.num_calls
+    }
+
+    fn as_any(&mut self) -> &mut dyn Any {
+        self
+    }
+}
+
 // Check that the input parameters of g.call() are well-formed.
 fn gadget_call_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
@@ -468,9 +582,10 @@ fn gadget_poly_fft_mem_len(degree: usize, num_calls: usize) -> usize {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "multithreaded")]
-    use crate::field::FieldElement;
-    use crate::field::{random_vector, Field64 as TestField};
+    use crate::field::{
+        random_vector, Field64 as TestField, FieldElement, FieldElementWithInteger,
+    };
+    use crate::polynomial::poly_range_check;
     use crate::prng::Prng;
 
     #[test]
@@ -558,6 +673,62 @@ mod tests {
         }
     }
 
+    #[test]
+    fn test_range2() {
+        let num_calls = 1;
+        let mut g: Range2<TestField> = Range2::new(num_calls);
+        gadget_test(&mut g, num_calls);
+
+        let num_calls = FFT_THRESHOLD / 2;
+        let mut g: Range2<TestField> = Range2::new(num_calls);
+        gadget_test(&mut g, num_calls);
+
+        let num_calls = FFT_THRESHOLD;
+        let mut g: Range2<TestField> = Range2::new(num_calls);
+        gadget_test(&mut g, num_calls);
+    }
+
+    #[test]
+    fn range2_polyeval_specialization() {
+        for num_calls in [1, 2, FFT_THRESHOLD / 2, FFT_THRESHOLD, FFT_THRESHOLD * 2] {
+            // These gadgets should behave identically.
+            let mut poly_eval = PolyEval::<TestField>::new(poly_range_check(0, 2), num_calls);
+            let mut range2 = Range2::<TestField>::new(num_calls);
+
+            assert_eq!(
+                poly_eval.call(&[TestField::zero()]).unwrap(),
+                TestField::zero()
+            );
+            assert_eq!(
+                poly_eval.call(&[TestField::one()]).unwrap(),
+                TestField::zero()
+            );
+            assert_eq!(
+                range2.call(&[TestField::zero()]).unwrap(),
+                TestField::zero()
+            );
+            assert_eq!(range2.call(&[TestField::one()]).unwrap(), TestField::zero());
+
+            let poly_eval_output = poly_eval.call(&[TestField::from(2)]).unwrap();
+            let range2_output = range2.call(&[TestField::from(2)]).unwrap();
+            assert_ne!(poly_eval_output, TestField::zero());
+            assert_ne!(range2_output, TestField::zero());
+            assert_eq!(poly_eval_output, range2_output);
+
+            let wire_poly_len = wire_poly_len(num_calls);
+            let input = random_vector(wire_poly_len).unwrap();
+            let input_array = [input];
+            let output_len = gadget_poly_fft_mem_len(2, num_calls);
+            let mut poly_eval_output = vec![TestField::zero(); output_len];
+            let mut range2_output = vec![TestField::zero(); output_len];
+            poly_eval
+                .call_poly(&mut poly_eval_output, &input_array)
+                .unwrap();
+            range2.call_poly(&mut range2_output, &input_array).unwrap();
+            assert_eq!(poly_eval_output, range2_output);
+        }
+    }
+
     // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     // to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FftFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
@@ -578,7 +749,13 @@ mod tests {
         g.call_poly(&mut gadget_poly, &wire_polys).unwrap();
         let got = poly_eval(&gadget_poly, r);
         let want = g.call(&inp).unwrap();
-        assert_eq!(got, want);
+        assert_eq!(
+            got,
+            want,
+            "prime: {}, wire polynomial coefficients: {wire_polys:?}, \
+            gadget polynomial coefficients: {gadget_poly:?}, evaluation point: {r}",
+            TestField::modulus()
+        );
 
         // Repeat the call to make sure that the gadget's memory is reset properly between calls.
         g.call_poly(&mut gadget_poly, &wire_polys).unwrap();

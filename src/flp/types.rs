@@ -3,7 +3,7 @@
 //! A collection of [`Type`] implementations.
 
 use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
-use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
+use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval, Range2};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
@@ -109,7 +109,7 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
 /// aggregate result is the sum of the measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct SlimCount<F> {
-    range_checker: Vec<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F> Debug for SlimCount<F> {
@@ -122,7 +122,7 @@ impl<F: FftFriendlyFieldElement> SlimCount<F> {
     /// Return a new [`SlimCount`] type instance.
     pub fn new() -> Self {
         Self {
-            range_checker: poly_range_check(0, 2),
+            _phantom: PhantomData,
         }
     }
 }
@@ -151,7 +151,7 @@ impl<F: FftFriendlyFieldElement> Type for SlimCount<F> {
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(self.range_checker.clone(), 1))]
+        vec![Box::new(Range2::new(1))]
     }
 
     fn valid(
