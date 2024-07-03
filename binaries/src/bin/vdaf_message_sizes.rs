@@ -6,8 +6,8 @@ use prio::{
     vdaf::{
         prio2::Prio2,
         prio3::{
-            Prio3, Prio3Count, Prio3FixedPointBoundedL2VecSum, Prio3Histogram, Prio3Sum,
-            Prio3SumVec,
+            Prio3, Prio3Count, Prio3FixedPointBoundedL2VecSum, Prio3Histogram, Prio3SlimCount,
+            Prio3Sum, Prio3SumVec,
         },
         Client, Vdaf,
     },
@@ -22,6 +22,13 @@ fn main() {
     println!(
         "prio3 count share size = {}",
         vdaf_input_share_size::<Prio3Count, 16>(prio3.shard(&measurement, &nonce).unwrap())
+    );
+
+    let prio3 = Prio3::new_slim_count(num_shares).unwrap();
+    let measurement = true;
+    println!(
+        "prio3 slim count share size = {}",
+        vdaf_input_share_size::<Prio3SlimCount, 16>(prio3.shard(&measurement, &nonce).unwrap())
     );
 
     let length = 10;

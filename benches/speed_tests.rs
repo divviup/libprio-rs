@@ -181,6 +181,25 @@ fn prio3(c: &mut Criterion) {
         });
     });
 
+    c.bench_function("prio3slimcount_shard", |b| {
+        let vdaf = Prio3::new_slim_count(num_shares).unwrap();
+        let measurement = black_box(true);
+        let nonce = black_box([0u8; 16]);
+        b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+    });
+
+    c.bench_function("prio3slimcount_prepare_init", |b| {
+        let vdaf = Prio3::new_slim_count(num_shares).unwrap();
+        let measurement = black_box(true);
+        let nonce = black_box([0u8; 16]);
+        let verify_key = black_box([0u8; 16]);
+        let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+        b.iter(|| {
+            vdaf.prepare_init(&verify_key, 0, &(), &nonce, &public_share, &input_shares[0])
+                .unwrap()
+        });
+    });
+
     let mut group = c.benchmark_group("prio3sum_shard");
     for bits in [8, 32] {
         group.bench_with_input(BenchmarkId::from_parameter(bits), &bits, |b, bits| {

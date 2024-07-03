@@ -102,6 +102,16 @@ fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 16>> {
         .1
 }
 
+fn prio3_client_slim_count() -> Vec<Prio3InputShare<Field64, 16>> {
+    let prio3 = Prio3::new_slim_count(2).unwrap();
+    let measurement = true;
+    let nonce = [0; 16];
+    prio3
+        .shard(&black_box(measurement), &black_box(nonce))
+        .unwrap()
+        .1
+}
+
 fn prio3_client_histogram_10() -> Vec<Prio3InputShare<Field128, 16>> {
     let prio3 = Prio3::new_histogram(2, 10, 3).unwrap();
     let measurement = 9;
@@ -250,6 +260,7 @@ macro_rules! main_base {
             prng_1024,
             prng_4096,
             prio3_client_count,
+            prio3_client_slim_count,
             prio3_client_histogram_10,
             prio3_client_sum_32,
             prio3_client_count_vec_1000,

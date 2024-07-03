@@ -44,7 +44,7 @@ use crate::flp::gadgets::{Mul, ParallelSum};
 use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
 };
-use crate::flp::types::{Average, Count, Histogram, Sum, SumVec};
+use crate::flp::types::{Average, Count, Histogram, SlimCount, Sum, SumVec};
 use crate::flp::Type;
 #[cfg(feature = "experimental")]
 use crate::flp::TypeWithNoise;
@@ -79,6 +79,17 @@ impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
     pub fn new_count(num_aggregators: u8) -> Result<Self, VdafError> {
         Prio3::new(num_aggregators, 1, 0x00000000, Count::new())
+    }
+}
+
+/// An alternate VDAF for the count type. Each measurement is an integer in `[0,2)` and the
+/// aggregate result is the sum.
+pub type Prio3SlimCount = Prio3<SlimCount<Field64>, XofTurboShake128, 16>;
+
+impl Prio3SlimCount {
+    /// Construct an instance of Prio3SlimCount with the given number of aggregators.
+    pub fn new_slim_count(num_aggregators: u8) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, 1, 0x00000000, SlimCount::new())
     }
 }
 

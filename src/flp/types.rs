@@ -10,10 +10,12 @@ use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 use subtle::Choice;
-/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
+
+/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the
+/// measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Count<F> {
-    range_checker: Vec<F>,
+    _phantom: PhantomData<F>,
 }
 
 impl<F> Debug for Count<F> {
@@ -26,7 +28,7 @@ impl<F: FftFriendlyFieldElement> Count<F> {
     /// Return a new [`Count`] type instance.
     pub fn new() -> Self {
         Self {
-            range_checker: poly_range_check(0, 2),
+            _phantom: PhantomData,
         }
     }
 }
@@ -96,6 +98,100 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
 
     fn prove_rand_len(&self) -> usize {
         2
+    }
+
+    fn query_rand_len(&self) -> usize {
+        1
+    }
+}
+
+/// An alternative circuit for the counter data type. Each measurement is `0` or `1` and the
+/// aggregate result is the sum of the measurements (i.e., the total number of `1s`).
+#[derive(Clone, PartialEq, Eq)]
+pub struct SlimCount<F> {
+    range_checker: Vec<F>,
+}
+
+impl<F> Debug for SlimCount<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("SlimCount").finish()
+    }
+}
+
+impl<F: FftFriendlyFieldElement> SlimCount<F> {
+    /// Return a new [`SlimCount`] type instance.
+    pub fn new() -> Self {
+        Self {
+            range_checker: poly_range_check(0, 2),
+        }
+    }
+}
+
+impl<F: FftFriendlyFieldElement> Default for SlimCount<F> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl<F: FftFriendlyFieldElement> Type for SlimCount<F> {
+    type Measurement = bool;
+    type AggregateResult = F::Integer;
+    type Field = F;
+
+    fn encode_measurement(&self, value: &bool) -> Result<Vec<F>, FlpError> {
+        Ok(vec![F::conditional_select(
+            &F::zero(),
+            &F::one(),
+            Choice::from(u8::from(*value)),
+        )])
+    }
+
+    fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
+        decode_result(data)
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(PolyEval::new(self.range_checker.clone(), 1))]
+    }
+
+    fn valid(
+        &self,
+        g: &mut Vec<Box<dyn Gadget<F>>>,
+        input: &[F],
+        joint_rand: &[F],
+        _num_shares: usize,
+    ) -> Result<F, FlpError> {
+        self.valid_call_check(input, joint_rand)?;
+        g[0].call(input)
+    }
+
+    fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
+        self.truncate_call_check(&input)?;
+        Ok(input)
+    }
+
+    fn input_len(&self) -> usize {
+        1
+    }
+
+    fn proof_len(&self) -> usize {
+        4
+    }
+
+    fn verifier_len(&self) -> usize {
+        3
+    }
+
+    fn output_len(&self) -> usize {
+        self.input_len()
+    }
+
+    fn joint_rand_len(&self) -> usize {
+        0
+    }
+
+    fn prove_rand_len(&self) -> usize {
+        1
     }
 
     fn query_rand_len(&self) -> usize {
@@ -781,6 +877,39 @@ mod tests {
     #[test]
     fn test_count() {
         let count: Count<TestField> = Count::new();
+        let zero = TestField::zero();
+        let one = TestField::one();
+
+        // Round trip
+        assert_eq!(
+            count
+                .decode_result(
+                    &count
+                        .truncate(count.encode_measurement(&true).unwrap())
+                        .unwrap(),
+                    1
+                )
+                .unwrap(),
+            1,
+        );
+
+        // Test FLP on valid input.
+        FlpTest::expect_valid::<3>(&count, &count.encode_measurement(&true).unwrap(), &[one]);
+        FlpTest::expect_valid::<3>(&count, &count.encode_measurement(&false).unwrap(), &[zero]);
+
+        // Test FLP on invalid input.
+        FlpTest::expect_invalid::<3>(&count, &[TestField::from(1337)]);
+
+        // Try running the validity circuit on an input that's too short.
+        count.valid(&mut count.gadget(), &[], &[], 1).unwrap_err();
+        count
+            .valid(&mut count.gadget(), &[1.into(), 2.into()], &[], 1)
+            .unwrap_err();
+    }
+
+    #[test]
+    fn test_slim_count() {
+        let count: SlimCount<TestField> = SlimCount::new();
         let zero = TestField::zero();
         let one = TestField::one();
 

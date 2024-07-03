@@ -83,3 +83,6 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-all-features]
 skip_optional_dependencies = true
+
+[patch.crates-io]
+iai = { git = "https://github.com/sigaloid/iai", rev = "d56a5971f6d5556cd9e9b92e7e0f753c9ce9cdc7" }
