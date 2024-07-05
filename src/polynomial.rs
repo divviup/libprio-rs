@@ -161,7 +161,7 @@ pub fn poly_fft<F: FftFriendlyFieldElement>(
     fft_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
 }
 
-// Evaluate a polynomial using Horner's method.
+/// Evaluate a polynomial using Horner's method.
 pub fn poly_eval<F: FftFriendlyFieldElement>(poly: &[F], eval_at: F) -> F {
     if poly.is_empty() {
         return F::zero();
@@ -176,7 +176,7 @@ pub fn poly_eval<F: FftFriendlyFieldElement>(poly: &[F], eval_at: F) -> F {
     result
 }
 
-// Returns the degree of polynomial `p`.
+/// Returns the degree of polynomial `p`.
 pub fn poly_deg<F: FftFriendlyFieldElement>(p: &[F]) -> usize {
     let mut d = p.len();
     while d > 0 && p[d - 1] == F::zero() {
@@ -185,7 +185,7 @@ pub fn poly_deg<F: FftFriendlyFieldElement>(p: &[F]) -> usize {
     d.saturating_sub(1)
 }
 
-// Multiplies polynomials `p` and `q` and returns the result.
+/// Multiplies polynomials `p` and `q` and returns the result.
 pub fn poly_mul<F: FftFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F> {
     let p_size = poly_deg(p) + 1;
     let q_size = poly_deg(q) + 1;
@@ -212,8 +212,8 @@ pub fn poly_interpret_eval<F: FftFriendlyFieldElement>(
     poly_eval(&tmp_coeffs[..points.len()], eval_at)
 }
 
-// Returns a polynomial that evaluates to `0` if the input is in range `[start, end)`. Otherwise,
-// the output is not `0`.
+/// Returns a polynomial that evaluates to `0` if the input is in range `[start, end)`. Otherwise,
+/// the output is not `0`.
 pub(crate) fn poly_range_check<F: FftFriendlyFieldElement>(start: usize, end: usize) -> Vec<F> {
     let mut p = vec![F::one()];
     let mut q = [F::zero(), F::one()];

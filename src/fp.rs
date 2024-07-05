@@ -325,7 +325,7 @@ pub(crate) const FP128: FieldParameters = FieldParameters {
     ],
 };
 
-// Compute the ceiling of the base-2 logarithm of `x`.
+/// Compute the ceiling of the base-2 logarithm of `x`.
 pub(crate) fn log2(x: u128) -> u128 {
     let y = (127 - x.leading_zeros()) as u128;
     y + ((x > 1 << y) as u128)

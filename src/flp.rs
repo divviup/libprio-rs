@@ -584,8 +584,8 @@ pub trait Gadget<F: FftFriendlyFieldElement>: Debug {
     fn as_any(&mut self) -> &mut dyn Any;
 }
 
-// A "shim" gadget used during proof generation to record the input wires each time a gadget is
-// evaluated.
+/// A "shim" gadget used during proof generation to record the input wires each time a gadget is
+/// evaluated.
 #[derive(Debug)]
 struct ProveShimGadget<F: FftFriendlyFieldElement> {
     inner: Box<dyn Gadget<F>>,
@@ -646,8 +646,8 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
     }
 }
 
-// A "shim" gadget used during proof verification to record the points at which the intermediate
-// proof polynomials are evaluated.
+/// A "shim" gadget used during proof verification to record the points at which the intermediate
+/// proof polynomials are evaluated.
 #[derive(Debug)]
 struct QueryShimGadget<F: FftFriendlyFieldElement> {
     inner: Box<dyn Gadget<F>>,

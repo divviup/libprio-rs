@@ -43,7 +43,7 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
         }
     }
 
-    // Multiply input polynomials directly.
+    /// Multiply input polynomials directly.
     pub(crate) fn call_poly_direct(
         &mut self,
         outp: &mut [F],
@@ -54,7 +54,7 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
         Ok(())
     }
 
-    // Multiply input polynomials using FFT.
+    /// Multiply input polynomials using FFT.
     pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
@@ -134,7 +134,7 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
 }
 
 impl<F: FftFriendlyFieldElement> PolyEval<F> {
-    // Multiply input polynomials directly.
+    /// Multiply input polynomials directly.
     fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         outp[0] = self.poly[0];
         let mut x = inp[0].to_vec();
@@ -150,7 +150,7 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
         Ok(())
     }
 
-    // Multiply input polynomials using FFT.
+    /// Multiply input polynomials using FFT.
     fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let inp = &inp[0];
@@ -411,7 +411,7 @@ where
     }
 }
 
-// Check that the input parameters of g.call() are well-formed.
+/// Check that the input parameters of g.call() are well-formed.
 fn gadget_call_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     in_len: usize,
@@ -431,7 +431,7 @@ fn gadget_call_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
     Ok(())
 }
 
-// Check that the input parameters of g.call_poly() are well-formed.
+/// Check that the input parameters of g.call_poly() are well-formed.
 fn gadget_call_poly_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     outp: &[F],
@@ -558,8 +558,8 @@ mod tests {
         }
     }
 
-    // Test that calling g.call_poly() and evaluating the output at a given point is equivalent
-    // to evaluating each of the inputs at the same point and applying g.call() on the results.
+    /// Test that calling g.call_poly() and evaluating the output at a given point is equivalent
+    /// to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FftFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
         let wire_poly_len = (1 + num_calls).next_power_of_two();
         let mut prng = Prng::new().unwrap();
