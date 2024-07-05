@@ -10,7 +10,9 @@ use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 use subtle::Choice;
-/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the measurements (i.e., the total number of `1s`).
+
+/// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the
+/// measurements (i.e., the total number of `1s`).
 #[derive(Clone, PartialEq, Eq)]
 pub struct Count<F> {
     _phantom: PhantomData<F>,
