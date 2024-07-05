@@ -300,8 +300,8 @@ where
 
 /// Methods common to all `FieldElementWithInteger` implementations that are private to the crate.
 pub(crate) trait FieldElementWithIntegerExt: FieldElementWithInteger {
-    /// Interpret `i` as [`Self::Integer`] if it's representable in that type and smaller than the
-    /// field modulus.
+    /// Interpret `i` as [`FieldElementWithInteger::Integer`] if it's representable in that type and
+    /// smaller than the field modulus.
     fn valid_integer_try_from<N>(i: N) -> Result<Self::Integer, FieldError>
     where
         Self::Integer: TryFrom<N>,
@@ -330,14 +330,14 @@ impl<F: FieldElementWithInteger> FieldElementWithIntegerExt for F {}
 
 /// Methods common to all `FieldElement` implementations that are private to the crate.
 pub(crate) trait FieldElementExt: FieldElement {
-    /// Try to interpret a slice of [`Self::ENCODED_SIZE`] random bytes as an element in the field. If
-    /// the input represents an integer greater than or equal to the field modulus, then
-    /// [`ControlFlow::Continue`] is returned instead, to indicate that an enclosing rejection sampling
-    /// loop should try again with different random bytes.
+    /// Try to interpret a slice of [`FieldElement::ENCODED_SIZE`] random bytes as an element in the
+    /// field. If the input represents an integer greater than or equal to the field modulus, then
+    /// [`ControlFlow::Continue`] is returned instead, to indicate that an enclosing rejection
+    /// sampling loop should try again with different random bytes.
     ///
     /// # Panics
     ///
-    /// Panics if `bytes` is not of length [`Self::ENCODED_SIZE`].
+    /// Panics if `bytes` is not of length [`FieldElement::ENCODED_SIZE`].
     fn from_random_rejection(bytes: &[u8]) -> ControlFlow<Self, ()> {
         match Self::try_from_random(bytes) {
             Ok(x) => ControlFlow::Break(x),
