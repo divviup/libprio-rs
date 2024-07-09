@@ -1497,9 +1497,9 @@ where
     }
 }
 
-// This function determines equality between two optional, constant-time comparable values. It
-// short-circuits on the existence (but not contents) of the values -- a timing side-channel may
-// reveal whether the values match on Some or None.
+/// This function determines equality between two optional, constant-time comparable values. It
+/// short-circuits on the existence (but not contents) of the values -- a timing side-channel may
+/// reveal whether the values match on Some or None.
 #[inline]
 fn option_ct_eq<T>(left: Option<&T>, right: Option<&T>) -> Choice
 where

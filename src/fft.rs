@@ -118,7 +118,7 @@ pub(crate) fn discrete_fourier_transform_inv_finish<F: FftFriendlyFieldElement>(
     }
 }
 
-// bitrev returns the first d bits of x in reverse order. (Thanks, OEIS! https://oeis.org/A030109)
+/// Returns the first d bits of x in reverse order. (Thanks, OEIS! <https://oeis.org/A030109>)
 fn bitrev(d: usize, x: usize) -> usize {
     x.reverse_bits() >> (usize::BITS - d as u32)
 }

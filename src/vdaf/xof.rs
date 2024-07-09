@@ -503,7 +503,7 @@ mod tests {
         expanded_vec_field128: Vec<u8>,
     }
 
-    // Test correctness of dervied methods.
+    /// Test correctness of dervied methods.
     fn test_xof<P, const SEED_SIZE: usize>()
     where
         P: Xof<SEED_SIZE>,
