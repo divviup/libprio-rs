@@ -408,6 +408,16 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "0.1.1"
 
+[[audits.nalgebra]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.29.0 -> 0.32.6"
+
+[[audits.nalgebra-macros]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.1.0 -> 0.2.2"
+
 [[audits.num-bigint]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -684,6 +694,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.10.7 -> 0.10.8"
 
+[[audits.simba]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.6.0 -> 0.8.1"
+
 [[audits.statest]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -693,6 +708,11 @@ version = "0.2.2"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.16.0 -> 0.16.1"
+
+[[audits.statrs]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-run"
+delta = "0.16.1 -> 0.17.1"
 
 [[audits.subtle]]
 who = "David Cook <dcook@divviup.org>"
