@@ -262,6 +262,8 @@ where
 }
 
 /// A DP strategy using the discrete gaussian distribution providing zero-concentrated DP.
+///
+/// This uses l2-sensitivity, with the substitution definition of neighboring datasets.
 pub type ZCdpDiscreteGaussian = DiscreteGaussianDpStrategy<ZCdpBudget>;
 
 impl DifferentialPrivacyStrategy for DiscreteGaussianDpStrategy<ZCdpBudget> {
@@ -331,6 +333,8 @@ where
 }
 
 /// A DP strategy using the discrete Laplace distribution, providing pure DP.
+///
+/// This uses l1-sensitivity, with the substitution definition of neighboring datasets.
 pub type PureDpDiscreteLaplace = DiscreteLaplaceDpStrategy<PureDpBudget>;
 
 impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
