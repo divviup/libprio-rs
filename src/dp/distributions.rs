@@ -322,6 +322,7 @@ impl Distribution<BigInt> for DiscreteLaplace {
 impl DifferentialPrivacyDistribution for DiscreteLaplace {}
 
 /// A DP strategy using the discrete Laplace distribution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
 pub struct DiscreteLaplaceDpStrategy<B>
 where
     B: DifferentialPrivacyBudget,
