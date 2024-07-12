@@ -15,6 +15,7 @@ use crate::{
     },
 };
 use std::{fmt::Debug, io::Cursor, marker::PhantomData};
+
 /// The main struct implementing the Mastic VDAF.
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
 /// distributed point function.
@@ -37,7 +38,7 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    ///Creates a new instance of Mastic, with a specific label length and validity type.
+    /// Creates a new instance of Mastic, with a specific label length and validity type.
     pub fn new(
         algorithm_id: u32,
         szk: Szk<T, P, SEED_SIZE>,
@@ -53,6 +54,7 @@ where
         }
     }
 }
+
 /// Mastic aggregation parameter.
 ///
 /// This includes the VIDPF tree level under evaluation, a set of prefixes to evaluate at that level,
@@ -109,6 +111,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticInputShare<F, SEE
 pub struct MasticOutputShare<V: VidpfValue> {
     result: Vec<V>,
 }
+
 impl<V: VidpfValue + Debug> Aggregatable for MasticOutputShare<V> {
     type OutputShare = MasticOutputShare<V>;
     /// Update an aggregate share by merging it with another (`agg_share`).
