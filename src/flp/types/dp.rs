@@ -209,9 +209,9 @@ mod tests {
 
     #[test]
     fn sumvec_laplace_noise() {
-        let dp_strategy = PureDpDiscreteLaplace::from_budget(PureDpBudget::new(
-            Rational::from_unsigned(2u8, 1u8).unwrap(),
-        ));
+        let dp_strategy = PureDpDiscreteLaplace::from_budget(
+            PureDpBudget::new(Rational::from_unsigned(2u8, 1u8).unwrap()).unwrap(),
+        );
         const SIZE: usize = 10;
 
         {
@@ -289,9 +289,9 @@ mod tests {
 
     #[test]
     fn histogram_laplace_noise() {
-        let dp_strategy = PureDpDiscreteLaplace::from_budget(PureDpBudget::new(
-            Rational::from_unsigned(2u8, 1u8).unwrap(),
-        ));
+        let dp_strategy = PureDpDiscreteLaplace::from_budget(
+            PureDpBudget::new(Rational::from_unsigned(2u8, 1u8).unwrap()).unwrap(),
+        );
         const SIZE: usize = 10;
 
         let mut rng = XofTurboShake128::init(&[2; 16], &[]).into_seed_stream();

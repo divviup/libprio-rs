@@ -99,6 +99,7 @@ impl ZCdpBudget {
     /// for a `rho`-ZCDP budget.
     ///
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
+    // TODO(#1095): This should be fallible, and it should return an error if epsilon is zero.
     pub fn new(epsilon: Rational) -> Self {
         Self { epsilon: epsilon.0 }
     }
@@ -114,8 +115,11 @@ pub struct PureDpBudget {
 
 impl PureDpBudget {
     /// Create a budget for parameter `epsilon`.
-    pub fn new(epsilon: Rational) -> Self {
-        Self { epsilon: epsilon.0 }
+    pub fn new(epsilon: Rational) -> Result<Self, DpError> {
+        if epsilon.0.numer() == &BigUint::ZERO {
+            return Err(DpError::InvalidParameter("epsilon cannot be zero".into()));
+        }
+        Ok(Self { epsilon: epsilon.0 })
     }
 }
 
