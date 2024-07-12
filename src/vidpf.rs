@@ -23,12 +23,10 @@ use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
-    flp::Type,
     idpf::{
         conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
         IdpfInput, IdpfValue,
     },
-    mastic::Mastic,
     vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
 };
 
@@ -60,38 +58,8 @@ pub enum VidpfError {
 /// Represents the domain of an incremental point function.
 pub type VidpfInput = IdpfInput;
 
-impl Decode for VidpfInput {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let unwrapped_bytes = bytes.bytes();
-        let mut vec_of_bytes = Vec::with_capacity(
-            unwrapped_bytes
-                .size_hint()
-                .1
-                .ok_or(CodecError::UnexpectedValue)?,
-        );
-        for b in unwrapped_bytes {
-            vec_of_bytes.push(b?);
-        }
-        Ok(VidpfInput::from_bytes(&vec_of_bytes[..]))
-    }
-}
-
-impl Encode for VidpfInput {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        let encoded = self.to_bytes();
-        for byte in encoded {
-            bytes.push(byte);
-        }
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        Some((self.len() + 7) / 8)
-    }
-}
-
 /// Represents the codomain of an incremental point function.
-pub trait VidpfValue: IdpfValue + Clone + Debug {}
+pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq {}
 
 #[derive(Clone, Debug)]
 /// A VIDPF instance.
@@ -108,6 +76,11 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// * `weight_parameter`, any parameters required to instantiate a weight value.
     pub const fn new(weight_parameter: W::ValueParameter) -> Self {
         Self { weight_parameter }
+    }
+
+    /// Public accessor method for the weight_parameter field
+    pub(crate) fn weight_parameter(&self) -> &W::ValueParameter {
+        &self.weight_parameter
     }
 
     /// The [`Vidpf::gen`] method splits an incremental point function `F` into two private keys
@@ -405,9 +378,7 @@ impl Decode for VidpfKey {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let id = u8::decode(bytes)?;
         let mut value = [0; 16];
-        for item in &mut value {
-            *item = u8::decode(bytes)?;
-        }
+        bytes.read_exact(&mut value)?;
         Ok(VidpfKey {
             id: match id {
                 0 => VidpfServerId::S0,
@@ -433,6 +404,15 @@ impl Encode for VidpfKey {
 
     fn encoded_len(&self) -> Option<usize> {
         Some(17)
+    }
+}
+
+impl PartialEq for VidpfKey {
+    fn eq(&self, other: &VidpfKey) -> bool {
+        if self.id == other.id {
+            return self.value == other.value
+        };
+        false
     }
 }
 
@@ -463,14 +443,9 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
-impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<&'a Mastic<T, P, SEED_SIZE>>
-    for VidpfCorrectionWord<VidpfWeight<T::Field>>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<W: VidpfValue> ParameterizedDecode<&W::ValueParameter> for VidpfCorrectionWord<W> {
     fn decode_with_param(
-        decoding_parameter: &&'a Mastic<T, P, SEED_SIZE>,
+        decoding_parameter: &&W::ValueParameter,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let seed = <[u8; 16]>::decode(bytes)?;
@@ -482,8 +457,8 @@ where
             3 => (Choice::from(1), Choice::from(1)),
             _ => return Err(CodecError::UnexpectedValue),
         };
-        let weight = VidpfWeight::<T::Field>::decode_with_param(
-            &decoding_parameter.vpf.weight_parameter,
+        let weight = W::decode_with_param(
+            *decoding_parameter,
             bytes,
         )?;
         Ok(Self {
@@ -528,29 +503,26 @@ pub struct VidpfPublicShare<W: VidpfValue> {
     cs: Vec<VidpfProof>,
 }
 
-impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>>
-    for VidpfPublicShare<VidpfWeight<T::Field>>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
+impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)>
+    for VidpfPublicShare<W>
 {
     fn decode_with_param(
-        decoding_parameter: &Mastic<T, P, SEED_SIZE>,
+        (bits, weight_parameter): &(usize, W::ValueParameter),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut cw = Vec::<VidpfCorrectionWord<VidpfWeight<T::Field>>>::with_capacity(
-            decoding_parameter.bits,
+        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(
+            *bits,
         );
-        let mut cs = Vec::<VidpfProof>::with_capacity(decoding_parameter.bits);
-        for _ in 0..decoding_parameter.bits {
+        let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
+        for _ in 0..*bits {
             cw.push(
-                VidpfCorrectionWord::<VidpfWeight<T::Field>>::decode_with_param(
-                    &decoding_parameter,
+                VidpfCorrectionWord::<W>::decode_with_param(
+                    &weight_parameter,
                     bytes,
                 )?,
             );
         }
-        for _ in 0..decoding_parameter.bits {
+        for _ in 0..*bits {
             cs.push(VidpfProof::decode(bytes)?);
         }
         Ok(Self { cw, cs })
@@ -642,7 +614,7 @@ impl<F: FieldElement> From<Vec<F>> for VidpfWeight<F> {
 }
 
 impl<F: FieldElement> VidpfWeight<F> {
-    pub(crate) fn slice(&self) -> &[F] {
+    pub(crate) fn as_slice(&self) -> &[F] {
         &self.0[..]
     }
 }
@@ -758,20 +730,6 @@ impl<F: FieldElement> ParameterizedDecode<<Self as IdpfValue>::ValueParameter> f
         }
 
         Ok(Self(v))
-    }
-}
-
-impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>>
-    for VidpfWeight<T::Field>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
-    fn decode_with_param(
-        decoding_parameter: &Mastic<T, P, SEED_SIZE>,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        VidpfWeight::<T::Field>::decode_with_param(&decoding_parameter.vpf.weight_parameter, bytes)
     }
 }
 

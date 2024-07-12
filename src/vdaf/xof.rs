@@ -48,7 +48,7 @@ use std::{
 use subtle::{Choice, ConstantTimeEq};
 
 /// Input of [`Xof`].
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
 impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {

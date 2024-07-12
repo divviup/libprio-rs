@@ -269,15 +269,15 @@ impl Encode for u64 {
         Some(8)
     }
 }
-impl<D: Decode, const BUFFER_SIZE: usize> Decode for [D; BUFFER_SIZE] {
+impl<D: Decode, const SIZE: usize> Decode for [D; SIZE] {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut v = Vec::with_capacity(BUFFER_SIZE);
-        for elem in v.iter_mut().take(BUFFER_SIZE) {
-            *elem = D::decode(bytes)?
+        let mut v = Vec::with_capacity(SIZE);
+        for _ in 0..SIZE {
+            v.push(D::decode(bytes)?);
         }
         match v.try_into() {
             Ok(a) => Ok(a),
-            Err(e) => Err(CodecError::BytesLeftOver(e.len())),
+            Err(_) => unreachable!("If the above for loop completes, then the vector will always contain exactly BUFFER_SIZE elements."),
         }
     }
 }
@@ -313,13 +313,12 @@ impl<D: Decode> ParameterizedDecode<usize> for Vec<D> {
 
 impl<P, D: ParameterizedDecode<P>> ParameterizedDecode<(usize, P)> for Vec<D> {
     fn decode_with_param(
-        decoding_parameter: &(usize, P),
+        (len, decoding_parameter): &(usize, P),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let (len, param) = decoding_parameter;
         let mut out = Vec::with_capacity(*len);
         for _ in 0..*len {
-            out.push(<D>::decode_with_param(param, bytes)?)
+            out.push(<D>::decode_with_param(decoding_parameter, bytes)?)
         }
         Ok(out)
     }
@@ -605,6 +604,28 @@ mod tests {
         assert_eq!(value, decoded);
     }
 
+    #[test]
+    fn roundtrip_vec() {
+        let value = vec![1u32, 2u32, 3u32, 4u32];
+        let mut bytes = vec![];
+        value.encode(&mut bytes).unwrap();
+        assert_eq!(bytes.len(), 16);
+        assert_eq!(bytes, vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]);
+        let decoded = Vec::<u32>::decode_with_param(&4, &mut Cursor::new(&bytes)).unwrap();
+        assert_eq!(value, decoded);
+    }
+
+    #[test]
+    fn roundtrip_array() {
+        let value = [1u32, 2u32, 3u32, 4u32];
+        let mut bytes = vec![];
+        value.encode(&mut bytes).unwrap();
+        assert_eq!(bytes.len(), 16);
+        assert_eq!(bytes, vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]);
+        let decoded = <[u32; 4]>::decode(&mut Cursor::new(&bytes)).unwrap();
+        assert_eq!(value, decoded);
+    }
+
     #[derive(Debug, Eq, PartialEq)]
     struct TestMessage {
         field_u8: u8,
@@ -850,6 +871,14 @@ mod tests {
         assert_eq!(
             0u64.encoded_len().unwrap(),
             0u64.get_encoded().unwrap().len()
+        );
+        assert_eq!(
+            [0u8; 7].encoded_len().unwrap(),
+            [0u8; 7].get_encoded().unwrap().len()
+        );
+        assert_eq!(
+            vec![0u8; 7].encoded_len().unwrap(),
+            vec![0u8; 7].get_encoded().unwrap().len()
         );
     }
 

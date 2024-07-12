@@ -15,7 +15,6 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
     flp::{FlpError, Type},
-    mastic::Mastic,
     prng::{Prng, PrngError},
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
@@ -81,39 +80,27 @@ pub enum SzkProofShare<F, const SEED_SIZE: usize> {
     },
 }
 
-impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>>
-    for SzkProofShare<T::Field, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(u8, usize, bool)>
+    for SzkProofShare<F, SEED_SIZE> {
     fn decode_with_param(
-        decoding_parameter: &Mastic<T, P, SEED_SIZE>,
+        (role, bits, is_random): &(u8, usize, bool),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let role = <u8>::decode(bytes)?;
         match role {
             0 => Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<T::Field>::decode_with_param(
-                    &(decoding_parameter.proof_len(), ()),
+                uncompressed_proof_share: Vec::<F>::decode_with_param(
+                    bits,
                     bytes,
                 )?,
-                leader_blind_and_helper_joint_rand_part_opt: if decoding_parameter.is_randomized() {
-                    Some((
+                leader_blind_and_helper_joint_rand_part_opt: is_random.then_some((
                         Seed::<SEED_SIZE>::decode(bytes)?,
                         Seed::<SEED_SIZE>::decode(bytes)?,
-                    ))
-                } else {
-                    None
-                },
+                    )),
             }),
             1 => Ok(SzkProofShare::Helper {
                 proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: if decoding_parameter.is_randomized() {
-                    Some(Seed::<SEED_SIZE>::decode(bytes)?)
-                } else {
-                    None
-                },
+                leader_joint_rand_part_opt: is_random.then_some(
+                    Seed::<SEED_SIZE>::decode(bytes)?),
             }),
             _ => Err(CodecError::UnexpectedValue),
         }
@@ -156,7 +143,7 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
                 uncompressed_proof_share,
                 leader_blind_and_helper_joint_rand_part_opt,
             } => Some(
-                uncompressed_proof_share.encoded_len()?
+                 1 + uncompressed_proof_share.encoded_len()?
                     + if let Some((blind, helper_joint_rand_part)) =
                         leader_blind_and_helper_joint_rand_part_opt
                     {
@@ -169,13 +156,37 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
                 proof_share_seed_and_blind,
                 leader_joint_rand_part_opt,
             } => Some(
-                proof_share_seed_and_blind.encoded_len()?
+                1 + proof_share_seed_and_blind.encoded_len()?
                     + if let Some(leader_joint_rand_part) = leader_joint_rand_part_opt {
                         leader_joint_rand_part.encoded_len()?
                     } else {
                         0
                     },
             ),
+        }
+    }
+}
+
+impl<F: PartialEq, const SEED_SIZE: usize> PartialEq for SzkProofShare<F, SEED_SIZE> {
+    fn eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> bool {
+        match (self, other) {
+            (SzkProofShare::Leader {
+                uncompressed_proof_share: self_share,
+                leader_blind_and_helper_joint_rand_part_opt: self_opt
+            },
+            SzkProofShare::Leader {
+                uncompressed_proof_share: other_share,
+                leader_blind_and_helper_joint_rand_part_opt: other_opt
+            }) => self_share == other_share && self_opt == other_opt,
+            (SzkProofShare::Helper {
+                proof_share_seed_and_blind: self_seed,
+                leader_joint_rand_part_opt: self_opt
+            },
+            SzkProofShare::Helper {
+                proof_share_seed_and_blind: other_seed,
+                leader_joint_rand_part_opt: other_opt
+            }) => self_seed == other_seed && self_opt == other_opt,
+            _ => false,
         }
     }
 }
@@ -527,10 +538,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field128;
-    use crate::field::{random_vector, FieldElementWithInteger};
-    use crate::flp::types::{Count, Sum};
-    use crate::flp::Type;
+    use crate::{
+        field::Field128,
+        field::{random_vector, FieldElementWithInteger},
+        flp::types::{Count, Sum},
+        flp::Type,
+        vidpf::{Vidpf, VidpfWeight}
+    };
     use rand::{thread_rng, Rng};
 
     fn generic_szk_test<T: Type>(typ: T, encoded_measurement: &[T::Field], valid: bool) {
@@ -584,7 +598,7 @@ mod tests {
         let h_jr_seed = h_query_state.joint_rand_seed;
         let l_jr_part = l_query_share.joint_rand_part;
         let l_jr_seed = l_query_state.joint_rand_seed;
-        if let Ok(leader_decision) = szk_typ.decide(&verifier, l_jr_part, h_jr_part, l_jr_seed) {
+        if let Ok(leader_decision) = szk_typ.decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), l_jr_seed.clone()) {
             assert_eq!(
                 leader_decision, valid,
                 "Leader incorrectly determined validity",
@@ -592,7 +606,7 @@ mod tests {
         } else {
             panic!("Leader failed during decision");
         };
-        if let Ok(helper_decision) = szk_typ.decide(&verifier, l_jr_part, h_jr_part, h_jr_seed) {
+        if let Ok(helper_decision) = szk_typ.decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), h_jr_seed.clone()) {
             assert_eq!(
                 helper_decision, valid,
                 "Helper incorrectly determined validity",
@@ -605,7 +619,7 @@ mod tests {
         if szk_typ.has_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
             if let Ok(leader_decision) =
-                szk_typ.decide(&verifier, l_jr_part, h_jr_part, joint_rand_seed_opt)
+                szk_typ.decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), joint_rand_seed_opt.clone())
             {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
             };
@@ -621,7 +635,7 @@ mod tests {
         }
 
         let leader_decision = szk_typ
-            .decide(&verifier, l_jr_part, h_jr_part, l_jr_seed)
+            .decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), l_jr_seed.clone())
             .unwrap();
         assert!(!leader_decision, "Leader validated after proof mutation");
 
@@ -641,7 +655,7 @@ mod tests {
         let mutated_jr_seed = mutated_query_state.joint_rand_seed;
         let mutated_jr_part = mutated_query_share.joint_rand_part;
         if let Ok(leader_decision) =
-            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part, mutated_jr_seed)
+            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part.clone(), mutated_jr_seed)
         {
             assert!(!leader_decision, "Leader validated after input mutation");
         };
@@ -680,12 +694,72 @@ mod tests {
         let mutated_jr_seed = l_query_state.joint_rand_seed;
         let mutated_jr_part = l_query_share.joint_rand_part;
         if let Ok(leader_decision) =
-            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part, mutated_jr_seed)
+            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part.clone(), mutated_jr_seed)
         {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
     }
 
+    #[test]
+    fn test_proof_share_encode() {
+        let sum = Sum::<Field128>::new(5).unwrap();
+        let encoded_measurement = sum.encode_measurement(&9).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [l_proof_share, _] = szk_typ.prove(
+            &leader_input_share,
+            &helper_input_share,
+            &encoded_measurement[..],
+            [prove_rand_seed, helper_seed],
+            leader_seed_opt,
+            &nonce,
+        ).unwrap();
+
+        assert_eq!(l_proof_share.encoded_len().unwrap(), l_proof_share.get_encoded().unwrap().len());
+
+    }
+
+    #[test]
+    fn test_proof_share_roundtrip() {
+
+        let sum = Sum::<Field128>::new(5).unwrap();
+        let encoded_measurement = sum.encode_measurement(&9).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [l_proof_share, _] = szk_typ.prove(
+            &leader_input_share,
+            &helper_input_share,
+            &encoded_measurement[..],
+            [prove_rand_seed, helper_seed],
+            leader_seed_opt,
+            &nonce,
+        ).unwrap();
+
+        let decoding_parameter = (szk_typ.proof_len(), true);
+        let mut bytes = vec![];
+        l_proof_share.encode(&mut bytes);
+        let decoded_proof_share = SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes)).unwrap();
+        assert_eq!(l_proof_share, decoded_proof_share);
+
+    }
     #[test]
     fn test_sum() {
         let sum = Sum::<Field128>::new(5).unwrap();

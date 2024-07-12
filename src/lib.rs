@@ -32,10 +32,6 @@ mod fp64;
     doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
 )]
 pub mod idpf;
-#[cfg(feature = "experimental")]
-#[allow(dead_code)]
-/// Implements the Mastic VDAF for weighted heavy hitters and attribute-based metrics.
-pub mod mastic;
 mod polynomial;
 mod prng;
 pub mod topology;
