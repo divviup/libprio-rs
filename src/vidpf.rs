@@ -46,6 +46,10 @@ pub enum VidpfError {
     #[error("level index out of bounds")]
     IndexLevel,
 
+    /// Error when input's length is larger than the maximum.
+    #[error("invalid label length")]
+    InvalidLabelLength,
+
     /// Error when weight's length mismatches the length in weight's parameter.
     #[error("invalid weight length")]
     InvalidWeightLength,
@@ -443,9 +447,9 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
-impl<W: VidpfValue> ParameterizedDecode<&W::ValueParameter> for VidpfCorrectionWord<W> {
+impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWord<W> {
     fn decode_with_param(
-        decoding_parameter: &&W::ValueParameter,
+        decoding_parameter: &W::ValueParameter,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let seed = <[u8; 16]>::decode(bytes)?;
@@ -458,7 +462,7 @@ impl<W: VidpfValue> ParameterizedDecode<&W::ValueParameter> for VidpfCorrectionW
             _ => return Err(CodecError::UnexpectedValue),
         };
         let weight = W::decode_with_param(
-            *decoding_parameter,
+            decoding_parameter,
             bytes,
         )?;
         Ok(Self {
@@ -472,9 +476,7 @@ impl<W: VidpfValue> ParameterizedDecode<&W::ValueParameter> for VidpfCorrectionW
 
 impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        for byte in self.seed {
-            bytes.push(byte);
-        }
+        bytes.extend_from_slice(&self.seed);
         let both_control_bits = if bool::from(self.left_control_bit) {
             if bool::from(self.right_control_bit) {
                 3

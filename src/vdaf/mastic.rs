@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: MPL-2.0
+
+//! Implementation of Mastic as specified in [[draft-mouris-cfrg-mastic-01]].
+//!
+//! [draft-mouris-cfrg-mastic-01]: https://www.ietf.org/archive/id/draft-mouris-cfrg-mastic-01.html
+
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
@@ -11,7 +17,7 @@ use crate::{
         Aggregatable, Client, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfValue, VidpfWeight,
+        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfValue, VidpfWeight,
     },
 };
 use std::{fmt::Debug, io::Cursor};
@@ -131,7 +137,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> PartialEq for MasticInputShare<F, 
         self.vidpf_key == other.vidpf_key && self.proofs_share == other.proofs_share
     }
 }
-/// Struct containing a vector of VIDPF outputs: one for each prefix. Likely needs to be changed in the next PR to include proofs as well.
+/// Struct containing a vector of VIDPF outputs: one for each prefix.
 #[derive(Clone, Debug)]
 pub struct MasticOutputShare<V: VidpfValue> {
     result: Vec<V>,
@@ -217,7 +223,7 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    type Measurement = (VidpfInput, VidpfWeight<T::Field>);
+    type Measurement = (VidpfInput, T::Measurement);
     type AggregateResult = T::AggregateResult;
     type AggregationParam = MasticAggregationParam;
     type PublicShare = MasticPublicShare<VidpfWeight<T::Field>>;
@@ -257,19 +263,29 @@ where
         let leader_measurement_share = self.vidpf().eval(
             &vidpf_keys[0],
             &public_share,
-            &measurement_label.prefix(1),
+            &VidpfInput::from_bools(&[false]),
             nonce,
-        )?;
+        )?.share + self.vidpf.eval(
+            &vidpf_keys[0],
+            &public_share,
+            &VidpfInput::from_bools(&[true]),
+            nonce,
+        )?.share;
         let helper_measurement_share = self.vidpf().eval(
             &vidpf_keys[1],
             &public_share,
-            &measurement_label.prefix(1),
+            &VidpfInput::from_bools(&[false]),
             nonce,
-        )?;
+        )?.share + self.vidpf.eval(
+            &vidpf_keys[1],
+            &public_share,
+            &VidpfInput::from_bools(&[true]),
+            nonce,
+        )?.share;
 
         let szk_proof_shares = self.szk.prove(
-            leader_measurement_share.share.as_slice(),
-            helper_measurement_share.share.as_slice(),
+            leader_measurement_share.as_slice(),
+            helper_measurement_share.as_slice(),
             measurement_weight.as_slice(),
             szk_random,
             opt_random,
@@ -293,6 +309,10 @@ where
     pub(crate) fn proof_len(&self) -> usize {
         self.szk.proof_len()
     }
+
+    fn encode_measurement(&self, measurement: &T::Measurement) -> Result<VidpfWeight<T::Field>, VdafError> {
+        Ok(VidpfWeight::<T::Field>::from(self.szk.typ.encode_measurement(measurement)?))
+    }
 }
 
 impl<T, P, const SEED_SIZE: usize> Client<16> for Mastic<T, P, SEED_SIZE>
@@ -302,9 +322,13 @@ where
 {
     fn shard(
         &self,
-        measurement: &(VidpfInput, VidpfWeight<T::Field>),
+        measurement: &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
+        if measurement.0.len() != self.bits {
+            return Err(VdafError::Vidpf(VidpfError::InvalidLabelLength))
+        }
+
         let vidpf_keys = [
             VidpfKey::gen(VidpfServerId::S0)?,
             VidpfKey::gen(VidpfServerId::S1)?,
@@ -319,7 +343,7 @@ where
         ];
         self.shard_with_random(
             &measurement.0,
-            &measurement.1,
+            &self.encode_measurement(&measurement.1)?,
             nonce,
             vidpf_keys,
             szk_random,
@@ -359,7 +383,7 @@ mod tests {
             28.into(),
         ]);
 
-        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 16);
+        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
         let (_public, _input_shares) = mastic.shard(&(first_input, first_weight), &nonce).unwrap();
     }
 
