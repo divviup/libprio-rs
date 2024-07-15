@@ -553,6 +553,7 @@ where
     S: DifferentialPrivacyStrategy,
 {
     /// Add noise to the aggregate share to obtain differential privacy.
+    // TODO(#1073): Rename to add_noise_to_agg_share.
     fn add_noise_to_result(
         &self,
         dp_strategy: &S,
