@@ -151,7 +151,7 @@ pub struct MasticOutputShare<V: VidpfValue> {
     result: Vec<V>,
 }
 
-impl<V: VidpfValue + Debug> Aggregatable for MasticOutputShare<V> {
+impl<V: VidpfValue> Aggregatable for MasticOutputShare<V> {
     type OutputShare = MasticOutputShare<V>;
     /// Update an aggregate share by merging it with another (`agg_share`).
     fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError> {
