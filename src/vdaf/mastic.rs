@@ -88,9 +88,9 @@ where
         MasticPublicShare::<VidpfWeight<T::Field>>::decode_with_param(
             &(
                 decoding_parameter.bits(),
-                *decoding_parameter.vidpf().weight_parameter()
+                *decoding_parameter.vidpf().weight_parameter(),
             ),
-            bytes
+            bytes,
         )
     }
 }
@@ -115,11 +115,10 @@ where
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let vidpf_key = VidpfKey::decode(bytes)?;
-        let proofs_share =
-            SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
-                &(*role, mastic.proof_len(), mastic.is_randomized()),
-                bytes
-            )?;
+        let proofs_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
+            &(*role, mastic.proof_len(), mastic.is_randomized()),
+            bytes,
+        )?;
         Ok(Self {
             vidpf_key,
             proofs_share,
@@ -198,7 +197,7 @@ where
         for _ in 0..l {
             result.push(VidpfWeight::<T::Field>::decode_with_param(
                 mastic.vidpf().weight_parameter(),
-                bytes
+                bytes,
             )?);
         }
         Ok(MasticOutputShare { result })
@@ -270,7 +269,7 @@ where
             &vidpf_keys,
             measurement_label,
             measurement_weight,
-            nonce
+            nonce,
         )?;
 
         let leader_measurement_share = self
@@ -282,15 +281,15 @@ where
                 nonce,
             )?
             .share
-             + self
+            + self
                 .vidpf()
                 .eval(
-                &vidpf_keys[0],
-                &public_share,
-                &VidpfInput::from_bools(&[true]),
-                nonce,
-            )?
-            .share;
+                    &vidpf_keys[0],
+                    &public_share,
+                    &VidpfInput::from_bools(&[true]),
+                    nonce,
+                )?
+                .share;
         let helper_measurement_share = self
             .vidpf()
             .eval(
@@ -303,12 +302,12 @@ where
             + self
                 .vidpf()
                 .eval(
-                &vidpf_keys[1],
-                &public_share,
-                &VidpfInput::from_bools(&[true]),
-                nonce,
-            )?
-            .share;
+                    &vidpf_keys[1],
+                    &public_share,
+                    &VidpfInput::from_bools(&[true]),
+                    nonce,
+                )?
+                .share;
 
         let szk_proof_shares = self.szk.prove(
             leader_measurement_share.as_slice(),
@@ -339,10 +338,10 @@ where
 
     fn encode_measurement(
         &self,
-        measurement: &T::Measurement
+        measurement: &T::Measurement,
     ) -> Result<VidpfWeight<T::Field>, VdafError> {
         Ok(VidpfWeight::<T::Field>::from(
-            self.szk.typ.encode_measurement(measurement)?
+            self.szk.typ.encode_measurement(measurement)?,
         ))
     }
 }
@@ -470,7 +469,5 @@ mod tests {
         let decoded_helper_input_share =
             MasticInputShare::decode_with_param(&(&mastic, 1), &mut Cursor::new(&bytes)).unwrap();
         assert_eq!(helper_input_share, &decoded_helper_input_share);
-
-
     }
 }

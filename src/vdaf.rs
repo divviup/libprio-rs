@@ -744,7 +744,6 @@ mod tests {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod dummy;
 #[cfg(feature = "experimental")]
-/// Implements the Mastic VDAF for weighted heavy hitters and attribute-based metrics.
 pub mod mastic;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(

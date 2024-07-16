@@ -168,21 +168,21 @@ impl<F: PartialEq, const SEED_SIZE: usize> PartialEq for SzkProofShare<F, SEED_S
             (
                 SzkProofShare::Leader {
                     uncompressed_proof_share: self_share,
-                    leader_blind_and_helper_joint_rand_part_opt: self_opt
+                    leader_blind_and_helper_joint_rand_part_opt: self_opt,
                 },
                 SzkProofShare::Leader {
                     uncompressed_proof_share: other_share,
-                    leader_blind_and_helper_joint_rand_part_opt: other_opt
+                    leader_blind_and_helper_joint_rand_part_opt: other_opt,
                 },
             ) => self_share == other_share && self_opt == other_opt,
             (
                 SzkProofShare::Helper {
                     proof_share_seed_and_blind: self_seed,
-                    leader_joint_rand_part_opt: self_opt
+                    leader_joint_rand_part_opt: self_opt,
                 },
                 SzkProofShare::Helper {
                     proof_share_seed_and_blind: other_seed,
-                    leader_joint_rand_part_opt: other_opt
+                    leader_joint_rand_part_opt: other_opt,
                 },
             ) => self_seed == other_seed && self_opt == other_opt,
             _ => false,
@@ -600,7 +600,7 @@ mod tests {
             &verifier,
             l_jr_part.clone(),
             h_jr_part.clone(),
-            l_jr_seed.clone()
+            l_jr_seed.clone(),
         ) {
             assert_eq!(
                 leader_decision, valid,
@@ -613,7 +613,7 @@ mod tests {
             &verifier,
             l_jr_part.clone(),
             h_jr_part.clone(),
-            h_jr_seed.clone()
+            h_jr_seed.clone(),
         ) {
             assert_eq!(
                 helper_decision, valid,
@@ -630,7 +630,7 @@ mod tests {
                 &verifier,
                 l_jr_part.clone(),
                 h_jr_part.clone(),
-                joint_rand_seed_opt.clone()
+                joint_rand_seed_opt.clone(),
             ) {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
             };
@@ -650,7 +650,7 @@ mod tests {
                 &verifier,
                 l_jr_part.clone(),
                 h_jr_part.clone(),
-                l_jr_seed.clone()
+                l_jr_seed.clone(),
             )
             .unwrap();
         assert!(!leader_decision, "Leader validated after proof mutation");
@@ -672,9 +672,9 @@ mod tests {
         let mutated_jr_part = mutated_query_share.joint_rand_part;
         if let Ok(leader_decision) = szk_typ.decide(
             &verifier,
-             mutated_jr_part,
-             h_jr_part.clone(),
-             mutated_jr_seed
+            mutated_jr_part,
+            h_jr_part.clone(),
+            mutated_jr_seed,
         ) {
             assert!(!leader_decision, "Leader validated after input mutation");
         };
@@ -716,7 +716,7 @@ mod tests {
             &verifier,
             mutated_jr_part,
             h_jr_part.clone(),
-            mutated_jr_seed
+            mutated_jr_seed,
         ) {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
@@ -743,7 +743,7 @@ mod tests {
             .prove(
                 &leader_input_share,
                 &helper_input_share,
-                    &encoded_measurement[..],
+                &encoded_measurement[..],
                 [prove_rand_seed, helper_seed],
                 leader_seed_opt,
                 &nonce,
@@ -782,7 +782,7 @@ mod tests {
                 leader_seed_opt,
                 &nonce,
             )
-        .unwrap();
+            .unwrap();
 
         let decoding_parameter = (0, szk_typ.proof_len(), true);
         let mut bytes = vec![];
@@ -828,7 +828,6 @@ mod tests {
             SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes))
                 .unwrap();
         assert_eq!(h_proof_share, decoded_proof_share);
-
     }
     #[test]
     fn test_sum() {
