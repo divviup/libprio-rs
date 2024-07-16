@@ -158,7 +158,7 @@ pub trait IdpfValue:
     + Sized
 {
     /// Any run-time parameters needed to produce a value.
-    type ValueParameter: Clone + std::fmt::Debug;
+    type ValueParameter;
 
     /// Generate a pseudorandom value from a seed stream.
     fn generate<S>(seed_stream: &mut S, parameter: &Self::ValueParameter) -> Self
