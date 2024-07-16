@@ -452,7 +452,8 @@ impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWo
         decoding_parameter: &W::ValueParameter,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let seed = <[u8; 16]>::decode(bytes)?;
+        let mut seed = [0; 16];
+        bytes.read_exact(&mut seed);
         let control_bits = u8::decode(bytes)?;
         let (left_control_bit, right_control_bit) = match control_bits {
             0 => (Choice::from(0), Choice::from(0)),
