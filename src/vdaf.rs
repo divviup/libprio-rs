@@ -7,6 +7,8 @@
 
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
+#[cfg(feature = "experimental")]
+use crate::flp::szk::SzkError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -14,7 +16,7 @@ use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
-    flp::{szk::SzkError, FlpError},
+    flp::FlpError,
     prng::PrngError,
     vdaf::xof::Seed,
 };
@@ -47,6 +49,7 @@ pub enum VdafError {
     Flp(#[from] FlpError),
 
     /// SZK error.
+    #[cfg(feature = "experimental")]
     #[error("Szk error: {0}")]
     Szk(#[from] SzkError),
 
