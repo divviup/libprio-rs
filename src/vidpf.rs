@@ -512,7 +512,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
         let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
         for _ in 0..*bits {
             cw.push(VidpfCorrectionWord::<W>::decode_with_param(
-                &weight_parameter,
+                weight_parameter,
                 bytes,
             )?);
         }

@@ -197,7 +197,7 @@ where
         let mut result = Vec::<VidpfWeight<T::Field>>::with_capacity(l);
         for _ in 0..l {
             result.push(VidpfWeight::<T::Field>::decode_with_param(
-                &mastic.vidpf().weight_parameter(),
+                mastic.vidpf().weight_parameter(),
                 bytes
             )?);
         }
