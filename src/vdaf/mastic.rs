@@ -17,7 +17,8 @@ use crate::{
         Aggregatable, Client, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfValue, VidpfWeight,
+        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfValue,
+        VidpfWeight,
     },
 };
 use std::{fmt::Debug, io::Cursor};
@@ -84,7 +85,13 @@ where
         decoding_parameter: &Mastic<T, P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        MasticPublicShare::<VidpfWeight<T::Field>>::decode_with_param(&(decoding_parameter.bits(), *decoding_parameter.vidpf().weight_parameter()), bytes)
+        MasticPublicShare::<VidpfWeight<T::Field>>::decode_with_param(
+            &(
+                decoding_parameter.bits(),
+                *decoding_parameter.vidpf().weight_parameter()
+            ),
+            bytes
+        )
     }
 }
 
@@ -109,7 +116,10 @@ where
     ) -> Result<Self, CodecError> {
         let vidpf_key = VidpfKey::decode(bytes)?;
         let proofs_share =
-            SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(&(*role, mastic.proof_len(), mastic.is_randomized()), bytes)?;
+            SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
+                &(*role, mastic.proof_len(), mastic.is_randomized()),
+                bytes
+            )?;
         Ok(Self {
             vidpf_key,
             proofs_share,
@@ -186,7 +196,10 @@ where
         let l = agg_param.prefixes().len();
         let mut result = Vec::<VidpfWeight<T::Field>>::with_capacity(l);
         for _ in 0..l {
-            result.push(VidpfWeight::<T::Field>::decode_with_param(&mastic.vidpf().weight_parameter(), bytes)?);
+            result.push(VidpfWeight::<T::Field>::decode_with_param(
+                &mastic.vidpf().weight_parameter(),
+                bytes
+            )?);
         }
         Ok(MasticOutputShare { result })
     }
@@ -253,32 +266,49 @@ where
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
-        let public_share =
-            self.vidpf()
-                .gen_with_keys(&vidpf_keys, measurement_label, measurement_weight, nonce)?;
+        let public_share = self.vidpf().gen_with_keys(
+            &vidpf_keys,
+            measurement_label,
+            measurement_weight,
+            nonce
+        )?;
 
-        let leader_measurement_share = self.vidpf().eval(
-            &vidpf_keys[0],
-            &public_share,
-            &VidpfInput::from_bools(&[false]),
-            nonce,
-        )?.share + self.vidpf.eval(
-            &vidpf_keys[0],
-            &public_share,
-            &VidpfInput::from_bools(&[true]),
-            nonce,
-        )?.share;
-        let helper_measurement_share = self.vidpf().eval(
-            &vidpf_keys[1],
-            &public_share,
-            &VidpfInput::from_bools(&[false]),
-            nonce,
-        )?.share + self.vidpf.eval(
-            &vidpf_keys[1],
-            &public_share,
-            &VidpfInput::from_bools(&[true]),
-            nonce,
-        )?.share;
+        let leader_measurement_share = self
+            .vidpf()
+            .eval(
+                &vidpf_keys[0],
+                &public_share,
+                &VidpfInput::from_bools(&[false]),
+                nonce,
+            )?
+            .share
+             + self
+                .vidpf()
+                .eval(
+                &vidpf_keys[0],
+                &public_share,
+                &VidpfInput::from_bools(&[true]),
+                nonce,
+            )?
+            .share;
+        let helper_measurement_share = self
+            .vidpf()
+            .eval(
+                &vidpf_keys[1],
+                &public_share,
+                &VidpfInput::from_bools(&[false]),
+                nonce,
+            )?
+            .share
+            + self
+                .vidpf()
+                .eval(
+                &vidpf_keys[1],
+                &public_share,
+                &VidpfInput::from_bools(&[true]),
+                nonce,
+            )?
+            .share;
 
         let szk_proof_shares = self.szk.prove(
             leader_measurement_share.as_slice(),
@@ -307,8 +337,13 @@ where
         self.szk.proof_len()
     }
 
-    fn encode_measurement(&self, measurement: &T::Measurement) -> Result<VidpfWeight<T::Field>, VdafError> {
-        Ok(VidpfWeight::<T::Field>::from(self.szk.typ.encode_measurement(measurement)?))
+    fn encode_measurement(
+        &self,
+        measurement: &T::Measurement
+    ) -> Result<VidpfWeight<T::Field>, VdafError> {
+        Ok(VidpfWeight::<T::Field>::from(
+            self.szk.typ.encode_measurement(measurement)?
+        ))
     }
 }
 
@@ -323,7 +358,7 @@ where
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
         if measurement.0.len() != self.bits {
-            return Err(VdafError::Vidpf(VidpfError::InvalidLabelLength))
+            return Err(VdafError::Vidpf(VidpfError::InvalidLabelLength));
         }
 
         let vidpf_keys = [
@@ -396,8 +431,14 @@ mod tests {
         let leader_input_share = &input_shares[0];
         let helper_input_share = &input_shares[1];
 
-        assert_eq!(leader_input_share.encoded_len().unwrap(), leader_input_share.get_encoded().unwrap().len());
-        assert_eq!(helper_input_share.encoded_len().unwrap(), helper_input_share.get_encoded().unwrap().len());
+        assert_eq!(
+            leader_input_share.encoded_len().unwrap(),
+            leader_input_share.get_encoded().unwrap().len()
+        );
+        assert_eq!(
+            helper_input_share.encoded_len().unwrap(),
+            helper_input_share.get_encoded().unwrap().len()
+        );
     }
 
     #[test]
@@ -421,11 +462,13 @@ mod tests {
 
         let mut bytes = vec![];
         leader_input_share.encode(&mut bytes).unwrap();
-        let decoded_leader_input_share = MasticInputShare::decode_with_param(&(&mastic, 0), &mut Cursor::new(&bytes)).unwrap();
+        let decoded_leader_input_share =
+            MasticInputShare::decode_with_param(&(&mastic, 0), &mut Cursor::new(&bytes)).unwrap();
         assert_eq!(leader_input_share, &decoded_leader_input_share);
         let mut bytes = vec![];
         helper_input_share.encode(&mut bytes).unwrap();
-        let decoded_helper_input_share = MasticInputShare::decode_with_param(&(&mastic, 1), &mut Cursor::new(&bytes)).unwrap();
+        let decoded_helper_input_share =
+            MasticInputShare::decode_with_param(&(&mastic, 1), &mut Cursor::new(&bytes)).unwrap();
         assert_eq!(helper_input_share, &decoded_helper_input_share);
 
 

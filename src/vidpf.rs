@@ -414,7 +414,7 @@ impl Encode for VidpfKey {
 impl PartialEq for VidpfKey {
     fn eq(&self, other: &VidpfKey) -> bool {
         if self.id == other.id {
-            return self.value == other.value
+            return self.value == other.value;
         };
         false
     }
@@ -462,10 +462,7 @@ impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWo
             3 => (Choice::from(1), Choice::from(1)),
             _ => return Err(CodecError::UnexpectedValue),
         };
-        let weight = W::decode_with_param(
-            decoding_parameter,
-            bytes,
-        )?;
+        let weight = W::decode_with_param(decoding_parameter, bytes)?;
         Ok(Self {
             seed,
             left_control_bit,
@@ -506,24 +503,18 @@ pub struct VidpfPublicShare<W: VidpfValue> {
     cs: Vec<VidpfProof>,
 }
 
-impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)>
-    for VidpfPublicShare<W>
-{
+impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
     fn decode_with_param(
         (bits, weight_parameter): &(usize, W::ValueParameter),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(
-            *bits,
-        );
+        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
         let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
         for _ in 0..*bits {
-            cw.push(
-                VidpfCorrectionWord::<W>::decode_with_param(
-                    &weight_parameter,
-                    bytes,
-                )?,
-            );
+            cw.push(VidpfCorrectionWord::<W>::decode_with_param(
+                &weight_parameter,
+                bytes,
+            )?);
         }
         for _ in 0..*bits {
             cs.push(VidpfProof::decode(bytes)?);

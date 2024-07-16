@@ -81,26 +81,23 @@ pub enum SzkProofShare<F, const SEED_SIZE: usize> {
 }
 
 impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(usize, usize, bool)>
-    for SzkProofShare<F, SEED_SIZE> {
+    for SzkProofShare<F, SEED_SIZE>
+{
     fn decode_with_param(
         (role, bits, is_random): &(usize, usize, bool),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match role {
             0 => Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<F>::decode_with_param(
-                    bits,
-                    bytes,
-                )?,
+                uncompressed_proof_share: Vec::<F>::decode_with_param(bits, bytes)?,
                 leader_blind_and_helper_joint_rand_part_opt: is_random.then_some((
-                        Seed::<SEED_SIZE>::decode(bytes)?,
-                        Seed::<SEED_SIZE>::decode(bytes)?,
-                    )),
+                    Seed::<SEED_SIZE>::decode(bytes)?,
+                    Seed::<SEED_SIZE>::decode(bytes)?,
+                )),
             }),
             1 => Ok(SzkProofShare::Helper {
                 proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: is_random.then_some(
-                    Seed::<SEED_SIZE>::decode(bytes)?),
+                leader_joint_rand_part_opt: is_random.then_some(Seed::<SEED_SIZE>::decode(bytes)?),
             }),
             _ => Err(CodecError::UnexpectedValue),
         }
@@ -141,7 +138,7 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
                 uncompressed_proof_share,
                 leader_blind_and_helper_joint_rand_part_opt,
             } => Some(
-                 uncompressed_proof_share.encoded_len()?
+                uncompressed_proof_share.encoded_len()?
                     + if let Some((blind, helper_joint_rand_part)) =
                         leader_blind_and_helper_joint_rand_part_opt
                     {
@@ -168,22 +165,26 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
 impl<F: PartialEq, const SEED_SIZE: usize> PartialEq for SzkProofShare<F, SEED_SIZE> {
     fn eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> bool {
         match (self, other) {
-            (SzkProofShare::Leader {
-                uncompressed_proof_share: self_share,
-                leader_blind_and_helper_joint_rand_part_opt: self_opt
-            },
-            SzkProofShare::Leader {
-                uncompressed_proof_share: other_share,
-                leader_blind_and_helper_joint_rand_part_opt: other_opt
-            }) => self_share == other_share && self_opt == other_opt,
-            (SzkProofShare::Helper {
-                proof_share_seed_and_blind: self_seed,
-                leader_joint_rand_part_opt: self_opt
-            },
-            SzkProofShare::Helper {
-                proof_share_seed_and_blind: other_seed,
-                leader_joint_rand_part_opt: other_opt
-            }) => self_seed == other_seed && self_opt == other_opt,
+            (
+                SzkProofShare::Leader {
+                    uncompressed_proof_share: self_share,
+                    leader_blind_and_helper_joint_rand_part_opt: self_opt
+                },
+                SzkProofShare::Leader {
+                    uncompressed_proof_share: other_share,
+                    leader_blind_and_helper_joint_rand_part_opt: other_opt
+                },
+            ) => self_share == other_share && self_opt == other_opt,
+            (
+                SzkProofShare::Helper {
+                    proof_share_seed_and_blind: self_seed,
+                    leader_joint_rand_part_opt: self_opt
+                },
+                SzkProofShare::Helper {
+                    proof_share_seed_and_blind: other_seed,
+                    leader_joint_rand_part_opt: other_opt
+                },
+            ) => self_seed == other_seed && self_opt == other_opt,
             _ => false,
         }
     }
@@ -595,7 +596,12 @@ mod tests {
         let h_jr_seed = h_query_state.joint_rand_seed;
         let l_jr_part = l_query_share.joint_rand_part;
         let l_jr_seed = l_query_state.joint_rand_seed;
-        if let Ok(leader_decision) = szk_typ.decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), l_jr_seed.clone()) {
+        if let Ok(leader_decision) = szk_typ.decide(
+            &verifier,
+            l_jr_part.clone(),
+            h_jr_part.clone(),
+            l_jr_seed.clone()
+        ) {
             assert_eq!(
                 leader_decision, valid,
                 "Leader incorrectly determined validity",
@@ -603,7 +609,12 @@ mod tests {
         } else {
             panic!("Leader failed during decision");
         };
-        if let Ok(helper_decision) = szk_typ.decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), h_jr_seed.clone()) {
+        if let Ok(helper_decision) = szk_typ.decide(
+            &verifier,
+            l_jr_part.clone(),
+            h_jr_part.clone(),
+            h_jr_seed.clone()
+        ) {
             assert_eq!(
                 helper_decision, valid,
                 "Helper incorrectly determined validity",
@@ -615,9 +626,12 @@ mod tests {
         //test mutated jr seed
         if szk_typ.has_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
-            if let Ok(leader_decision) =
-                szk_typ.decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), joint_rand_seed_opt.clone())
-            {
+            if let Ok(leader_decision) = szk_typ.decide(
+                &verifier,
+                l_jr_part.clone(),
+                h_jr_part.clone(),
+                joint_rand_seed_opt.clone()
+            ) {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
             };
         };
@@ -632,7 +646,12 @@ mod tests {
         }
 
         let leader_decision = szk_typ
-            .decide(&verifier, l_jr_part.clone(), h_jr_part.clone(), l_jr_seed.clone())
+            .decide(
+                &verifier,
+                l_jr_part.clone(),
+                h_jr_part.clone(),
+                l_jr_seed.clone()
+            )
             .unwrap();
         assert!(!leader_decision, "Leader validated after proof mutation");
 
@@ -651,9 +670,12 @@ mod tests {
 
         let mutated_jr_seed = mutated_query_state.joint_rand_seed;
         let mutated_jr_part = mutated_query_share.joint_rand_part;
-        if let Ok(leader_decision) =
-            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part.clone(), mutated_jr_seed)
-        {
+        if let Ok(leader_decision) = szk_typ.decide(
+            &verifier,
+             mutated_jr_part,
+             h_jr_part.clone(),
+             mutated_jr_seed
+        ) {
             assert!(!leader_decision, "Leader validated after input mutation");
         };
 
@@ -690,9 +712,12 @@ mod tests {
 
         let mutated_jr_seed = l_query_state.joint_rand_seed;
         let mutated_jr_part = l_query_share.joint_rand_part;
-        if let Ok(leader_decision) =
-            szk_typ.decide(&verifier, mutated_jr_part, h_jr_part.clone(), mutated_jr_seed)
-        {
+        if let Ok(leader_decision) = szk_typ.decide(
+            &verifier,
+            mutated_jr_part,
+            h_jr_part.clone(),
+            mutated_jr_seed
+        ) {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
     }
@@ -714,17 +739,21 @@ mod tests {
             *x -= *y;
         }
 
-        let [l_proof_share, _] = szk_typ.prove(
-            &leader_input_share,
-            &helper_input_share,
-            &encoded_measurement[..],
-            [prove_rand_seed, helper_seed],
-            leader_seed_opt,
-            &nonce,
-        ).unwrap();
+        let [l_proof_share, _] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                    &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
 
-        assert_eq!(l_proof_share.encoded_len().unwrap(), l_proof_share.get_encoded().unwrap().len());
-
+        assert_eq!(
+            l_proof_share.encoded_len().unwrap(),
+            l_proof_share.get_encoded().unwrap().len()
+        );
     }
 
     #[test]
@@ -744,21 +773,24 @@ mod tests {
             *x -= *y;
         }
 
-        let [l_proof_share, _] = szk_typ.prove(
-            &leader_input_share,
-            &helper_input_share,
-            &encoded_measurement[..],
-            [prove_rand_seed, helper_seed],
-            leader_seed_opt,
-            &nonce,
-        ).unwrap();
+        let [l_proof_share, _] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+        .unwrap();
 
         let decoding_parameter = (0, szk_typ.proof_len(), true);
         let mut bytes = vec![];
         l_proof_share.encode(&mut bytes).unwrap();
-        let decoded_proof_share = SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes)).unwrap();
+        let decoded_proof_share =
+            SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes))
+                .unwrap();
         assert_eq!(l_proof_share, decoded_proof_share);
-
     }
 
     #[test]
@@ -778,19 +810,23 @@ mod tests {
             *x -= *y;
         }
 
-        let [_, h_proof_share] = szk_typ.prove(
-            &leader_input_share,
-            &helper_input_share,
-            &encoded_measurement[..],
-            [prove_rand_seed, helper_seed],
-            leader_seed_opt,
-            &nonce,
-        ).unwrap();
+        let [_, h_proof_share] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
 
         let decoding_parameter = (1, szk_typ.proof_len(), true);
         let mut bytes = vec![];
         h_proof_share.encode(&mut bytes).unwrap();
-        let decoded_proof_share = SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes)).unwrap();
+        let decoded_proof_share =
+            SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes))
+                .unwrap();
         assert_eq!(h_proof_share, decoded_proof_share);
 
     }
