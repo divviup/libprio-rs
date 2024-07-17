@@ -817,7 +817,7 @@ impl Integer for u128 {
 make_field!(
     /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
     FieldPrio2,
-    u128,
+    u64,
     u32,
     FP32,
     4,
