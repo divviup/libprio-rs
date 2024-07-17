@@ -263,6 +263,16 @@ impl FieldParameters {
 }
 
 #[inline(always)]
+pub(crate) fn lo32(x: u64) -> u64 {
+    x & ((1 << 32) - 1)
+}
+
+#[inline(always)]
+pub(crate) fn hi32(x: u64) -> u64 {
+    x >> 32
+}
+
+#[inline(always)]
 pub(crate) fn lo64(x: u128) -> u128 {
     x & ((1 << 64) - 1)
 }
@@ -278,20 +288,6 @@ fn modp(x: u128, p: u128) -> u128 {
     let m = 0u128.wrapping_sub(carry as u128);
     z.wrapping_add(m & p)
 }
-
-pub(crate) const FP32: FieldParameters = FieldParameters {
-    p: 4293918721, // 32-bit prime
-    mu: 17302828673139736575,
-    r2: 1676699750,
-    g: 1074114499,
-    num_roots: 20,
-    bit_mask: 4294967295,
-    roots: [
-        2564090464, 1729828257, 306605458, 2294308040, 1648889905, 57098624, 2788941825,
-        2779858277, 368200145, 2760217336, 594450960, 4255832533, 1372848488, 721329415,
-        3873251478, 1134002069, 7138597, 2004587313, 2989350643, 725214187, 1074114499,
-    ],
-};
 
 pub(crate) const FP128: FieldParameters = FieldParameters {
     p: 340282366920938462946865773367900766209, // 128-bit prime
@@ -344,6 +340,7 @@ pub(crate) mod tests {
     pub(crate) trait TestFieldParameters {
         fn p(&self) -> u128;
         fn g(&self) -> u128;
+        fn base(&self) -> u128;
         fn r2(&self) -> u128;
         fn mu(&self) -> u64;
         fn bit_mask(&self) -> u128;
@@ -367,6 +364,10 @@ pub(crate) mod tests {
 
         fn g(&self) -> u128 {
             self.g
+        }
+
+        fn base(&self) -> u128 {
+            1u128 << 64
         }
 
         fn r2(&self) -> u128 {
@@ -422,7 +423,7 @@ pub(crate) mod tests {
         }
 
         fn radix(&self) -> BigInt {
-            BigInt::from(1) << 128
+            BigInt::from(self.base()).pow(2) // radix = base^2 = (2^64)^2 = 2^128
         }
     }
 
@@ -452,16 +453,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn test_fp32_u128() {
-        all_field_parameters_tests(TestFieldParametersData {
-            fp: Box::new(FP32),
-            expected_p: 4293918721,
-            expected_g: 3925978153,
-            expected_order: 1 << 20,
-        });
-    }
-
-    #[test]
     fn test_fp128_u128() {
         all_field_parameters_tests(TestFieldParametersData {
             fp: Box::new(FP128),
@@ -485,10 +476,12 @@ pub(crate) mod tests {
 
     fn check_consistency(fp: &dyn TestFieldParameters, p: u128, g: u128, order: u128) {
         assert_eq!(fp.p(), p, "p mismatch");
+        assert!(fp.base().is_power_of_two());
 
-        let mu = match modinverse((-(p as i128)).rem_euclid(1 << 64), 1 << 64) {
+        let base = i128::try_from(fp.base()).unwrap();
+        let mu = match modinverse((-(p as i128)).rem_euclid(base), base) {
             Some(mu) => mu as u64,
-            None => panic!("inverse of -p (mod 2^64) is undefined"),
+            None => panic!("inverse of -p (mod base) is undefined"),
         };
         assert_eq!(fp.mu(), mu, "mu mismatch");
 

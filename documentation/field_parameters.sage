@@ -102,11 +102,11 @@ class Field:
 
 FIELDS = [
     Field(
-        "FieldPrio2, u128",
+        "FieldPrio2, u32",
         2 ^ 20 * 4095 + 1,
         3925978153,
-        2 ^ 64,
-        2 ^ 128,
+        2 ^ 32,
+        2 ^ 32,
     ),
     Field(
         "Field64, u128",

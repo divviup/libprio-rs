@@ -9,7 +9,8 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode},
-    fp::{FP128, FP32},
+    fp::FP128,
+    fp32::FP32,
     fp64::FP64,
     prng::{Prng, PrngError},
 };
@@ -815,9 +816,9 @@ impl Integer for u128 {
 }
 
 make_field!(
-    /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
+    /// `GF(4293918721)`, a 32-bit field.
     FieldPrio2,
-    u128,
+    u32,
     u32,
     FP32,
     4,
