@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: MPL-2.0
+
 use crate::dp::{distributions::PureDpDiscreteLaplace, DifferentialPrivacyStrategy};
 use crate::dp::{DifferentialPrivacyDistribution, DpError};
 use crate::field::{FftFriendlyFieldElement, Field128, Field64};
@@ -64,7 +66,7 @@ where
     where
         R: Rng,
     {
-        // Compute the l1-sensitivity of the aggregation function (assuming the substitution-DP
+        // Compute the L1-sensitivity of the aggregation function (assuming the substitution-DP
         // model). The worst case is when one individual's measurement changes such that each vector
         // element flips from 0 to 2^bits - 1, or vice versa. Then, the l1 distance from the initial
         // query result to the new query result will be (2^bits - 1) * length.
@@ -137,7 +139,7 @@ where
     where
         R: Rng,
     {
-        // The l1-sensitivity of the aggregation function is two, assuming the substitution-DP
+        // The L1-sensitivity of the aggregation function is two, assuming the substitution-DP
         // model. Substituting a measurement may, at worst, cause one cell of the query result
         // to be incremented by one, and another to be decremented by one.
         let sensitivity = BigUint::from(2u64);

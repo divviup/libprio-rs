@@ -263,7 +263,7 @@ where
 
 /// A DP strategy using the discrete gaussian distribution providing zero-concentrated DP.
 ///
-/// This uses l2-sensitivity, with the substitution definition of neighboring datasets.
+/// This uses L2-sensitivity, with the substitution definition of neighboring datasets.
 pub type ZCdpDiscreteGaussian = DiscreteGaussianDpStrategy<ZCdpBudget>;
 
 impl DifferentialPrivacyStrategy for DiscreteGaussianDpStrategy<ZCdpBudget> {
@@ -334,7 +334,7 @@ where
 
 /// A DP strategy using the discrete Laplace distribution, providing pure DP.
 ///
-/// This uses l1-sensitivity, with the substitution definition of neighboring datasets.
+/// This uses L1-sensitivity, with the substitution definition of neighboring datasets.
 pub type PureDpDiscreteLaplace = DiscreteLaplaceDpStrategy<PureDpBudget>;
 
 impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
@@ -348,7 +348,7 @@ impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
 
     /// Create a new sampler for the discrete Laplace distribution with a scale parameter calibrated
     /// to provide `epsilon`-differential privacy when added to the result of an integer-valued
-    /// function with l1-sensitivity `sensitivity`.
+    /// function with L1-sensitivity `sensitivity`.
     ///
     /// A mechanism is defined for 1-dimensional query results in [[GRS12]], and restated in Lemma
     /// 29 from [[CKS20]]. However, most VDAF instances will produce query results of higher
