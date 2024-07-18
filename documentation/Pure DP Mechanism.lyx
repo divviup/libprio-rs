@@ -850,7 +850,16 @@ Prio3Histogram
  then either the result is unchanged,
  or one count is decreased by one and another is increased by one.
  Thus,
- the mechanism will add noise independently drawn from 
+ the 
+\family typewriter
+scale
+\family default
+ parameter is 
+\begin_inset Formula $t=\nicefrac{2}{\varepsilon}$
+\end_inset
+
+,
+ and the mechanism will add noise drawn independently from 
 \begin_inset Formula $\mathrm{Lap}_{\mathbb{Z}}\left(\nicefrac{2}{\varepsilon}\right)$
 \end_inset
 
@@ -896,7 +905,16 @@ Let the length parameter of Prio3SumVec be denoted by
 
 .
  Thus,
- the mechanism will add noise independently drawn from 
+ the 
+\family typewriter
+scale
+\family default
+ parameter is 
+\begin_inset Formula $t=\frac{\left(2^{b}-1\right)l}{\varepsilon}$
+\end_inset
+
+,
+ and the mechanism will add noise drawn independently from 
 \begin_inset Formula $\mathrm{Lap}_{\mathbb{Z}}\left(\frac{\left(2^{b}-1\right)l}{\varepsilon}\right)$
 \end_inset
 
