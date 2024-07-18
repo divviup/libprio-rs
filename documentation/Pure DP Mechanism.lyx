@@ -101,6 +101,26 @@ Prio3
 PureDpDiscreteLaplace
 \end_layout
 
+\begin_layout Author
+David Cook,
+ 
+\begin_inset CommandInset href
+LatexCommand href
+name "dcook@divviup.org"
+target "dcook@divviup.org"
+type "mailto:"
+literal "false"
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Date
+July 18,
+ 2024
+\end_layout
+
 \begin_layout Standard
 Recall the definitions of pure differential privacy and the discrete Laplace distribution from 
 \begin_inset CommandInset citation
@@ -110,10 +130,25 @@ literal "false"
 
 \end_inset
 
+,
+ and the definition of global sensitivity from 
+\begin_inset CommandInset citation
+LatexCommand cite
+key "NRS07"
+literal "false"
+
+\end_inset
+
 .
 \end_layout
 
 \begin_layout Definition
+\begin_inset CommandInset label
+LatexCommand label
+name "def:pure-dp"
+
+\end_inset
+
 A randomized algorithm 
 \begin_inset Formula $M:\mathcal{X}^{n}\rightarrow\mathcal{Y}$
 \end_inset
@@ -123,12 +158,13 @@ A randomized algorithm
 \end_inset
 
 -differential privacy if,
- for all 
+ for all neighboring datasets 
 \begin_inset Formula $x,x^{\prime}\in\mathcal{X}^{n}$
 \end_inset
 
- differing on a single element and all events 
-\begin_inset Formula $E\subset\mathcal{Y}$
+ (differing on a single element),
+ and all events 
+\begin_inset Formula $E\subseteq\mathcal{Y}$
 \end_inset
 
 ,
@@ -147,6 +183,12 @@ A randomized algorithm
 \end_layout
 
 \begin_layout Definition
+\begin_inset CommandInset label
+LatexCommand label
+name "def:discrete-laplace"
+
+\end_inset
+
 The discrete Laplace distribution,
  with scale parameter 
 \begin_inset Formula $t$
@@ -158,6 +200,46 @@ The discrete Laplace distribution,
 \begin_inset Formula 
 \[
 \forall x\in\mathbb{Z},\underset{X\leftarrow\mathrm{Lap}_{\mathbb{Z}}\left(t\right)}{\mathbb{P}}\left[X=x\right]=\frac{e^{\nicefrac{1}{t}}-1}{e^{\nicefrac{1}{t}}+1}\cdot e^{\nicefrac{-\left|x\right|}{t}}
+\]
+
+\end_inset
+
+
+\end_layout
+
+\begin_layout Standard
+\begin_inset Separator plain
+\end_inset
+
+
+\end_layout
+
+\begin_layout Definition
+\begin_inset CommandInset label
+LatexCommand label
+name "def:global-sensitivity"
+
+\end_inset
+
+The global sensitivity of a query function 
+\begin_inset Formula $f\left(x\right)$
+\end_inset
+
+ on a dataset 
+\begin_inset Formula $x$
+\end_inset
+
+ is the maximum distance between two query outputs over any neighboring datasets.
+ Here,
+ we will use the 
+\begin_inset Formula $\ell_{1}$
+\end_inset
+
+ metric to measure distances between results,
+ and the replacement definition of neighboring datasets.
+\begin_inset Formula 
+\[
+GS_{f}=\underset{x,x^{\prime}:\mathrm{neighboring}}{\mathrm{max}}\left\Vert f\left(x\right)-f\left(x^{\prime}\right)\right\Vert _{1}
 \]
 
 \end_inset
@@ -201,16 +283,6 @@ Prio3SumVec
 \end_inset
 
 .
- Let 
-\begin_inset Formula $GS_{f}$
-\end_inset
-
- be the global sensitivity of 
-\begin_inset Formula $f\left(x\right)$
-\end_inset
-
-,
- using the replacement definition of neighboring datasets.
  Let 
 \begin_inset Formula $\mathbb{F}_{p}$
 \end_inset
@@ -270,6 +342,11 @@ Prio3SumVec
 
 .
  Let 
+\begin_inset Formula $\vec{\pi}_{\mathbb{F}_{p}}:\mathbb{Z}^{d}\rightarrow\mathbb{F}_{p}^{d}$
+\end_inset
+
+ be the natural extension to project vectors of integers into vectors of field elements.
+ Let 
 \begin_inset Formula $q^{*}=f^{*}\left(x\right)\in\mathbb{F}_{p}^{d}$
 \end_inset
 
@@ -296,7 +373,7 @@ Prio3SumVec
  and then sends the sum as their aggregate share to the collector.
  If we pessimistically assume that only one honest aggregator out of the two aggregators is adding differential privacy noise,
  then the mechanism produces 
-\begin_inset Formula $M\left(x\right)=q^{\left(0\right)}+q^{\left(1\right)}+\pi_{\mathbb{F}_{p}}\left(Z\right)=q^{*}+\pi_{\mathbb{F}_{p}}\left(Z\right)$
+\begin_inset Formula $\vec{M}\left(x\right)=q^{\left(0\right)}+q^{\left(1\right)}+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right)=q^{*}+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right)$
 \end_inset
 
 ,
@@ -312,7 +389,14 @@ Prio3SumVec
 \end_layout
 
 \begin_layout Theorem
-\begin_inset Formula $M\left(x\right)=\pi_{\mathbb{F}_{p}}\left(f\left(x\right)\right)+\pi_{\mathbb{F}_{p}}\left(Z\right),Z_{j}\leftarrow Lap_{\mathbb{Z}}\left(\nicefrac{GS_{f}}{\varepsilon}\right)$
+\begin_inset CommandInset label
+LatexCommand label
+name "thm:multivariate-laplace-mechanism-satisfies-pure-dp"
+
+\end_inset
+
+
+\begin_inset Formula $\vec{M}\left(x\right)=\vec{\pi}_{\mathbb{F}_{p}}\left(f\left(x\right)\right)+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right),Z_{j}\leftarrow Lap_{\mathbb{Z}}\left(\nicefrac{GS_{f}}{\varepsilon}\right)$
 \end_inset
 
  satisfies 
@@ -323,7 +407,18 @@ Prio3SumVec
 \end_layout
 
 \begin_layout Proof
-We will show Definition 1 holds for singleton events,
+We will show Definition 
+\begin_inset CommandInset ref
+LatexCommand formatted
+reference "def:pure-dp"
+plural "false"
+caps "false"
+noprefix "false"
+nolink "false"
+
+\end_inset
+
+ holds for singleton events,
  where 
 \begin_inset Formula $E$
 \end_inset
@@ -333,18 +428,27 @@ We will show Definition 1 holds for singleton events,
 \end_layout
 
 \begin_layout Proof
-Let 
-\begin_inset Formula $q=f\left(x\right)$
+For neighboring datasets 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $x^{\prime}$
+\end_inset
+
+,
+ let 
+\begin_inset Formula $\vec{q}=f\left(x\right)$
 \end_inset
 
 ,
  
-\begin_inset Formula $q^{\prime}=f\left(x^{\prime}\right)$
+\begin_inset Formula $\vec{q}^{\prime}=f\left(x^{\prime}\right)$
 \end_inset
 
 ,
  and 
-\begin_inset Formula $q^{*}=\vec{\pi}_{\mathbb{F}_{p}}\left(f\left(x\right)\right)$
+\begin_inset Formula $\vec{q}^{*}=\vec{\pi}_{\mathbb{F}_{p}}\left(f\left(x\right)\right)$
 \end_inset
 
 ,
@@ -392,7 +496,7 @@ Let
 
 \begin_inset Formula 
 \[
-=\stackrel[k=-\infty]{\infty}{\sum}\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}}
+=\stackrel[k=-\infty]{\infty}{\sum}\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\mathrm{exp}\left(\frac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}\right)
 \]
 
 \end_inset
@@ -400,7 +504,7 @@ Let
 
 \begin_inset Formula 
 \[
-=\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\stackrel[k=-\infty]{\infty}{\sum}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}}
+=\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(\frac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}\right)
 \]
 
 \end_inset
@@ -417,7 +521,7 @@ Since each
  the probability of the mechanism returning some result can be found by taking the product of the probabilities for each dimension of the result vector.
 \begin_inset Formula 
 \[
-\mathbb{P}\left[M\left(x\right)=y\right]=\left(\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\right)^{d}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}}
+\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]=\left(\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\right)^{d}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(\frac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}{GS_{f}}\right)
 \]
 
 \end_inset
@@ -425,7 +529,7 @@ Since each
 
 \begin_inset Formula 
 \[
-\mathbb{P}\left[M\left(x^{\prime}\right)=y\right]=\left(\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\right)^{d}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{\nicefrac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}{GS_{f}}}
+\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]=\left(\frac{e^{\nicefrac{\varepsilon}{GS_{f}}}-1}{e^{\nicefrac{\varepsilon}{GS_{f}}}+1}\right)^{d}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(\frac{-\varepsilon\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}{GS_{f}}\right)
 \]
 
 \end_inset
@@ -490,7 +594,7 @@ By the definition of global sensitivity,
 
 \begin_inset Formula 
 \[
-e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}\ge e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}
+\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}\right)
 \]
 
 \end_inset
@@ -498,7 +602,7 @@ e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\
 
 \begin_inset Formula 
 \[
-e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}\ge e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}
+\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)e^{-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}
 \]
 
 \end_inset
@@ -506,15 +610,19 @@ e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}e^{-\frac{\varepsilon}{GS_{
 
 \begin_inset Formula 
 \[
-e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \]
 
 \end_inset
 
 
-\end_layout
+\begin_inset Formula 
+\[
+\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\]
 
-\begin_layout Proof
+\end_inset
+
 Since the above holds for a fixed 
 \begin_inset Formula $y$
 \end_inset
@@ -540,33 +648,37 @@ Since the above holds for a fixed
 ,
  we can first add and then multiply inequalities together.
 \begin_inset Formula 
-\[
-\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
-\]
+\begin{multline*}
+\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
+e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\end{multline*}
 
 \end_inset
 
 
 \begin_inset Formula 
-\[
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le\stackrel[j=1]{d}{\prod}e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
-\]
+\begin{multline*}
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
+\stackrel[j=1]{d}{\prod}e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\end{multline*}
 
 \end_inset
 
 
 \begin_inset Formula 
-\[
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon\stackrel[j=1]{d}{\sum}\left|\delta_{j}\right|}{GS_{f}}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
-\]
+\begin{multline*}
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
+\mathrm{exp}\left(\frac{\varepsilon\stackrel[j=1]{d}{\sum}\left|\delta_{j}\right|}{GS_{f}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\end{multline*}
 
 \end_inset
 
 
 \begin_inset Formula 
-\[
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon}{GS_{f}}\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
-\]
+\begin{multline*}
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
+\mathrm{exp}\left(\frac{\varepsilon}{GS_{f}}\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\end{multline*}
 
 \end_inset
 
@@ -577,8 +689,57 @@ Then,
 
 ,
 \begin_inset Formula 
+\begin{multline*}
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
+e^{\frac{\varepsilon}{GS_{f}}GS_{f}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\end{multline*}
+
+\end_inset
+
+
+\begin_inset Formula 
+\begin{multline*}
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
+e^{\varepsilon}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\end{multline*}
+
+\end_inset
+
+This shows that,
+ for any neighboring 
+\begin_inset Formula $x$
+\end_inset
+
+ and 
+\begin_inset Formula $x^{\prime}$
+\end_inset
+
+,
+ and any 
+\begin_inset Formula $y$
+\end_inset
+
+,
+ 
+\begin_inset Formula $\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]$
+\end_inset
+
+.
+\end_layout
+
+\begin_layout Proof
+Next,
+ we apply union bounds.
+ For any event 
+\begin_inset Formula $E\subseteq\mathcal{Y}$
+\end_inset
+
+,
+ we decompose the probabilities into that of the corresponding singleton events.
+ (note that the singleton events are mutually exclusive)
+\begin_inset Formula 
 \[
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\frac{\varepsilon}{GS_{f}}GS_{f}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\mathbb{P}\left[\vec{M}\left(x\right)\in E\right]=\mathbb{P}\left[\vec{M}\left(x\right)\in\underset{\vec{y}_{i}\in E}{\bigcup}\vec{y}_{i}\right]=\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]
 \]
 
 \end_inset
@@ -586,24 +747,47 @@ Then,
 
 \begin_inset Formula 
 \[
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|}\le e^{\varepsilon}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}e^{-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|}
+\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)\in E\right]=\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)\in\underset{\vec{y}_{i}\in E}{\bigcup}\vec{y}_{i}\right]=\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]
 \]
 
 \end_inset
 
-This shows that 
-\begin_inset Formula $\mathbb{P}\left[M\left(x^{\prime}\right)=y\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[M\left(x\right)=y\right]$
+Since we already know 
+\begin_inset Formula $\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]$
 \end_inset
 
-.
- By applying union bounds,
- then 
-\begin_inset Formula $\mathbb{P}\left[M\left(x^{\prime}\right)\in E\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[M\left(x\right)\in E\right]$
+ for all 
+\begin_inset Formula $\vec{y}$
 \end_inset
 
- as well,
- and thus 
-\begin_inset Formula $M\left(x\right)$
+,
+ we can add multiple such inequalities together.
+\begin_inset Formula 
+\[
+\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]\le\underset{\vec{y}_{i}\in E}{\sum}e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]\le e^{\varepsilon}\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]
+\]
+
+\end_inset
+
+
+\begin_inset Formula 
+\[
+\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)\in E\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)\in E\right]
+\]
+
+\end_inset
+
+Therefore,
+ 
+\begin_inset Formula $\vec{M}\left(x\right)$
 \end_inset
 
  satisfies 
@@ -611,6 +795,112 @@ This shows that
 \end_inset
 
 -differential privacy.
+\end_layout
+
+\begin_layout Standard
+We will now apply this mechanism to 
+\family typewriter
+Prio3Histogram
+\family default
+ and 
+\family typewriter
+Prio3SumVec
+\family default
+ in turn.
+\end_layout
+
+\begin_layout Standard
+First,
+ let the length parameter 
+\family typewriter
+Prio3Histogram
+\family default
+ be denoted by 
+\begin_inset Formula $l$
+\end_inset
+
+.
+ Then,
+ each measurement making up a dataset is an element of 
+\begin_inset Formula $\mathcal{X}=\left\{ 0,1,2,\dots,l-1\right\} $
+\end_inset
+
+,
+ and the query result is a vector of counts,
+ in 
+\begin_inset Formula $\mathcal{Y}=\mathbb{Z}_{\ge0}^{l}$
+\end_inset
+
+.
+ The VDAF's aggregation function is our query function,
+ 
+\begin_inset Formula $f\left(x\right)$
+\end_inset
+
+.
+ It maps each measurement to a one-hot vector,
+ with the position of the one determined by the measurement,
+ and adds them up.
+ The global sensitivity of this query function is 
+\begin_inset Formula $GS_{f}=2$
+\end_inset
+
+.
+ When one measurement in a dataset is replaced with another,
+ then either the result is unchanged,
+ or one count is decreased by one and another is increased by one.
+ Thus,
+ the mechanism will add noise independently drawn from 
+\begin_inset Formula $\mathrm{Lap}_{\mathbb{Z}}\left(\nicefrac{2}{\varepsilon}\right)$
+\end_inset
+
+ to each counter in both aggregate shares.
+\end_layout
+
+\begin_layout Standard
+Let the length parameter of Prio3SumVec be denoted by 
+\begin_inset Formula $l$
+\end_inset
+
+,
+ and the bits parameter be denoted by 
+\begin_inset Formula $b$
+\end_inset
+
+.
+ Each measurement making up a dataset is an element of 
+\begin_inset Formula $\mathcal{X}=\left\{ 0,1,2,\dots,2^{b}-1\right\} ^{l}$
+\end_inset
+
+.
+ The query result is a vector of sums,
+ in 
+\begin_inset Formula $\mathcal{Y}=\mathbb{Z}_{\ge0}^{l}$
+\end_inset
+
+.
+ The VDAF's aggregation function is our query function,
+ 
+\begin_inset Formula $f\left(x\right)=\stackrel[i=1]{n}{\sum}x_{i}$
+\end_inset
+
+.
+ The global sensitivity of this query function is 
+\begin_inset Formula $GS_{f}=\left(2^{b}-1\right)\cdot l$
+\end_inset
+
+,
+ because substituting one measurement may increase or decrease each component of the vector sum by up to 
+\begin_inset Formula $2^{b}-1$
+\end_inset
+
+.
+ Thus,
+ the mechanism will add noise independently drawn from 
+\begin_inset Formula $\mathrm{Lap}_{\mathbb{Z}}\left(\frac{\left(2^{b}-1\right)l}{\varepsilon}\right)$
+\end_inset
+
+ to each sum in both aggregate shares.
 \end_layout
 
 \begin_layout Bibliography
@@ -642,6 +932,41 @@ The Discrete Gaussian for Differential Privacy
 \begin_inset CommandInset href
 LatexCommand href
 target "https://arxiv.org/abs/2004.00010"
+
+\end_inset
+
+>.
+\end_layout
+
+\begin_layout Bibliography
+\begin_inset CommandInset bibitem
+LatexCommand bibitem
+key "NRS07"
+literal "false"
+
+\end_inset
+
+Nissim,
+ K.,
+ Raskhodnikova,
+ S.,
+ and Smith,
+ A.,
+ 
+\begin_inset Quotes eld
+\end_inset
+
+Smooth sensitivity and sampling in private data analysis
+\begin_inset Quotes erd
+\end_inset
+
+,
+ 2007,
+ <
+\begin_inset CommandInset href
+LatexCommand href
+target "https://cs-people.bu.edu/ads22/pubs/NRS07/NRS07-full-draft-v1.pdf"
+literal "false"
 
 \end_inset
 
