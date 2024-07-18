@@ -570,7 +570,7 @@ By the definition of global sensitivity,
 .
  By the triangle inequality,
  
-\begin_inset Formula $\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\le\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|+\left|\delta_{j}\right|$
+\begin_inset Formula $\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\le\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|+\left|\delta_{j}\right|$
 \end_inset
 
 .
@@ -586,7 +586,7 @@ By the definition of global sensitivity,
  then,
 \begin_inset Formula 
 \[
--\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\ge-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|-\frac{\varepsilon}{GS_{f}}\left|\delta_{j}\right|
+-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\ge-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|-\frac{\varepsilon}{GS_{f}}\left|\delta_{j}\right|
 \]
 
 \end_inset
@@ -594,7 +594,7 @@ By the definition of global sensitivity,
 
 \begin_inset Formula 
 \[
-\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}\right)
+\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}\right)
 \]
 
 \end_inset
@@ -602,7 +602,7 @@ By the definition of global sensitivity,
 
 \begin_inset Formula 
 \[
-\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)e^{-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}
+\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)e^{-\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}
 \]
 
 \end_inset
@@ -610,7 +610,7 @@ By the definition of global sensitivity,
 
 \begin_inset Formula 
 \[
-e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
+e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\ge\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
 \]
 
 \end_inset
@@ -618,7 +618,7 @@ e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\v
 
 \begin_inset Formula 
 \[
-\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \]
 
 \end_inset
@@ -649,8 +649,8 @@ Since the above holds for a fixed
  we can first add and then multiply inequalities together.
 \begin_inset Formula 
 \begin{multline*}
-\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
-e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
+e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
@@ -658,8 +658,8 @@ e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty
 
 \begin_inset Formula 
 \begin{multline*}
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
-\stackrel[j=1]{d}{\prod}e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
+\stackrel[j=1]{d}{\prod}e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
@@ -667,8 +667,8 @@ e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty
 
 \begin_inset Formula 
 \begin{multline*}
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
-\mathrm{exp}\left(\frac{\varepsilon\stackrel[j=1]{d}{\sum}\left|\delta_{j}\right|}{GS_{f}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
+\mathrm{exp}\left(\frac{\varepsilon\stackrel[j=1]{d}{\sum}\left|\delta_{j}\right|}{GS_{f}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
@@ -676,8 +676,8 @@ e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty
 
 \begin_inset Formula 
 \begin{multline*}
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
-\mathrm{exp}\left(\frac{\varepsilon}{GS_{f}}\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
+\mathrm{exp}\left(\frac{\varepsilon}{GS_{f}}\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
@@ -690,8 +690,8 @@ Then,
 ,
 \begin_inset Formula 
 \begin{multline*}
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
-e^{\frac{\varepsilon}{GS_{f}}GS_{f}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
+e^{\frac{\varepsilon}{GS_{f}}GS_{f}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
@@ -699,8 +699,8 @@ e^{\frac{\varepsilon}{GS_{f}}GS_{f}}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]
 
 \begin_inset Formula 
 \begin{multline*}
-\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)\le\\
-e^{\varepsilon}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)
+\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
+e^{\varepsilon}\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
@@ -721,7 +721,7 @@ This shows that,
 
 ,
  
-\begin_inset Formula $\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]$
+\begin_inset Formula $\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]$
 \end_inset
 
 .
@@ -753,7 +753,7 @@ Next,
 \end_inset
 
 Since we already know 
-\begin_inset Formula $\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]$
+\begin_inset Formula $\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}\right]$
 \end_inset
 
  for all 
@@ -764,7 +764,7 @@ Since we already know
  we can add multiple such inequalities together.
 \begin_inset Formula 
 \[
-\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]\le\underset{\vec{y}_{i}\in E}{\sum}e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]
+\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]\le\underset{\vec{y}_{i}\in E}{\sum}e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]
 \]
 
 \end_inset
@@ -772,7 +772,7 @@ Since we already know
 
 \begin_inset Formula 
 \[
-\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]\le e^{\varepsilon}\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]
+\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x\right)=\vec{y}_{i}\right]\le e^{\varepsilon}\underset{\vec{y}_{i}\in E}{\sum}\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)=\vec{y}_{i}\right]
 \]
 
 \end_inset
@@ -780,7 +780,7 @@ Since we already know
 
 \begin_inset Formula 
 \[
-\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)\in E\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x\right)\in E\right]
+\mathbb{P}\left[\vec{M}\left(x\right)\in E\right]\le e^{\varepsilon}\cdot\mathbb{P}\left[\vec{M}\left(x^{\prime}\right)\in E\right]
 \]
 
 \end_inset
