@@ -66,10 +66,11 @@ where
     where
         R: Rng,
     {
-        // Compute the L1-sensitivity of the aggregation function (assuming the substitution-DP
-        // model). The worst case is when one individual's measurement changes such that each vector
-        // element flips from 0 to 2^bits - 1, or vice versa. Then, the l1 distance from the initial
-        // query result to the new query result will be (2^bits - 1) * length.
+        // Compute the global sensitivity of the aggregation function, using the L1 norm as a
+        // distance metric, and using the substitution-DP model. The worst case is when one
+        // individual's measurement changes such that each vector element flips from 0 to 2^bits -
+        // 1, or vice versa. Then, the l1 distance from the initial query result to the new query
+        // result will be (2^bits - 1) * length.
         let length = BigUint::from(self.len);
         let sensitivity = BigUint::from(
             1u128
@@ -139,9 +140,10 @@ where
     where
         R: Rng,
     {
-        // The L1-sensitivity of the aggregation function is two, assuming the substitution-DP
-        // model. Substituting a measurement may, at worst, cause one cell of the query result
-        // to be incremented by one, and another to be decremented by one.
+        // The global sensitivity of the aggregation function is two, using the L1 norm as a
+        // distance metric, and using the substitution-DP model. Substituting a measurement may, at
+        // worst, cause one cell of the query result to be incremented by one, and another to be
+        // decremented by one.
         let sensitivity = BigUint::from(2u64);
 
         // Initialize sampler.
