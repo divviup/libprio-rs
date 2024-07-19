@@ -24,7 +24,7 @@ num-bigint = { version = "0.4.6", optional = true, features = ["rand", "serde"] 
 num-integer = { version = "0.1.46", optional = true }
 num-iter = { version = "0.1.45", optional = true }
 num-rational = { version = "0.4.2", optional = true, features = ["serde"] }
-num-traits = { version = "0.2.19", optional = true }
+num-traits = "0.2.19"
 rand = "0.8"
 rand_core = "0.6.4"
 rayon = { version = "1.10.0", optional = true }
@@ -52,7 +52,7 @@ statrs = "0.17.1"
 
 [features]
 default = ["crypto-dependencies"]
-experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", "num-traits", "num-integer", "num-iter"]
+experimental = ["bitvec", "fiat-crypto", "fixed", "num-bigint", "num-rational", "num-integer", "num-iter"]
 multithreaded = ["rayon"]
 crypto-dependencies = ["aes", "ctr", "hmac", "sha2"]
 test-util = ["hex", "serde_json", "zipf"]
