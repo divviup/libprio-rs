@@ -99,21 +99,27 @@ class Field:
             for i in range(min(self.num_roots, 20) + 1)
         ]
 
+    def log2_base(self):
+        """
+        Returns log2(r), where r is the base used for multiprecision arithmetic.
+        """
+        return log(self.r, 2)
+
+    def log2_radix(self):
+        """
+        Returns log2(R), where R is the machine word-friendly modulus
+        used in the Montgomery representation.
+        """
+        return log(self.R, 2)
+
 
 FIELDS = [
     Field(
-        "FieldPrio2, u128",
+        "FieldPrio2, u32",
         2 ^ 20 * 4095 + 1,
         3925978153,
-        2 ^ 64,
-        2 ^ 128,
-    ),
-    Field(
-        "Field64, u128",
-        2 ^ 32 * 4294967295 + 1,
-        pow(7, 4294967295, 2 ^ 32 * 4294967295 + 1),
-        2 ^ 64,
-        2 ^ 128,
+        2 ^ 32,
+        2 ^ 32,
     ),
     Field(
         "Field64, u64",
@@ -140,4 +146,6 @@ for field in FIELDS:
     print(f"bit_mask: {field.bit_mask()}")
     print("roots:")
     pprint.pprint(field.roots())
+    print(f"log2_base: {field.log2_base()}")
+    print(f"log2_radix: {field.log2_radix()}")
     print()
