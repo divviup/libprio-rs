@@ -287,7 +287,11 @@ Prio3SumVec
 \begin_inset Formula $\mathbb{F}_{p}$
 \end_inset
 
- be field of prime order over which Prio3 operates.
+ be field of prime order over which 
+\family typewriter
+Prio3
+\family default
+ operates.
  Noise is sampled from the discrete Laplace distribution 
 \begin_inset Formula $\mathrm{Lap}_{\mathbb{Z}}\left(\nicefrac{GS_{f}}{\varepsilon}\right)$
 \end_inset
@@ -347,11 +351,11 @@ Prio3SumVec
 
  be the natural extension to project vectors of integers into vectors of field elements.
  Let 
-\begin_inset Formula $q^{*}=f^{*}\left(x\right)\in\mathbb{F}_{p}^{d}$
+\begin_inset Formula $\vec{q}^{*}=f^{*}\left(x\right)\in\mathbb{F}_{p}^{d}$
 \end_inset
 
  be the element-wise projections of 
-\begin_inset Formula $q$
+\begin_inset Formula $\vec{q}$
 \end_inset
 
  and 
@@ -359,13 +363,17 @@ Prio3SumVec
 \end_inset
 
  into the field using 
-\begin_inset Formula $\pi_{\mathbb{F}_{p}}$
+\begin_inset Formula $\vec{\pi}_{\mathbb{F}_{p}}$
 \end_inset
 
 .
- The un-noised aggregate shares produced by Prio3 are secret shares of the query result,
+ The un-noised aggregate shares produced by 
+\family typewriter
+Prio3
+\family default
+ are secret shares of the query result,
  
-\begin_inset Formula $q^{*}=q^{\left(0\right)}+q^{\left(1\right)}$
+\begin_inset Formula $\vec{q}^{*}=\vec{q}^{\left(0\right)}+\vec{q}^{\left(1\right)}$
 \end_inset
 
 .
@@ -373,7 +381,7 @@ Prio3SumVec
  and then sends the sum as their aggregate share to the collector.
  If we pessimistically assume that only one honest aggregator out of the two aggregators is adding differential privacy noise,
  then the mechanism produces 
-\begin_inset Formula $\vec{M}\left(x\right)=q^{\left(0\right)}+q^{\left(1\right)}+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right)=q^{*}+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right)$
+\begin_inset Formula $\vec{M}\left(x\right)=\vec{q}^{\left(0\right)}+\vec{q}^{\left(1\right)}+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right)=\vec{q}^{*}+\vec{\pi}_{\mathbb{F}_{p}}\left(\vec{Z}\right)$
 \end_inset
 
 ,
@@ -540,7 +548,7 @@ Since each
 \begin_layout Proof
 By the definition of global sensitivity,
  we know 
-\begin_inset Formula $\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\le GS_{f}$
+\begin_inset Formula $\left\Vert \vec{q}-\vec{q}^{\prime}\right\Vert _{\ell_{1}}\le GS_{f}$
 \end_inset
 
 .
@@ -549,11 +557,11 @@ By the definition of global sensitivity,
 \end_inset
 
  distance between 
-\begin_inset Formula $q$
+\begin_inset Formula $\vec{q}$
 \end_inset
 
  and 
-\begin_inset Formula $q^{\prime}$
+\begin_inset Formula $\vec{q}^{\prime}$
 \end_inset
 
  by dimension,
@@ -677,14 +685,14 @@ e^{\frac{\varepsilon\left|\delta_{j}\right|}{GS_{f}}}\stackrel[k=-\infty]{\infty
 \begin_inset Formula 
 \begin{multline*}
 \stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}+kp\right|\right)\le\\
-\mathrm{exp}\left(\frac{\varepsilon}{GS_{f}}\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
+\mathrm{exp}\left(\frac{\varepsilon}{GS_{f}}\left\Vert \vec{q}-\vec{q}^{\prime}\right\Vert _{\ell_{1}}\right)\stackrel[j=1]{d}{\prod}\stackrel[k=-\infty]{\infty}{\sum}\mathrm{exp}\left(-\frac{\varepsilon}{GS_{f}}\left|\pi_{\mathbb{Z}}\left(y_{j}\right)-q_{j}^{\prime}+kp\right|\right)
 \end{multline*}
 
 \end_inset
 
 Then,
  since 
-\begin_inset Formula $\left\Vert q-q^{\prime}\right\Vert _{\ell_{1}}\le GS_{f}$
+\begin_inset Formula $\left\Vert \vec{q}-\vec{q}^{\prime}\right\Vert _{\ell_{1}}\le GS_{f}$
 \end_inset
 
 ,
@@ -811,7 +819,11 @@ Prio3SumVec
 
 \begin_layout Standard
 First,
- let the length parameter 
+ let the 
+\family typewriter
+length
+\family default
+ parameter of 
 \family typewriter
 Prio3Histogram
 \family default
@@ -867,12 +879,24 @@ scale
 \end_layout
 
 \begin_layout Standard
-Let the length parameter of Prio3SumVec be denoted by 
+Let the 
+\family typewriter
+length
+\family default
+ parameter of 
+\family typewriter
+Prio3SumVec
+\family default
+ be denoted by 
 \begin_inset Formula $l$
 \end_inset
 
 ,
- and the bits parameter be denoted by 
+ and the 
+\family typewriter
+bits
+\family default
+ parameter be denoted by 
 \begin_inset Formula $b$
 \end_inset
 
