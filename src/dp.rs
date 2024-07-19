@@ -36,6 +36,10 @@ pub enum DpError {
     /// Tried to convert BigInt into something incompatible.
     #[error("DP error: {0}")]
     BigIntConversion(#[from] TryFromBigIntError<BigInt>),
+
+    /// Invalid parameter value.
+    #[error("invalid parameter: {0}")]
+    InvalidParameter(String),
 }
 
 /// Positive arbitrary precision rational number to represent DP and noise distribution parameters in
@@ -95,12 +99,56 @@ impl ZCdpBudget {
     /// for a `rho`-ZCDP budget.
     ///
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
+    // TODO(#1095): This should be fallible, and it should return an error if epsilon is zero.
     pub fn new(epsilon: Rational) -> Self {
         Self { epsilon: epsilon.0 }
     }
 }
 
 impl DifferentialPrivacyBudget for ZCdpBudget {}
+
+/// Pure differential privacy budget. (&epsilon;-DP or (&epsilon;, 0)-DP)
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Ord, PartialOrd)]
+pub struct PureDpBudget {
+    epsilon: Ratio<BigUint>,
+}
+
+impl PureDpBudget {
+    /// Create a budget for parameter `epsilon`.
+    pub fn new(epsilon: Rational) -> Result<Self, DpError> {
+        if epsilon.0.numer() == &BigUint::ZERO {
+            return Err(DpError::InvalidParameter("epsilon cannot be zero".into()));
+        }
+        Ok(Self { epsilon: epsilon.0 })
+    }
+}
+
+impl DifferentialPrivacyBudget for PureDpBudget {}
+
+/// This module encapsulates a deserialization helper struct. It is needed so we can wrap its
+/// derived `Deserialize` implementation in a customized `Deserialize` implementation, which makes
+/// use of the budget's constructor to enforce input validation invariants.
+mod budget_serde {
+    use num_bigint::BigUint;
+    use num_rational::Ratio;
+    use serde::{de, Deserialize};
+
+    #[derive(Deserialize)]
+    pub struct PureDpBudget {
+        epsilon: Ratio<BigUint>,
+    }
+
+    impl<'de> Deserialize<'de> for super::PureDpBudget {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            let helper = PureDpBudget::deserialize(deserializer)?;
+            super::PureDpBudget::new(super::Rational(helper.epsilon))
+                .map_err(|_| de::Error::custom("epsilon cannot be zero"))
+        }
+    }
+}
 
 /// Strategy to make aggregate results differentially private, e.g. by adding noise from a specific
 /// type of distribution instantiated with a given DP budget.
@@ -126,3 +174,17 @@ pub trait DifferentialPrivacyStrategy {
 }
 
 pub mod distributions;
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::PureDpBudget;
+
+    #[test]
+    fn budget_deserialization() {
+        serde_json::from_value::<PureDpBudget>(json!({"epsilon": [[1], [1]]})).unwrap();
+        serde_json::from_value::<PureDpBudget>(json!({"epsilon": [[0], [1]]})).unwrap_err();
+        serde_json::from_value::<PureDpBudget>(json!({"epsilon": [[1], [0]]})).unwrap_err();
+    }
+}

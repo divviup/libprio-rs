@@ -60,7 +60,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     DifferentialPrivacyBudget, DifferentialPrivacyDistribution, DifferentialPrivacyStrategy,
-    DpError, ZCdpBudget,
+    DpError, PureDpBudget, ZCdpBudget,
 };
 
 /// Sample from the Bernoulli(gamma) distribution, where $gamma /leq 1$.
@@ -262,6 +262,8 @@ where
 }
 
 /// A DP strategy using the discrete gaussian distribution providing zero-concentrated DP.
+///
+/// This uses L2-sensitivity, with the substitution definition of neighboring datasets.
 pub type ZCdpDiscreteGaussian = DiscreteGaussianDpStrategy<ZCdpBudget>;
 
 impl DifferentialPrivacyStrategy for DiscreteGaussianDpStrategy<ZCdpBudget> {
@@ -284,6 +286,89 @@ impl DifferentialPrivacyStrategy for DiscreteGaussianDpStrategy<ZCdpBudget> {
         sensitivity: Ratio<BigUint>,
     ) -> Result<DiscreteGaussian, DpError> {
         DiscreteGaussian::new(sensitivity / self.budget.epsilon.clone())
+    }
+}
+
+/// Samples `BigInt` numbers according to the discrete Laplace distribution, with the given scale
+/// parameter. The distribution is defined over the integers, represented by arbitrary-precision
+/// integers. The sampling procedure follows [[CKS20]].
+///
+/// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
+pub struct DiscreteLaplace {
+    /// The scale parameter of the distribution.
+    scale: Ratio<BigUint>,
+}
+
+impl DiscreteLaplace {
+    /// Create a new sampler for the discrete Laplace distribution with the given scale parameter.
+    /// Returns an error if the scale parameter is zero or if it has a denominator of zero.
+    pub fn new(scale: Ratio<BigUint>) -> Result<Self, DpError> {
+        if scale.denom().is_zero() {
+            return Err(DpError::ZeroDenominator);
+        }
+        if scale.numer().is_zero() {
+            return Err(DpError::InvalidParameter(
+                "the scale of the discrete Laplace distribution must be nonzero".into(),
+            ));
+        }
+        Ok(Self { scale })
+    }
+}
+
+impl Distribution<BigInt> for DiscreteLaplace {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BigInt {
+        sample_discrete_laplace(&self.scale, rng)
+    }
+}
+
+impl DifferentialPrivacyDistribution for DiscreteLaplace {}
+
+/// A DP strategy using the discrete Laplace distribution.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Ord, PartialOrd)]
+pub struct DiscreteLaplaceDpStrategy<B>
+where
+    B: DifferentialPrivacyBudget,
+{
+    budget: B,
+}
+
+/// A DP strategy using the discrete Laplace distribution, providing pure DP.
+///
+/// This uses L1-sensitivity, with the substitution definition of neighboring datasets.
+pub type PureDpDiscreteLaplace = DiscreteLaplaceDpStrategy<PureDpBudget>;
+
+impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
+    type Budget = PureDpBudget;
+    type Distribution = DiscreteLaplace;
+    type Sensitivity = Ratio<BigUint>;
+
+    fn from_budget(budget: Self::Budget) -> Self {
+        DiscreteLaplaceDpStrategy { budget }
+    }
+
+    /// Create a new sampler for the discrete Laplace distribution with a scale parameter calibrated
+    /// to provide `epsilon`-differential privacy when added to the result of an integer-valued
+    /// function with L1-sensitivity `sensitivity`.
+    ///
+    /// A mechanism is defined for 1-dimensional query results in [[GRS12]], and restated in Lemma
+    /// 29 from [[CKS20]]. However, most VDAF instances will produce query results of higher
+    /// dimensions. Proposition 1 of [[DMNS06]] gives a mechanism for multidimensional queries using
+    /// the continuous Laplace distribution. In both cases, the scale parameter of the respective
+    /// distribution is set to the sensitivity divided by epsilon, and independent samples from the
+    /// distribution are added to each component of the query result. Intuitively, adding discrete
+    /// Laplace noise using this scale parameter to each vector element of the query result should
+    /// provide epsilon-DP, since continuous Laplce noise can be used in the multi-dimensional case,
+    /// and discrete and continuous Laplace noise provide the same pure DP with the same parameters
+    /// in the one-dimensional case.
+    ///
+    /// [GRS12]: https://theory.stanford.edu/~tim/papers/priv.pdf
+    /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
+    /// [DMNS06]: https://people.csail.mit.edu/asmith/PS/sensitivity-tcc-final.pdf
+    fn create_distribution(
+        &self,
+        sensitivity: Self::Sensitivity,
+    ) -> Result<Self::Distribution, DpError> {
+        DiscreteLaplace::new(sensitivity / &self.budget.epsilon)
     }
 }
 

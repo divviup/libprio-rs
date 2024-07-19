@@ -171,20 +171,20 @@
 
 pub mod compatible_float;
 
-use crate::dp::{distributions::ZCdpDiscreteGaussian, DifferentialPrivacyStrategy, DpError};
+use crate::dp::{distributions::ZCdpDiscreteGaussian, DifferentialPrivacyStrategy};
 use crate::field::{
     Field128, FieldElement, FieldElementWithInteger, FieldElementWithIntegerExt, Integer,
 };
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
+use crate::flp::types::dp::add_iid_noise_to_field_vec;
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::types::parallel_sum_range_checks;
 use crate::flp::{FlpError, Gadget, Type, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
 use fixed::traits::Fixed;
-use num_bigint::{BigInt, BigUint, TryFromBigIntError};
-use num_integer::Integer as _;
+use num_bigint::BigUint;
 use num_rational::Ratio;
-use rand::{distributions::Distribution, Rng};
+use rand::Rng;
 use rand_core::SeedableRng;
 use std::{convert::TryFrom, convert::TryInto, fmt::Debug, marker::PhantomData};
 
@@ -362,37 +362,12 @@ where
         // 0. Compute sensitivity of aggregation, namely 2^n.
         let sensitivity = BigUint::from(2u128).pow(self.bits_per_entry as u32);
         // Also create a BigInt containing the field modulus.
-        let modulus = BigInt::from(Field128::modulus());
 
         // 1. initialize sampler
         let sampler = dp_strategy.create_distribution(Ratio::from_integer(sensitivity))?;
 
         // 2. Generate noise for each slice entry and apply it.
-        for entry in agg_result.iter_mut() {
-            // (a) Generate noise.
-            let noise: BigInt = sampler.sample(rng);
-
-            // (b) Put noise into field.
-            //
-            // The noise is generated as BigInt, but has to fit into the Field128,
-            // which has modulus `Field128::modulus()`. Thus we use `BigInt::mod_floor()`
-            // to calculate `noise mod modulus`. This value fits into `u128`, and
-            // can be then put into the field.
-            //
-            // Note: we cannot use the operator `%` here, since it is not the mathematical
-            // modulus operation: for negative inputs and positive modulus it gives a
-            // negative result!
-            let noise: BigInt = noise.mod_floor(&modulus);
-            let noise: u128 = noise.try_into().map_err(|e: TryFromBigIntError<BigInt>| {
-                FlpError::DifferentialPrivacy(DpError::BigIntConversion(e))
-            })?;
-            let f_noise = Field128::from(Field128::valid_integer_try_from::<u128>(noise)?);
-
-            // (c) Apply noise to each entry of the aggregate share.
-            *entry += f_noise;
-        }
-
-        Ok(())
+        add_iid_noise_to_field_vec(agg_result, rng, &sampler)
     }
 }
 
