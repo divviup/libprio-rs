@@ -11,14 +11,14 @@
 
 use core::{
     iter::zip,
-    ops::{Add, AddAssign, BitXor, BitXorAssign, Index, Sub},
+    ops::{Add, AddAssign, BitAnd, BitXor, BitXorAssign, Index, Sub},
 };
 
 use bitvec::field::BitField;
 use rand_core::RngCore;
 use std::fmt::Debug;
 use std::io::{Cursor, Read};
-use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
+use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -46,7 +46,7 @@ pub enum VidpfError {
     #[error("level index out of bounds")]
     IndexLevel,
 
-    /// Error when input's length is larger than the maximum.
+    /// Error when input's length does not match the .
     #[error("invalid label length")]
     InvalidLabelLength,
 
@@ -217,6 +217,9 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         let mut share = W::zero(&self.weight_parameter);
 
         let n = input.len();
+        if n > public.cw.len() {
+            return Err(VidpfError::InvalidLabelLength);
+        }
         for level in 0..n {
             (state, share) = self.eval_next(key.id, public, input, level, &state, nonce)?;
         }
@@ -400,9 +403,7 @@ impl Encode for VidpfKey {
             VidpfServerId::S0 => 0u8,
             VidpfServerId::S1 => 1u8,
         });
-        for byte in self.value {
-            byte.encode(bytes)?
-        }
+        bytes.extend_from_slice(&self.value[..]);
         Ok(())
     }
 
@@ -445,6 +446,24 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     left_control_bit: Choice,
     right_control_bit: Choice,
     weight: W,
+}
+
+impl<W: VidpfValue> PartialEq for VidpfCorrectionWord<W> {
+    fn eq(&self, other: &VidpfCorrectionWord<W>) -> bool {
+        let seed_and_weight_equal = if self.seed == other.seed && self.weight == other.weight {
+            1
+        } else {
+            0
+        };
+
+        0 == u8::conditional_select(
+            &seed_and_weight_equal,
+            &0,
+            self.left_control_bit
+                .ct_eq(&other.left_control_bit)
+                .bitand(self.right_control_bit.ct_eq(&other.right_control_bit)),
+        )
+    }
 }
 
 impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWord<W> {
@@ -497,7 +516,7 @@ impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
 }
 
 /// Common public information used by aggregation servers.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct VidpfPublicShare<W: VidpfValue> {
     cw: Vec<VidpfCorrectionWord<W>>,
     cs: Vec<VidpfProof>,

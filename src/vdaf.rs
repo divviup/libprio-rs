@@ -71,6 +71,11 @@ pub enum VdafError {
     #[error("vidpf error: {0}")]
     Vidpf(#[from] VidpfError),
 
+    /// Mastic error.
+    #[cfg(all(feature = "crypto_dependencies", feature = "experimental"))]
+    #[error("mastic error: {0}")]
+    Mastic(#[from] MasticError),
+
     /// Errors from other VDAFs.
     #[error(transparent)]
     Other(Box<dyn Error + 'static + Send + Sync>),

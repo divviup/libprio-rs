@@ -269,16 +269,14 @@ impl Encode for u64 {
         Some(8)
     }
 }
-impl<D: Decode, const SIZE: usize> Decode for [D; SIZE] {
+
+impl<D: Decode + std::fmt::Debug, const SIZE: usize> Decode for [D; SIZE] {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let mut v = Vec::with_capacity(SIZE);
         for _ in 0..SIZE {
             v.push(D::decode(bytes)?);
         }
-        match v.try_into() {
-            Ok(a) => Ok(a),
-            Err(_) => unreachable!("If the above for loop completes, then the vector will always contain exactly BUFFER_SIZE elements."),
-        }
+        Ok(v.try_into().expect("If the above for loop completes, then the vector will always contain exactly BUFFER_SIZE elements."))
     }
 }
 

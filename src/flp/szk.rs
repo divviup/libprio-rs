@@ -60,7 +60,7 @@ pub enum SzkError {
 
 /// Contains an FLP proof share, and if joint randomness is needed, the blind
 /// used to derive it and the other party's joint randomness part.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum SzkProofShare<F, const SEED_SIZE: usize> {
     /// Leader's proof share is uncompressed.
     Leader {
@@ -80,26 +80,34 @@ pub enum SzkProofShare<F, const SEED_SIZE: usize> {
     },
 }
 
-impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(usize, usize, bool)>
+impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize, bool)>
     for SzkProofShare<F, SEED_SIZE>
 {
     fn decode_with_param(
-        (role, bits, is_random): &(usize, usize, bool),
+        (is_leader, proof_len, requires_joint_rand): &(bool, usize, bool),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        match role {
-            0 => Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<F>::decode_with_param(bits, bytes)?,
-                leader_blind_and_helper_joint_rand_part_opt: is_random.then_some((
-                    Seed::<SEED_SIZE>::decode(bytes)?,
-                    Seed::<SEED_SIZE>::decode(bytes)?,
-                )),
-            }),
-            1 => Ok(SzkProofShare::Helper {
+        if *is_leader {
+            Ok(SzkProofShare::Leader {
+                uncompressed_proof_share: Vec::<F>::decode_with_param(proof_len, bytes)?,
+                leader_blind_and_helper_joint_rand_part_opt: if *requires_joint_rand {
+                    Some((
+                        Seed::<SEED_SIZE>::decode(bytes)?,
+                        Seed::<SEED_SIZE>::decode(bytes)?,
+                    ))
+                } else {
+                    None
+                },
+            })
+        } else {
+            Ok(SzkProofShare::Helper {
                 proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: is_random.then_some(Seed::<SEED_SIZE>::decode(bytes)?),
-            }),
-            _ => Err(CodecError::UnexpectedValue),
+                leader_joint_rand_part_opt: if *requires_joint_rand {
+                    Some(Seed::<SEED_SIZE>::decode(bytes)?)
+                } else {
+                    None
+                },
+            })
         }
     }
 }
@@ -162,34 +170,6 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
     }
 }
 
-impl<F: PartialEq, const SEED_SIZE: usize> PartialEq for SzkProofShare<F, SEED_SIZE> {
-    fn eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> bool {
-        match (self, other) {
-            (
-                SzkProofShare::Leader {
-                    uncompressed_proof_share: self_share,
-                    leader_blind_and_helper_joint_rand_part_opt: self_opt,
-                },
-                SzkProofShare::Leader {
-                    uncompressed_proof_share: other_share,
-                    leader_blind_and_helper_joint_rand_part_opt: other_opt,
-                },
-            ) => self_share == other_share && self_opt == other_opt,
-            (
-                SzkProofShare::Helper {
-                    proof_share_seed_and_blind: self_seed,
-                    leader_joint_rand_part_opt: self_opt,
-                },
-                SzkProofShare::Helper {
-                    proof_share_seed_and_blind: other_seed,
-                    leader_joint_rand_part_opt: other_opt,
-                },
-            ) => self_seed == other_seed && self_opt == other_opt,
-            _ => false,
-        }
-    }
-}
-
 /// A tuple containing the state and messages produced by an SZK query.
 #[cfg(test)]
 #[derive(Clone)]
@@ -197,6 +177,7 @@ pub(crate) struct SzkQueryShare<F, const SEED_SIZE: usize> {
     joint_rand_part: Option<Seed<SEED_SIZE>>,
     verifier: SzkVerifier<F>,
 }
+
 #[cfg(test)]
 /// The state that needs to be stored by an Szk verifier between query() and decide()
 pub(crate) struct SzkQueryState<const SEED_SIZE: usize> {
@@ -216,7 +197,7 @@ where
     P: Xof<SEED_SIZE>,
 {
     /// The Type representing the specific FLP system used to prove validity of an input.
-    pub typ: T,
+    typ: T,
     algorithm_id: u32,
     phantom: PhantomData<P>,
 }
@@ -241,6 +222,10 @@ where
             algorithm_id,
             phantom: PhantomData,
         }
+    }
+
+    pub(crate) fn typ(&self) -> &T {
+        &self.typ
     }
 
     fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
@@ -325,6 +310,7 @@ where
         .take(self.typ.proof_len())
         .collect()
     }
+
     #[cfg(test)]
     fn derive_query_rand(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
@@ -540,7 +526,8 @@ mod tests {
     use crate::{
         field::Field128,
         field::{random_vector, FieldElementWithInteger},
-        flp::types::{Count, Sum},
+        flp::gadgets::{Mul, ParallelSum},
+        flp::types::{Count, Sum, SumVec},
         flp::Type,
     };
     use rand::{thread_rng, Rng};
@@ -723,7 +710,7 @@ mod tests {
     }
 
     #[test]
-    fn test_proof_share_encode() {
+    fn test_sum_proof_share_encode() {
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(5).unwrap();
@@ -757,7 +744,76 @@ mod tests {
     }
 
     #[test]
-    fn test_leader_proof_share_roundtrip() {
+    fn test_sumvec_proof_share_encode() {
+        let mut nonce = [0u8; 16];
+        thread_rng().fill(&mut nonce[..]);
+        let sumvec =
+            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
+        let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(sumvec, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [l_proof_share, _] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
+
+        assert_eq!(
+            l_proof_share.encoded_len().unwrap(),
+            l_proof_share.get_encoded().unwrap().len()
+        );
+    }
+
+    #[test]
+    fn test_count_proof_share_encode() {
+        let mut nonce = [0u8; 16];
+        thread_rng().fill(&mut nonce[..]);
+        let count = Count::<Field128>::new();
+        let encoded_measurement = count.encode_measurement(&true).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(count, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [l_proof_share, _] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
+
+        assert_eq!(
+            l_proof_share.encoded_len().unwrap(),
+            l_proof_share.get_encoded().unwrap().len()
+        );
+    }
+
+    #[test]
+    fn test_sum_leader_proof_share_roundtrip() {
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(5).unwrap();
@@ -784,17 +840,16 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (0, szk_typ.proof_len(), true);
-        let mut bytes = vec![];
-        l_proof_share.encode(&mut bytes).unwrap();
+        let decoding_parameter = (true, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let encoded_proof_share = l_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
-            SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes))
+            SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
                 .unwrap();
         assert_eq!(l_proof_share, decoded_proof_share);
     }
 
     #[test]
-    fn test_helper_proof_share_roundtrip() {
+    fn test_sum_helper_proof_share_roundtrip() {
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(5).unwrap();
@@ -821,14 +876,160 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (1, szk_typ.proof_len(), true);
-        let mut bytes = vec![];
-        h_proof_share.encode(&mut bytes).unwrap();
+        let decoding_parameter = (false, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let encoded_proof_share = h_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
-            SzkProofShare::decode_with_param(&decoding_parameter, &mut Cursor::new(&bytes))
+            SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
                 .unwrap();
         assert_eq!(h_proof_share, decoded_proof_share);
     }
+
+    #[test]
+    fn test_count_leader_proof_share_roundtrip() {
+        let mut nonce = [0u8; 16];
+        thread_rng().fill(&mut nonce[..]);
+        let count = Count::<Field128>::new();
+        let encoded_measurement = count.encode_measurement(&true).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(count, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = None;
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [l_proof_share, _] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
+
+        let decoding_parameter = (true, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let encoded_proof_share = l_proof_share.get_encoded().unwrap();
+        let decoded_proof_share =
+            SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
+                .unwrap();
+        assert_eq!(l_proof_share, decoded_proof_share);
+    }
+
+    #[test]
+    fn test_count_helper_proof_share_roundtrip() {
+        let mut nonce = [0u8; 16];
+        thread_rng().fill(&mut nonce[..]);
+        let count = Count::<Field128>::new();
+        let encoded_measurement = count.encode_measurement(&true).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(count, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = None;
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [_, h_proof_share] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
+
+        let decoding_parameter = (false, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let encoded_proof_share = h_proof_share.get_encoded().unwrap();
+        let decoded_proof_share =
+            SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
+                .unwrap();
+        assert_eq!(h_proof_share, decoded_proof_share);
+    }
+
+    #[test]
+    fn test_sumvec_leader_proof_share_roundtrip() {
+        let mut nonce = [0u8; 16];
+        thread_rng().fill(&mut nonce[..]);
+        let sumvec =
+            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
+        let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(sumvec, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [l_proof_share, _] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
+
+        let decoding_parameter = (true, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let encoded_proof_share = l_proof_share.get_encoded().unwrap();
+        let decoded_proof_share =
+            SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
+                .unwrap();
+        assert_eq!(l_proof_share, decoded_proof_share);
+    }
+
+    #[test]
+    fn test_sumvec_helper_proof_share_roundtrip() {
+        let mut nonce = [0u8; 16];
+        thread_rng().fill(&mut nonce[..]);
+        let sumvec =
+            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
+        let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
+        let algorithm_id = 5;
+        let szk_typ = Szk::new_turboshake128(sumvec, algorithm_id);
+        let prove_rand_seed = Seed::<16>::generate().unwrap();
+        let helper_seed = Seed::<16>::generate().unwrap();
+        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let mut leader_input_share = encoded_measurement.clone().to_owned();
+        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
+            *x -= *y;
+        }
+
+        let [_, h_proof_share] = szk_typ
+            .prove(
+                &leader_input_share,
+                &helper_input_share,
+                &encoded_measurement[..],
+                [prove_rand_seed, helper_seed],
+                leader_seed_opt,
+                &nonce,
+            )
+            .unwrap();
+
+        let decoding_parameter = (false, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let encoded_proof_share = h_proof_share.get_encoded().unwrap();
+        let decoded_proof_share =
+            SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
+                .unwrap();
+        assert_eq!(h_proof_share, decoded_proof_share);
+    }
+
     #[test]
     fn test_sum() {
         let sum = Sum::<Field128>::new(5).unwrap();
@@ -838,6 +1039,18 @@ mod tests {
         let bad_encoding = &vec![five; sum.input_len()];
         generic_szk_test(sum.clone(), &nine, true);
         generic_szk_test(sum, bad_encoding, false);
+    }
+
+    #[test]
+    fn test_sumvec() {
+        let sumvec =
+            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
+
+        let five = Field128::from(5);
+        let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
+        let bad_encoding = &vec![five; sumvec.input_len()];
+        generic_szk_test(sumvec.clone(), &encoded_measurement, true);
+        generic_szk_test(sumvec, bad_encoding, false);
     }
 
     #[test]
