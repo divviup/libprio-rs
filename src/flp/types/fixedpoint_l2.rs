@@ -91,15 +91,20 @@
 //! ### Norm computation
 //!
 //! The L2 norm of a vector xs of numbers in `[-1,1)` is given by:
+//!
 //! ```text
 //! norm(xs) = sqrt(sum_{x in xs} x^2)
 //! ```
+//!
 //! Instead of computing the norm, we make two simplifications:
+//!
 //! 1. We ignore the square root, which means that we are actually computing
 //!    the square of the norm.
 //! 2. We want our norm computation result to be integral and in the range `[0, 2^(2n-2))`,
 //!    so we can represent it in our field integers. We achieve this by multiplying with `2^(2n-2)`.
+//!
 //! This means that what is actually computed in this type is the following:
+//!
 //! ```text
 //! our_norm(xs) = 2^(2n-2) * norm(xs)^2
 //! ```
@@ -113,11 +118,13 @@
 //!                                         |                      |
 //!                     fractions with denom of 2^(n-1)     fractions with denom of 2^(2n-2)
 //! ```
+//!
 //! (Note that the ranges on the LHS and RHS of `"mult with 2^(2n-2)"` are stated
 //! here for vectors with a norm less than `1`.)
 //!
 //! Given a vector `ys` of numbers in the field integer encoding (in `[0,2^n)`),
 //! this gives the following equation:
+//!
 //! ```text
 //! our_norm_on_encoded(ys) = our_norm([dec(y) for y in ys])
 //!                         = 2^(2n-2) * sum_{y in ys} ((y - 2^(n-1)) * 2^(1-n))^2
@@ -133,9 +140,11 @@
 //! finite field used for encoding must be at least as large as this.
 //! For validating that the norm of the submitted vector lies in the correct
 //! range, consider the following:
+//!
 //!  - The result of `norm(xs)` should be in `[0,1)`.
 //!  - Thus, the result of `our_norm(xs)` should be in `[0,2^(2n-2))`.
 //!  - The result of `our_norm_on_encoded(ys)` should be in `[0,2^(2n-2))`.
+//!
 //! This means that the valid norms are exactly those representable with `2n-2`
 //! bits.
 //!

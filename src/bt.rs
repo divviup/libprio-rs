@@ -102,7 +102,7 @@ impl<V> Node<V> {
     /// # Returns
     /// - `Ok(())` when the node is inserted at the end of the path.
     /// - `Err(InsertNonEmptyNode(value))` when the subtree already contains a
-    /// value at the end of the path.
+    ///   value at the end of the path.
     /// - `Err(UnreachablePath(value))` when the end of the path is unreachable.
     ///
     /// In the error cases, no insertion occurs and the value is returned to
@@ -195,7 +195,7 @@ impl<V> BinaryTree<V> {
     /// # Returns
     /// - `Ok(())` when the node is inserted at the end of the path.
     /// - `Err(InsertNonEmptyNode(value))` when the tree already contains a
-    /// value at the end of the path.
+    ///   value at the end of the path.
     /// - `Err(UnreachablePath(value))` when the end of the path is unreachable.
     ///
     /// In the error cases, no insertion occurs and the value is returned to
