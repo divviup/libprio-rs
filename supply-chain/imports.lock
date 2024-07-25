@@ -142,15 +142,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "1.0.61"
-when = "2024-05-17"
+version = "1.0.63"
+when = "2024-07-17"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "1.0.61"
-when = "2024-05-17"
+version = "1.0.63"
+when = "2024-07-17"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -404,12 +404,6 @@ aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust
 who = "ChromeOS"
 criteria = "safe-to-run"
 version = "0.10.5"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
-[[audits.google.audits.lazy_static]]
-who = "Android Legacy"
-criteria = "safe-to-run"
-version = "1.4.0"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.same-file]]
