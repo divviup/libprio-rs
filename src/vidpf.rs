@@ -11,7 +11,11 @@
 
 use core::{
     iter::zip,
+<<<<<<< HEAD
     ops::{Add, AddAssign, BitAnd, BitXor, BitXorAssign, Index, Sub},
+=======
+    ops::{Add, AddAssign, BitAndAssign, BitXor, BitXorAssign, Index, Not, Sub},
+>>>>>>> 2f6051e (constanttimeeq for Vidpf correction words)
 };
 
 use bitvec::field::BitField;
@@ -63,7 +67,7 @@ pub enum VidpfError {
 pub type VidpfInput = IdpfInput;
 
 /// Represents the codomain of an incremental point function.
-pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq {}
+pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 
 #[derive(Clone, Debug)]
 /// A VIDPF instance.
@@ -448,9 +452,34 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     weight: W,
 }
 
-impl<W: VidpfValue> PartialEq for VidpfCorrectionWord<W> {
-    fn eq(&self, other: &VidpfCorrectionWord<W>) -> bool {
-        let seed_and_weight_equal = if self.seed == other.seed && self.weight == other.weight {
+impl<W: VidpfValue> ConstantTimeEq for VidpfCorrectionWord<W> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        self.seed.ct_eq(&other.seed)
+            & self.left_control_bit.ct_eq(&other.left_control_bit)
+            & self.right_control_bit.ct_eq(&other.right_control_bit)
+            & self.weight.ct_eq(&other.weight)
+    }
+}
+
+impl<W: VidpfValue> PartialEq for VidpfCorrectionWord<W>
+where
+    W: ConstantTimeEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.ct_eq(other).into()
+    }
+}
+
+impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        bytes.extend_from_slice(&self.seed);
+        let both_control_bits = if bool::from(self.left_control_bit) {
+            if bool::from(self.right_control_bit) {
+                3
+            } else {
+                2
+            }
+        } else if bool::from(self.right_control_bit) {
             1
         } else {
             0
@@ -488,30 +517,6 @@ impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWo
             right_control_bit,
             weight,
         })
-    }
-}
-
-impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.extend_from_slice(&self.seed);
-        let both_control_bits = if bool::from(self.left_control_bit) {
-            if bool::from(self.right_control_bit) {
-                3
-            } else {
-                2
-            }
-        } else if bool::from(self.right_control_bit) {
-            1
-        } else {
-            0
-        };
-        bytes.push(both_control_bits);
-        self.weight.encode(bytes)?;
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        Some(17 + self.weight.encoded_len()?)
     }
 }
 
@@ -716,6 +721,20 @@ impl<F: FieldElement> Sub for VidpfWeight<F> {
         );
 
         Self(zip(self.0, rhs.0).map(|(a, b)| a.sub(b)).collect())
+    }
+}
+
+impl<F: FieldElement> ConstantTimeEq for VidpfWeight<F> {
+    fn ct_eq(&self, other: &Self) -> Choice {
+        let mut out = self.0.len().ct_eq(&other.0.len());
+        for (a, o) in self.0.iter().zip(other.0.iter()) {
+            out.bitand_assign(a.ct_eq(o));
+        }
+        out
+    }
+
+    fn ct_ne(&self, other: &Self) -> Choice {
+        self.ct_eq(other).not()
     }
 }
 
