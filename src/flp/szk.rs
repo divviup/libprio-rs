@@ -80,38 +80,6 @@ pub enum SzkProofShare<F, const SEED_SIZE: usize> {
     },
 }
 
-impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize, bool)>
-    for SzkProofShare<F, SEED_SIZE>
-{
-    fn decode_with_param(
-        (is_leader, proof_len, requires_joint_rand): &(bool, usize, bool),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        if *is_leader {
-            Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<F>::decode_with_param(proof_len, bytes)?,
-                leader_blind_and_helper_joint_rand_part_opt: if *requires_joint_rand {
-                    Some((
-                        Seed::<SEED_SIZE>::decode(bytes)?,
-                        Seed::<SEED_SIZE>::decode(bytes)?,
-                    ))
-                } else {
-                    None
-                },
-            })
-        } else {
-            Ok(SzkProofShare::Helper {
-                proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: if *requires_joint_rand {
-                    Some(Seed::<SEED_SIZE>::decode(bytes)?)
-                } else {
-                    None
-                },
-            })
-        }
-    }
-}
-
 impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
@@ -166,6 +134,40 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
                         0
                     },
             ),
+        }
+    }
+}
+
+impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize, bool)>
+    for SzkProofShare<F, SEED_SIZE>
+{
+    fn decode_with_param(
+        (is_leader, proof_len, requires_joint_rand): &(bool, usize, bool),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        if *is_leader {
+            Ok(SzkProofShare::Leader {
+                uncompressed_proof_share: Vec::<F>::decode_with_param(proof_len, bytes)?,
+                leader_blind_and_helper_joint_rand_part_opt: requires_joint_rand
+                    .then(
+                        || -> Result<(Seed<SEED_SIZE>, Seed<SEED_SIZE>), CodecError> {
+                            Ok((
+                                Seed::<SEED_SIZE>::decode(bytes)?,
+                                Seed::<SEED_SIZE>::decode(bytes)?,
+                            ))
+                        },
+                    )
+                    .transpose()?,
+            })
+        } else {
+            Ok(SzkProofShare::Helper {
+                proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
+                leader_joint_rand_part_opt: requires_joint_rand
+                    .then(|| -> Result<Seed<SEED_SIZE>, CodecError> {
+                        Seed::<SEED_SIZE>::decode(bytes)
+                    })
+                    .transpose()?,
+            })
         }
     }
 }

@@ -11,11 +11,7 @@
 
 use core::{
     iter::zip,
-<<<<<<< HEAD
-    ops::{Add, AddAssign, BitAnd, BitXor, BitXorAssign, Index, Sub},
-=======
     ops::{Add, AddAssign, BitAndAssign, BitXor, BitXorAssign, Index, Not, Sub},
->>>>>>> 2f6051e (constanttimeeq for Vidpf correction words)
 };
 
 use bitvec::field::BitField;
@@ -419,7 +415,11 @@ impl Encode for VidpfKey {
 impl PartialEq for VidpfKey {
     fn eq(&self, other: &VidpfKey) -> bool {
         if self.id == other.id {
-            return self.value == other.value;
+            return self
+                .value
+                .iter()
+                .zip(other.value.iter())
+                .all(|(s, o)| *s == *o);
         };
         false
     }
@@ -475,7 +475,7 @@ impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
         bytes.extend_from_slice(&self.seed);
         let both_control_bits = if bool::from(self.left_control_bit) {
             if bool::from(self.right_control_bit) {
-                3
+                3u8
             } else {
                 2
             }
@@ -484,14 +484,9 @@ impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
         } else {
             0
         };
-
-        0 == u8::conditional_select(
-            &seed_and_weight_equal,
-            &0,
-            self.left_control_bit
-                .ct_eq(&other.left_control_bit)
-                .bitand(self.right_control_bit.ct_eq(&other.right_control_bit)),
-        )
+        bytes.extend_from_slice(&[both_control_bits]);
+        self.weight.encode(bytes)?;
+        Ok(())
     }
 }
 
@@ -631,9 +626,9 @@ impl<F: FieldElement> From<Vec<F>> for VidpfWeight<F> {
     }
 }
 
-impl<F: FieldElement> VidpfWeight<F> {
-    pub(crate) fn as_slice(&self) -> &[F] {
-        &self.0[..]
+impl<F: FieldElement> AsRef<[F]> for VidpfWeight<F> {
+    fn as_ref(&self) -> &[F] {
+        &self.0
     }
 }
 

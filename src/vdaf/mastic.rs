@@ -313,9 +313,9 @@ where
                 .share;
 
         let szk_proof_shares = self.szk.prove(
-            leader_measurement_share.as_slice(),
-            helper_measurement_share.as_slice(),
-            measurement_weight.as_slice(),
+            leader_measurement_share.as_ref(),
+            helper_measurement_share.as_ref(),
+            measurement_weight.as_ref(),
             szk_random,
             opt_random,
             nonce,
@@ -377,7 +377,7 @@ where
         ];
 
         let encoded_measurement = self.encode_measurement(&measurement.1)?;
-        if encoded_measurement.as_slice().len() != *self.vidpf().weight_parameter() {
+        if encoded_measurement.as_ref().len() != *self.vidpf.weight_parameter() {
             return Err(VdafError::Uncategorized(
                 "encoded_measurement is wrong length".to_string(),
             ));
