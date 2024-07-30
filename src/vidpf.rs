@@ -46,9 +46,10 @@ pub enum VidpfError {
     #[error("level index out of bounds")]
     IndexLevel,
 
-    /// Error when input's length does not match the .
-    #[error("invalid label length")]
-    InvalidLabelLength,
+    /// Error when input attribute has too few or many bits to be a path in an initialized
+    /// VIDPF tree.
+    #[error("invalid attribute length")]
+    InvalidAttributeLength,
 
     /// Error when weight's length mismatches the length in weight's parameter.
     #[error("invalid weight length")]
@@ -114,7 +115,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
     /// [`Vidpf::gen_with_keys`] works as the [`Vidpf::gen`] method, except that two different
     /// keys must be provided.
-    pub fn gen_with_keys(
+    pub(crate) fn gen_with_keys(
         &self,
         keys: &[VidpfKey; 2],
         input: &VidpfInput,
@@ -213,7 +214,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
         let n = input.len();
         if n > public.cw.len() {
-            return Err(VidpfError::InvalidLabelLength);
+            return Err(VidpfError::InvalidAttributeLength);
         }
         for level in 0..n {
             (state, share) = self.eval_next(key.id, public, input, level, &state, nonce)?;
@@ -348,6 +349,8 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     }
 }
 
+/// Vidpf domain separation tag
+///
 /// Contains the domain separation tags for invoking different oracles.
 struct VidpfDomainSepTag;
 impl VidpfDomainSepTag {
@@ -358,6 +361,8 @@ impl VidpfDomainSepTag {
 }
 
 #[derive(Clone, Debug)]
+/// Vidpf key
+///
 /// Private key of an aggregation server.
 pub struct VidpfKey {
     id: VidpfServerId,
@@ -423,6 +428,8 @@ impl PartialEq for VidpfKey {
     }
 }
 
+/// Vidpf server ID
+///
 /// Identifies the two aggregation servers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum VidpfServerId {
@@ -441,7 +448,9 @@ impl From<VidpfServerId> for Choice {
     }
 }
 
-/// Adjusts values of shares during the VIDPF evaluation.
+/// Vidpf correction word
+///
+///  Adjusts values of shares during the VIDPF evaluation.
 #[derive(Clone, Debug)]
 struct VidpfCorrectionWord<W: VidpfValue> {
     seed: VidpfSeed,
@@ -482,9 +491,13 @@ impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
         } else {
             0
         };
-        bytes.extend_from_slice(&[both_control_bits]);
+        bytes.push(both_control_bits);
         self.weight.encode(bytes)?;
         Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(17 + self.weight.encoded_len()?)
     }
 }
 
@@ -513,31 +526,13 @@ impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWo
     }
 }
 
+/// Vidpf public share
+///
 /// Common public information used by aggregation servers.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VidpfPublicShare<W: VidpfValue> {
     cw: Vec<VidpfCorrectionWord<W>>,
     cs: Vec<VidpfProof>,
-}
-
-impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
-    fn decode_with_param(
-        (bits, weight_parameter): &(usize, W::ValueParameter),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
-        let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
-        for _ in 0..*bits {
-            cw.push(VidpfCorrectionWord::<W>::decode_with_param(
-                weight_parameter,
-                bytes,
-            )?);
-        }
-        for _ in 0..*bits {
-            cs.push(VidpfProof::decode(bytes)?);
-        }
-        Ok(Self { cw, cs })
-    }
 }
 
 impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
@@ -562,6 +557,29 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
         Some(total)
     }
 }
+
+impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
+    fn decode_with_param(
+        (bits, weight_parameter): &(usize, W::ValueParameter),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
+        let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
+        for _ in 0..*bits {
+            cw.push(VidpfCorrectionWord::<W>::decode_with_param(
+                weight_parameter,
+                bytes,
+            )?);
+        }
+        for _ in 0..*bits {
+            cs.push(VidpfProof::decode(bytes)?);
+        }
+        Ok(Self { cw, cs })
+    }
+}
+
+/// Vidpf evaluation state
+///
 /// Contains the values produced during input evaluation at a given level.
 pub struct VidpfEvalState {
     seed: VidpfSeed,

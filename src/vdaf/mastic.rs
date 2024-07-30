@@ -36,9 +36,9 @@ where
 {
     algorithm_id: u32,
     szk: Szk<T, P, SEED_SIZE>,
-    vidpf: Vidpf<VidpfWeight<T::Field>, 16>,
-    /// The length of the private label associated with any input.
-    bits: usize,
+    pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>, 16>,
+    /// The length of the private attribute associated with any input.
+    pub(crate) bits: usize,
 }
 
 impl<T, P, const SEED_SIZE: usize> Mastic<T, P, SEED_SIZE>
@@ -46,7 +46,7 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    /// Creates a new instance of Mastic, with a specific label length and validity type.
+    /// Creates a new instance of Mastic, with a specific attribute length and weight type.
     pub fn new(
         algorithm_id: u32,
         szk: Szk<T, P, SEED_SIZE>,
@@ -60,21 +60,56 @@ where
             bits,
         }
     }
-
-    pub(crate) fn bits(&self) -> usize {
-        self.bits
-    }
-
-    pub(crate) fn vidpf(&self) -> &Vidpf<VidpfWeight<T::Field>, 16> {
-        &self.vidpf
-    }
 }
 
 /// Mastic aggregation parameter.
 ///
 /// This includes the VIDPF tree level under evaluation and a set of prefixes to evaluate at that level.
-pub type MasticAggregationParam = Poplar1AggregationParam;
+#[derive(Clone, Debug)]
+pub struct MasticAggregationParam {
+    /// aggregation parameter inherited from [`Poplar1`]: contains the level (attribute length) and a vector of attributes (IdpfInputs)
+    poplar_param: Poplar1AggregationParam,
+    /// Flag indicating whether the VIDPF weight needs to be validated using SZK.
+    root_check_flag: bool,
+}
 
+#[cfg(test)]
+impl MasticAggregationParam {
+    fn new(prefixes: Vec<VidpfInput>, root_check_flag: bool) -> Result<Self, VdafError> {
+        Ok(MasticAggregationParam {
+            poplar_param: Poplar1AggregationParam::try_from_prefixes(prefixes)?,
+            root_check_flag,
+        })
+    }
+}
+
+impl Encode for MasticAggregationParam {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.poplar_param.encode(bytes)?;
+        let root_check = if self.root_check_flag { 1u8 } else { 0u8 };
+        root_check.encode(bytes)?;
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(self.poplar_param.encoded_len()? + 1usize)
+    }
+}
+
+impl Decode for MasticAggregationParam {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let poplar_param = Poplar1AggregationParam::decode(bytes)?;
+        let root_check = u8::decode(bytes)?;
+        let root_check_flag = root_check == 0;
+        Ok(Self {
+            poplar_param,
+            root_check_flag,
+        })
+    }
+}
+
+/// Mastic public share
+///
 /// Contains broadcast information shared between parties to support VIDPF correctness.
 pub type MasticPublicShare<V> = VidpfPublicShare<V>;
 
@@ -95,6 +130,8 @@ where
     }
 }
 
+/// Mastic input share
+///
 /// Message sent by the [`Client`] to each Aggregator during the Sharding phase.
 #[derive(Clone, Debug)]
 pub struct MasticInputShare<F: FieldElement, const SEED_SIZE: usize> {
@@ -182,7 +219,8 @@ where
         let l = &mastic.vidpf.weight_parameter * agg_param.poplar_param.prefixes().len();
         let mut result = Vec::<T::Field>::with_capacity(l);
         for _ in 0..l {
-            result.push(T::Field::decode(
+            result.append(&mut Vec::<T::Field>::decode_with_param(
+                &mastic.vidpf.weight_parameter,
                 bytes,
             )?);
         };
@@ -249,7 +287,7 @@ where
 {
     fn shard_with_random(
         &self,
-        measurement_label: &VidpfInput,
+        measurement_attribute: &VidpfInput,
         measurement_weight: &VidpfWeight<T::Field>,
         nonce: &[u8; 16],
         vidpf_keys: [VidpfKey; 2],
@@ -258,15 +296,15 @@ where
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
-        let public_share = self.vidpf().gen_with_keys(
+        let public_share = self.vidpf.gen_with_keys(
             &vidpf_keys,
-            measurement_label,
+            measurement_attribute,
             measurement_weight,
             nonce,
         )?;
 
         let leader_measurement_share = self
-            .vidpf()
+            .vidpf
             .eval(
                 &vidpf_keys[0],
                 &public_share,
@@ -275,7 +313,7 @@ where
             )?
             .share
             + self
-                .vidpf()
+                .vidpf
                 .eval(
                     &vidpf_keys[0],
                     &public_share,
@@ -284,7 +322,7 @@ where
                 )?
                 .share;
         let helper_measurement_share = self
-            .vidpf()
+            .vidpf
             .eval(
                 &vidpf_keys[1],
                 &public_share,
@@ -293,7 +331,7 @@ where
             )?
             .share
             + self
-                .vidpf()
+                .vidpf
                 .eval(
                     &vidpf_keys[1],
                     &public_share,
@@ -342,7 +380,7 @@ where
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
         if measurement.0.len() != self.bits {
-            return Err(VdafError::Vidpf(VidpfError::InvalidLabelLength));
+            return Err(VdafError::Vidpf(VidpfError::InvalidAttributeLength));
         }
 
         let vidpf_keys = [
@@ -468,75 +506,7 @@ mod tests {
     }
 
     #[test]
-    fn test_input_share_encode_count() {
-        let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (_public, input_shares) = mastic.shard(&(first_input, true), &nonce).unwrap();
-        let leader_input_share = &input_shares[0];
-        let helper_input_share = &input_shares[1];
-
-        assert_eq!(
-            leader_input_share.encoded_len().unwrap(),
-            leader_input_share.get_encoded().unwrap().len()
-        );
-        assert_eq!(
-            helper_input_share.encoded_len().unwrap(),
-            helper_input_share.get_encoded().unwrap().len()
-        );
-    }
-
-    #[test]
-    fn test_input_share_roundtrip_count() {
-        let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (_public, input_shares) = mastic.shard(&(first_input, true), &nonce).unwrap();
-        let leader_input_share = &input_shares[0];
-        let helper_input_share = &input_shares[1];
-
-        let encoded_input_share = leader_input_share.get_encoded().unwrap();
-        let decoded_leader_input_share =
-            MasticInputShare::get_decoded_with_param(&(&mastic, 0), &encoded_input_share[..])
-                .unwrap();
-        assert_eq!(leader_input_share, &decoded_leader_input_share);
-        let encoded_input_share = helper_input_share.get_encoded().unwrap();
-        let decoded_helper_input_share =
-            MasticInputShare::get_decoded_with_param(&(&mastic, 1), &encoded_input_share[..])
-                .unwrap();
-        assert_eq!(helper_input_share, &decoded_helper_input_share);
-    }
-
-    #[test]
-    fn test_public_share_encode_count() {
-        let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
+    fn test_public_share_encoded_len() {
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);

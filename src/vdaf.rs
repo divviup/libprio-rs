@@ -12,6 +12,7 @@ use crate::flp::szk::SzkError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -70,11 +71,6 @@ pub enum VdafError {
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("vidpf error: {0}")]
     Vidpf(#[from] VidpfError),
-
-    /// Mastic error.
-    #[cfg(all(feature = "crypto_dependencies", feature = "experimental"))]
-    #[error("mastic error: {0}")]
-    Mastic(#[from] MasticError),
 
     /// Errors from other VDAFs.
     #[error(transparent)]

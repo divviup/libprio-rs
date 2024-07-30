@@ -296,13 +296,11 @@ impl<E: Encode, const BUFFER_SIZE: usize> Encode for [E; BUFFER_SIZE] {
         Some(total)
     }
 }
+
 impl<D: Decode> ParameterizedDecode<usize> for Vec<D> {
-    fn decode_with_param(
-        decoding_parameter: &usize,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        let mut out = Vec::with_capacity(*decoding_parameter);
-        for _ in 0..*decoding_parameter {
+    fn decode_with_param(len: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let mut out = Vec::with_capacity(*len);
+        for _ in 0..*len {
             out.push(<D>::decode(bytes)?)
         }
         Ok(out)

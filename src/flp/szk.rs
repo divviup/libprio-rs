@@ -172,46 +172,117 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
         if *is_leader {
             Ok(SzkProofShare::Leader {
                 uncompressed_proof_share: Vec::<F>::decode_with_param(proof_len, bytes)?,
-                leader_blind_and_helper_joint_rand_part_opt: requires_joint_rand
-                    .then(
-                        || -> Result<(Seed<SEED_SIZE>, Seed<SEED_SIZE>), CodecError> {
-                            Ok((
-                                Seed::<SEED_SIZE>::decode(bytes)?,
-                                Seed::<SEED_SIZE>::decode(bytes)?,
-                            ))
-                        },
-                    )
-                    .transpose()?,
+                leader_blind_and_helper_joint_rand_part_opt: if *requires_joint_rand {
+                    Some((
+                        Seed::<SEED_SIZE>::decode(bytes)?,
+                        Seed::<SEED_SIZE>::decode(bytes)?,
+                    ))
+                } else {
+                    None
+                },
             })
         } else {
             Ok(SzkProofShare::Helper {
                 proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
-                leader_joint_rand_part_opt: requires_joint_rand
-                    .then(|| -> Result<Seed<SEED_SIZE>, CodecError> {
-                        Seed::<SEED_SIZE>::decode(bytes)
-                    })
-                    .transpose()?,
+                leader_joint_rand_part_opt: if *requires_joint_rand {
+                    Some(Seed::<SEED_SIZE>::decode(bytes)?)
+                } else {
+                    None
+                },
             })
         }
     }
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
-#[cfg(test)]
-#[derive(Clone)]
-pub(crate) struct SzkQueryShare<F, const SEED_SIZE: usize> {
+#[derive(Clone, Debug)]
+pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
     joint_rand_part: Option<Seed<SEED_SIZE>>,
-    verifier: SzkVerifier<F>,
+    verifier: Vec<F>,
 }
 
-#[cfg(test)]
+impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
+    pub(crate) fn verifier_len(&self) -> usize {
+        self.verifier.len()
+    }
+}
+
 /// The state that needs to be stored by an Szk verifier between query() and decide()
-pub(crate) struct SzkQueryState<const SEED_SIZE: usize> {
-    joint_rand_seed: Option<Seed<SEED_SIZE>>,
+pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
+
+impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
+    pub(crate) fn merge_verifiers(
+        mut leader_share: SzkQueryShare<F, SEED_SIZE>,
+        helper_share: SzkQueryShare<F, SEED_SIZE>,
+    ) -> SzkVerifier<F, SEED_SIZE> {
+        for (x, y) in leader_share.verifier.iter_mut().zip(helper_share.verifier) {
+            *x += y;
+        }
+        SzkVerifier {
+            flp_verifier: leader_share.verifier,
+            leader_joint_rand_part_opt: leader_share.joint_rand_part,
+            helper_joint_rand_part_opt: helper_share.joint_rand_part,
+        }
+    }
 }
 
 /// Verifier type for the SZK proof.
-pub type SzkVerifier<F> = Vec<F>;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SzkVerifier<F: FieldElement, const SEED_SIZE: usize> {
+    flp_verifier: Vec<F>,
+    leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
+    helper_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
+}
+
+impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkVerifier<F, SEED_SIZE> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        self.flp_verifier.encode(bytes)?;
+        if let Some(ref part) = self.leader_joint_rand_part_opt {
+            part.encode(bytes)?
+        };
+        if let Some(ref part) = self.helper_joint_rand_part_opt {
+            part.encode(bytes)?
+        };
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(
+            self.flp_verifier.encoded_len()?
+                + match self.leader_joint_rand_part_opt {
+                    Some(ref part) => part.encoded_len()?,
+                    None => 0,
+                }
+                + match self.helper_joint_rand_part_opt {
+                    Some(ref part) => part.encoded_len()?,
+                    None => 0,
+                },
+        )
+    }
+}
+
+impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize)>
+    for SzkVerifier<F, SEED_SIZE>
+{
+    fn decode_with_param(
+        (requires_joint_rand, verifier_len): &(bool, usize),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        if *requires_joint_rand {
+            Ok(SzkVerifier {
+                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+                leader_joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
+                helper_joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
+            })
+        } else {
+            Ok(SzkVerifier {
+                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+                leader_joint_rand_part_opt: None,
+                helper_joint_rand_part_opt: None,
+            })
+        }
+    }
+}
 
 /// Main struct encapsulating the shared zero-knowledge functionality. The type
 /// T is the underlying FLP proof system. P is the XOF used to derive all random
@@ -508,7 +579,7 @@ where
                 joint_rand_part,
                 verifier: verifier_share,
             },
-            SzkQueryState { joint_rand_seed },
+            joint_rand_seed,
         ))
     }
 
@@ -516,22 +587,20 @@ where
     /// it was generated is valid.
     pub fn decide(
         &self,
-        verifier: &[T::Field],
-        leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
-        helper_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
-        joint_rand_seed_opt: Option<Seed<SEED_SIZE>>,
+        verifier: SzkVerifier<T::Field, SEED_SIZE>,
+        query_state: SzkQueryState<SEED_SIZE>,
     ) -> Result<bool, SzkError> {
         // Check if underlying FLP proof validates
-        let check_flp_proof = self.typ.decide(verifier)?;
+        let check_flp_proof = self.typ.decide(&verifier.flp_verifier)?;
         if !check_flp_proof {
             return Ok(false);
         }
         // Check that joint randomness was properly derived from both
         // aggregators' parts
         match (
-            joint_rand_seed_opt,
-            leader_joint_rand_part_opt,
-            helper_joint_rand_part_opt,
+            query_state,
+            verifier.leader_joint_rand_part_opt,
+            verifier.helper_joint_rand_part_opt,
         ) {
             (Some(joint_rand_seed), Some(leader_joint_rand_part), Some(helper_joint_rand_part)) => {
                 let expected_joint_rand_seed =
@@ -627,21 +696,8 @@ mod tests {
             .query(&helper_input_share, h_proof_share, &verify_key, &nonce)
             .unwrap();
 
-        let mut verifier = l_query_share.clone().verifier;
-
-        for (x, y) in verifier.iter_mut().zip(h_query_share.clone().verifier) {
-            *x += y;
-        }
-        let h_jr_part = h_query_share.clone().joint_rand_part;
-        let h_jr_seed = h_query_state.joint_rand_seed;
-        let l_jr_part = l_query_share.joint_rand_part;
-        let l_jr_seed = l_query_state.joint_rand_seed;
-        if let Ok(leader_decision) = szk_typ.decide(
-            &verifier,
-            l_jr_part.clone(),
-            h_jr_part.clone(),
-            l_jr_seed.clone(),
-        ) {
+        let verifier = SzkQueryShare::merge_verifiers(l_query_share.clone(), h_query_share.clone());
+        if let Ok(leader_decision) = szk_typ.decide(verifier.clone(), l_query_state.clone()) {
             assert_eq!(
                 leader_decision, valid,
                 "Leader incorrectly determined validity",
@@ -649,12 +705,7 @@ mod tests {
         } else {
             panic!("Leader failed during decision");
         };
-        if let Ok(helper_decision) = szk_typ.decide(
-            &verifier,
-            l_jr_part.clone(),
-            h_jr_part.clone(),
-            h_jr_seed.clone(),
-        ) {
+        if let Ok(helper_decision) = szk_typ.decide(verifier.clone(), h_query_state.clone()) {
             assert_eq!(
                 helper_decision, valid,
                 "Helper incorrectly determined validity",
@@ -666,33 +717,18 @@ mod tests {
         //test mutated jr seed
         if szk_typ.has_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
-            if let Ok(leader_decision) = szk_typ.decide(
-                &verifier,
-                l_jr_part.clone(),
-                h_jr_part.clone(),
-                joint_rand_seed_opt.clone(),
-            ) {
+            if let Ok(leader_decision) = szk_typ.decide(verifier, joint_rand_seed_opt) {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
             };
         };
 
-        //test mutated verifier
-        let mut verifier = l_query_share.verifier;
-
-        for (x, y) in verifier.iter_mut().zip(h_query_share.clone().verifier) {
-            *x += y + T::Field::from(
-                <T::Field as FieldElementWithInteger>::Integer::try_from(7).unwrap(),
-            );
+        // test mutated verifier
+        for x in (h_query_share.clone().flp_verifier) {
+            *x += y + <T::Field as FieldElementWithInteger>::Integer::try_from(7).unwrap();
         }
+        let verifier = SzkQueryShare::merge_verifiers(mutated_query_share, h_query_share.clone());
 
-        let leader_decision = szk_typ
-            .decide(
-                &verifier,
-                l_jr_part.clone(),
-                h_jr_part.clone(),
-                l_jr_seed.clone(),
-            )
-            .unwrap();
+        let leader_decision = szk_typ.decide(verifier, l_query_state.clone()).unwrap();
         assert!(!leader_decision, "Leader validated after proof mutation");
 
         // test mutated input share
@@ -708,14 +744,7 @@ mod tests {
             *x += y;
         }
 
-        let mutated_jr_seed = mutated_query_state.joint_rand_seed;
-        let mutated_jr_part = mutated_query_share.joint_rand_part;
-        if let Ok(leader_decision) = szk_typ.decide(
-            &verifier,
-            mutated_jr_part,
-            h_jr_part.clone(),
-            mutated_jr_seed,
-        ) {
+        if let Ok(leader_decision) = szk_typ.decide(verifier, mutated_query_state) {
             assert!(!leader_decision, "Leader validated after input mutation");
         };
 
@@ -746,18 +775,7 @@ mod tests {
             .unwrap();
         let mut verifier = l_query_share.verifier;
 
-        for (x, y) in verifier.iter_mut().zip(h_query_share.clone().verifier) {
-            *x += y;
-        }
-
-        let mutated_jr_seed = l_query_state.joint_rand_seed;
-        let mutated_jr_part = l_query_share.joint_rand_part;
-        if let Ok(leader_decision) = szk_typ.decide(
-            &verifier,
-            mutated_jr_part,
-            h_jr_part.clone(),
-            mutated_jr_seed,
-        ) {
+        if let Ok(leader_decision) = szk_typ.decide(verifier, l_query_state) {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
     }
