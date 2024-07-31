@@ -11,7 +11,7 @@
 
 use core::{
     iter::zip,
-    ops::{Add, AddAssign, BitAndAssign, BitXor, BitXorAssign, Index, Not, Sub},
+    ops::{Add, AddAssign, BitAnd, BitAndAssign, BitXor, BitXorAssign, Index, Not, Sub},
 };
 
 use bitvec::field::BitField;
@@ -69,7 +69,7 @@ pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 /// A VIDPF instance.
 pub struct Vidpf<W: VidpfValue, const NONCE_SIZE: usize> {
     /// Any parameters required to instantiate a weight value.
-    weight_parameter: W::ValueParameter,
+    pub(crate) weight_parameter: W::ValueParameter,
 }
 
 impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
@@ -80,11 +80,6 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// * `weight_parameter`, any parameters required to instantiate a weight value.
     pub const fn new(weight_parameter: W::ValueParameter) -> Self {
         Self { weight_parameter }
-    }
-
-    /// Public accessor method for the weight_parameter field
-    pub(crate) fn weight_parameter(&self) -> &W::ValueParameter {
-        &self.weight_parameter
     }
 
     /// The [`Vidpf::gen`] method splits an incremental point function `F` into two private keys
@@ -381,19 +376,13 @@ impl VidpfKey {
     }
 }
 
-impl Decode for VidpfKey {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let id = u8::decode(bytes)?;
-        let mut value = [0; 16];
-        bytes.read_exact(&mut value)?;
-        Ok(VidpfKey {
-            id: match id {
-                0 => VidpfServerId::S0,
-                1 => VidpfServerId::S1,
-                _ => return Err(CodecError::UnexpectedValue),
-            },
-            value,
-        })
+impl ConstantTimeEq for VidpfKey {
+    fn ct_eq(&self, other: &VidpfKey) -> Choice {
+        Choice::from(self.id).ct_eq(&Choice::from(other.id)).bitand(self.value.ct_eq(&other.value))
+    }
+
+    fn ct_ne(&self, other: &VidpfKey) -> Choice {
+        self.ct_eq(other).not()
     }
 }
 
@@ -412,16 +401,25 @@ impl Encode for VidpfKey {
     }
 }
 
+impl Decode for VidpfKey {
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let id = u8::decode(bytes)?;
+        let mut value = [0; 16];
+        bytes.read_exact(&mut value)?;
+        Ok(VidpfKey {
+            id: match id {
+                0 => VidpfServerId::S0,
+                1 => VidpfServerId::S1,
+                _ => return Err(CodecError::UnexpectedValue),
+            },
+            value,
+        })
+    }
+}
+
 impl PartialEq for VidpfKey {
     fn eq(&self, other: &VidpfKey) -> bool {
-        if self.id == other.id {
-            return self
-                .value
-                .iter()
-                .zip(other.value.iter())
-                .all(|(s, o)| *s == *o);
-        };
-        false
+        bool::from(self.ct_eq(other))
     }
 }
 
@@ -618,7 +616,7 @@ struct VidpfPrgOutput {
 
 /// Represents an array of field elements that implements the [`VidpfValue`] trait.
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct VidpfWeight<F: FieldElement>(Vec<F>);
+pub struct VidpfWeight<F: FieldElement>(pub(crate) Vec<F>);
 
 impl<F: FieldElement> From<Vec<F>> for VidpfWeight<F> {
     fn from(value: Vec<F>) -> Self {

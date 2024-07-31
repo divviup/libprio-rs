@@ -21,6 +21,8 @@ use crate::{
 #[cfg(test)]
 use std::borrow::Cow;
 use std::{io::Cursor, marker::PhantomData};
+use std::ops::{BitAnd, Not};
+use subtle::{Choice, ConstantTimeEq};
 
 // Domain separation tags
 const DST_PROVE_RANDOMNESS: u16 = 0;
@@ -78,6 +80,28 @@ pub enum SzkProofShare<F, const SEED_SIZE: usize> {
         /// The leader's joint randomness part, if needed.
         leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     },
+}
+
+impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F, SEED_SIZE> {
+    fn ct_eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> Choice {
+        match (self, other) {
+            (
+                SzkProofShare::Leader { uncompressed_proof_share: s_proof, leader_blind_and_helper_joint_rand_part_opt: s_blind},
+                SzkProofShare::Leader { uncompressed_proof_share: o_proof, leader_blind_and_helper_joint_rand_part_opt: o_blind}
+            ) =>
+                s_proof[..].ct_eq(&o_proof[..]).bitand(option_tuple_ct_eq(s_blind, o_blind)),
+            (
+                SzkProofShare::Helper { proof_share_seed_and_blind: s_seed, leader_joint_rand_part_opt:s_rand },
+                SzkProofShare::Helper { proof_share_seed_and_blind: o_seed, leader_joint_rand_part_opt:o_rand },
+            ) =>
+                s_seed.ct_eq(o_seed).bitand(option_ct_eq(s_rand, o_rand)),
+                _ => Choice::from(0),
+        }
+    }
+
+    fn ct_ne(&self, other: &SzkProofShare<F, SEED_SIZE>) -> Choice {
+        self.ct_eq(other).not()
+    }
 }
 
 impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
@@ -519,6 +543,33 @@ where
                 "at least one of the input seeds is missing".to_string(),
             )),
         }
+    }
+}
+
+#[inline]
+fn option_ct_eq<T>(left: &Option<T>, right: &Option<T>) -> Choice
+where
+    T: ConstantTimeEq + Sized,
+{
+    match (left, right) {
+        (Some(left), Some(right)) => left.ct_eq(right),
+        (None, None) => Choice::from(1),
+        _ => Choice::from(0),
+    }
+}
+
+// This function determines equality between two optional, constant-time comparable tuples. It
+// short-circuits on the existence (but not contents) of the values -- a timing side-channel may
+// reveal whether the values match on Some or None.
+#[inline]
+fn option_tuple_ct_eq<T>(left: &Option<(T, T)>, right: &Option<(T, T)>) -> Choice
+where
+    T: ConstantTimeEq + Sized,
+{
+    match (left, right) {
+        (Some((left_0, left_1)), Some((right_0, right_1))) => left_0.ct_eq(right_0).bitand(left_1.ct_eq(right_1)),
+        (None, None) => Choice::from(1),
+        _ => Choice::from(0),
     }
 }
 
