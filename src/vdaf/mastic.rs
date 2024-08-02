@@ -24,7 +24,6 @@ use std::ops::{BitAnd, Not};
 use std::{fmt::Debug, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
 
-
 /// The main struct implementing the Mastic VDAF.
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
 /// distributed point function.

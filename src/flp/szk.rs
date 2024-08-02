@@ -95,16 +95,16 @@ impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F
                     leader_blind_and_helper_joint_rand_part_opt: o_blind,
                 },
             ) => s_proof[..]
-                    .ct_eq(&o_proof[..])
-                    .bitand(option_tuple_ct_eq(s_blind, o_blind)),
+                .ct_eq(&o_proof[..])
+                .bitand(option_tuple_ct_eq(s_blind, o_blind)),
             (
                 SzkProofShare::Helper {
                     proof_share_seed_and_blind: s_seed,
-                    leader_joint_rand_part_opt:s_rand,
+                    leader_joint_rand_part_opt: s_rand,
                 },
                 SzkProofShare::Helper {
                     proof_share_seed_and_blind: o_seed,
-                    leader_joint_rand_part_opt:o_rand ,
+                    leader_joint_rand_part_opt: o_rand,
                 },
             ) => s_seed.ct_eq(o_seed).bitand(option_ct_eq(s_rand, o_rand)),
             _ => Choice::from(0),
@@ -224,7 +224,8 @@ impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
         helper_share: SzkQueryShare<F, SEED_SIZE>,
     ) -> SzkVerifier<F, SEED_SIZE> {
         for (x, y) in leader_share
-            .flp_verifier.iter_mut()
+            .flp_verifier
+            .iter_mut()
             .zip(helper_share.flp_verifier)
         {
             *x += y;
@@ -442,8 +443,8 @@ where
     /// that is both shared between the leader and helper
     /// and encoded as a measurement. Has a precondition that leader_input_share
     /// + helper_input_share = encoded_measurement.
-    /// leader_seed_opt should be set only if the underlying FLP system requires
-    /// joint randomness.
+    ///     leader_seed_opt should be set only if the underlying FLP system requires
+    ///     joint randomness.
     pub(crate) fn prove(
         &self,
         leader_input_share: &[T::Field],
@@ -793,7 +794,6 @@ mod tests {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
     }
-
 
     #[test]
     fn test_sum_proof_share_encode() {
