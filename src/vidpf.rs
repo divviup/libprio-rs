@@ -383,7 +383,9 @@ impl VidpfKey {
 
 impl ConstantTimeEq for VidpfKey {
     fn ct_eq(&self, other: &VidpfKey) -> Choice {
-        Choice::from(self.id).ct_eq(&Choice::from(other.id)).bitand(self.value.ct_eq(&other.value))
+        Choice::from(self.id)
+            .ct_eq(&Choice::from(other.id))
+            .bitand(self.value.ct_eq(&other.value))
     }
 
     fn ct_ne(&self, other: &VidpfKey) -> Choice {

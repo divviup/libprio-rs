@@ -20,8 +20,8 @@ use crate::{
 };
 #[cfg(test)]
 use std::borrow::Cow;
-use std::{io::Cursor, marker::PhantomData};
 use std::ops::{BitAnd, Not};
+use std::{io::Cursor, marker::PhantomData};
 use subtle::{Choice, ConstantTimeEq};
 
 // Domain separation tags
@@ -86,16 +86,28 @@ impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F
     fn ct_eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> Choice {
         match (self, other) {
             (
-                SzkProofShare::Leader { uncompressed_proof_share: s_proof, leader_blind_and_helper_joint_rand_part_opt: s_blind},
-                SzkProofShare::Leader { uncompressed_proof_share: o_proof, leader_blind_and_helper_joint_rand_part_opt: o_blind}
-            ) =>
-                s_proof[..].ct_eq(&o_proof[..]).bitand(option_tuple_ct_eq(s_blind, o_blind)),
+                SzkProofShare::Leader {
+                    uncompressed_proof_share: s_proof,
+                    leader_blind_and_helper_joint_rand_part_opt: s_blind,
+                },
+                SzkProofShare::Leader {
+                    uncompressed_proof_share: o_proof,
+                    leader_blind_and_helper_joint_rand_part_opt: o_blind,
+                },
+            ) => s_proof[..]
+                    .ct_eq(&o_proof[..])
+                    .bitand(option_tuple_ct_eq(s_blind, o_blind)),
             (
-                SzkProofShare::Helper { proof_share_seed_and_blind: s_seed, leader_joint_rand_part_opt:s_rand },
-                SzkProofShare::Helper { proof_share_seed_and_blind: o_seed, leader_joint_rand_part_opt:o_rand },
-            ) =>
-                s_seed.ct_eq(o_seed).bitand(option_ct_eq(s_rand, o_rand)),
-                _ => Choice::from(0),
+                SzkProofShare::Helper {
+                    proof_share_seed_and_blind: s_seed,
+                    leader_joint_rand_part_opt:s_rand,
+                },
+                SzkProofShare::Helper {
+                    proof_share_seed_and_blind: o_seed,
+                    leader_joint_rand_part_opt:o_rand ,
+                },
+            ) => s_seed.ct_eq(o_seed).bitand(option_ct_eq(s_rand, o_rand)),
+            _ => Choice::from(0),
         }
     }
 
@@ -195,33 +207,32 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
+#[cfg(test)]
 #[derive(Clone, Debug)]
 pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
-    joint_rand_part: Option<Seed<SEED_SIZE>>,
-    verifier: Vec<F>,
-}
-
-impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
-    pub(crate) fn verifier_len(&self) -> usize {
-        self.verifier.len()
-    }
+    joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
+    flp_verifier: Vec<F>,
 }
 
 /// The state that needs to be stored by an Szk verifier between query() and decide()
 pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
+#[cfg(test)]
 impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
     pub(crate) fn merge_verifiers(
         mut leader_share: SzkQueryShare<F, SEED_SIZE>,
         helper_share: SzkQueryShare<F, SEED_SIZE>,
     ) -> SzkVerifier<F, SEED_SIZE> {
-        for (x, y) in leader_share.verifier.iter_mut().zip(helper_share.verifier) {
+        for (x, y) in leader_share
+            .flp_verifier.iter_mut()
+            .zip(helper_share.flp_verifier)
+        {
             *x += y;
         }
         SzkVerifier {
-            flp_verifier: leader_share.verifier,
-            leader_joint_rand_part_opt: leader_share.joint_rand_part,
-            helper_joint_rand_part_opt: helper_share.joint_rand_part,
+            flp_verifier: leader_share.flp_verifier,
+            leader_joint_rand_part_opt: leader_share.joint_rand_part_opt,
+            helper_joint_rand_part_opt: helper_share.joint_rand_part_opt,
         }
     }
 }
@@ -576,8 +587,8 @@ where
         )?;
         Ok((
             SzkQueryShare {
-                joint_rand_part,
-                verifier: verifier_share,
+                joint_rand_part_opt: joint_rand_part,
+                flp_verifier: verifier_share,
             },
             joint_rand_seed,
         ))
@@ -636,7 +647,9 @@ where
     T: ConstantTimeEq + Sized,
 {
     match (left, right) {
-        (Some((left_0, left_1)), Some((right_0, right_1))) => left_0.ct_eq(right_0).bitand(left_1.ct_eq(right_1)),
+        (Some((left_0, left_1)), Some((right_0, right_1))) => {
+            left_0.ct_eq(right_0).bitand(left_1.ct_eq(right_1))
+        }
         (None, None) => Choice::from(1),
         _ => Choice::from(0),
     }
@@ -717,15 +730,19 @@ mod tests {
         //test mutated jr seed
         if szk_typ.has_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
-            if let Ok(leader_decision) = szk_typ.decide(verifier, joint_rand_seed_opt) {
+            if let Ok(leader_decision) = szk_typ.decide(verifier, joint_rand_seed_opt.clone()) {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
             };
         };
 
         // test mutated verifier
-        for x in (h_query_share.clone().flp_verifier) {
-            *x += y + <T::Field as FieldElementWithInteger>::Integer::try_from(7).unwrap();
+        let mut mutated_query_share = l_query_share.clone();
+        for x in mutated_query_share.flp_verifier.iter_mut() {
+            *x += T::Field::from(
+                <T::Field as FieldElementWithInteger>::Integer::try_from(7).unwrap(),
+            );
         }
+
         let verifier = SzkQueryShare::merge_verifiers(mutated_query_share, h_query_share.clone());
 
         let leader_decision = szk_typ.decide(verifier, l_query_state.clone()).unwrap();
@@ -738,11 +755,8 @@ mod tests {
         let (mutated_query_share, mutated_query_state) = szk_typ
             .query(&mutated_input, l_proof_share.clone(), &verify_key, &nonce)
             .unwrap();
-        let mut verifier = mutated_query_share.verifier;
 
-        for (x, y) in verifier.iter_mut().zip(h_query_share.clone().verifier) {
-            *x += y;
-        }
+        let verifier = SzkQueryShare::merge_verifiers(mutated_query_share, h_query_share.clone());
 
         if let Ok(leader_decision) = szk_typ.decide(verifier, mutated_query_state) {
             assert!(!leader_decision, "Leader validated after input mutation");
@@ -773,12 +787,13 @@ mod tests {
                 &nonce,
             )
             .unwrap();
-        let mut verifier = l_query_share.verifier;
+        let verifier = SzkQueryShare::merge_verifiers(l_query_share, h_query_share.clone());
 
         if let Ok(leader_decision) = szk_typ.decide(verifier, l_query_state) {
             assert!(!leader_decision, "Leader validated after proof mutation");
         };
     }
+
 
     #[test]
     fn test_sum_proof_share_encode() {

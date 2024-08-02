@@ -17,13 +17,13 @@ use crate::{
         Aggregatable, Client, OutputShare, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
-        VidpfWeight,
+        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
     },
 };
-use subtle::{Choice, ConstantTimeEq};
-use std::{fmt::Debug, io::Cursor};
 use std::ops::{BitAnd, Not};
+use std::{fmt::Debug, io::Cursor};
+use subtle::{Choice, ConstantTimeEq};
+
 
 /// The main struct implementing the Mastic VDAF.
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
@@ -71,16 +71,6 @@ pub struct MasticAggregationParam {
     poplar_param: Poplar1AggregationParam,
     /// Flag indicating whether the VIDPF weight needs to be validated using SZK.
     root_check_flag: bool,
-}
-
-#[cfg(test)]
-impl MasticAggregationParam {
-    fn new(prefixes: Vec<VidpfInput>, root_check_flag: bool) -> Result<Self, VdafError> {
-        Ok(MasticAggregationParam {
-            poplar_param: Poplar1AggregationParam::try_from_prefixes(prefixes)?,
-            root_check_flag,
-        })
-    }
 }
 
 impl Encode for MasticAggregationParam {
@@ -169,7 +159,11 @@ where
         }
         let vidpf_key = VidpfKey::decode(bytes)?;
         let proofs_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
-            &(*role == 0, mastic.szk.proof_len(), mastic.szk.has_joint_rand()),
+            &(
+                *role == 0,
+                mastic.szk.proof_len(),
+                mastic.szk.has_joint_rand(),
+            ),
             bytes,
         )?;
         Ok(Self {
@@ -188,7 +182,9 @@ impl<F: FieldElement, const SEED_SIZE: usize> PartialEq for MasticInputShare<F, 
 
 impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for MasticInputShare<F, SEED_SIZE> {
     fn ct_eq(&self, other: &MasticInputShare<F, SEED_SIZE>) -> Choice {
-        self.vidpf_key.ct_eq(&other.vidpf_key).bitand(self.proofs_share.ct_eq(&other.proofs_share))
+        self.vidpf_key
+            .ct_eq(&other.vidpf_key)
+            .bitand(self.proofs_share.ct_eq(&other.proofs_share))
     }
 
     fn ct_ne(&self, other: &MasticInputShare<F, SEED_SIZE>) -> Choice {
@@ -216,14 +212,14 @@ where
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let (mastic, agg_param) = decoding_parameter;
-        let l = &mastic.vidpf.weight_parameter * agg_param.poplar_param.prefixes().len();
+        let l = mastic.vidpf.weight_parameter * agg_param.poplar_param.prefixes().len();
         let mut result = Vec::<T::Field>::with_capacity(l);
         for _ in 0..l {
             result.append(&mut Vec::<T::Field>::decode_with_param(
                 &mastic.vidpf.weight_parameter,
                 bytes,
             )?);
-        };
+        }
         Ok(OutputShare(result))
     }
 }
@@ -238,7 +234,7 @@ impl<F: FieldElement> Aggregatable for MasticOutputShare<F> {
             ));
         };
         for (a, o) in self.0.iter_mut().zip(agg_share.0.iter()) {
-            *a += o.clone();
+            *a += *o;
         }
         Ok(())
     }
@@ -252,7 +248,7 @@ impl<F: FieldElement> Aggregatable for MasticOutputShare<F> {
         };
         // Would love to get rid of the below clone if possible.
         for (a, o) in self.0.iter_mut().zip(output_share.0.iter()) {
-            *a += o.clone();
+            *a += *o;
         }
         Ok(())
     }
@@ -507,8 +503,15 @@ mod tests {
 
     #[test]
     fn test_public_share_encoded_len() {
-        thread_rng().fill(&mut nonce[..]);
+        let algorithm_id = 6;
+        let count = Count::<Field128>::new();
+        let szk = Szk::new_turboshake128(count, algorithm_id);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
 
+        let mut nonce = [0u8; 16];
+        let mut verify_key = [0u8; 16];
+        thread_rng().fill(&mut verify_key[..]);
+        thread_rng().fill(&mut nonce[..]);
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
