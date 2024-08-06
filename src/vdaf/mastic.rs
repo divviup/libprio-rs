@@ -156,7 +156,7 @@ where
         if *role > 1 {
             return Err(CodecError::UnexpectedValue);
         }
-        let vidpf_key = VidpfKey::decode(bytes)?;
+        let vidpf_key = VidpfKey::decode_with_param(&(*role == 0), bytes)?;
         let proofs_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
             &(
                 *role == 0,

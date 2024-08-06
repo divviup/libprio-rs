@@ -395,29 +395,24 @@ impl ConstantTimeEq for VidpfKey {
 
 impl Encode for VidpfKey {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.push(match self.id {
-            VidpfServerId::S0 => 0u8,
-            VidpfServerId::S1 => 1u8,
-        });
         bytes.extend_from_slice(&self.value[..]);
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(17)
+        Some(16)
     }
 }
 
-impl Decode for VidpfKey {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let id = u8::decode(bytes)?;
+impl ParameterizedDecode<bool> for VidpfKey {
+    fn decode_with_param(is_leader: &bool, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let mut value = [0; 16];
         bytes.read_exact(&mut value)?;
         Ok(VidpfKey {
-            id: match id {
-                0 => VidpfServerId::S0,
-                1 => VidpfServerId::S1,
-                _ => return Err(CodecError::UnexpectedValue),
+            id: if *is_leader {
+                VidpfServerId::S0
+            } else {
+                VidpfServerId::S1
             },
             value,
         })
