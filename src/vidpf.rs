@@ -276,6 +276,20 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok((next_state, y))
     }
 
+    pub(crate) fn eval_root(
+        &self,
+        key: &VidpfKey,
+        public_share: &VidpfPublicShare<W>,
+        nonce: &[u8; NONCE_SIZE],
+    ) -> Result<W, VidpfError> {
+        Ok(self
+            .eval(key, public_share, &VidpfInput::from_bools(&[false]), nonce)?
+            .share
+            + self
+                .eval(key, public_share, &VidpfInput::from_bools(&[true]), nonce)?
+                .share)
+    }
+
     fn prg(seed: &VidpfSeed, nonce: &[u8]) -> VidpfPrgOutput {
         let mut rng = XofFixedKeyAes128::seed_stream(&Seed(*seed), VidpfDomainSepTag::PRG, nonce);
 
