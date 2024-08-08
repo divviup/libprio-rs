@@ -270,6 +270,33 @@ impl Encode for u64 {
     }
 }
 
+// impl<E: Encode, const SIZE: usize> Encode for [E; SIZE] {
+//     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+//         for input in self {
+//             input.encode(bytes)?
+//         }
+//         Ok(())
+//     }
+
+//     fn encoded_len(&self) -> Option<usize> {
+//         let mut total = 0;
+//         for item in self {
+//             total += item.encoded_len()?
+//         }
+//         Some(total)
+//     }
+// }
+
+// impl<D: Decode + std::fmt::Debug, const SIZE: usize> Decode for [D; SIZE] {
+//     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+//         let mut v = Vec::with_capacity(SIZE);
+//         for _ in 0..SIZE {
+//             v.push(D::decode(bytes)?);
+//         }
+//         Ok(v.try_into().expect("If the above for loop completes, then the vector will always contain exactly BUFFER_SIZE elements."))
+//     }
+// }
+
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4

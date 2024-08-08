@@ -8,6 +8,8 @@
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+use crate::flp::szk::SzkError;
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vidpf::VidpfError;
@@ -45,6 +47,11 @@ pub enum VdafError {
     /// FLP error.
     #[error("flp error: {0}")]
     Flp(#[from] FlpError),
+
+    /// SZK error.
+    #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+    #[error("Szk error: {0}")]
+    Szk(#[from] SzkError),
 
     /// PRNG error.
     #[error("prng error: {0}")]
@@ -739,6 +746,8 @@ mod tests {
 #[cfg(feature = "test-util")]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod dummy;
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+pub mod mastic;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(
     docsrs,
