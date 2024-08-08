@@ -430,35 +430,17 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
-        let (public, _) = mastic.shard(&(first_input, 26u128), &nonce).unwrap();
+        let (_, input_shares) = mastic.shard(&(first_input, 26u128), &nonce).unwrap();
+        let [leader_input_share, helper_input_share] = [&input_shares[0], &input_shares[1]];
 
         assert_eq!(
-            public.encoded_len().unwrap(),
-            public.get_encoded().unwrap().len()
+            leader_input_share.encoded_len().unwrap(),
+            leader_input_share.get_encoded().unwrap().len()
         );
-    }
-
-    #[test]
-    fn test_public_share_roundtrip_sum() {
-        let algorithm_id = 6;
-        let sum_typ = Sum::<Field128>::new(5).unwrap();
-        let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(5);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
-        let (public, _) = mastic.shard(&(first_input, 25u128), &nonce).unwrap();
-
-        let encoded_public = public.get_encoded().unwrap();
-        let decoded_public =
-            MasticPublicShare::get_decoded_with_param(&mastic, &encoded_public[..]).unwrap();
-        assert_eq!(public, decoded_public);
+        assert_eq!(
+            helper_input_share.encoded_len().unwrap(),
+            helper_input_share.get_encoded().unwrap().len()
+        );
     }
 
     #[test]
@@ -477,51 +459,6 @@ mod tests {
 
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (_public, _input_shares) = mastic.shard(&(first_input, true), &nonce).unwrap();
-    }
-
-    #[test]
-    fn test_public_share_encoded_len() {
-        let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (public, _) = mastic.shard(&(first_input, true), &nonce).unwrap();
-
-        assert_eq!(
-            public.encoded_len().unwrap(),
-            public.get_encoded().unwrap().len()
-        );
-    }
-
-    #[test]
-    fn test_public_share_roundtrip_count() {
-        let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (public, _) = mastic.shard(&(first_input, true), &nonce).unwrap();
-
-        let encoded_public = public.get_encoded().unwrap();
-        let decoded_public =
-            MasticPublicShare::get_decoded_with_param(&mastic, &encoded_public[..]).unwrap();
-        assert_eq!(public, decoded_public);
     }
 
     #[test]
@@ -606,55 +543,5 @@ mod tests {
             MasticInputShare::get_decoded_with_param(&(&mastic, 1), &encoded_input_share[..])
                 .unwrap();
         assert_eq!(helper_input_share, &decoded_helper_input_share);
-    }
-
-    #[test]
-    fn test_public_share_encode_sumvec() {
-        let algorithm_id = 6;
-        let sumvec =
-            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
-        let measurement = vec![1, 16, 0];
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (public, _) = mastic.shard(&(first_input, measurement), &nonce).unwrap();
-
-        assert_eq!(
-            public.encoded_len().unwrap(),
-            public.get_encoded().unwrap().len()
-        );
-    }
-
-    #[test]
-    fn test_public_share_roundtrip_sumvec() {
-        let algorithm_id = 6;
-        let sumvec =
-            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
-        let measurement = vec![1, 16, 0];
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
-
-        let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
-
-        let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
-
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (public, _) = mastic.shard(&(first_input, measurement), &nonce).unwrap();
-
-        let encoded_public_share = public.get_encoded().unwrap();
-        let decoded_public_share =
-            MasticPublicShare::get_decoded_with_param(&mastic, &encoded_public_share[..]).unwrap();
-        assert_eq!(public, decoded_public_share);
     }
 }

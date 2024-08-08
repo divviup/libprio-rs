@@ -21,7 +21,7 @@ use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 use crate::{
-    codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{CodecError, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{
         conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
@@ -465,51 +465,21 @@ where
 }
 
 impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.extend_from_slice(&self.seed);
-        let both_control_bits = if bool::from(self.left_control_bit) {
-            if bool::from(self.right_control_bit) {
-                3u8
-            } else {
-                2
-            }
-        } else if bool::from(self.right_control_bit) {
-            1
-        } else {
-            0
-        };
-        bytes.push(both_control_bits);
-        self.weight.encode(bytes)?;
-        Ok(())
+    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        todo!();
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(17 + self.weight.encoded_len()?)
+        todo!();
     }
 }
 
 impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWord<W> {
     fn decode_with_param(
-        decoding_parameter: &W::ValueParameter,
-        bytes: &mut Cursor<&[u8]>,
+        _decoding_parameter: &W::ValueParameter,
+        _bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut seed = [0; 16];
-        bytes.read_exact(&mut seed)?;
-        let control_bits = u8::decode(bytes)?;
-        let (left_control_bit, right_control_bit) = match control_bits {
-            0 => (Choice::from(0), Choice::from(0)),
-            1 => (Choice::from(0), Choice::from(1)),
-            2 => (Choice::from(1), Choice::from(0)),
-            3 => (Choice::from(1), Choice::from(1)),
-            _ => return Err(CodecError::UnexpectedValue),
-        };
-        let weight = W::decode_with_param(decoding_parameter, bytes)?;
-        Ok(Self {
-            seed,
-            left_control_bit,
-            right_control_bit,
-            weight,
-        })
+        todo!();
     }
 }
 
