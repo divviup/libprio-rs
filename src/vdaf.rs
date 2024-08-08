@@ -49,7 +49,7 @@ pub enum VdafError {
     Flp(#[from] FlpError),
 
     /// SZK error.
-    #[cfg(feature = "experimental")]
+    #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("Szk error: {0}")]
     Szk(#[from] SzkError),
 
