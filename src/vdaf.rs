@@ -7,7 +7,7 @@
 
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
-#[cfg(feature = "experimental")]
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::flp::szk::SzkError;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
