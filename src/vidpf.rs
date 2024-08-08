@@ -11,7 +11,7 @@
 
 use core::{
     iter::zip,
-    ops::{Add, AddAssign, BitAnd, BitAndAssign, BitXor, BitXorAssign, Index, Not, Sub},
+    ops::{Add, AddAssign, BitXor, BitXorAssign, Index, Sub},
 };
 
 use bitvec::field::BitField;
@@ -380,7 +380,7 @@ impl VidpfDomainSepTag {
 /// Private key of an aggregation server.
 pub struct VidpfKey {
     id: VidpfServerId,
-    value: [u8; 16],
+    pub(crate) value: [u8; 16],
 }
 
 impl VidpfKey {
@@ -393,43 +393,19 @@ impl VidpfKey {
         getrandom::getrandom(&mut value)?;
         Ok(Self { id, value })
     }
+
+    pub(crate) fn new(id: VidpfServerId, value: [u8; 16]) -> Self {
+        Self { id, value }
+    }
 }
 
 impl ConstantTimeEq for VidpfKey {
     fn ct_eq(&self, other: &VidpfKey) -> Choice {
-        Choice::from(self.id)
-            .ct_eq(&Choice::from(other.id))
-            .bitand(self.value.ct_eq(&other.value))
-    }
-
-    fn ct_ne(&self, other: &VidpfKey) -> Choice {
-        self.ct_eq(other).not()
-    }
-}
-
-impl Encode for VidpfKey {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.extend_from_slice(&self.value[..]);
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        Some(16)
-    }
-}
-
-impl ParameterizedDecode<bool> for VidpfKey {
-    fn decode_with_param(is_leader: &bool, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut value = [0; 16];
-        bytes.read_exact(&mut value)?;
-        Ok(VidpfKey {
-            id: if *is_leader {
-                VidpfServerId::S0
-            } else {
-                VidpfServerId::S1
-            },
-            value,
-        })
+        if self.id != other.id {
+            Choice::from(0)
+        } else {
+            self.value.ct_eq(&other.value)
+        }
     }
 }
 
@@ -552,7 +528,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
             word.encode(bytes)?;
         }
         for proof in &self.cs {
-            proof.encode(bytes)?;
+            bytes.extend_from_slice(proof);
         }
         Ok(())
     }
@@ -562,8 +538,8 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
         for word in &self.cw {
             total += word.encoded_len()?;
         }
-        for proof in &self.cs {
-            total += proof.encoded_len()?;
+        for _ in &self.cs {
+            total += VIDPF_PROOF_SIZE;
         }
         Some(total)
     }
@@ -583,7 +559,9 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
             )?);
         }
         for _ in 0..*bits {
-            cs.push(VidpfProof::decode(bytes)?);
+            let mut proof = VidpfProof::from([0u8; VIDPF_PROOF_SIZE]);
+            bytes.read_exact(&mut proof)?;
+            cs.push(proof)
         }
         Ok(Self { cw, cs })
     }
@@ -748,15 +726,7 @@ impl<F: FieldElement> Sub for VidpfWeight<F> {
 
 impl<F: FieldElement> ConstantTimeEq for VidpfWeight<F> {
     fn ct_eq(&self, other: &Self) -> Choice {
-        let mut out = self.0.len().ct_eq(&other.0.len());
-        for (a, o) in self.0.iter().zip(other.0.iter()) {
-            out.bitand_assign(a.ct_eq(o));
-        }
-        out
-    }
-
-    fn ct_ne(&self, other: &Self) -> Choice {
-        self.ct_eq(other).not()
+        self.0[..].ct_eq(&other.0[..])
     }
 }
 

@@ -13,14 +13,14 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::FieldElement,
+    field::{decode_fieldvec, encode_fieldvec, FieldElement},
     flp::{FlpError, Type},
     prng::{Prng, PrngError},
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
 #[cfg(test)]
 use std::borrow::Cow;
-use std::ops::{BitAnd, Not};
+use std::ops::BitAnd;
 use std::{io::Cursor, marker::PhantomData};
 use subtle::{Choice, ConstantTimeEq};
 
@@ -62,7 +62,7 @@ pub enum SzkError {
 
 /// Contains an FLP proof share, and if joint randomness is needed, the blind
 /// used to derive it and the other party's joint randomness part.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum SzkProofShare<F, const SEED_SIZE: usize> {
     /// Leader's proof share is uncompressed.
     Leader {
@@ -80,6 +80,12 @@ pub enum SzkProofShare<F, const SEED_SIZE: usize> {
         /// The leader's joint randomness part, if needed.
         leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     },
+}
+
+impl<F: FieldElement, const SEED_SIZE: usize> PartialEq for SzkProofShare<F, SEED_SIZE> {
+    fn eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> bool {
+        bool::from(self.ct_eq(other))
+    }
 }
 
 impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F, SEED_SIZE> {
@@ -110,20 +116,16 @@ impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F
             _ => Choice::from(0),
         }
     }
-
-    fn ct_ne(&self, other: &SzkProofShare<F, SEED_SIZE>) -> Choice {
-        self.ct_eq(other).not()
-    }
 }
 
-impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
+impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
             SzkProofShare::Leader {
                 uncompressed_proof_share,
                 leader_blind_and_helper_joint_rand_part_opt,
             } => (
-                uncompressed_proof_share.encode(bytes)?,
+                encode_fieldvec(uncompressed_proof_share, bytes)?,
                 if let Some((blind, helper_joint_rand_part)) =
                     leader_blind_and_helper_joint_rand_part_opt
                 {
@@ -150,7 +152,7 @@ impl<F: Encode, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
                 uncompressed_proof_share,
                 leader_blind_and_helper_joint_rand_part_opt,
             } => Some(
-                uncompressed_proof_share.encoded_len()?
+                uncompressed_proof_share.len() * F::ENCODED_SIZE
                     + if let Some((blind, helper_joint_rand_part)) =
                         leader_blind_and_helper_joint_rand_part_opt
                     {
@@ -183,7 +185,7 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
     ) -> Result<Self, CodecError> {
         if *is_leader {
             Ok(SzkProofShare::Leader {
-                uncompressed_proof_share: Vec::<F>::decode_with_param(proof_len, bytes)?,
+                uncompressed_proof_share: decode_fieldvec::<F>(*proof_len, bytes)?,
                 leader_blind_and_helper_joint_rand_part_opt: if *requires_joint_rand {
                     Some((
                         Seed::<SEED_SIZE>::decode(bytes)?,
@@ -248,7 +250,7 @@ pub struct SzkVerifier<F: FieldElement, const SEED_SIZE: usize> {
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkVerifier<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.flp_verifier.encode(bytes)?;
+        encode_fieldvec(&self.flp_verifier, bytes)?;
         if let Some(ref part) = self.leader_joint_rand_part_opt {
             part.encode(bytes)?
         };
@@ -260,7 +262,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkVerifier<F, SEED_SIZ
 
     fn encoded_len(&self) -> Option<usize> {
         Some(
-            self.flp_verifier.encoded_len()?
+            self.flp_verifier.len() * F::ENCODED_SIZE
                 + match self.leader_joint_rand_part_opt {
                     Some(ref part) => part.encoded_len()?,
                     None => 0,
@@ -282,13 +284,13 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
     ) -> Result<Self, CodecError> {
         if *requires_joint_rand {
             Ok(SzkVerifier {
-                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+                flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
                 leader_joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
                 helper_joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
             })
         } else {
             Ok(SzkVerifier {
-                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+                flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
                 leader_joint_rand_part_opt: None,
                 helper_joint_rand_part_opt: None,
             })
@@ -306,7 +308,7 @@ where
     P: Xof<SEED_SIZE>,
 {
     /// The Type representing the specific FLP system used to prove validity of an input.
-    typ: T,
+    pub(crate) typ: T,
     algorithm_id: u32,
     phantom: PhantomData<P>,
 }
@@ -331,10 +333,6 @@ where
             algorithm_id,
             phantom: PhantomData,
         }
-    }
-
-    pub(crate) fn typ(&self) -> &T {
-        &self.typ
     }
 
     fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
@@ -435,16 +433,14 @@ where
         self.typ.joint_rand_len() > 0
     }
 
-    pub(crate) fn proof_len(&self) -> usize {
-        self.typ.proof_len()
-    }
-
     /// Used by a client to prove validity (according to an FLP system) of an input
     /// that is both shared between the leader and helper
     /// and encoded as a measurement. Has a precondition that leader_input_share
-    /// + helper_input_share = encoded_measurement.
-    ///     leader_seed_opt should be set only if the underlying FLP system requires
-    ///     joint randomness.
+    /// \+ helper_input_share = encoded_measurement.
+    /// leader_seed_opt should be set only if the underlying FLP system requires
+    /// joint randomness.
+    /// In this case, the helper uses the same seed to derive its proof share and
+    /// joint randomness.
     pub(crate) fn prove(
         &self,
         leader_input_share: &[T::Field],
@@ -926,7 +922,11 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (true, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let decoding_parameter = (
+            true,
+            szk_typ.typ.proof_len(),
+            szk_typ.typ.joint_rand_len() != 0,
+        );
         let encoded_proof_share = l_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
             SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
@@ -962,7 +962,11 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (false, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let decoding_parameter = (
+            false,
+            szk_typ.typ.proof_len(),
+            szk_typ.typ.joint_rand_len() != 0,
+        );
         let encoded_proof_share = h_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
             SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
@@ -998,7 +1002,11 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (true, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let decoding_parameter = (
+            true,
+            szk_typ.typ.proof_len(),
+            szk_typ.typ.joint_rand_len() != 0,
+        );
         let encoded_proof_share = l_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
             SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
@@ -1034,7 +1042,11 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (false, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let decoding_parameter = (
+            false,
+            szk_typ.typ.proof_len(),
+            szk_typ.typ.joint_rand_len() != 0,
+        );
         let encoded_proof_share = h_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
             SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
@@ -1071,7 +1083,11 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (true, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let decoding_parameter = (
+            true,
+            szk_typ.typ.proof_len(),
+            szk_typ.typ.joint_rand_len() != 0,
+        );
         let encoded_proof_share = l_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
             SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])
@@ -1108,7 +1124,11 @@ mod tests {
             )
             .unwrap();
 
-        let decoding_parameter = (false, szk_typ.proof_len(), szk_typ.has_joint_rand());
+        let decoding_parameter = (
+            false,
+            szk_typ.typ.proof_len(),
+            szk_typ.typ.joint_rand_len() != 0,
+        );
         let encoded_proof_share = h_proof_share.get_encoded().unwrap();
         let decoded_proof_share =
             SzkProofShare::get_decoded_with_param(&decoding_parameter, &encoded_proof_share[..])

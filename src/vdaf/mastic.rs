@@ -6,7 +6,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::FieldElement,
+    field::{decode_fieldvec, FieldElement},
     flp::{
         szk::{Szk, SzkProofShare},
         Type,
@@ -14,14 +14,16 @@ use crate::{
     vdaf::{
         poplar1::Poplar1AggregationParam,
         xof::{Seed, Xof},
-        Aggregatable, Client, OutputShare, Vdaf, VdafError,
+        AggregateShare, Client, OutputShare, Vdaf, VdafError,
     },
     vidpf::{
         Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
     },
 };
+
+use std::fmt::Debug;
+use std::io::{Cursor, Read};
 use std::ops::{BitAnd, Not};
-use std::{fmt::Debug, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
 
 /// The main struct implementing the Mastic VDAF.
@@ -66,33 +68,34 @@ where
 /// This includes the VIDPF tree level under evaluation and a set of prefixes to evaluate at that level.
 #[derive(Clone, Debug)]
 pub struct MasticAggregationParam {
-    /// aggregation parameter inherited from [`Poplar1`]: contains the level (attribute length) and a vector of attributes (IdpfInputs)
-    poplar_param: Poplar1AggregationParam,
+    /// aggregation parameter inherited from [`Poplar1`]: contains the level (attribute length) and a vector of attribute prefixes (IdpfInputs)
+    level_and_prefixes: Poplar1AggregationParam,
     /// Flag indicating whether the VIDPF weight needs to be validated using SZK.
-    root_check_flag: bool,
+    /// This flag must be set the first time any report is aggregated; however this may happen at any level of the tree.
+    require_check_flag: bool,
 }
 
 impl Encode for MasticAggregationParam {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.poplar_param.encode(bytes)?;
-        let root_check = if self.root_check_flag { 1u8 } else { 0u8 };
-        root_check.encode(bytes)?;
+        self.level_and_prefixes.encode(bytes)?;
+        let require_check = if self.require_check_flag { 1u8 } else { 0u8 };
+        require_check.encode(bytes)?;
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(self.poplar_param.encoded_len()? + 1usize)
+        Some(self.level_and_prefixes.encoded_len()? + 1usize)
     }
 }
 
 impl Decode for MasticAggregationParam {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let poplar_param = Poplar1AggregationParam::decode(bytes)?;
-        let root_check = u8::decode(bytes)?;
-        let root_check_flag = root_check == 0;
+        let level_and_prefixes = Poplar1AggregationParam::decode(bytes)?;
+        let require_check = u8::decode(bytes)?;
+        let require_check_flag = require_check != 0;
         Ok(Self {
-            poplar_param,
-            root_check_flag,
+            level_and_prefixes,
+            require_check_flag,
         })
     }
 }
@@ -128,18 +131,18 @@ pub struct MasticInputShare<F: FieldElement, const SEED_SIZE: usize> {
     vidpf_key: VidpfKey,
 
     /// The proof share.
-    proofs_share: SzkProofShare<F, SEED_SIZE>,
+    proof_share: SzkProofShare<F, SEED_SIZE>,
 }
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticInputShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.vidpf_key.encode(bytes)?;
-        self.proofs_share.encode(bytes)?;
+        bytes.extend_from_slice(&self.vidpf_key.value[..]);
+        self.proof_share.encode(bytes)?;
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(self.vidpf_key.encoded_len()? + self.proofs_share.encoded_len()?)
+        Some(16 + self.proof_share.encoded_len()?)
     }
 }
 
@@ -150,24 +153,34 @@ where
     P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        (mastic, role): &(&'a Mastic<T, P, SEED_SIZE>, usize),
+        (mastic, agg_id): &(&'a Mastic<T, P, SEED_SIZE>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        if *role > 1 {
+        if *agg_id > 1 {
             return Err(CodecError::UnexpectedValue);
         }
-        let vidpf_key = VidpfKey::decode_with_param(&(*role == 0), bytes)?;
-        let proofs_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
+        let mut value = [0; 16];
+        bytes.read_exact(&mut value)?;
+        let vidpf_key = VidpfKey::new(
+            if *agg_id == 0 {
+                VidpfServerId::S0
+            } else {
+                VidpfServerId::S1
+            },
+            value,
+        );
+
+        let proof_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
             &(
-                *role == 0,
-                mastic.szk.proof_len(),
-                mastic.szk.has_joint_rand(),
+                *agg_id == 0,
+                mastic.szk.typ.proof_len(),
+                mastic.szk.typ.joint_rand_len() != 0,
             ),
             bytes,
         )?;
         Ok(Self {
             vidpf_key,
-            proofs_share,
+            proof_share,
         })
     }
 }
@@ -183,7 +196,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for MasticInputShar
     fn ct_eq(&self, other: &MasticInputShare<F, SEED_SIZE>) -> Choice {
         self.vidpf_key
             .ct_eq(&other.vidpf_key)
-            .bitand(self.proofs_share.ct_eq(&other.proofs_share))
+            .bitand(self.proof_share.ct_eq(&other.proof_share))
     }
 
     fn ct_ne(&self, other: &MasticInputShare<F, SEED_SIZE>) -> Choice {
@@ -197,7 +210,32 @@ impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for MasticInputShar
 pub type MasticOutputShare<V> = OutputShare<V>;
 
 /// Vector of VidpfWeights to be aggregated by Mastic aggregators
-pub type MasticAggregateShare<V> = MasticOutputShare<V>;
+pub type MasticAggregateShare<V> = AggregateShare<V>;
+
+impl<'a, T, P, const SEED_SIZE: usize>
+    ParameterizedDecode<(&'a Mastic<T, P, SEED_SIZE>, &'a MasticAggregationParam)>
+    for MasticAggregateShare<T::Field>
+where
+    T: Type,
+    P: Xof<SEED_SIZE>,
+{
+    fn decode_with_param(
+        decoding_parameter: &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let (mastic, agg_param) = decoding_parameter;
+        let l = mastic
+            .vidpf
+            .weight_parameter
+            .checked_mul(agg_param.level_and_prefixes.prefixes().len())
+            .ok_or_else(|| CodecError::Other("multiplication overflow".into()))?;
+        let mut result = Vec::<T::Field>::with_capacity(l);
+        for _ in 0..agg_param.level_and_prefixes.prefixes().len() {
+            result.append(&mut decode_fieldvec(mastic.vidpf.weight_parameter, bytes)?);
+        }
+        Ok(AggregateShare(result))
+    }
+}
 
 impl<'a, T, P, const SEED_SIZE: usize>
     ParameterizedDecode<(&'a Mastic<T, P, SEED_SIZE>, &'a MasticAggregationParam)>
@@ -211,45 +249,16 @@ where
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let (mastic, agg_param) = decoding_parameter;
-        let l = mastic.vidpf.weight_parameter * agg_param.poplar_param.prefixes().len();
+        let l = mastic
+            .vidpf
+            .weight_parameter
+            .checked_mul(agg_param.level_and_prefixes.prefixes().len())
+            .ok_or_else(|| CodecError::Other("multiplication overflow".into()))?;
         let mut result = Vec::<T::Field>::with_capacity(l);
-        for _ in 0..l {
-            result.append(&mut Vec::<T::Field>::decode_with_param(
-                &mastic.vidpf.weight_parameter,
-                bytes,
-            )?);
+        for _ in 0..agg_param.level_and_prefixes.prefixes().len() {
+            result.append(&mut decode_fieldvec(mastic.vidpf.weight_parameter, bytes)?);
         }
         Ok(OutputShare(result))
-    }
-}
-
-impl<F: FieldElement> Aggregatable for MasticOutputShare<F> {
-    type OutputShare = MasticOutputShare<F>;
-    /// Update an aggregate share by merging it with another (`agg_share`).
-    fn merge(&mut self, agg_share: &Self) -> Result<(), VdafError> {
-        if self.0.len() != agg_share.0.len() {
-            return Err(VdafError::Uncategorized(
-                "Attempted to merge two output shares with different agg_params".to_string(),
-            ));
-        };
-        for (a, o) in self.0.iter_mut().zip(agg_share.0.iter()) {
-            *a += *o;
-        }
-        Ok(())
-    }
-
-    /// Update an aggregate share by adding `output_share`.
-    fn accumulate(&mut self, output_share: &Self::OutputShare) -> Result<(), VdafError> {
-        if self.0.len() != output_share.0.len() {
-            return Err(VdafError::Uncategorized(
-                "Attempted to accumulate two output shares with different agg_params".to_string(),
-            ));
-        };
-        // Would love to get rid of the below clone if possible.
-        for (a, o) in self.0.iter_mut().zip(output_share.0.iter()) {
-            *a += *o;
-        }
-        Ok(())
     }
 }
 
@@ -264,7 +273,7 @@ where
     type PublicShare = MasticPublicShare<VidpfWeight<T::Field>>;
     type InputShare = MasticInputShare<T::Field, SEED_SIZE>;
     type OutputShare = MasticOutputShare<T::Field>;
-    type AggregateShare = MasticOutputShare<T::Field>;
+    type AggregateShare = MasticAggregateShare<T::Field>;
 
     fn algorithm_id(&self) -> u32 {
         self.algorithm_id
@@ -314,11 +323,11 @@ where
         let [leader_vidpf_key, helper_vidpf_key] = vidpf_keys;
         let leader_share = MasticInputShare::<T::Field, SEED_SIZE> {
             vidpf_key: leader_vidpf_key,
-            proofs_share: leader_szk_proof_share,
+            proof_share: leader_szk_proof_share,
         };
         let helper_share = MasticInputShare::<T::Field, SEED_SIZE> {
             vidpf_key: helper_vidpf_key,
-            proofs_share: helper_szk_proof_share,
+            proof_share: helper_szk_proof_share,
         };
         Ok((public_share, vec![leader_share, helper_share]))
     }
@@ -328,7 +337,7 @@ where
         measurement: &T::Measurement,
     ) -> Result<VidpfWeight<T::Field>, VdafError> {
         Ok(VidpfWeight::<T::Field>::from(
-            self.szk.typ().encode_measurement(measurement)?,
+            self.szk.typ.encode_measurement(measurement)?,
         ))
     }
 }
