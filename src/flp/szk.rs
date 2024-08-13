@@ -220,13 +220,13 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkQueryShare<F, SEED_S
             part.encode(bytes)?
         };
 
-        self.flp_verifier.encode(bytes)?;
+        encode_fieldvec(&self.flp_verifier, bytes)?;
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
         Some(
-            self.flp_verifier.encoded_len()?
+            self.flp_verifier.len() * F::ENCODED_SIZE
                 + match self.joint_rand_part_opt {
                     Some(ref part) => part.encoded_len()?,
                     None => 0,
@@ -245,12 +245,12 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
         if *requires_joint_rand {
             Ok(SzkQueryShare {
                 joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
-                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+                flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
             })
         } else {
             Ok(SzkQueryShare {
                 joint_rand_part_opt: None,
-                flp_verifier: Vec::<F>::decode_with_param(verifier_len, bytes)?,
+                flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
             })
         }
     }

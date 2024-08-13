@@ -540,7 +540,9 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
         }
         let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
         for _ in 0..*bits {
-            cs.push(VidpfProof::decode(bytes)?);
+            let mut proof = [0u8; 32];
+            bytes.read_exact(&mut proof)?;
+            cs.push(proof);
         }
         Ok(Self { cw, cs })
     }

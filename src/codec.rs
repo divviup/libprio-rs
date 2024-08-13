@@ -270,73 +270,6 @@ impl Encode for u64 {
     }
 }
 
-impl<D: Decode + std::fmt::Debug, const SIZE: usize> Decode for [D; SIZE] {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut v = Vec::with_capacity(SIZE);
-        for _ in 0..SIZE {
-            v.push(D::decode(bytes)?);
-        }
-        Ok(v.try_into().expect("If the above for loop completes, then the vector will always contain exactly BUFFER_SIZE elements."))
-    }
-}
-
-impl<E: Encode, const BUFFER_SIZE: usize> Encode for [E; BUFFER_SIZE] {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        for input in self {
-            input.encode(bytes)?
-        }
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        let mut total = 0;
-        for item in self {
-            total += item.encoded_len()?
-        }
-        Some(total)
-    }
-}
-
-impl<D: Decode> ParameterizedDecode<usize> for Vec<D> {
-    fn decode_with_param(len: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut out = Vec::with_capacity(*len);
-        for _ in 0..*len {
-            out.push(<D>::decode(bytes)?)
-        }
-        Ok(out)
-    }
-}
-
-impl<P, D: ParameterizedDecode<P>> ParameterizedDecode<(usize, P)> for Vec<D> {
-    fn decode_with_param(
-        (len, decoding_parameter): &(usize, P),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        let mut out = Vec::with_capacity(*len);
-        for _ in 0..*len {
-            out.push(<D>::decode_with_param(decoding_parameter, bytes)?)
-        }
-        Ok(out)
-    }
-}
-
-impl<E: Encode> Encode for Vec<E> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        for input in self {
-            input.encode(bytes)?
-        }
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        let mut total = 0;
-        for item in self {
-            total += item.encoded_len()?
-        }
-        Some(total)
-    }
-}
-
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
@@ -600,28 +533,6 @@ mod tests {
         assert_eq!(value, decoded);
     }
 
-    #[test]
-    fn roundtrip_vec() {
-        let value = vec![1u32, 2u32, 3u32, 4u32];
-        let mut bytes = vec![];
-        value.encode(&mut bytes).unwrap();
-        assert_eq!(bytes.len(), 16);
-        assert_eq!(bytes, vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]);
-        let decoded = Vec::<u32>::decode_with_param(&4, &mut Cursor::new(&bytes)).unwrap();
-        assert_eq!(value, decoded);
-    }
-
-    #[test]
-    fn roundtrip_array() {
-        let value = [1u32, 2u32, 3u32, 4u32];
-        let mut bytes = vec![];
-        value.encode(&mut bytes).unwrap();
-        assert_eq!(bytes.len(), 16);
-        assert_eq!(bytes, vec![0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4]);
-        let decoded = <[u32; 4]>::decode(&mut Cursor::new(&bytes)).unwrap();
-        assert_eq!(value, decoded);
-    }
-
     #[derive(Debug, Eq, PartialEq)]
     struct TestMessage {
         field_u8: u8,
@@ -867,14 +778,6 @@ mod tests {
         assert_eq!(
             0u64.encoded_len().unwrap(),
             0u64.get_encoded().unwrap().len()
-        );
-        assert_eq!(
-            [0u8; 7].encoded_len().unwrap(),
-            [0u8; 7].get_encoded().unwrap().len()
-        );
-        assert_eq!(
-            vec![0u8; 7].encoded_len().unwrap(),
-            vec![0u8; 7].get_encoded().unwrap().len()
         );
     }
 
