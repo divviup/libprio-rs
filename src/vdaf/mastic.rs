@@ -135,7 +135,6 @@ where
     }
 }
 
-
 /// Mastic input share.
 ///
 /// Message sent by the [`Client`] to each Aggregator during the Sharding phase.

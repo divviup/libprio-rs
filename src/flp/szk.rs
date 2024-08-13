@@ -465,7 +465,6 @@ where
         .collect()
     }
 
-    #[cfg(test)]
     fn derive_query_rand(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,

@@ -11,7 +11,7 @@
 
 use core::{
     iter::zip,
-    ops::{Add, AddAssign, BitAnd, BitXor, BitXorAssign, Index, Sub},
+    ops::{Add, AddAssign, BitXor, BitXorAssign, Index, Sub},
 };
 
 use bitvec::field::BitField;
