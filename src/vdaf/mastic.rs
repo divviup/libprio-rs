@@ -29,6 +29,7 @@ use subtle::{Choice, ConstantTimeEq};
 
 const DST_PATH_CHECK_BATCH: u16 = 6;
 const NONCE_SIZE: usize = 16;
+
 /// The main struct implementing the Mastic VDAF.
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
 /// distributed point function.
@@ -364,15 +365,12 @@ where
             VidpfKey::gen(VidpfServerId::S0)?,
             VidpfKey::gen(VidpfServerId::S1)?,
         ];
-        let joint_random_opt = if self.szk.has_joint_rand() {
+        let joint_random_opt = if self.szk.requires_joint_rand() {
             Some(Seed::<SEED_SIZE>::generate()?)
         } else {
             None
         };
-        let szk_random = [
-            Seed::<SEED_SIZE>::generate()?,
-            Seed::<SEED_SIZE>::generate()?,
-        ];
+        let szk_random = [Seed::generate()?, Seed::generate()?];
 
         let encoded_measurement = self.encode_measurement(weight)?;
         if encoded_measurement.as_ref().len() != self.vidpf.weight_parameter {
@@ -391,49 +389,50 @@ where
     }
 }
 
-/// Mastic prepare state
+/// Mastic prepare state.
 ///
-///  State held by an aggregator between rounds of Mastic. Includes intermediate
+/// State held by an aggregator between rounds of Mastic preparation. Includes intermediate
 /// state for Szk verification, the output shares currently being validated, and
 /// parameters of Mastic used for encoding.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
-    /// Includes state for performing Szk verification at the root.
-    FirstRound(SzkQueryState<SEED_SIZE>, MasticOutputShare<F>, usize, bool),
-    /// In all rounds but the first, SZK is not run, so only the output shares and encoding information are stored.
-    LaterRound(MasticOutputShare<F>, bool),
+pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
+    /// Includes output shares for eventual aggregation.
+    output_shares: MasticOutputShare<F>,
+    /// if SZK verification is being performed, we also store the relevant state for that operation.
+    szk_query_state: SzkQueryState<SEED_SIZE>,
+    verifier_len: Option<usize>,
 }
 
-/// Mastic prepare share
+/// Mastic prepare share.
 ///
 /// Broadcast message from an aggregator between rounds of Mastic. Includes the
 /// hashed VIDPF proofs for every prefix in the aggregation parameter, and optionally
 /// the verification message for Szk.
 #[derive(Clone, Debug)]
-pub enum MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
-    /// Includes a batched VIDPF proof and an SZK verification message for the root weight.
-    FirstRound(Seed<SEED_SIZE>, SzkQueryShare<F, SEED_SIZE>),
-    /// Includes only a batched VIDPF proof as SZK will not be run.
-    LaterRound(Seed<SEED_SIZE>),
+pub struct MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
+    /// Batched VIDPF proofs
+    vidpf_proofs: Seed<SEED_SIZE>,
+    /// If Szk verification of the root weight is needed, an SZK verification message.
+    szk_query_share_opt: Option<SzkQueryShare<F, SEED_SIZE>>,
 }
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        match self {
-            MasticPrepareShare::FirstRound(seed, query_share) => {
-                seed.encode(bytes).and_then(|_| query_share.encode(bytes))
-            }
-            MasticPrepareShare::LaterRound(seed) => seed.encode(bytes),
+        self.vidpf_proofs.encode(bytes)?;
+        match &self.szk_query_share_opt {
+            Some(query_share) => query_share.encode(bytes),
+            None => Ok(()),
         }
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        match self {
-            MasticPrepareShare::FirstRound(seed, query_share) => {
-                Some(seed.encoded_len()? + query_share.encoded_len()?)
-            }
-            MasticPrepareShare::LaterRound(seed) => seed.encoded_len(),
-        }
+        Some(
+            self.vidpf_proofs.encoded_len()?
+                + match &self.szk_query_share_opt {
+                    Some(query_share) => query_share.encoded_len()?,
+                    None => 0,
+                },
+        )
     }
 }
 
@@ -444,21 +443,26 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
         prep_state: &MasticPrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        match prep_state {
-            MasticPrepareState::FirstRound(_, _, verifier_len, requires_joint_rand) => {
-                Ok(MasticPrepareShare::FirstRound(
-                    Seed::<SEED_SIZE>::decode(bytes)?,
-                    SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
-                        &(*requires_joint_rand, *verifier_len),
-                        bytes,
-                    )?,
-                ))
-            }
-            MasticPrepareState::LaterRound(_, _) => {
-                Ok(MasticPrepareShare::LaterRound(Seed::<SEED_SIZE>::decode(
+        match (&prep_state.szk_query_state, prep_state.verifier_len) {
+            (Some(_), Some(verifier_len)) => Ok(MasticPrepareShare {
+                vidpf_proofs: Seed::decode(bytes)?,
+                szk_query_share_opt: Some(SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
+                    &(true, verifier_len),
                     bytes,
-                )?))
-            }
+                )?),
+            }),
+            (None, Some(verifier_len)) => Ok(MasticPrepareShare {
+                vidpf_proofs: Seed::decode(bytes)?,
+                szk_query_share_opt: Some(SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
+                    &(false, verifier_len),
+                    bytes,
+                )?),
+            }),
+            (None, None) => Ok(MasticPrepareShare {
+                vidpf_proofs: Seed::<SEED_SIZE>::decode(bytes)?,
+                szk_query_share_opt: None,
+            }),
+            (Some(_), None) => Err(CodecError::UnexpectedValue),
         }
     }
 }
@@ -467,28 +471,20 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
 ///
 /// Result of preprocessing the broadcast messages of all parties during the
 /// preparation phase.
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub enum MasticPrepareMessage<F: FieldElement, const SEED_SIZE: usize> {
-    ///If Szk is being run, all SzkQueryShares have been summed
-    /// to produce a verifier to be input to decide()
-    FirstRound(SzkVerifier<F, SEED_SIZE>),
-    /// If Szk is not being run, no further computation is necessary as the VIDPF proofs have already
-    /// been checked.
-    LaterRound,
-}
+pub type MasticPrepareMessage<F, const SEED_SIZE: usize> = Option<SzkVerifier<F, SEED_SIZE>>;
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareMessage<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
-            MasticPrepareMessage::FirstRound(verifier) => verifier.encode(bytes),
-            MasticPrepareMessage::LaterRound => Ok(()),
+            Some(verifier) => verifier.encode(bytes),
+            None => Ok(()),
         }
     }
 
     fn encoded_len(&self) -> Option<usize> {
         match self {
-            MasticPrepareMessage::FirstRound(verifier) => verifier.encoded_len(),
-            MasticPrepareMessage::LaterRound => Some(0),
+            Some(verifier) => verifier.encoded_len(),
+            None => Some(0),
         }
     }
 }
@@ -500,13 +496,16 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
         prep_state: &MasticPrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        match prep_state {
-            MasticPrepareState::FirstRound(_, _, verifier_len, requires_joint_rand) => {
-                Ok(MasticPrepareMessage::FirstRound(
-                    SzkVerifier::decode_with_param(&(*requires_joint_rand, *verifier_len), bytes)?,
-                ))
-            }
-            MasticPrepareState::LaterRound(_, _) => Ok(MasticPrepareMessage::LaterRound),
+        match (&prep_state.szk_query_state, prep_state.verifier_len) {
+            (Some(_), Some(verifier_len)) => Ok(Some(
+                SzkVerifier::<F, SEED_SIZE>::decode_with_param(&(true, verifier_len), bytes)?,
+            )),
+            (None, Some(verifier_len)) => Ok(Some(SzkVerifier::<F, SEED_SIZE>::decode_with_param(
+                &(false, verifier_len),
+                bytes,
+            )?)),
+            (None, None) => Ok(None),
+            (Some(_), None) => Err(CodecError::UnexpectedValue),
         }
     }
 }
@@ -602,23 +601,29 @@ where
         };
         let (prep_share, prep_state) =
             if let Some((szk_query_share, szk_query_state)) = szk_verify_opt {
-                let verifier_len = szk_query_share.verifier_len();
+                let verifier_len = szk_query_share.flp_verifier.len();
                 (
-                    MasticPrepareShare::FirstRound(xof.into_seed(), szk_query_share),
-                    MasticPrepareState::FirstRound(
+                    MasticPrepareShare {
+                        vidpf_proofs: xof.into_seed(),
+                        szk_query_share_opt: Some(szk_query_share),
+                    },
+                    MasticPrepareState {
+                        output_shares: MasticOutputShare::<T::Field>::from(output_shares),
                         szk_query_state,
-                        MasticOutputShare::<T::Field>::from(output_shares),
-                        verifier_len,
-                        self.szk.has_joint_rand(),
-                    ),
+                        verifier_len: Some(verifier_len),
+                    },
                 )
             } else {
                 (
-                    MasticPrepareShare::LaterRound(xof.into_seed()),
-                    MasticPrepareState::LaterRound(
-                        MasticOutputShare::<T::Field>::from(output_shares),
-                        self.szk.has_joint_rand(),
-                    ),
+                    MasticPrepareShare {
+                        vidpf_proofs: xof.into_seed(),
+                        szk_query_share_opt: None,
+                    },
+                    MasticPrepareState {
+                        output_shares: MasticOutputShare::<T::Field>::from(output_shares),
+                        szk_query_state: None,
+                        verifier_len: None,
+                    },
                 )
             };
         Ok((prep_state, prep_share))
@@ -651,13 +656,20 @@ where
 
         match (leader_share, helper_share) {
             (
-                MasticPrepareShare::FirstRound(leader_vidpf_proof, leader_query_share),
-                MasticPrepareShare::FirstRound(helper_vidpf_proof, helper_query_share),
+                MasticPrepareShare {
+                    vidpf_proofs: leader_vidpf_proof,
+                    szk_query_share_opt: Some(leader_query_share),
+                },
+                MasticPrepareShare {
+                    vidpf_proofs: helper_vidpf_proof,
+                    szk_query_share_opt: Some(helper_query_share),
+                },
             ) => {
                 if leader_vidpf_proof == helper_vidpf_proof {
-                    Ok(MasticPrepareMessage::FirstRound(
-                        SzkQueryShare::merge_verifiers(leader_query_share, helper_query_share),
-                    ))
+                    Ok(Some(SzkQueryShare::merge_verifiers(
+                        leader_query_share,
+                        helper_query_share,
+                    )))
                 } else {
                     Err(VdafError::Uncategorized(
                         "Vidpf proof verification failed".to_string(),
@@ -665,11 +677,17 @@ where
                 }
             }
             (
-                MasticPrepareShare::LaterRound(leader_vidpf_proof),
-                MasticPrepareShare::LaterRound(helper_vidpf_proof),
+                MasticPrepareShare {
+                    vidpf_proofs: leader_vidpf_proof,
+                    szk_query_share_opt: None,
+                },
+                MasticPrepareShare {
+                    vidpf_proofs: helper_vidpf_proof,
+                    szk_query_share_opt: None,
+                },
             ) => {
                 if leader_vidpf_proof == helper_vidpf_proof {
-                    Ok(MasticPrepareMessage::LaterRound)
+                    Ok(None)
                 } else {
                     Err(VdafError::Uncategorized(
                         "Vidpf proof verification failed".to_string(),
@@ -700,25 +718,30 @@ where
         input: MasticPrepareMessage<T::Field, SEED_SIZE>,
     ) -> Result<PrepareTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
         match (state, input) {
-            (MasticPrepareState::LaterRound(output_share, _), MasticPrepareMessage::LaterRound) => {
-                Ok(PrepareTransition::Finish(output_share))
-            }
             (
-                MasticPrepareState::FirstRound(query_state, output_share, _, _),
-                MasticPrepareMessage::FirstRound(verifier),
+                MasticPrepareState {
+                    output_shares,
+                    szk_query_state: _,
+                    verifier_len: _,
+                },
+                None,
+            ) => Ok(PrepareTransition::Finish(output_shares)),
+            (
+                MasticPrepareState {
+                    output_shares,
+                    szk_query_state,
+                    verifier_len: _,
+                },
+                Some(verifier),
             ) => {
-                if self.szk.decide(verifier, query_state)? {
-                    Ok(PrepareTransition::Finish(output_share))
+                if self.szk.decide(verifier, szk_query_state)? {
+                    Ok(PrepareTransition::Finish(output_shares))
                 } else {
                     Err(VdafError::Uncategorized(
                         "Szk proof failed verification".to_string(),
                     ))
                 }
             }
-            _ => Err(VdafError::Uncategorized(
-                "Prepare state and message disagree on whether Szk verification should occur"
-                    .to_string(),
-            )),
         }
     }
 
@@ -771,8 +794,8 @@ where
                 [i * self.vidpf.weight_parameter..(i + 1) * self.vidpf.weight_parameter];
             result.push(
                 self.szk
-                    .typ()
-                    .decode_result(&self.szk.typ().truncate(encoded_result.to_vec())?[..], 1)?,
+                    .typ
+                    .decode_result(&self.szk.typ.truncate(encoded_result.to_vec())?[..], 1)?,
             );
         }
         Ok(result)
