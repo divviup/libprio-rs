@@ -9,8 +9,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode},
-    fp::{FP128, FP32},
-    fp64::FP64,
+    fp::{FieldOps, FieldParameters, FP128, FP32, FP64},
     prng::{Prng, PrngError},
 };
 use rand::{
@@ -465,12 +464,12 @@ macro_rules! make_field {
 
                 int &= mask;
 
-                if int >= $fp.p {
+                if int >= $fp::PRIME {
                     return Err(FieldError::ModulusOverflow);
                 }
                 // FieldParameters::montgomery() will return a value that has been fully reduced
                 // mod p, satisfying the invariant on Self.
-                Ok(Self($fp.montgomery(int)))
+                Ok(Self($fp::montgomery(int)))
             }
         }
 
@@ -481,8 +480,8 @@ macro_rules! make_field {
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
 
                 // Check the invariant that the integer representation is fully reduced.
-                debug_assert!(self.0 < $fp.p);
-                debug_assert!(rhs.0 < $fp.p);
+                debug_assert!(self.0 < $fp::PRIME);
+                debug_assert!(rhs.0 < $fp::PRIME);
 
                 self.0 == rhs.0
             }
@@ -507,7 +506,7 @@ macro_rules! make_field {
                 // https://doc.rust-lang.org/std/hash/trait.Hash.html#hash-and-eq
 
                 // Check the invariant that the integer representation is fully reduced.
-                debug_assert!(self.0 < $fp.p);
+                debug_assert!(self.0 < $fp::PRIME);
 
                 self.0.hash(state);
             }
@@ -520,7 +519,7 @@ macro_rules! make_field {
             fn add(self, rhs: Self) -> Self {
                 // FieldParameters::add() returns a value that has been fully reduced
                 // mod p, satisfying the invariant on Self.
-                Self($fp.add(self.0, rhs.0))
+                Self($fp::add(self.0, rhs.0))
             }
         }
 
@@ -542,7 +541,7 @@ macro_rules! make_field {
             fn sub(self, rhs: Self) -> Self {
                 // We know that self.0 and rhs.0 are both less than p, thus FieldParameters::sub()
                 // returns a value less than p, satisfying the invariant on Self.
-                Self($fp.sub(self.0, rhs.0))
+                Self($fp::sub(self.0, rhs.0))
             }
         }
 
@@ -564,7 +563,7 @@ macro_rules! make_field {
             fn mul(self, rhs: Self) -> Self {
                 // FieldParameters::mul() always returns a value less than p, so the invariant on
                 // Self is satisfied.
-                Self($fp.mul(self.0, rhs.0))
+                Self($fp::mul(self.0, rhs.0))
             }
         }
 
@@ -607,7 +606,7 @@ macro_rules! make_field {
             fn neg(self) -> Self {
                 // FieldParameters::neg() will return a value less than p because self.0 is less
                 // than p, and neg() dispatches to sub().
-                Self($fp.neg(self.0))
+                Self($fp::neg(self.0))
             }
         }
 
@@ -622,19 +621,19 @@ macro_rules! make_field {
             fn from(x: $int_conversion) -> Self {
                 // FieldParameters::montgomery() will return a value that has been fully reduced
                 // mod p, satisfying the invariant on Self.
-                Self($fp.montgomery($int_internal::try_from(x).unwrap()))
+                Self($fp::montgomery($int_internal::try_from(x).unwrap()))
             }
         }
 
         impl From<$elem> for $int_conversion {
             fn from(x: $elem) -> Self {
-                $int_conversion::try_from($fp.residue(x.0)).unwrap()
+                $int_conversion::try_from($fp::residue(x.0)).unwrap()
             }
         }
 
         impl PartialEq<$int_conversion> for $elem {
             fn eq(&self, rhs: &$int_conversion) -> bool {
-                $fp.residue(self.0) == $int_internal::try_from(*rhs).unwrap()
+                $fp::residue(self.0) == $int_internal::try_from(*rhs).unwrap()
             }
         }
 
@@ -648,7 +647,7 @@ macro_rules! make_field {
 
         impl From<$elem> for [u8; $elem::ENCODED_SIZE] {
             fn from(elem: $elem) -> Self {
-                let int = $fp.residue(elem.0);
+                let int = $fp::residue(elem.0);
                 let mut slice = [0; $elem::ENCODED_SIZE];
                 for i in 0..$elem::ENCODED_SIZE {
                     slice[i] = ((int >> (i << 3)) & 0xff) as u8;
@@ -665,13 +664,13 @@ macro_rules! make_field {
 
         impl Display for $elem {
             fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
-                write!(f, "{}", $fp.residue(self.0))
+                write!(f, "{}", $fp::residue(self.0))
             }
         }
 
         impl Debug for $elem {
             fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-                write!(f, "{}", $fp.residue(self.0))
+                write!(f, "{}", $fp::residue(self.0))
             }
         }
 
@@ -719,11 +718,11 @@ macro_rules! make_field {
             fn inv(&self) -> Self {
                 // FieldParameters::inv() ultimately relies on mul(), and will always return a
                 // value less than p.
-                Self($fp.inv(self.0))
+                Self($fp::inv(self.0))
             }
 
             fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError> {
-                $elem::try_from_bytes(bytes, $fp.bit_mask)
+                $elem::try_from_bytes(bytes, $fp::BIT_MASK)
             }
 
             fn zero() -> Self {
@@ -731,7 +730,7 @@ macro_rules! make_field {
             }
 
             fn one() -> Self {
-                Self($fp.roots[0])
+                Self($fp::ROOTS[0])
             }
         }
 
@@ -741,26 +740,26 @@ macro_rules! make_field {
             fn pow(&self, exp: Self::Integer) -> Self {
                 // FieldParameters::pow() relies on mul(), and will always return a value less
                 // than p.
-                Self($fp.pow(self.0, $int_internal::try_from(exp).unwrap()))
+                Self($fp::pow(self.0, $int_internal::try_from(exp).unwrap()))
             }
 
             fn modulus() -> Self::Integer {
-                $fp.p as $int_conversion
+                $fp::PRIME as $int_conversion
             }
         }
 
         impl FftFriendlyFieldElement for $elem {
             fn generator() -> Self {
-                Self($fp.g)
+                Self($fp::G)
             }
 
             fn generator_order() -> Self::Integer {
-                1 << (Self::Integer::try_from($fp.num_roots).unwrap())
+                1 << (Self::Integer::try_from($fp::NUM_ROOTS).unwrap())
             }
 
             fn root(l: usize) -> Option<Self> {
-                if l < min($fp.roots.len(), $fp.num_roots+1) {
-                    Some(Self($fp.roots[l]))
+                if l < min($fp::ROOTS.len(), $fp::NUM_ROOTS+1) {
+                    Some(Self($fp::ROOTS[l]))
                 } else {
                     None
                 }
@@ -815,9 +814,9 @@ impl Integer for u128 {
 }
 
 make_field!(
-    /// Same as Field32, but encoded in little endian for compatibility with Prio v2.
+    /// `GF(4293918721)`, a 32-bit field.
     FieldPrio2,
-    u128,
+    u32,
     u32,
     FP32,
     4,
