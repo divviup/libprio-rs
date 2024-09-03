@@ -128,8 +128,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.125"
-when = "2024-08-15"
+version = "1.0.127"
+when = "2024-08-23"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
