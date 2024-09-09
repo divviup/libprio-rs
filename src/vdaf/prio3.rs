@@ -1575,11 +1575,12 @@ mod tests {
     use assert_matches::assert_matches;
     #[cfg(feature = "experimental")]
     use fixed::{
-        types::extra::{U15, U31, U63},
+        types::{
+            extra::{U15, U31, U63},
+            I1F15, I1F31, I1F63,
+        },
         FixedI16, FixedI32, FixedI64,
     };
-    #[cfg(feature = "experimental")]
-    use fixed_macro::fixed;
     use rand::prelude::*;
 
     #[test]
@@ -1719,19 +1720,19 @@ mod tests {
 
         {
             const SIZE: usize = 5;
-            let fp32_0 = fixed!(0: I1F31);
+            const FP32_0: I1F31 = I1F31::lit("0");
 
             // 32 bit fixedpoint, non-power-of-2 vector, single-threaded
             {
                 let prio3_32 = ctor_32(2, SIZE).unwrap();
-                test_fixed_vec::<_, _, _, SIZE>(fp32_0, prio3_32);
+                test_fixed_vec::<_, _, _, SIZE>(FP32_0, prio3_32);
             }
 
             // 32 bit fixedpoint, non-power-of-2 vector, multi-threaded
             #[cfg(feature = "multithreaded")]
             {
                 let prio3_mt_32 = ctor_mt_32(2, SIZE).unwrap();
-                test_fixed_vec::<_, _, _, SIZE>(fp32_0, prio3_mt_32);
+                test_fixed_vec::<_, _, _, SIZE>(FP32_0, prio3_mt_32);
             }
         }
 
@@ -1756,6 +1757,16 @@ mod tests {
     #[test]
     #[cfg(feature = "experimental")]
     fn test_prio3_bounded_fpvec_sum() {
+        const FP16_4_INV: I1F15 = I1F15::lit("0.25");
+        const FP16_8_INV: I1F15 = I1F15::lit("0.125");
+        const FP16_16_INV: I1F15 = I1F15::lit("0.0625");
+        const FP32_4_INV: I1F31 = I1F31::lit("0.25");
+        const FP32_8_INV: I1F31 = I1F31::lit("0.125");
+        const FP32_16_INV: I1F31 = I1F31::lit("0.0625");
+        const FP64_4_INV: I1F63 = I1F63::lit("0.25");
+        const FP64_8_INV: I1F63 = I1F63::lit("0.125");
+        const FP64_16_INV: I1F63 = I1F63::lit("0.0625");
+
         type P<Fx> = Prio3FixedPointBoundedL2VecSum<Fx>;
         let ctor_16 = P::<FixedI16<U15>>::new_fixedpoint_boundedl2_vec_sum;
         let ctor_32 = P::<FixedI32<U31>>::new_fixedpoint_boundedl2_vec_sum;
@@ -1772,56 +1783,47 @@ mod tests {
 
         {
             // 16 bit fixedpoint
-            let fp16_4_inv = fixed!(0.25: I1F15);
-            let fp16_8_inv = fixed!(0.125: I1F15);
-            let fp16_16_inv = fixed!(0.0625: I1F15);
 
             // two aggregators, three entries per vector.
             {
                 let prio3_16 = ctor_16(2, 3).unwrap();
-                test_fixed(fp16_4_inv, fp16_8_inv, fp16_16_inv, prio3_16);
+                test_fixed(FP16_4_INV, FP16_8_INV, FP16_16_INV, prio3_16);
             }
 
             #[cfg(feature = "multithreaded")]
             {
                 let prio3_16_mt = ctor_mt_16(2, 3).unwrap();
-                test_fixed(fp16_4_inv, fp16_8_inv, fp16_16_inv, prio3_16_mt);
+                test_fixed(FP16_4_INV, FP16_8_INV, FP16_16_INV, prio3_16_mt);
             }
         }
 
         {
             // 32 bit fixedpoint
-            let fp32_4_inv = fixed!(0.25: I1F31);
-            let fp32_8_inv = fixed!(0.125: I1F31);
-            let fp32_16_inv = fixed!(0.0625: I1F31);
 
             {
                 let prio3_32 = ctor_32(2, 3).unwrap();
-                test_fixed(fp32_4_inv, fp32_8_inv, fp32_16_inv, prio3_32);
+                test_fixed(FP32_4_INV, FP32_8_INV, FP32_16_INV, prio3_32);
             }
 
             #[cfg(feature = "multithreaded")]
             {
                 let prio3_32_mt = ctor_mt_32(2, 3).unwrap();
-                test_fixed(fp32_4_inv, fp32_8_inv, fp32_16_inv, prio3_32_mt);
+                test_fixed(FP32_4_INV, FP32_8_INV, FP32_16_INV, prio3_32_mt);
             }
         }
 
         {
             // 64 bit fixedpoint
-            let fp64_4_inv = fixed!(0.25: I1F63);
-            let fp64_8_inv = fixed!(0.125: I1F63);
-            let fp64_16_inv = fixed!(0.0625: I1F63);
 
             {
                 let prio3_64 = ctor_64(2, 3).unwrap();
-                test_fixed(fp64_4_inv, fp64_8_inv, fp64_16_inv, prio3_64);
+                test_fixed(FP64_4_INV, FP64_8_INV, FP64_16_INV, prio3_64);
             }
 
             #[cfg(feature = "multithreaded")]
             {
                 let prio3_64_mt = ctor_mt_64(2, 3).unwrap();
-                test_fixed(fp64_4_inv, fp64_8_inv, fp64_16_inv, prio3_64_mt);
+                test_fixed(FP64_4_INV, FP64_8_INV, FP64_16_INV, prio3_64_mt);
             }
         }
 
