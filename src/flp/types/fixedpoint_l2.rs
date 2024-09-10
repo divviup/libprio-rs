@@ -672,17 +672,23 @@ mod tests {
     use crate::flp::test_utils::FlpTest;
     use crate::vdaf::xof::SeedStreamTurboShake128;
     use fixed::types::extra::{U127, U14, U63};
+    use fixed::types::{I1F15, I1F31, I1F63};
     use fixed::{FixedI128, FixedI16, FixedI64};
-    use fixed_macro::fixed;
     use rand::SeedableRng;
+
+    const FP16_4_INV: I1F15 = I1F15::lit("0.25");
+    const FP16_8_INV: I1F15 = I1F15::lit("0.125");
+    const FP16_16_INV: I1F15 = I1F15::lit("0.0625");
+    const FP32_4_INV: I1F31 = I1F31::lit("0.25");
+    const FP32_8_INV: I1F31 = I1F31::lit("0.125");
+    const FP32_16_INV: I1F31 = I1F31::lit("0.0625");
+    const FP64_4_INV: I1F63 = I1F63::lit("0.25");
+    const FP64_8_INV: I1F63 = I1F63::lit("0.125");
+    const FP64_16_INV: I1F63 = I1F63::lit("0.0625");
 
     #[test]
     fn test_bounded_fpvec_sum_parallel_fp16() {
-        let fp16_4_inv = fixed!(0.25: I1F15);
-        let fp16_8_inv = fixed!(0.125: I1F15);
-        let fp16_16_inv = fixed!(0.0625: I1F15);
-
-        let fp16_vec = vec![fp16_4_inv, fp16_8_inv, fp16_16_inv];
+        let fp16_vec = vec![FP16_4_INV, FP16_8_INV, FP16_16_INV];
 
         // the encoded vector has the following entries:
         // enc(0.25) =  2^(n-1) * 0.25 + 2^(n-1)     = 40960
@@ -693,22 +699,14 @@ mod tests {
 
     #[test]
     fn test_bounded_fpvec_sum_parallel_fp32() {
-        let fp32_4_inv = fixed!(0.25: I1F31);
-        let fp32_8_inv = fixed!(0.125: I1F31);
-        let fp32_16_inv = fixed!(0.0625: I1F31);
-
-        let fp32_vec = vec![fp32_4_inv, fp32_8_inv, fp32_16_inv];
+        let fp32_vec = vec![FP32_4_INV, FP32_8_INV, FP32_16_INV];
         // computed as above but with n=32
         test_fixed(fp32_vec, vec![2684354560, 2415919104, 2281701376]);
     }
 
     #[test]
     fn test_bounded_fpvec_sum_parallel_fp64() {
-        let fp64_4_inv = fixed!(0.25: I1F63);
-        let fp64_8_inv = fixed!(0.125: I1F63);
-        let fp64_16_inv = fixed!(0.0625: I1F63);
-
-        let fp64_vec = vec![fp64_4_inv, fp64_8_inv, fp64_16_inv];
+        let fp64_vec = vec![FP64_4_INV, FP64_8_INV, FP64_16_INV];
         // computed as above but with n=64
         test_fixed(
             fp64_vec,

@@ -1,5 +1,7 @@
-use fixed::{types::extra::U15, FixedI16};
-use fixed_macro::fixed;
+use fixed::{
+    types::{extra::U15, I1F15},
+    FixedI16,
+};
 
 use prio::{
     codec::Encode,
@@ -53,8 +55,8 @@ fn main() {
 
     let len = 1000;
     let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, len).unwrap();
-    let fp_num = fixed!(0.0001: I1F15);
-    let measurement = vec![fp_num; len];
+    const FP_NUM: I1F15 = I1F15::lit("0.0001");
+    let measurement = vec![FP_NUM; len];
     println!(
         "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
         len,

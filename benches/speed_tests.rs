@@ -6,8 +6,6 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 #[cfg(feature = "experimental")]
 use fixed::types::{I1F15, I1F31};
 #[cfg(feature = "experimental")]
-use fixed_macro::fixed;
-#[cfg(feature = "experimental")]
 use num_bigint::BigUint;
 #[cfg(feature = "experimental")]
 use num_rational::Ratio;
@@ -434,6 +432,11 @@ fn prio3(c: &mut Criterion) {
 
     #[cfg(feature = "experimental")]
     {
+        const FP16_ZERO: I1F15 = I1F15::lit("0");
+        const FP32_ZERO: I1F31 = I1F31::lit("0");
+        const FP16_HALF: I1F15 = I1F15::lit("0.5");
+        const FP32_HALF: I1F31 = I1F31::lit("0.5");
+
         let mut group = c.benchmark_group("prio3fixedpointboundedl2vecsum_i1f15_shard");
         for dimension in [10, 100, 1_000] {
             group.bench_with_input(
@@ -442,8 +445,8 @@ fn prio3(c: &mut Criterion) {
                 |b, dimension| {
                     let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
-                    let mut measurement = vec![fixed!(0: I1F15); *dimension];
-                    measurement[0] = fixed!(0.5: I1F15);
+                    let mut measurement = vec![FP16_ZERO; *dimension];
+                    measurement[0] = FP16_HALF;
                     let nonce = black_box([0u8; 16]);
                     b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
                 },
@@ -462,8 +465,8 @@ fn prio3(c: &mut Criterion) {
                                 num_shares, *dimension,
                             )
                             .unwrap();
-                        let mut measurement = vec![fixed!(0: I1F15); *dimension];
-                        measurement[0] = fixed!(0.5: I1F15);
+                        let mut measurement = vec![FP16_ZERO; *dimension];
+                        measurement[0] = FP16_HALF;
                         let nonce = black_box([0u8; 16]);
                         b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
                     },
@@ -480,8 +483,8 @@ fn prio3(c: &mut Criterion) {
                 |b, dimension| {
                     let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
-                    let mut measurement = vec![fixed!(0: I1F15); *dimension];
-                    measurement[0] = fixed!(0.5: I1F15);
+                    let mut measurement = vec![FP16_ZERO; *dimension];
+                    measurement[0] = FP16_HALF;
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 16]);
                     let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
@@ -512,8 +515,8 @@ fn prio3(c: &mut Criterion) {
                                 num_shares, *dimension,
                             )
                             .unwrap();
-                        let mut measurement = vec![fixed!(0: I1F15); *dimension];
-                        measurement[0] = fixed!(0.5: I1F15);
+                        let mut measurement = vec![FP16_ZERO; *dimension];
+                        measurement[0] = FP16_HALF;
                         let nonce = black_box([0u8; 16]);
                         let verify_key = black_box([0u8; 16]);
                         let (public_share, input_shares) =
@@ -543,8 +546,8 @@ fn prio3(c: &mut Criterion) {
                 |b, dimension| {
                     let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
-                    let mut measurement = vec![fixed!(0: I1F31); *dimension];
-                    measurement[0] = fixed!(0.5: I1F31);
+                    let mut measurement = vec![FP32_ZERO; *dimension];
+                    measurement[0] = FP32_HALF;
                     let nonce = black_box([0u8; 16]);
                     b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
                 },
@@ -563,8 +566,8 @@ fn prio3(c: &mut Criterion) {
                                 num_shares, *dimension,
                             )
                             .unwrap();
-                        let mut measurement = vec![fixed!(0: I1F31); *dimension];
-                        measurement[0] = fixed!(0.5: I1F31);
+                        let mut measurement = vec![FP32_ZERO; *dimension];
+                        measurement[0] = FP32_HALF;
                         let nonce = black_box([0u8; 16]);
                         b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
                     },
@@ -581,8 +584,8 @@ fn prio3(c: &mut Criterion) {
                 |b, dimension| {
                     let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
-                    let mut measurement = vec![fixed!(0: I1F31); *dimension];
-                    measurement[0] = fixed!(0.5: I1F31);
+                    let mut measurement = vec![FP32_ZERO; *dimension];
+                    measurement[0] = FP32_HALF;
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 16]);
                     let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
@@ -613,8 +616,8 @@ fn prio3(c: &mut Criterion) {
                                 num_shares, *dimension,
                             )
                             .unwrap();
-                        let mut measurement = vec![fixed!(0: I1F31); *dimension];
-                        measurement[0] = fixed!(0.5: I1F31);
+                        let mut measurement = vec![FP32_ZERO; *dimension];
+                        measurement[0] = FP32_HALF;
                         let nonce = black_box([0u8; 16]);
                         let verify_key = black_box([0u8; 16]);
                         let (public_share, input_shares) =
