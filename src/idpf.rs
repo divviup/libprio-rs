@@ -47,7 +47,7 @@ pub enum IdpfError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct IdpfInput {
     /// The index as a boxed bit slice.
-    index: BitBox,
+    pub(crate) index: BitBox,
 }
 
 impl IdpfInput {

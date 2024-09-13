@@ -398,7 +398,7 @@ where
 pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
     /// Includes output shares for eventual aggregation.
     output_shares: MasticOutputShare<F>,
-    /// if SZK verification is being performed, we also store the relevant state for that operation.
+    /// If SZK verification is being performed, we also store the relevant state for that operation.
     szk_query_state: SzkQueryState<SEED_SIZE>,
     verifier_len: Option<usize>,
 }
@@ -467,9 +467,9 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
     }
 }
 
-/// Mastic prepare message
+/// Mastic prepare message.
 ///
-/// Result of preprocessing the broadcast messages of all parties during the
+/// Result of preprocessing the broadcast messages of both aggregators during the
 /// preparation phase.
 pub type MasticPrepareMessage<F, const SEED_SIZE: usize> = Option<SzkVerifier<F, SEED_SIZE>>;
 
@@ -517,17 +517,8 @@ where
 {
     type PrepareState = MasticPrepareState<T::Field, SEED_SIZE>;
 
-    /// The type of messages sent by each aggregator at each round of the Prepare Process.
-    ///
-    /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
-    /// associated with any aggregator involved in the execution of the VDAF.
     type PrepareShare = MasticPrepareShare<T::Field, SEED_SIZE>;
 
-    /// Result of preprocessing a round of preparation shares. This is used by all aggregators as an
-    /// input to the next round of the Prepare Process.
-    ///
-    /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
-    /// associated with any aggregator involved in the execution of the VDAF.
     type PrepareMessage = MasticPrepareMessage<T::Field, SEED_SIZE>;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
