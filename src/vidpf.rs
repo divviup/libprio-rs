@@ -35,7 +35,7 @@ use crate::{
 /// VIDPF-related errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
-pub enum VidpfError<V> {
+pub enum VidpfError {
     /// Error when key's identifier are equal.
     #[error("key's identifier should be different")]
     SameKeyId,
@@ -63,7 +63,7 @@ pub enum VidpfError<V> {
 
     /// Failure when caching VIDPF evaluation.
     #[error("cache tree: {0}")]
-    BinaryTreeError(#[from] BinaryTreeError<VidpfEvalCache<V>>),
+    BinaryTreeError(#[from] BinaryTreeError<V>),
 }
 
 /// Represents the domain of an incremental point function.
@@ -110,7 +110,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         input: &VidpfInput,
         weight: &W,
         nonce: &[u8; NONCE_SIZE],
-    ) -> Result<(VidpfPublicShare<W>, [VidpfKey; 2]), VidpfError<W>> {
+    ) -> Result<(VidpfPublicShare<W>, [VidpfKey; 2]), VidpfError> {
         let keys = [
             VidpfKey::gen(VidpfServerId::S0)?,
             VidpfKey::gen(VidpfServerId::S1)?,
@@ -127,9 +127,9 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         input: &VidpfInput,
         weight: &W,
         nonce: &[u8; NONCE_SIZE],
-    ) -> Result<VidpfPublicShare<W>, VidpfError<W>> {
+    ) -> Result<VidpfPublicShare<W>, VidpfError> {
         if keys[0].id == keys[1].id {
-            return Err(VidpfError::W::SameKeyId);
+            return Err(VidpfError::SameKeyId);
         }
 
         let mut s_i = [keys[0].value, keys[1].value];
@@ -140,7 +140,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         let mut cs = Vec::with_capacity(n);
 
         for level in 0..n {
-            let alpha_i = Choice::from(u8::from(input.get(level).ok_or(VidpfError::W::IndexLevel)?));
+            let alpha_i = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
 
             // If alpha_i == 0 then
             //     (same_seed, diff_seed) = (right_seed, left_seed)
@@ -214,13 +214,13 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
         nonce: &[u8; NONCE_SIZE],
-    ) -> Result<VidpfValueShare<W>, VidpfError<W>> {
+    ) -> Result<VidpfValueShare<W>, VidpfError> {
         let mut state = VidpfEvalState::init_from_key(key);
         let mut share = W::zero(&self.weight_parameter);
 
         let n = input.len();
         if n > public.cw.len() {
-            return Err(VidpfError::W::InvalidAttributeLength);
+            return Err(VidpfError::InvalidAttributeLength);
         }
         for level in 0..n {
             (state, share) = self.eval_next(key.id, public, input, level, &state, nonce)?;
@@ -245,26 +245,26 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     ) -> Result<VidpfValueShare<W>, VidpfError> {
         let n = input.len();
         if n > public.cw.len() {
-            return Err(VidpfError::W::InvalidAttributeLength);
+            return Err(VidpfError::InvalidAttributeLength);
         }
+
         let mut state = VidpfEvalState::init_from_key(key);
-        let mut share = W::zero(&self.weight_parameter);
         match cache_tree.get(input.prefix(0).index.as_bitslice()) {
             Some(_) => Ok(()),
-            None => cache_tree.insert(IdpfInput::from_bytes(&[]).index.as_bitslice(), self.eval_next_cached(key.id, public, input, 0, &state, nonce)),
+            None => cache_tree.insert(IdpfInput::from_bytes(&[]).index.as_bitslice(), self.eval_next_cached(key.id, public, input, 0, &state, nonce)?),
         }?;
 
         for level in 1..n {
             if let Some(next_cache) = cache_tree.get(input.prefix(level).index.as_bitslice()){
                 ();
             } else {
-                let current_cache = cache_tree.get(input.prefix(level-1).index.as_bitslice());
+                let current_cache = cache_tree.get(input.prefix(level-1).index.as_bitslice()).ok_or(VidpfError::BinaryTreeError)?;
                 let (state, share) = self.eval_next(key.id, public, input, level, &current_cache.state, nonce)?;
-                let new_cache = VidpfEvalCache::init_from_state(state, share);
-                cache_tree.insert(input.prefix(level).index.as_bitslice(), new_cache)?;
+                let next_cache = VidpfEvalCache::<W>::init_from_state(state, share);
+                cache_tree.insert(input.prefix(level).index.as_bitslice(), next_cache)?;
             }
         }
-        let final_cache = cache_tree.get(input.index.as_bitslice());
+        let final_cache = cache_tree.get(input.index.as_bitslice()).ok_or(VidpfError::BinaryTreeError)?;
         Ok(VidpfValueShare {
             share: final_cache.share,
             proof: final_cache.state.proof,
@@ -281,8 +281,8 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         level: usize,
         state: &VidpfEvalState,
         nonce: &[u8; NONCE_SIZE],
-    ) -> Result<(VidpfEvalState, W), VidpfError<W>> {
-        let cw = public.cw.get(level).ok_or(VidpfError::W::IndexLevel)?;
+    ) -> Result<(VidpfEvalState, W), VidpfError> {
+        let cw = public.cw.get(level).ok_or(VidpfError::IndexLevel)?;
 
         let seq_tilde = Self::prg(&state.seed, nonce);
 
@@ -292,7 +292,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         let tl = seq_tilde.left_control_bit ^ (t_i & cw.left_control_bit);
         let tr = seq_tilde.right_control_bit ^ (t_i & cw.right_control_bit);
 
-        let x_i = Choice::from(u8::from(input.get(level).ok_or(VidpfError::W::IndexLevel)?));
+        let x_i = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
         let s_tilde_i = conditional_select_seed(x_i, &[sl, sr]);
 
         let next_control_bit = Choice::conditional_select(&tl, &tr, x_i);
@@ -304,7 +304,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         y.conditional_negate(Choice::from(id));
 
         let pi_i = &state.proof;
-        let cs_i = public.cs.get(level).ok_or(VidpfError::W::IndexLevel)?;
+        let cs_i = public.cs.get(level).ok_or(VidpfError::IndexLevel)?;
         let pi_tilde = Self::node_proof(input, level, &next_seed)?;
         let h2_input = xor_proof(
             conditional_xor_proof(pi_tilde, cs_i, next_control_bit),
@@ -331,7 +331,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         level: usize,
         state: &VidpfEvalState,
         nonce: &[u8; NONCE_SIZE],
-    ) -> Result<VidpfEvalCache<W>, VidpfError<W>> {
+    ) -> Result<VidpfEvalCache<W>, VidpfError> {
         let (state, share) = self.eval_next(id, public, input, level, state, nonce)?;
         Ok(VidpfEvalCache::init_from_state(state, share))
     }
@@ -341,7 +341,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         key: &VidpfKey,
         public_share: &VidpfPublicShare<W>,
         nonce: &[u8; NONCE_SIZE],
-    ) -> Result<W, <VidpfError<W>> {
+    ) -> Result<W, VidpfError> {
         Ok(self
             .eval(key, public_share, &VidpfInput::from_bools(&[false]), nonce)?
             .share
@@ -388,7 +388,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         input: &VidpfInput,
         level: usize,
         seed: &VidpfSeed,
-    ) -> Result<VidpfProof, VidpfError<W>> {
+    ) -> Result<VidpfProof, VidpfError> {
         let mut shake = XofTurboShake128::init(seed, VidpfDomainSepTag::NODE_PROOF);
         for chunk128 in input
             .index(..=level)
@@ -400,7 +400,7 @@ impl<'a, W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         }
         shake.update(
             &u16::try_from(level)
-                .map_err(|_e| VidpfError::W::LevelTooBig)?
+                .map_err(|_e| VidpfError::LevelTooBig)?
                 .to_le_bytes(),
         );
         let mut rng = shake.into_seed_stream();
@@ -448,7 +448,7 @@ impl VidpfKey {
     ///
     /// # Errors
     /// Triggers an error if the random generator fails.
-    pub(crate) fn gen(id: VidpfServerId) -> Result<Self, <VidpfError<W>> {
+    pub(crate) fn gen(id: VidpfServerId) -> Result<Self, VidpfError> {
         let mut value = [0; 16];
         getrandom::getrandom(&mut value)?;
         Ok(Self { id, value })
@@ -631,21 +631,14 @@ impl VidpfEvalState {
 /// Contains the values produced during input evaluation at a given level.
 pub struct VidpfEvalCache<W: VidpfValue> {
     state: VidpfEvalState,
-    share: Option<VidpfValueShare<W>>,
+    share: W,
 }
 
-impl<W: VidpfValue> VidpfEvalCache<'a, W> {
-    fn init_from_key(key: &VidpfKey) -> Self {
-        Self {
-            state: VidpfEvalState::init_from_key(key),
-            share: None,
-        }
-    }
-
-    fn init_from_state(state: VidpfEvalState, share: VidpfValueShare<W>) -> Self {
+impl<W: VidpfValue> VidpfEvalCache<W> {
+    fn init_from_state(state: VidpfEvalState, share: W) -> Self {
         Self {
             state,
-            share: Some(share),
+            share,
         }
     }
 }
@@ -725,7 +718,7 @@ impl<F: FieldElement> IdpfValue for VidpfWeight<F> {
             lhs.0.len(),
             rhs.0.len(),
             "{}",
-            VidpfError::W::InvalidWeightLength
+            VidpfError::InvalidWeightLength
         );
 
         Self(
@@ -751,7 +744,7 @@ impl<F: FieldElement> Add for VidpfWeight<F> {
             self.0.len(),
             rhs.0.len(),
             "{}",
-            VidpfError::W::InvalidWeightLength
+            VidpfError::InvalidWeightLength
         );
 
         Self(zip(self.0, rhs.0).map(|(a, b)| a.add(b)).collect())
@@ -765,7 +758,7 @@ impl<F: FieldElement> AddAssign for VidpfWeight<F> {
             self.0.len(),
             rhs.0.len(),
             "{}",
-            VidpfError::W::InvalidWeightLength
+            VidpfError::InvalidWeightLength
         );
 
         zip(&mut self.0, rhs.0).for_each(|(a, b)| a.add_assign(b));
@@ -781,7 +774,7 @@ impl<F: FieldElement> Sub for VidpfWeight<F> {
             self.0.len(),
             rhs.0.len(),
             "{}",
-            VidpfError::W::InvalidWeightLength
+            VidpfError::InvalidWeightLength
         );
 
         Self(zip(self.0, rhs.0).map(|(a, b)| a.sub(b)).collect())
