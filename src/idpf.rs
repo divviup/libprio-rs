@@ -80,6 +80,11 @@ impl IdpfInput {
         }
     }
 
+    /// Create a new empty IDPF input.
+    pub fn empty_input() -> IdpfInput {
+        IdpfInput::from_bools(&[])
+    }
+
     /// Get the length of the input in bits.
     pub fn len(&self) -> usize {
         self.index.len()
@@ -108,6 +113,13 @@ impl IdpfInput {
     pub fn prefix(&self, level: usize) -> Self {
         Self {
             index: self.index[..=level].to_owned().into(),
+        }
+    }
+
+    /// Return the single bit of this IDPF input at the given level.
+    pub fn next_branch(&self, level: usize) -> Self {
+        Self {
+            index: self.index[level - 1..level].to_owned().into(),
         }
     }
 
