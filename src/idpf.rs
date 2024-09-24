@@ -80,11 +80,6 @@ impl IdpfInput {
         }
     }
 
-    /// Create a new empty IDPF input.
-    pub fn empty_input() -> IdpfInput {
-        IdpfInput::from_bools(&[])
-    }
-
     /// Get the length of the input in bits.
     pub fn len(&self) -> usize {
         self.index.len()

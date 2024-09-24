@@ -241,17 +241,12 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
         (requires_joint_rand, verifier_len): &(bool, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        if *requires_joint_rand {
-            Ok(SzkQueryShare {
-                joint_rand_part_opt: Some(Seed::<SEED_SIZE>::decode(bytes)?),
-                flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
-            })
-        } else {
-            Ok(SzkQueryShare {
-                joint_rand_part_opt: None,
-                flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
-            })
-        }
+        Ok(SzkQueryShare {
+            joint_rand_part_opt: (*requires_joint_rand)
+                .then(|| Seed::<SEED_SIZE>::decode(bytes))
+                .transpose()?,
+            flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
+        })
     }
 }
 

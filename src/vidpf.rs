@@ -22,7 +22,7 @@ use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 use crate::{
-    bt::BinaryTree,
+    bt::{BinaryTree, BinaryTreeError},
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{
@@ -47,6 +47,10 @@ pub enum VidpfError {
     /// Error during VIDPF evaluation: tried to access a level index out of bounds.
     #[error("level index out of bounds")]
     IndexLevel,
+
+    /// Error during VIDPF evaluation: writing to the evaluation cache did not succeed.
+    #[error("failed to insert node into an empty cache")]
+    CacheError,
 
     /// Error when input attribute has too few or many bits to be a path in an initialized
     /// VIDPF tree.
@@ -231,7 +235,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// [`Vidpf::eval_cached`] evaluates the entire `input` and produces a share of the
     /// input's weight. It reuses computation from previous levels available in the
     /// cache
-    pub fn eval_cached(
+    pub fn eval_with_cache(
         &self,
         key: &VidpfKey,
         public: &VidpfPublicShare<W>,
@@ -246,18 +250,21 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
         let state = VidpfEvalState::init_from_key(key);
         let path = input;
-        match cache_tree.get(input.prefix(0).index.as_bitslice()) {
-            Some(_) => (),
-            None => cache_tree
-                .insert(
-                    IdpfInput::empty_input().index.as_bitslice(),
-                    self.eval_next_cached(key.id, public, input, 0, &state, nonce)?,
-                )
-                .expect("inserting into top of empty tree"),
+        match cache_tree
+            .insert(
+                input.prefix(0).index.as_bitslice(),
+            self.eval_next_with_cache(key.id, public, input, 0, &state, nonce)?
+            )
+        {
+            Ok(_) => (),
+            Err(value) => match value {
+                BinaryTreeError::<VidpfEvalCache<W>>::InsertNonEmptyNode(_) => Ok(()),
+                BinaryTreeError::<VidpfEvalCache<W>>::UnreachableNode(_) => Err(VidpfError::CacheError),
+            }?
         };
 
         let mut cache_node = cache_tree
-            .get_node(IdpfInput::empty_input().index.as_bitslice())
+            .get_node(IdpfInput::from_bools(&[]).index.as_bitslice())
             .expect("previous match statement ensures initialization");
 
         for level in 1..n {
@@ -270,7 +277,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
                     .expect("existence of node ensured by above condition");
             } else {
                 let cache = cache_node
-                    .get(IdpfInput::empty_input().index.as_bitslice())
+                    .get(IdpfInput::from_bools(&[]).index.as_bitslice())
                     .expect("current node initialized by previous loop iteration");
                 let (state, share) =
                     self.eval_next(key.id, public, input, level, &cache.state, nonce)?;
@@ -284,7 +291,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
             }
         }
         let final_cache = cache_node
-            .get(IdpfInput::empty_input().index.as_bitslice())
+            .get(IdpfInput::from_bools(&[]).index.as_bitslice())
             .expect("node was inserted by last loop iteration");
         Ok(final_cache.to_share())
     }
@@ -341,7 +348,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
     /// [`Vidpf::eval_next_cached`] evaluates the `input` at the given level using the provided initial
     /// state, and returns a cache containing a new state and a share of the input's weight at that level.
-    fn eval_next_cached(
+    fn eval_next_with_cache(
         &self,
         id: VidpfServerId,
         public: &VidpfPublicShare<W>,
