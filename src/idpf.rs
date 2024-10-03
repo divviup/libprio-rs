@@ -114,7 +114,7 @@ impl IdpfInput {
     /// Return the single bit of this IDPF input at the given level.
     pub fn next_branch(&self, level: usize) -> Self {
         Self {
-            index: self.index[level - 1..level].to_owned().into(),
+            index: self.index[level..level + 1].to_owned().into(),
         }
     }
 

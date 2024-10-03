@@ -5,6 +5,7 @@
 //! [draft-mouris-cfrg-mastic-01]: https://www.ietf.org/archive/id/draft-mouris-cfrg-mastic-01.html
 
 use crate::{
+    bt::{BinaryTree, Path},
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, FieldElement},
     flp::{
@@ -18,7 +19,8 @@ use crate::{
         PrepareTransition, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
+        Vidpf, VidpfError, VidpfEvalCache, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
+        VidpfWeight,
     },
 };
 
@@ -549,33 +551,32 @@ where
         let mut output_shares = Vec::<T::Field>::with_capacity(
             self.vidpf.weight_parameter * agg_param.level_and_prefixes.prefixes().len(),
         );
+        let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
+        let cache = VidpfEvalCache::<VidpfWeight<T::Field>>::init_from_key(
+            &input_share.vidpf_key,
+            &self.vidpf.weight_parameter,
+        );
+        cache_tree
+            .insert(Path::empty(), cache)
+            .expect("Should alwys be able to insert into empty tree at root");
         for prefix in agg_param.level_and_prefixes.prefixes() {
-            let mut value_share =
-                self.vidpf
-                    .eval(&input_share.vidpf_key, public_share, prefix, nonce)?;
+            let mut value_share = self.vidpf.eval_with_cache(
+                &input_share.vidpf_key,
+                public_share,
+                prefix,
+                &mut cache_tree,
+                nonce,
+            )?;
             xof.update(&value_share.proof);
             output_shares.append(&mut value_share.share.0);
         }
         let root_share_opt = if agg_param.require_check_flag {
-            Some(
-                self.vidpf
-                    .eval(
-                        &input_share.vidpf_key,
-                        public_share,
-                        &VidpfInput::from_bools(&[false]),
-                        nonce,
-                    )?
-                    .share
-                    + self
-                        .vidpf
-                        .eval(
-                            &input_share.vidpf_key,
-                            public_share,
-                            &VidpfInput::from_bools(&[true]),
-                            nonce,
-                        )?
-                        .share,
-            )
+            Some(self.vidpf.eval_root_with_cache(
+                &input_share.vidpf_key,
+                public_share,
+                &mut cache_tree,
+                nonce,
+            )?)
         } else {
             None
         };
