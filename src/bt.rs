@@ -78,7 +78,7 @@ type SubTree<V> = Option<Box<Node<V>>>;
 
 /// Represents a node of a binary tree.
 pub struct Node<V> {
-    value: V,
+    pub(crate) value: V,
     left: SubTree<V>,
     right: SubTree<V>,
 }

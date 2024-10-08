@@ -15,13 +15,15 @@ use core::{
 };
 
 use bitvec::field::BitField;
+use bitvec::prelude::{BitSlice, BitVec, Lsb0};
 use rand_core::RngCore;
 use std::fmt::Debug;
-use std::io::Cursor;
+use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 use crate::{
-    codec::{CodecError, Encode, ParameterizedDecode},
+    bt::{BinaryTree, BinaryTreeError},
+    codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{
         conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
@@ -45,6 +47,10 @@ pub enum VidpfError {
     /// Error during VIDPF evaluation: tried to access a level index out of bounds.
     #[error("level index out of bounds")]
     IndexLevel,
+
+    /// Error during VIDPF evaluation: writing to the evaluation cache did not succeed.
+    #[error("failed to insert node into an empty cache")]
+    CacheError,
 
     /// Error when input attribute has too few or many bits to be a path in an initialized
     /// VIDPF tree.
@@ -226,6 +232,65 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         })
     }
 
+    /// [`Vidpf::eval_with_cache`] evaluates the entire `input` and produces a share of the
+    /// input's weight. It reuses computation from previous levels available in the
+    /// cache
+    pub fn eval_with_cache(
+        &self,
+        key: &VidpfKey,
+        public: &VidpfPublicShare<W>,
+        input: &VidpfInput,
+        cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
+        nonce: &[u8; NONCE_SIZE],
+    ) -> Result<VidpfValueShare<W>, VidpfError> {
+        let n = input.len();
+        if n > public.cw.len() {
+            return Err(VidpfError::InvalidAttributeLength);
+        }
+
+        let state = VidpfEvalState::init_from_key(key);
+        let path = input;
+        let first_cache = VidpfEvalCache::init_from_state(state, W::zero(&self.weight_parameter));
+
+        let mut cache_node = match cache_tree.get_node(BitSlice::empty()) {
+            Some(node) => Ok(node),
+            None => match cache_tree.insert(BitSlice::empty(), first_cache) {
+                Ok(_) => Ok(cache_tree
+                    .get_node(BitSlice::empty())
+                    .expect("node inserted by above successful statement")),
+                Err(BinaryTreeError::InsertNonEmptyNode(_)) => Err(VidpfError::CacheError),
+                Err(BinaryTreeError::UnreachableNode(_)) => Err(VidpfError::CacheError),
+            },
+        }?;
+        for level in 0..n {
+            if cache_node
+                .get(path.next_branch(level).index.as_bitslice())
+                .is_some()
+            {
+                cache_node = cache_node
+                    .get_node(path.next_branch(level).index.as_bitslice())
+                    .expect("existence of node ensured by above condition");
+            } else {
+                let cache = cache_node
+                    .get(IdpfInput::from_bools(&[]).index.as_bitslice())
+                    .expect("current node initialized by previous loop iteration");
+                let (state, share) =
+                    self.eval_next(key.id, public, input, level, &cache.state, nonce)?;
+                let next_cache = VidpfEvalCache::<W>::init_from_state(state, share);
+                cache_node
+                    .insert(input.next_branch(level).index.as_bitslice(), next_cache)
+                    .expect("current node initialized by previous loop iteration");
+                cache_node = cache_node
+                    .get_node(path.next_branch(level).index.as_bitslice())
+                    .expect("node was inserted by previous statement");
+            }
+        }
+        Ok(cache_tree
+            .get(input.index.as_bitslice())
+            .expect("node was inserted by last loop iteration")
+            .to_share())
+    }
+
     /// [`Vidpf::eval_next`] evaluates the `input` at the given level using the provided initial
     /// state, and returns a new state and a share of the input's weight at that level.
     fn eval_next(
@@ -274,6 +339,33 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         };
 
         Ok((next_state, y))
+    }
+
+    pub(crate) fn eval_root_with_cache(
+        &self,
+        key: &VidpfKey,
+        public_share: &VidpfPublicShare<W>,
+        cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
+        nonce: &[u8; NONCE_SIZE],
+    ) -> Result<W, VidpfError> {
+        Ok(self
+            .eval_with_cache(
+                key,
+                public_share,
+                &VidpfInput::from_bools(&[false]),
+                cache_tree,
+                nonce,
+            )?
+            .share
+            + self
+                .eval_with_cache(
+                    key,
+                    public_share,
+                    &VidpfInput::from_bools(&[true]),
+                    cache_tree,
+                    nonce,
+                )?
+                .share)
     }
 
     pub(crate) fn eval_root(
@@ -415,7 +507,7 @@ impl PartialEq for VidpfKey {
     }
 }
 
-/// Vidpf server ID
+/// Vidpf server ID.
 ///
 /// Identifies the two aggregation servers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -435,7 +527,7 @@ impl From<VidpfServerId> for Choice {
     }
 }
 
-/// Vidpf correction word
+/// Vidpf correction word.
 ///
 ///  Adjusts values of shares during the VIDPF evaluation.
 #[derive(Clone, Debug)]
@@ -464,25 +556,6 @@ where
     }
 }
 
-impl<W: VidpfValue> Encode for VidpfCorrectionWord<W> {
-    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        todo!();
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        todo!();
-    }
-}
-
-impl<W: VidpfValue> ParameterizedDecode<W::ValueParameter> for VidpfCorrectionWord<W> {
-    fn decode_with_param(
-        _decoding_parameter: &W::ValueParameter,
-        _bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        todo!();
-    }
-}
-
 /// Vidpf public share
 ///
 /// Common public information used by aggregation servers.
@@ -493,27 +566,83 @@ pub struct VidpfPublicShare<W: VidpfValue> {
 }
 
 impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
-    fn encode(&self, _bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        todo!()
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        // Control bits need to be written within each byte in LSB-to-MSB order, and assigned into
+        // bytes in big-endian order. Thus, the first four levels will have their control bits
+        // encoded in the last byte, and the last levels will have their control bits encoded in the
+        // first byte.
+        let mut control_bits: BitVec<u8, Lsb0> = BitVec::with_capacity(self.cw.len() * 2);
+        for correction_words in self.cw.iter() {
+            control_bits.extend(
+                [
+                    bool::from(correction_words.left_control_bit),
+                    bool::from(correction_words.right_control_bit),
+                ]
+                .iter(),
+            );
+        }
+        control_bits.set_uninitialized(false);
+        let mut packed_control = control_bits.into_vec();
+        bytes.append(&mut packed_control);
+
+        for correction_words in self.cw.iter() {
+            Seed(correction_words.seed).encode(bytes)?;
+            correction_words.weight.encode(bytes)?;
+        }
+
+        for proof in &self.cs {
+            bytes.extend_from_slice(proof);
+        }
+        Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        todo!()
+        let control_bits_count = (self.cw.len()) * 2;
+        let mut len = (control_bits_count + 7) / 8 + (self.cw.len()) * 16;
+        for correction_words in self.cw.iter() {
+            len += correction_words.weight.encoded_len()?;
+        }
+        len += self.cs.len() * 32;
+        Some(len)
     }
 }
 
 impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
     fn decode_with_param(
-        (_bits, _weight_parameter): &(usize, W::ValueParameter),
-        _bytes: &mut Cursor<&[u8]>,
+        (bits, weight_parameter): &(usize, W::ValueParameter),
+        bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        todo!()
+        let packed_control_len = (bits + 3) / 4;
+        let mut packed = vec![0u8; packed_control_len];
+        bytes.read_exact(&mut packed)?;
+        let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed);
+
+        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
+        for chunk in unpacked_control_bits[0..(bits) * 2].chunks(2) {
+            let left_control_bit = (chunk[0] as u8).into();
+            let right_control_bit = (chunk[1] as u8).into();
+            let seed = Seed::decode(bytes)?.0;
+            cw.push(VidpfCorrectionWord {
+                seed,
+                left_control_bit,
+                right_control_bit,
+                weight: W::decode_with_param(weight_parameter, bytes)?,
+            })
+        }
+        let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
+        for _ in 0..*bits {
+            let mut proof = [0u8; 32];
+            bytes.read_exact(&mut proof)?;
+            cs.push(proof);
+        }
+        Ok(Self { cw, cs })
     }
 }
 
 /// Vidpf evaluation state
 ///
 /// Contains the values produced during input evaluation at a given level.
+#[derive(Debug)]
 pub struct VidpfEvalState {
     seed: VidpfSeed,
     control_bit: Choice,
@@ -526,6 +655,34 @@ impl VidpfEvalState {
             seed: key.value,
             control_bit: Choice::from(key.id),
             proof: VidpfProof::default(),
+        }
+    }
+}
+
+/// Vidpf evaluation cache
+///
+/// Contains the values produced during input evaluation at a given level.
+#[derive(Debug)]
+pub struct VidpfEvalCache<W: VidpfValue> {
+    state: VidpfEvalState,
+    share: W,
+}
+
+impl<W: VidpfValue> VidpfEvalCache<W> {
+    pub(crate) fn init_from_key(key: &VidpfKey, length: &W::ValueParameter) -> Self {
+        Self {
+            state: VidpfEvalState::init_from_key(key),
+            share: W::zero(length),
+        }
+    }
+    fn init_from_state(state: VidpfEvalState, share: W) -> Self {
+        Self { state, share }
+    }
+
+    fn to_share(&self) -> VidpfValueShare<W> {
+        VidpfValueShare::<W> {
+            share: self.share.clone(),
+            proof: self.state.proof,
         }
     }
 }
@@ -703,6 +860,7 @@ impl<F: FieldElement> ParameterizedDecode<<Self as IdpfValue>::ValueParameter> f
 
 #[cfg(test)]
 mod tests {
+
     use crate::field::Field128;
 
     use super::VidpfWeight;
@@ -714,10 +872,11 @@ mod tests {
 
     mod vidpf {
         use crate::{
+            bt::{BinaryTree, Path},
             idpf::IdpfValue,
             vidpf::{
-                Vidpf, VidpfError, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare,
-                VidpfServerId,
+                Vidpf, VidpfError, VidpfEvalCache, VidpfEvalState, VidpfInput, VidpfKey,
+                VidpfPublicShare, VidpfServerId,
             },
         };
 
@@ -837,6 +996,88 @@ mod tests {
                 assert_eq!(
                     state_0.proof, state_1.proof,
                     "proofs must be equal at the current level: {:?}",
+                    level
+                );
+            }
+        }
+
+        #[test]
+        fn caching_at_each_level() {
+            let input = VidpfInput::from_bytes(&[0xFF]);
+            let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
+            let (vidpf, public, keys, nonce) = vidpf_gen_setup(&input, &weight);
+
+            equivalence_of_eval_with_caching(&vidpf, &keys, &public, &input, &nonce);
+        }
+
+        fn equivalence_of_eval_with_caching(
+            vidpf: &Vidpf<TestWeight, TEST_NONCE_SIZE>,
+            [key_0, key_1]: &[VidpfKey; 2],
+            public: &VidpfPublicShare<TestWeight>,
+            input: &VidpfInput,
+            nonce: &[u8; TEST_NONCE_SIZE],
+        ) {
+            let mut cache_tree_0 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
+            let mut cache_tree_1 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
+            let cache_0 =
+                VidpfEvalCache::<TestWeight>::init_from_key(key_0, &vidpf.weight_parameter);
+            let cache_1 =
+                VidpfEvalCache::<TestWeight>::init_from_key(key_1, &vidpf.weight_parameter);
+            cache_tree_0
+                .insert(Path::empty(), cache_0)
+                .expect("Should alwys be able to insert into empty tree at root");
+            cache_tree_1
+                .insert(Path::empty(), cache_1)
+                .expect("Should alwys be able to insert into empty tree at root");
+
+            let n = input.len();
+            for level in 0..n {
+                let val_share_0 = vidpf
+                    .eval(key_0, public, &input.prefix(level), nonce)
+                    .unwrap();
+                let val_share_1 = vidpf
+                    .eval(key_1, public, &input.prefix(level), nonce)
+                    .unwrap();
+                let val_share_0_cached = vidpf
+                    .eval_with_cache(
+                        key_0,
+                        public,
+                        &input.prefix(level),
+                        &mut cache_tree_0,
+                        nonce,
+                    )
+                    .unwrap();
+                let val_share_1_cached = vidpf
+                    .eval_with_cache(
+                        key_1,
+                        public,
+                        &input.prefix(level),
+                        &mut cache_tree_1,
+                        nonce,
+                    )
+                    .unwrap();
+
+                assert_eq!(
+                    val_share_0.share, val_share_0_cached.share,
+                    "shares must be computed equally with or without caching: {:?}",
+                    level
+                );
+
+                assert_eq!(
+                    val_share_1.share, val_share_1_cached.share,
+                    "shares must be computed equally with or without caching: {:?}",
+                    level
+                );
+
+                assert_eq!(
+                    val_share_0.proof, val_share_0_cached.proof,
+                    "proofs must be equal with or without caching: {:?}",
+                    level
+                );
+
+                assert_eq!(
+                    val_share_1.proof, val_share_1_cached.proof,
+                    "proofs must be equal with or without caching: {:?}",
                     level
                 );
             }
