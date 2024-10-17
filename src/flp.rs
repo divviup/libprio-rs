@@ -134,7 +134,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
         measurement: &Self::Measurement,
     ) -> Result<Vec<Self::Field>, FlpError>;
 
-    /// Decode an aggregate result.
+    /// Decode an aggregate result. The input is NOT the inverse of `encode_measurement`. Rather,
+    /// its input is an aggregation of truncated measurements.
     fn decode_result(
         &self,
         data: &[Self::Field],

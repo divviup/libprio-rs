@@ -1519,7 +1519,7 @@ where
 /// # Panics
 ///
 /// This function will panic if `input` is zero.
-fn ilog2(input: usize) -> u32 {
+pub(crate) fn ilog2(input: usize) -> u32 {
     if input == 0 {
         panic!("Tried to take the logarithm of zero");
     }
