@@ -149,10 +149,6 @@ criteria = "safe-to-run"
 version = "0.3.4"
 criteria = "safe-to-run"
 
-[[exemptions.portable-atomic]]
-version = "1.9.0"
-criteria = "safe-to-deploy"
-
 [[exemptions.ppv-lite86]]
 version = "0.2.16"
 criteria = "safe-to-deploy"
