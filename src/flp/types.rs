@@ -670,12 +670,10 @@ where
     }
 
     fn proof_len(&self) -> usize {
-        // TODO: where does this calculation come from? I copied it from Histogram
         (self.chunk_length * 2) + 2 * ((1 + self.gadget_calls).next_power_of_two() - 1) + 1
     }
 
     fn verifier_len(&self) -> usize {
-        // TODO: where does this calculation come from? I copied it from Histogram
         2 + self.chunk_length * 2
     }
 
@@ -690,12 +688,12 @@ where
     }
 
     fn prove_rand_len(&self) -> usize {
-        // TODO: where does this calculation come from? I copied it from Histogram
         self.chunk_length * 2
     }
 
     fn query_rand_len(&self) -> usize {
-        // TODO: where does this calculation come from? I copied it from Histogram
+        // TODO: this will need to be increase once draft-10 is implemented and more randomness is
+        // necessary due to random linear combination computations
         1
     }
 }
