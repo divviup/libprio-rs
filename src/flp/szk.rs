@@ -18,7 +18,6 @@ use crate::{
     prng::{Prng, PrngError},
     vdaf::xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
 };
-#[cfg(test)]
 use std::borrow::Cow;
 use std::ops::BitAnd;
 use std::{io::Cursor, marker::PhantomData};
@@ -27,7 +26,6 @@ use subtle::{Choice, ConstantTimeEq};
 // Domain separation tags
 const DST_PROVE_RANDOMNESS: u16 = 0;
 const DST_PROOF_SHARE: u16 = 1;
-#[allow(dead_code)]
 const DST_QUERY_RANDOMNESS: u16 = 2;
 const DST_JOINT_RAND_SEED: u16 = 3;
 const DST_JOINT_RAND_PART: u16 = 4;
@@ -46,6 +44,11 @@ pub enum SzkError {
     #[error("Szk query error: {0}")]
     /// Returned for errors in query evaluation
     Query(String),
+
+    #[error("Szk verifier length not stored")]
+    /// Returned when a user fails to store the length of the verifier so it
+    /// can be properly read upon receipt.
+    MissingVerifierLen(()),
 
     /// Returned if an FLP operation encountered an error.
     #[error("Flp error: {0}")]
@@ -209,17 +212,49 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
-#[cfg(test)]
 #[derive(Clone, Debug)]
 pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
     joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
-    flp_verifier: Vec<F>,
+    pub(crate) flp_verifier: Vec<F>,
 }
 
-/// The state that needs to be stored by an Szk verifier between query() and decide()
-pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
+impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkQueryShare<F, SEED_SIZE> {
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        if let Some(ref part) = self.joint_rand_part_opt {
+            part.encode(bytes)?
+        };
 
-#[cfg(test)]
+        encode_fieldvec(&self.flp_verifier, bytes)?;
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(
+            self.flp_verifier.len() * F::ENCODED_SIZE
+                + match self.joint_rand_part_opt {
+                    Some(ref part) => part.encoded_len()?,
+                    None => 0,
+                },
+        )
+    }
+}
+
+impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize)>
+    for SzkQueryShare<F, SEED_SIZE>
+{
+    fn decode_with_param(
+        (requires_joint_rand, verifier_len): &(bool, usize),
+        bytes: &mut Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        Ok(SzkQueryShare {
+            joint_rand_part_opt: (*requires_joint_rand)
+                .then(|| Seed::<SEED_SIZE>::decode(bytes))
+                .transpose()?,
+            flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
+        })
+    }
+}
+
 impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
     pub(crate) fn merge_verifiers(
         mut leader_share: SzkQueryShare<F, SEED_SIZE>,
@@ -239,6 +274,11 @@ impl<F: FieldElement, const SEED_SIZE: usize> SzkQueryShare<F, SEED_SIZE> {
         }
     }
 }
+
+/// Szk query state.
+///
+/// The state that needs to be stored by an Szk verifier between query() and decide().
+pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
 /// Verifier type for the SZK proof.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -418,7 +458,6 @@ where
         .collect()
     }
 
-    #[cfg(test)]
     fn derive_query_rand(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
@@ -429,7 +468,7 @@ where
             .into_field_vec(self.typ.query_rand_len())
     }
 
-    pub(crate) fn has_joint_rand(&self) -> bool {
+    pub(crate) fn requires_joint_rand(&self) -> bool {
         self.typ.joint_rand_len() > 0
     }
 
@@ -498,7 +537,6 @@ where
         Ok([leader_proof_share, helper_proof_share])
     }
 
-    #[cfg(test)]
     pub(crate) fn query(
         &self,
         input_share: &[T::Field],
@@ -518,7 +556,7 @@ where
             } => Cow::Owned(self.derive_helper_proof_share(proof_share_seed_and_blind)),
         };
 
-        let (joint_rand, joint_rand_seed, joint_rand_part) = if self.has_joint_rand() {
+        let (joint_rand, joint_rand_seed, joint_rand_part) = if self.requires_joint_rand() {
             let ((joint_rand_seed, joint_rand), host_joint_rand_part) = match proof_share {
                 SzkProofShare::Leader {
                     uncompressed_proof_share: _,
@@ -673,7 +711,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let prove_rand_seed = Seed::<16>::generate().unwrap();
         let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = if szk_typ.has_joint_rand() {
+        let leader_seed_opt = if szk_typ.requires_joint_rand() {
             Some(Seed::<16>::generate().unwrap())
         } else {
             None
@@ -725,7 +763,7 @@ mod tests {
         };
 
         //test mutated jr seed
-        if szk_typ.has_joint_rand() {
+        if szk_typ.requires_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
             if let Ok(leader_decision) = szk_typ.decide(verifier, joint_rand_seed_opt.clone()) {
                 assert!(!leader_decision, "Leader accepted wrong jr seed");
