@@ -78,15 +78,15 @@ pub struct MasticAggregationParam {
     level_and_prefixes: Poplar1AggregationParam,
     /// Flag indicating whether the VIDPF weight needs to be validated using SZK.
     /// This flag must be set the first time any report is aggregated; however this may happen at any level of the tree.
-    require_check_flag: bool,
+    require_weight_check: bool,
 }
 
 #[cfg(test)]
 impl MasticAggregationParam {
-    fn new(prefixes: Vec<VidpfInput>, require_check_flag: bool) -> Result<Self, VdafError> {
+    fn new(prefixes: Vec<VidpfInput>, require_weight_check: bool) -> Result<Self, VdafError> {
         Ok(Self {
             level_and_prefixes: Poplar1AggregationParam::try_from_prefixes(prefixes)?,
-            require_check_flag,
+            require_weight_check,
         })
     }
 }
@@ -94,8 +94,8 @@ impl MasticAggregationParam {
 impl Encode for MasticAggregationParam {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.level_and_prefixes.encode(bytes)?;
-        let require_check = if self.require_check_flag { 1u8 } else { 0u8 };
-        require_check.encode(bytes)?;
+        let require_weight_check = if self.require_weight_check { 1u8 } else { 0u8 };
+        require_weight_check.encode(bytes)?;
         Ok(())
     }
 
@@ -107,11 +107,11 @@ impl Encode for MasticAggregationParam {
 impl Decode for MasticAggregationParam {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let level_and_prefixes = Poplar1AggregationParam::decode(bytes)?;
-        let require_check = u8::decode(bytes)?;
-        let require_check_flag = require_check != 0;
+        let require_weight_check_u8 = u8::decode(bytes)?;
+        let require_weight_check = require_weight_check_u8 != 0;
         Ok(Self {
             level_and_prefixes,
-            require_check_flag,
+            require_weight_check,
         })
     }
 }
@@ -152,7 +152,7 @@ pub struct MasticInputShare<F: FieldElement, const SEED_SIZE: usize> {
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticInputShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.extend_from_slice(&self.vidpf_key.value[..]);
+        bytes.extend_from_slice(&self.vidpf_key.0[..]);
         self.proof_share.encode(bytes)?;
         Ok(())
     }
@@ -177,15 +177,7 @@ where
         }
         let mut value = [0; 16];
         bytes.read_exact(&mut value)?;
-        let vidpf_key = VidpfKey::new(
-            if *agg_id == 0 {
-                VidpfServerId::S0
-            } else {
-                VidpfServerId::S1
-            },
-            value,
-        );
-
+        let vidpf_key = VidpfKey::from_bytes(value);
         let proof_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
             &(
                 *agg_id == 0,
@@ -315,9 +307,11 @@ where
         )?;
 
         let leader_measurement_share =
-            self.vidpf.eval_root(&vidpf_keys[0], &public_share, nonce)?;
+            self.vidpf
+                .eval_root(&VidpfServerId::S0, &vidpf_keys[0], &public_share, nonce)?;
         let helper_measurement_share =
-            self.vidpf.eval_root(&vidpf_keys[1], &public_share, nonce)?;
+            self.vidpf
+                .eval_root(&VidpfServerId::S1, &vidpf_keys[1], &public_share, nonce)?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
             leader_measurement_share.as_ref(),
@@ -363,10 +357,7 @@ where
             return Err(VdafError::Vidpf(VidpfError::InvalidAttributeLength));
         }
 
-        let vidpf_keys = [
-            VidpfKey::gen(VidpfServerId::S0)?,
-            VidpfKey::gen(VidpfServerId::S1)?,
-        ];
+        let vidpf_keys = [VidpfKey::generate()?, VidpfKey::generate()?];
         let joint_random_opt = if self.szk.requires_joint_rand() {
             Some(Seed::<SEED_SIZE>::generate()?)
         } else {
@@ -394,13 +385,13 @@ where
 /// Mastic prepare state.
 ///
 /// State held by an aggregator between rounds of Mastic preparation. Includes intermediate
-/// state for Szk verification, the output shares currently being validated, and
+/// state for [`Szk``] verification, the output shares currently being validated, and
 /// parameters of Mastic used for encoding.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
     /// Includes output shares for eventual aggregation.
     output_shares: MasticOutputShare<F>,
-    /// If SZK verification is being performed, we also store the relevant state for that operation.
+    /// If [`Szk`]` verification is being performed, we also store the relevant state for that operation.
     szk_query_state: SzkQueryState<SEED_SIZE>,
     verifier_len: Option<usize>,
 }
@@ -408,19 +399,20 @@ pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
 /// Mastic prepare share.
 ///
 /// Broadcast message from an aggregator between rounds of Mastic. Includes the
-/// hashed VIDPF proofs for every prefix in the aggregation parameter, and optionally
+/// [`Vidpf`] evaluation proof covering every prefix in the aggregation parameter, and optionally
 /// the verification message for Szk.
 #[derive(Clone, Debug)]
 pub struct MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
-    /// Batched VIDPF proofs
-    vidpf_proofs: Seed<SEED_SIZE>,
-    /// If Szk verification of the root weight is needed, an SZK verification message.
+    ///  [`Vidpf`] evaluation proof, which guarantees one-hotness and payload consistency.
+    vidpf_proof: Seed<SEED_SIZE>,
+
+    /// If [`Szk`]` verification of the root weight is needed, a verification message.
     szk_query_share_opt: Option<SzkQueryShare<F, SEED_SIZE>>,
 }
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.vidpf_proofs.encode(bytes)?;
+        self.vidpf_proof.encode(bytes)?;
         match &self.szk_query_share_opt {
             Some(query_share) => query_share.encode(bytes),
             None => Ok(()),
@@ -429,7 +421,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, S
 
     fn encoded_len(&self) -> Option<usize> {
         Some(
-            self.vidpf_proofs.encoded_len()?
+            self.vidpf_proof.encoded_len()?
                 + match &self.szk_query_share_opt {
                     Some(query_share) => query_share.encoded_len()?,
                     None => 0,
@@ -445,27 +437,21 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
         prep_state: &MasticPrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        match (&prep_state.szk_query_state, prep_state.verifier_len) {
-            (Some(_), Some(verifier_len)) => Ok(MasticPrepareShare {
-                vidpf_proofs: Seed::decode(bytes)?,
-                szk_query_share_opt: Some(SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
-                    &(true, verifier_len),
-                    bytes,
-                )?),
-            }),
-            (None, Some(verifier_len)) => Ok(MasticPrepareShare {
-                vidpf_proofs: Seed::decode(bytes)?,
-                szk_query_share_opt: Some(SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
-                    &(false, verifier_len),
-                    bytes,
-                )?),
-            }),
-            (None, None) => Ok(MasticPrepareShare {
-                vidpf_proofs: Seed::<SEED_SIZE>::decode(bytes)?,
-                szk_query_share_opt: None,
-            }),
+        let vidpf_proof = Seed::decode(bytes)?;
+        let szk_query_share_opt = match (&prep_state.szk_query_state, prep_state.verifier_len) {
+            (Some(_), Some(verifier_len)) => Ok(Some(
+                SzkQueryShare::<F, SEED_SIZE>::decode_with_param(&(true, verifier_len), bytes)?,
+            )),
+            (None, Some(verifier_len)) => Ok(Some(
+                SzkQueryShare::<F, SEED_SIZE>::decode_with_param(&(false, verifier_len), bytes)?,
+            )),
+            (None, None) => Ok(None),
             (Some(_), None) => Err(CodecError::UnexpectedValue),
-        }
+        }?;
+        Ok(Self {
+            vidpf_proof,
+            szk_query_share_opt,
+        })
     }
 }
 
@@ -506,8 +492,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
                 &(false, verifier_len),
                 bytes,
             )?)),
-            (None, None) => Ok(None),
-            (Some(_), None) => Err(CodecError::UnexpectedValue),
+            (_, None) => Ok(None),
         }
     }
 }
@@ -518,21 +503,13 @@ where
     P: Xof<SEED_SIZE>,
 {
     type PrepareState = MasticPrepareState<T::Field, SEED_SIZE>;
-
     type PrepareShare = MasticPrepareShare<T::Field, SEED_SIZE>;
-
     type PrepareMessage = MasticPrepareMessage<T::Field, SEED_SIZE>;
 
-    /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
-    /// is passed to [`Self::prepare_next`] to get this aggregator's first-round prepare message.
-    ///
-    /// Implements `Vdaf.prep_init` from [VDAF].
-    ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
-        _agg_id: usize,
+        agg_id: usize,
         agg_param: &MasticAggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &MasticPublicShare<VidpfWeight<T::Field>>,
@@ -544,6 +521,13 @@ where
         ),
         VdafError,
     > {
+        let id = match agg_id {
+            0 => Ok(VidpfServerId::S0),
+            1 => Ok(VidpfServerId::S1),
+            _ => Err(VdafError::Uncategorized(
+                "Invalid aggregator ID".to_string(),
+            )),
+        }?;
         let mut xof = P::init(
             verify_key,
             &self.domain_separation_tag(DST_PATH_CHECK_BATCH),
@@ -553,6 +537,7 @@ where
         );
         let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
         let cache = VidpfEvalCache::<VidpfWeight<T::Field>>::init_from_key(
+            &id,
             &input_share.vidpf_key,
             &self.vidpf.weight_parameter,
         );
@@ -561,6 +546,7 @@ where
             .expect("Should alwys be able to insert into empty tree at root");
         for prefix in agg_param.level_and_prefixes.prefixes() {
             let mut value_share = self.vidpf.eval_with_cache(
+                &id,
                 &input_share.vidpf_key,
                 public_share,
                 prefix,
@@ -570,8 +556,9 @@ where
             xof.update(&value_share.proof);
             output_shares.append(&mut value_share.share.0);
         }
-        let root_share_opt = if agg_param.require_check_flag {
+        let root_share_opt = if agg_param.require_weight_check {
             Some(self.vidpf.eval_root_with_cache(
+                &id,
                 &input_share.vidpf_key,
                 public_share,
                 &mut cache_tree,
@@ -596,7 +583,7 @@ where
                 let verifier_len = szk_query_share.flp_verifier.len();
                 (
                     MasticPrepareShare {
-                        vidpf_proofs: xof.into_seed(),
+                        vidpf_proof: xof.into_seed(),
                         szk_query_share_opt: Some(szk_query_share),
                     },
                     MasticPrepareState {
@@ -608,7 +595,7 @@ where
             } else {
                 (
                     MasticPrepareShare {
-                        vidpf_proofs: xof.into_seed(),
+                        vidpf_proof: xof.into_seed(),
                         szk_query_share_opt: None,
                     },
                     MasticPrepareState {
@@ -621,11 +608,6 @@ where
         Ok((prep_state, prep_share))
     }
 
-    /// Preprocess a round of preparation shares into a single input to [`Self::prepare_next`].
-    ///
-    /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
-    ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_shares_to_prepare_message<
         M: IntoIterator<Item = MasticPrepareShare<T::Field, SEED_SIZE>>,
     >(
@@ -649,11 +631,11 @@ where
         match (leader_share, helper_share) {
             (
                 MasticPrepareShare {
-                    vidpf_proofs: leader_vidpf_proof,
+                    vidpf_proof: leader_vidpf_proof,
                     szk_query_share_opt: Some(leader_query_share),
                 },
                 MasticPrepareShare {
-                    vidpf_proofs: helper_vidpf_proof,
+                    vidpf_proof: helper_vidpf_proof,
                     szk_query_share_opt: Some(helper_query_share),
                 },
             ) => {
@@ -670,11 +652,11 @@ where
             }
             (
                 MasticPrepareShare {
-                    vidpf_proofs: leader_vidpf_proof,
+                    vidpf_proof: leader_vidpf_proof,
                     szk_query_share_opt: None,
                 },
                 MasticPrepareShare {
-                    vidpf_proofs: helper_vidpf_proof,
+                    vidpf_proof: helper_vidpf_proof,
                     szk_query_share_opt: None,
                 },
             ) => {
@@ -693,17 +675,6 @@ where
         }
     }
 
-    /// Compute the next state transition from the current state and the previous round of input
-    /// messages. If this returns [`PrepareTransition::Continue`], then the returned
-    /// [`Self::PrepareShare`] should be combined with the other Aggregators' `PrepareShare`s from
-    /// this round and passed into another call to this method. This continues until this method
-    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
-    /// aggregated. If the method returns an error, the aggregator should consider its input share
-    /// invalid and not attempt to process it any further.
-    ///
-    /// Implements `Vdaf.prep_next` from [VDAF].
-    ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_next(
         &self,
         state: MasticPrepareState<T::Field, SEED_SIZE>,
@@ -737,7 +708,6 @@ where
         }
     }
 
-    /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
         &self,
         agg_param: &MasticAggregationParam,
@@ -758,13 +728,11 @@ where
     }
 }
 
-/// The Collector's role in the execution of a VDAF.
 impl<T, P, const SEED_SIZE: usize> Collector for Mastic<T, P, SEED_SIZE>
 where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    /// Combines aggregate shares into the aggregate result.
     fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
         &self,
         agg_param: &MasticAggregationParam,

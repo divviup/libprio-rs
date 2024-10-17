@@ -24,6 +24,7 @@ use prio::{
     field::{random_vector, Field128 as F, FieldElement},
     flp::gadgets::Mul,
     vdaf::{prio3::Prio3, Aggregator, Client},
+    vidpf::VidpfServerId,
 };
 #[cfg(feature = "experimental")]
 use prio::{
@@ -813,7 +814,9 @@ fn vidpf(c: &mut Criterion) {
             let (public, keys) = vidpf.gen(&input, &weight, NONCE).unwrap();
 
             b.iter(|| {
-                let _ = vidpf.eval(&keys[0], &public, &input, NONCE).unwrap();
+                let _ = vidpf
+                    .eval(&VidpfServerId::S0, &keys[0], &public, &input, NONCE)
+                    .unwrap();
             });
         });
     }

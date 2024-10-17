@@ -79,12 +79,12 @@ type SubTree<V> = Option<Box<Node<V>>>;
 /// Represents a node of a binary tree.
 pub struct Node<V> {
     pub(crate) value: V,
-    left: SubTree<V>,
-    right: SubTree<V>,
+    pub(crate) left: SubTree<V>,
+    pub(crate) right: SubTree<V>,
 }
 
 impl<V> Node<V> {
-    fn new(value: V) -> Self {
+    pub(crate) fn new(value: V) -> Self {
         Self {
             value,
             left: None,
@@ -181,7 +181,7 @@ impl<V> Node<V> {
 
 /// Represents an append-only binary tree.
 pub struct BinaryTree<V> {
-    root: SubTree<V>,
+    pub(crate) root: SubTree<V>,
 }
 
 impl<V> BinaryTree<V> {

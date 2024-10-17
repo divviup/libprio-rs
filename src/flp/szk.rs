@@ -45,6 +45,11 @@ pub enum SzkError {
     /// Returned for errors in query evaluation
     Query(String),
 
+    #[error("Szk verifier length not stored")]
+    /// Returned when a user fails to store the length of the verifier so it
+    /// can be properly read upon receipt.
+    MissingVerifierLen(()),
+
     /// Returned if an FLP operation encountered an error.
     #[error("Flp error: {0}")]
     Flp(#[from] FlpError),
