@@ -516,6 +516,11 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
                 "chunk_length cannot be zero".to_string(),
             ));
         }
+        if max_weight == 0 {
+            return Err(FlpError::InvalidParameter(
+                "max_weight cannot be zero".to_string(),
+            ));
+        }
 
         // The bitlength of a measurement is the number of buckets plus the bitlength of the max
         // weight
