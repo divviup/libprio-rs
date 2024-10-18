@@ -472,15 +472,23 @@ where
     }
 }
 
-/// The multihot counter data type. Each measurement is a set of integers in `[0, length)`, of size
-/// at most `max_weight`, and the aggregate is a histogram counting the number of occurrences of
-/// each integer across all measurements.
+/// The multihot counter data type. Each measurement is a list of booleans of length `length`, with
+/// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
+/// values at each position across all measurements.
 #[derive(PartialEq, Eq)]
 pub struct MultihotCountVec<F, S> {
+    // Parameters
+    /// The number of elements in the list of booleans
     length: usize,
+    /// The max number of permissible `true` values in the list of booleans
     max_weight: usize,
+    /// The size of the chunks fed into our gadget calls
     chunk_length: usize,
+
+    // Calculated from parameters
     gadget_calls: usize,
+    bits_for_weight: usize,
+    offset: usize,
     phantom: PhantomData<(F, S)>,
 }
 
@@ -524,19 +532,21 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
 
         // The bitlength of a measurement is the number of buckets plus the bitlength of the max
         // weight
-        let meas_length = {
-            let bits_for_weight = ilog2(max_weight) as usize + 1;
-            num_buckets + bits_for_weight
-        };
+        let bits_for_weight = ilog2(max_weight) as usize + 1;
+        let meas_length = num_buckets + bits_for_weight;
 
         // Gadget calls is ⌈meas_length / chunk_length⌉
         let gadget_calls = (meas_length + chunk_length - 1) / chunk_length;
+        // Offset is 2^max_weight.bitlen() - 1 - max_weight
+        let offset = (1 << bits_for_weight) - 1 - max_weight;
 
         Ok(Self {
             length: num_buckets,
             max_weight,
             chunk_length,
             gadget_calls,
+            bits_for_weight,
+            offset,
             phantom: PhantomData,
         })
     }
@@ -549,6 +559,8 @@ impl<F, S> Clone for MultihotCountVec<F, S> {
             length: self.length,
             max_weight: self.max_weight,
             chunk_length: self.chunk_length,
+            bits_for_weight: self.bits_for_weight,
+            offset: self.offset,
             gadget_calls: self.gadget_calls,
             phantom: self.phantom,
         }
@@ -590,11 +602,8 @@ where
 
         // Encode the measurement weight in binary (actually, the weight plus some offset)
         let offset_weight_bits = {
-            let bits_for_weight = ilog2(self.max_weight) as usize + 1;
-            let offset = (1 << bits_for_weight) - 1 - self.max_weight;
-
-            let offset_weight_reported = F::valid_integer_try_from(offset + weight_reported)?;
-            F::encode_as_bitvector(offset_weight_reported, bits_for_weight)?.collect()
+            let offset_weight_reported = F::valid_integer_try_from(self.offset + weight_reported)?;
+            F::encode_as_bitvector(offset_weight_reported, self.bits_for_weight)?.collect()
         };
 
         // Report the concat of the two
@@ -642,11 +651,7 @@ where
 
         // From spec: weight_check = self.offset*shares_inv + weight - weight_reported
         let weight_check = {
-            let bits_for_weight = ilog2(self.max_weight) as usize + 1;
-            let offset = F::from(F::valid_integer_try_from(
-                (1 << bits_for_weight) - 1 - self.max_weight,
-            )?);
-
+            let offset = F::from(F::valid_integer_try_from(self.offset)?);
             let shares_inv = F::from(F::valid_integer_try_from(num_shares)?).inv();
             offset * shares_inv + weight - offset_weight_reported
         };
@@ -665,8 +670,7 @@ where
 
     // The length in field elements of the encoded input returned by [`Self::encode_measurement`].
     fn input_len(&self) -> usize {
-        let bits_for_weight = ilog2(self.max_weight) as usize + 1;
-        self.length + bits_for_weight
+        self.length + self.bits_for_weight
     }
 
     fn proof_len(&self) -> usize {
@@ -1283,15 +1287,9 @@ mod tests {
             &multihot_instance,
             &[&[zero, zero, one], &*encoded_weight_plus_offset(2)].concat(),
         );
-        // Weight too high. This actually panics because weight + offset cannot fit into a bitvector
-        // of the correct length. In other words, being out-of-range requires the prover to lie
-        // about their weight, which is tested above
-        /*
-        FlpTest::expect_invalid::<NUM_SHARES>(
-            &multihot_instance,
-            &[&[one, one, one], &*encoded_weight_plus_offset(3)].concat(),
-        );
-        */
+        // We cannot test the case where the weight is higher than max_weight. This is because
+        // weight + offset cannot fit into a bitvector of the correct length. In other words, being
+        // out-of-range requires the prover to lie about their weight, which is tested above
     }
 
     #[test]
