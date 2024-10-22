@@ -202,7 +202,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// input's weight.
     pub fn eval(
         &self,
-        id: &VidpfServerId,
+        id: VidpfServerId,
         key: &VidpfKey,
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
@@ -230,7 +230,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// cache.
     pub fn eval_with_cache(
         &self,
-        id: &VidpfServerId,
+        id: VidpfServerId,
         key: &VidpfKey,
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
@@ -280,7 +280,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// state, and returns a new state and a share of the input's weight at that level.
     fn eval_next(
         &self,
-        id: &VidpfServerId,
+        id: VidpfServerId,
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
         level: usize,
@@ -306,7 +306,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         let zero = <W as IdpfValue>::zero(&self.weight_parameter);
         let mut y = <W as IdpfValue>::conditional_select(&zero, &cw.weight, next_control_bit);
         y += w_i;
-        y.conditional_negate(Choice::from(*id));
+        y.conditional_negate(Choice::from(id));
 
         let pi_i = &state.proof;
         let cs_i = public.cs.get(level).ok_or(VidpfError::IndexLevel)?;
@@ -328,7 +328,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
     pub(crate) fn eval_root_with_cache(
         &self,
-        id: &VidpfServerId,
+        id: VidpfServerId,
         key: &VidpfKey,
         public_share: &VidpfPublicShare<W>,
         cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
@@ -358,7 +358,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
     pub(crate) fn eval_root(
         &self,
-        id: &VidpfServerId,
+        id: VidpfServerId,
         key: &VidpfKey,
         public_share: &VidpfPublicShare<W>,
         nonce: &[u8; NONCE_SIZE],
@@ -615,10 +615,10 @@ pub struct VidpfEvalState {
 }
 
 impl VidpfEvalState {
-    fn init_from_key(id: &VidpfServerId, key: &VidpfKey) -> Self {
+    fn init_from_key(id: VidpfServerId, key: &VidpfKey) -> Self {
         Self {
             seed: key.0,
-            control_bit: Choice::from(*id),
+            control_bit: Choice::from(id),
             proof: VidpfProof::default(),
         }
     }
@@ -635,7 +635,7 @@ pub struct VidpfEvalCache<W: VidpfValue> {
 
 impl<W: VidpfValue> VidpfEvalCache<W> {
     pub(crate) fn init_from_key(
-        id: &VidpfServerId,
+        id: VidpfServerId,
         key: &VidpfKey,
         length: &W::ValueParameter,
     ) -> Self {
@@ -839,14 +839,35 @@ mod tests {
     mod vidpf {
         use crate::{
             bt::{BinaryTree, Path},
+            codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
             vidpf::{
                 Vidpf, VidpfEvalCache, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare,
                 VidpfServerId,
             },
         };
+        use std::io::Cursor;
 
         use super::{TestWeight, TEST_NONCE, TEST_NONCE_SIZE, TEST_WEIGHT_LEN};
+
+        #[test]
+        fn roundtrip_codec() {
+            let input = VidpfInput::from_bytes(&[0xFF]);
+            let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
+            let (_, public, _, _) = vidpf_gen_setup(&input, &weight);
+
+            let mut bytes = vec![];
+            public.encode(&mut bytes).unwrap();
+
+            assert_eq!(public.encoded_len().unwrap(), bytes.len());
+
+            let decoded = VidpfPublicShare::<TestWeight>::decode_with_param(
+                &(8, TEST_WEIGHT_LEN),
+                &mut Cursor::new(&bytes),
+            )
+            .unwrap();
+            assert_eq!(public, decoded);
+        }
 
         fn vidpf_gen_setup(
             input: &VidpfInput,
@@ -869,10 +890,10 @@ mod tests {
             let (vidpf, public, [key_0, key_1], nonce) = vidpf_gen_setup(&input, &weight);
 
             let value_share_0 = vidpf
-                .eval(&VidpfServerId::S0, &key_0, &public, &input, &nonce)
+                .eval(VidpfServerId::S0, &key_0, &public, &input, &nonce)
                 .unwrap();
             let value_share_1 = vidpf
-                .eval(&VidpfServerId::S1, &key_1, &public, &input, &nonce)
+                .eval(VidpfServerId::S1, &key_1, &public, &input, &nonce)
                 .unwrap();
 
             assert_eq!(
@@ -889,10 +910,10 @@ mod tests {
             let bad_input = VidpfInput::from_bytes(&[0x00]);
             let zero = TestWeight::zero(&TEST_WEIGHT_LEN);
             let value_share_0 = vidpf
-                .eval(&VidpfServerId::S0, &key_0, &public, &bad_input, &nonce)
+                .eval(VidpfServerId::S0, &key_0, &public, &bad_input, &nonce)
                 .unwrap();
             let value_share_1 = vidpf
-                .eval(&VidpfServerId::S1, &key_1, &public, &bad_input, &nonce)
+                .eval(VidpfServerId::S1, &key_1, &public, &bad_input, &nonce)
                 .unwrap();
 
             assert_eq!(
@@ -929,18 +950,18 @@ mod tests {
             weight: &TestWeight,
             nonce: &[u8; TEST_NONCE_SIZE],
         ) {
-            let mut state_0 = VidpfEvalState::init_from_key(&VidpfServerId::S0, key_0);
-            let mut state_1 = VidpfEvalState::init_from_key(&VidpfServerId::S1, key_1);
+            let mut state_0 = VidpfEvalState::init_from_key(VidpfServerId::S0, key_0);
+            let mut state_1 = VidpfEvalState::init_from_key(VidpfServerId::S1, key_1);
 
             let n = input.len();
             for level in 0..n {
                 let share_0;
                 let share_1;
                 (state_0, share_0) = vidpf
-                    .eval_next(&VidpfServerId::S0, public, input, level, &state_0, nonce)
+                    .eval_next(VidpfServerId::S0, public, input, level, &state_0, nonce)
                     .unwrap();
                 (state_1, share_1) = vidpf
-                    .eval_next(&VidpfServerId::S1, public, input, level, &state_1, nonce)
+                    .eval_next(VidpfServerId::S1, public, input, level, &state_1, nonce)
                     .unwrap();
 
                 assert_eq!(
@@ -964,10 +985,12 @@ mod tests {
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
             let (vidpf, public, keys, nonce) = vidpf_gen_setup(&input, &weight);
 
-            equivalence_of_eval_with_caching(&vidpf, &keys, &public, &input, &nonce);
+            test_equivalence_of_eval_with_caching(&vidpf, &keys, &public, &input, &nonce);
         }
 
-        fn equivalence_of_eval_with_caching(
+        /// Ensures that VIDPF outputs match regardless of whether the path to
+        /// each node is recomputed or cached during evaluation.
+        fn test_equivalence_of_eval_with_caching(
             vidpf: &Vidpf<TestWeight, TEST_NONCE_SIZE>,
             [key_0, key_1]: &[VidpfKey; 2],
             public: &VidpfPublicShare<TestWeight>,
@@ -977,12 +1000,12 @@ mod tests {
             let mut cache_tree_0 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
             let mut cache_tree_1 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
             let cache_0 = VidpfEvalCache::<TestWeight>::init_from_key(
-                &VidpfServerId::S0,
+                VidpfServerId::S0,
                 key_0,
                 &vidpf.weight_parameter,
             );
             let cache_1 = VidpfEvalCache::<TestWeight>::init_from_key(
-                &VidpfServerId::S1,
+                VidpfServerId::S1,
                 key_1,
                 &vidpf.weight_parameter,
             );
@@ -997,7 +1020,7 @@ mod tests {
             for level in 0..n {
                 let val_share_0 = vidpf
                     .eval(
-                        &VidpfServerId::S0,
+                        VidpfServerId::S0,
                         key_0,
                         public,
                         &input.prefix(level),
@@ -1006,7 +1029,7 @@ mod tests {
                     .unwrap();
                 let val_share_1 = vidpf
                     .eval(
-                        &VidpfServerId::S1,
+                        VidpfServerId::S1,
                         key_1,
                         public,
                         &input.prefix(level),
@@ -1015,7 +1038,7 @@ mod tests {
                     .unwrap();
                 let val_share_0_cached = vidpf
                     .eval_with_cache(
-                        &VidpfServerId::S0,
+                        VidpfServerId::S0,
                         key_0,
                         public,
                         &input.prefix(level),
@@ -1025,7 +1048,7 @@ mod tests {
                     .unwrap();
                 let val_share_1_cached = vidpf
                     .eval_with_cache(
-                        &VidpfServerId::S1,
+                        VidpfServerId::S1,
                         key_1,
                         public,
                         &input.prefix(level),

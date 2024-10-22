@@ -308,10 +308,10 @@ where
 
         let leader_measurement_share =
             self.vidpf
-                .eval_root(&VidpfServerId::S0, &vidpf_keys[0], &public_share, nonce)?;
+                .eval_root(VidpfServerId::S0, &vidpf_keys[0], &public_share, nonce)?;
         let helper_measurement_share =
             self.vidpf
-                .eval_root(&VidpfServerId::S1, &vidpf_keys[1], &public_share, nonce)?;
+                .eval_root(VidpfServerId::S1, &vidpf_keys[1], &public_share, nonce)?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
             leader_measurement_share.as_ref(),
@@ -537,7 +537,7 @@ where
         );
         let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
         let cache = VidpfEvalCache::<VidpfWeight<T::Field>>::init_from_key(
-            &id,
+            id,
             &input_share.vidpf_key,
             &self.vidpf.weight_parameter,
         );
@@ -546,7 +546,7 @@ where
             .expect("Should alwys be able to insert into empty tree at root");
         for prefix in agg_param.level_and_prefixes.prefixes() {
             let mut value_share = self.vidpf.eval_with_cache(
-                &id,
+                id,
                 &input_share.vidpf_key,
                 public_share,
                 prefix,
@@ -558,7 +558,7 @@ where
         }
         let root_share_opt = if agg_param.require_weight_check {
             Some(self.vidpf.eval_root_with_cache(
-                &id,
+                id,
                 &input_share.vidpf_key,
                 public_share,
                 &mut cache_tree,
@@ -624,53 +624,24 @@ where
         ))?;
         if inputs_iter.next().is_some() {
             return Err(VdafError::Uncategorized(
-                "more than 2 prepare shares".to_string(),
+                "Received more than two prepare shares".to_string(),
             ));
         };
-
-        match (leader_share, helper_share) {
-            (
-                MasticPrepareShare {
-                    vidpf_proof: leader_vidpf_proof,
-                    szk_query_share_opt: Some(leader_query_share),
-                },
-                MasticPrepareShare {
-                    vidpf_proof: helper_vidpf_proof,
-                    szk_query_share_opt: Some(helper_query_share),
-                },
-            ) => {
-                if leader_vidpf_proof == helper_vidpf_proof {
-                    Ok(Some(SzkQueryShare::merge_verifiers(
-                        leader_query_share,
-                        helper_query_share,
-                    )))
-                } else {
-                    Err(VdafError::Uncategorized(
-                        "Vidpf proof verification failed".to_string(),
-                    ))
-                }
-            }
-            (
-                MasticPrepareShare {
-                    vidpf_proof: leader_vidpf_proof,
-                    szk_query_share_opt: None,
-                },
-                MasticPrepareShare {
-                    vidpf_proof: helper_vidpf_proof,
-                    szk_query_share_opt: None,
-                },
-            ) => {
-                if leader_vidpf_proof == helper_vidpf_proof {
-                    Ok(None)
-                } else {
-                    Err(VdafError::Uncategorized(
-                        "Vidpf proof verification failed".to_string(),
-                    ))
-                }
-            }
-            _ => Err(VdafError::Uncategorized(
-                "Prepare state and message disagree on whether Szk verification should occur"
-                    .to_string(),
+        if leader_share.vidpf_proof != helper_share.vidpf_proof {
+            return Err(VdafError::Uncategorized(
+                "Vidpf proof verification failed".to_string(),
+            ));
+        };
+        match (
+            leader_share.szk_query_share_opt,
+            helper_share.szk_query_share_opt,
+        ) {
+            (Some(leader_query_share), Some(helper_query_share)) => Ok(Some(
+                SzkQueryShare::merge_verifiers(leader_query_share, helper_query_share),
+            )),
+            (None, None) => Ok(None),
+            (_, _) => Err(VdafError::Uncategorized(
+                "Only one of leader and helper query shares is present".to_string(),
             )),
         }
     }
