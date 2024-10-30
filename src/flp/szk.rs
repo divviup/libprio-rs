@@ -751,26 +751,20 @@ mod tests {
             szk_typ.merge_verifiers(l_query_share.clone(), h_query_share.clone());
         match joint_share_result {
             Ok(Some(ref joint_share)) => {
-                let leader_decision = match szk_typ.decide(l_query_state.clone(), joint_share) {
-                    Ok(_) => true,
-                    Err(_) => false,
-                };
+                let leader_decision = szk_typ.decide(l_query_state.clone(), joint_share).is_ok();
                 assert_eq!(
                     leader_decision, valid,
                     "Leader incorrectly determined validity",
                 );
-                let helper_decision = match szk_typ.decide(h_query_state.clone(), joint_share) {
-                    Ok(_) => true,
-                    Err(_) => false,
-                };
+                let helper_decision = szk_typ.decide(h_query_state.clone(), joint_share).is_ok();
                 assert_eq!(
                     helper_decision, valid,
                     "Helper incorrectly determined validity",
                 );
             }
-            Ok(None) => assert_eq!(true, valid, "Aggregator incorrectly determined validity"),
+            Ok(None) => assert!(valid, "Aggregator incorrectly determined validity"),
             Err(_) => {
-                assert_eq!(false, valid, "Aggregator incorrectly determined validity");
+                assert!(!valid, "Aggregator incorrectly determined validity");
             }
         };
 
@@ -794,10 +788,7 @@ mod tests {
 
         let joint_share_res = szk_typ.merge_verifiers(mutated_query_share, h_query_share.clone());
         let leader_decision = match joint_share_res {
-            Ok(Some(ref joint_share)) => match szk_typ.decide(l_query_state.clone(), joint_share) {
-                Ok(_) => true,
-                Err(_) => false,
-            },
+            Ok(Some(ref joint_share)) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
             Ok(None) => true,
             Err(_) => false,
         };
@@ -814,10 +805,7 @@ mod tests {
         let joint_share_res = szk_typ.merge_verifiers(mutated_query_share, h_query_share.clone());
 
         let leader_decision = match joint_share_res {
-            Ok(Some(ref joint_share)) => match szk_typ.decide(mutated_query_state, joint_share) {
-                Ok(_) => true,
-                Err(_) => false,
-            },
+            Ok(Some(ref joint_share)) => szk_typ.decide(mutated_query_state, joint_share).is_ok(),
             Ok(None) => true,
             Err(_) => false,
         };
@@ -851,10 +839,7 @@ mod tests {
         let joint_share_res = szk_typ.merge_verifiers(l_query_share, h_query_share.clone());
 
         let leader_decision = match joint_share_res {
-            Ok(Some(ref joint_share)) => match szk_typ.decide(l_query_state.clone(), joint_share) {
-                Ok(_) => true,
-                Err(_) => false,
-            },
+            Ok(Some(ref joint_share)) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
             Ok(None) => true,
             Err(_) => false,
         };
