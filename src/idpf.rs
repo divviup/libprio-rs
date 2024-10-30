@@ -47,7 +47,7 @@ pub enum IdpfError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct IdpfInput {
     /// The index as a boxed bit slice.
-    pub(crate) index: BitBox,
+    index: BitBox,
 }
 
 impl IdpfInput {
@@ -108,13 +108,6 @@ impl IdpfInput {
     pub fn prefix(&self, level: usize) -> Self {
         Self {
             index: self.index[..=level].to_owned().into(),
-        }
-    }
-
-    /// Return the single bit of this IDPF input at the given level.
-    pub fn next_branch(&self, level: usize) -> Self {
-        Self {
-            index: self.index[level..level + 1].to_owned().into(),
         }
     }
 

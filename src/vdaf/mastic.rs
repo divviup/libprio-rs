@@ -9,7 +9,7 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, FieldElement},
     flp::{
-        szk::{Szk, SzkProofShare, SzkQueryShare, SzkQueryState, SzkVerifier},
+        szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState},
         Type,
     },
     vdaf::{
@@ -438,16 +438,16 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let vidpf_proof = Seed::decode(bytes)?;
-        let szk_query_share_opt = match (&prep_state.szk_query_state, prep_state.verifier_len) {
-            (Some(_), Some(verifier_len)) => Ok(Some(
-                SzkQueryShare::<F, SEED_SIZE>::decode_with_param(&(true, verifier_len), bytes)?,
-            )),
-            (None, Some(verifier_len)) => Ok(Some(
-                SzkQueryShare::<F, SEED_SIZE>::decode_with_param(&(false, verifier_len), bytes)?,
-            )),
-            (None, None) => Ok(None),
-            (Some(_), None) => Err(CodecError::UnexpectedValue),
-        }?;
+        let requires_joint_rand = prep_state.szk_query_state.is_some();
+        let szk_query_share_opt = prep_state
+            .verifier_len
+            .map(|verifier_len| {
+                SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
+                    &(requires_joint_rand, verifier_len),
+                    bytes,
+                )
+            })
+            .transpose()?;
         Ok(Self {
             vidpf_proof,
             szk_query_share_opt,
@@ -459,40 +459,18 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
 ///
 /// Result of preprocessing the broadcast messages of both aggregators during the
 /// preparation phase.
-pub type MasticPrepareMessage<F, const SEED_SIZE: usize> = Option<SzkVerifier<F, SEED_SIZE>>;
-
-impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareMessage<F, SEED_SIZE> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        match self {
-            Some(verifier) => verifier.encode(bytes),
-            None => Ok(()),
-        }
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        match self {
-            Some(verifier) => verifier.encoded_len(),
-            None => Some(0),
-        }
-    }
-}
+pub type MasticPrepareMessage<const SEED_SIZE: usize> = SzkJointShare<SEED_SIZE>;
 
 impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareState<F, SEED_SIZE>>
-    for MasticPrepareMessage<F, SEED_SIZE>
+    for MasticPrepareMessage<SEED_SIZE>
 {
     fn decode_with_param(
         prep_state: &MasticPrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        match (&prep_state.szk_query_state, prep_state.verifier_len) {
-            (Some(_), Some(verifier_len)) => Ok(Some(
-                SzkVerifier::<F, SEED_SIZE>::decode_with_param(&(true, verifier_len), bytes)?,
-            )),
-            (None, Some(verifier_len)) => Ok(Some(SzkVerifier::<F, SEED_SIZE>::decode_with_param(
-                &(false, verifier_len),
-                bytes,
-            )?)),
-            (_, None) => Ok(None),
+        match prep_state.szk_query_state {
+            Some(_) => SzkJointShare::<SEED_SIZE>::decode_with_param(&true, bytes),
+            None => SzkJointShare::<SEED_SIZE>::decode_with_param(&false, bytes),
         }
     }
 }
@@ -504,7 +482,7 @@ where
 {
     type PrepareState = MasticPrepareState<T::Field, SEED_SIZE>;
     type PrepareShare = MasticPrepareShare<T::Field, SEED_SIZE>;
-    type PrepareMessage = MasticPrepareMessage<T::Field, SEED_SIZE>;
+    type PrepareMessage = MasticPrepareMessage<SEED_SIZE>;
 
     fn prepare_init(
         &self,
@@ -528,7 +506,7 @@ where
                 "Invalid aggregator ID".to_string(),
             )),
         }?;
-        let mut xof = P::init(
+        let mut eval_proof = P::init(
             verify_key,
             &self.domain_separation_tag(DST_PATH_CHECK_BATCH),
         );
@@ -553,22 +531,18 @@ where
                 &mut cache_tree,
                 nonce,
             )?;
-            xof.update(&value_share.proof);
+            eval_proof.update(&value_share.proof);
             output_shares.append(&mut value_share.share.0);
         }
-        let root_share_opt = if agg_param.require_weight_check {
-            Some(self.vidpf.eval_root_with_cache(
+
+        let szk_verify_opt = if agg_param.require_weight_check {
+            let root_share = self.vidpf.eval_root_with_cache(
                 id,
                 &input_share.vidpf_key,
                 public_share,
                 &mut cache_tree,
                 nonce,
-            )?)
-        } else {
-            None
-        };
-
-        let szk_verify_opt = if let Some(root_share) = root_share_opt {
+            )?;
             Some(self.szk.query(
                 root_share.as_ref(),
                 input_share.proof_share.clone(),
@@ -578,12 +552,13 @@ where
         } else {
             None
         };
+
         let (prep_share, prep_state) =
             if let Some((szk_query_share, szk_query_state)) = szk_verify_opt {
                 let verifier_len = szk_query_share.flp_verifier.len();
                 (
                     MasticPrepareShare {
-                        vidpf_proof: xof.into_seed(),
+                        vidpf_proof: eval_proof.into_seed(),
                         szk_query_share_opt: Some(szk_query_share),
                     },
                     MasticPrepareState {
@@ -595,7 +570,7 @@ where
             } else {
                 (
                     MasticPrepareShare {
-                        vidpf_proof: xof.into_seed(),
+                        vidpf_proof: eval_proof.into_seed(),
                         szk_query_share_opt: None,
                     },
                     MasticPrepareState {
@@ -614,7 +589,7 @@ where
         &self,
         _agg_param: &MasticAggregationParam,
         inputs: M,
-    ) -> Result<MasticPrepareMessage<T::Field, SEED_SIZE>, VdafError> {
+    ) -> Result<MasticPrepareMessage<SEED_SIZE>, VdafError> {
         let mut inputs_iter = inputs.into_iter();
         let leader_share = inputs_iter.next().ok_or(VdafError::Uncategorized(
             "No leader share received".to_string(),
@@ -636,9 +611,9 @@ where
             leader_share.szk_query_share_opt,
             helper_share.szk_query_share_opt,
         ) {
-            (Some(leader_query_share), Some(helper_query_share)) => Ok(Some(
-                SzkQueryShare::merge_verifiers(leader_query_share, helper_query_share),
-            )),
+            (Some(leader_query_share), Some(helper_query_share)) => Ok(self
+                .szk
+                .merge_verifiers(leader_query_share, helper_query_share)?),
             (None, None) => Ok(None),
             (_, _) => Err(VdafError::Uncategorized(
                 "Only one of leader and helper query shares is present".to_string(),
@@ -649,7 +624,7 @@ where
     fn prepare_next(
         &self,
         state: MasticPrepareState<T::Field, SEED_SIZE>,
-        input: MasticPrepareMessage<T::Field, SEED_SIZE>,
+        input: MasticPrepareMessage<SEED_SIZE>,
     ) -> Result<PrepareTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
         match (state, input) {
             (
@@ -666,15 +641,10 @@ where
                     szk_query_state,
                     verifier_len: _,
                 },
-                Some(verifier),
+                Some(ref joint_share),
             ) => {
-                if self.szk.decide(verifier, szk_query_state)? {
-                    Ok(PrepareTransition::Finish(output_shares))
-                } else {
-                    Err(VdafError::Uncategorized(
-                        "Szk proof failed verification".to_string(),
-                    ))
-                }
+                self.szk.decide(szk_query_state, joint_share)?;
+                Ok(PrepareTransition::Finish(output_shares))
             }
         }
     }

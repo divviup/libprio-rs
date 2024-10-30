@@ -838,7 +838,7 @@ mod tests {
 
     mod vidpf {
         use crate::{
-            bt::{BinaryTree, Path},
+            bt::BinaryTree,
             codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
             vidpf::{
@@ -999,22 +999,6 @@ mod tests {
         ) {
             let mut cache_tree_0 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
             let mut cache_tree_1 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
-            let cache_0 = VidpfEvalCache::<TestWeight>::init_from_key(
-                VidpfServerId::S0,
-                key_0,
-                &vidpf.weight_parameter,
-            );
-            let cache_1 = VidpfEvalCache::<TestWeight>::init_from_key(
-                VidpfServerId::S1,
-                key_1,
-                &vidpf.weight_parameter,
-            );
-            cache_tree_0
-                .insert(Path::empty(), cache_0)
-                .expect("Should alwys be able to insert into empty tree at root");
-            cache_tree_1
-                .insert(Path::empty(), cache_1)
-                .expect("Should alwys be able to insert into empty tree at root");
 
             let n = input.len();
             for level in 0..n {

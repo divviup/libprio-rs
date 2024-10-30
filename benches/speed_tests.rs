@@ -20,7 +20,7 @@ use prio::idpf::test_utils::generate_zipf_distributed_batch;
 #[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
 #[cfg(feature = "experimental")]
-use prio::vdaf::vidpf::VidpfServerId;
+use prio::vidpf::VidpfServerId;
 use prio::{
     benchmarked::*,
     field::{random_vector, Field128 as F, FieldElement},
