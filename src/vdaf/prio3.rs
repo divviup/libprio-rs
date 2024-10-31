@@ -1565,20 +1565,6 @@ where
     }
 }
 
-/// This is a polyfill for `usize::ilog2()`, which is only available in Rust 1.67 and later. It is
-/// based on the implementation in the standard library. It can be removed when the MSRV has been
-/// advanced past 1.67.
-///
-/// # Panics
-///
-/// This function will panic if `input` is zero.
-pub(crate) fn ilog2(input: usize) -> u32 {
-    if input == 0 {
-        panic!("Tried to take the logarithm of zero");
-    }
-    (usize::BITS - 1) - input.leading_zeros()
-}
-
 /// Finds the optimal choice of chunk length for [`Prio3Histogram`] or [`Prio3SumVec`], given its
 /// encoded measurement length. For [`Prio3Histogram`], the measurement length is equal to the
 /// length parameter. For [`Prio3SumVec`], the measurement length is equal to the product of the
@@ -1594,7 +1580,7 @@ pub fn optimal_chunk_length(measurement_length: usize) -> usize {
         chunk_length: usize,
     }
 
-    let max_log2 = ilog2(measurement_length + 1);
+    let max_log2 = (measurement_length + 1).ilog2();
     let best_opt = (1..=max_log2)
         .rev()
         .map(|log2| {
