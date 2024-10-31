@@ -44,7 +44,7 @@ use crate::flp::gadgets::{Mul, ParallelSum};
 use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
 };
-use crate::flp::types::{Average, Count, Histogram, Sum, SumVec};
+use crate::flp::types::{Average, Count, Histogram, MultihotCountVec, Sum, SumVec};
 use crate::flp::Type;
 #[cfg(feature = "experimental")]
 use crate::flp::TypeWithNoise;
@@ -278,6 +278,59 @@ impl Prio3HistogramMultithreaded {
             1,
             0x00000003,
             Histogram::new(length, chunk_length)?,
+        )
+    }
+}
+
+/// The multihot counter data type. Each measurement is a list of booleans of length `length`, with
+/// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
+/// values at each position across all measurements.
+pub type Prio3MultihotCountVec =
+    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+
+impl Prio3MultihotCountVec {
+    /// Constructs an instance of Prio3MultihotCountVec with the given number of aggregators, number
+    /// of buckets, max weight, and parallel sum gadget chunk length.
+    pub fn new_multihot_count_vec(
+        num_aggregators: u8,
+        num_buckets: usize,
+        max_weight: usize,
+        chunk_length: usize,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(
+            num_aggregators,
+            1,
+            0xFFFF0000,
+            MultihotCountVec::new(num_buckets, max_weight, chunk_length)?,
+        )
+    }
+}
+
+/// Like [`Prio3MultihotCountVec`] except this type uses multithreading to improve sharding and preparation
+/// time. Note that this improvement is only noticeable for very large input lengths.
+#[cfg(feature = "multithreaded")]
+#[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
+pub type Prio3MultihotCountVecMultithreaded = Prio3<
+    MultihotCountVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
+    XofTurboShake128,
+    16,
+>;
+
+#[cfg(feature = "multithreaded")]
+impl Prio3MultihotCountVecMultithreaded {
+    /// Constructs an instance of Prio3MultihotCountVecMultithreaded with the given number of
+    /// aggregators, number of buckets, max weight, and parallel sum gadget chunk length.
+    pub fn new_multihot_count_vec_multithreaded(
+        num_aggregators: u8,
+        num_buckets: usize,
+        max_weight: usize,
+        chunk_length: usize,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(
+            num_aggregators,
+            1,
+            0xFFFF0000,
+            MultihotCountVec::new(num_buckets, max_weight, chunk_length)?,
         )
     }
 }
@@ -1519,7 +1572,7 @@ where
 /// # Panics
 ///
 /// This function will panic if `input` is zero.
-fn ilog2(input: usize) -> u32 {
+pub(crate) fn ilog2(input: usize) -> u32 {
     if input == 0 {
         panic!("Tried to take the logarithm of zero");
     }
