@@ -306,7 +306,7 @@ impl Prio3MultihotCountVec {
     }
 }
 
-/// Like [`Prio3Histogram`] except this type uses multithreading to improve sharding and preparation
+/// Like [`Prio3MultihotCountVec`] except this type uses multithreading to improve sharding and preparation
 /// time. Note that this improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]

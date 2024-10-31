@@ -616,7 +616,7 @@ where
         _num_measurements: usize,
     ) -> Result<Self::AggregateResult, FlpError> {
         // The aggregate is the same as the decoded result. Just convert to integers
-        Ok(data.iter().map(|f| F::Integer::from(*f)).collect())
+        decode_result_vec(data, self.length)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
