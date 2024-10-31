@@ -664,6 +664,7 @@ where
     // Truncates the measurement, removing extra data that was necessary for validity (here, the
     // encoded weight), but not important for aggregation
     fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, FlpError> {
+        self.truncate_call_check(&input)?;
         // Cut off the encoded weight
         Ok(input[..self.length].to_vec())
     }
