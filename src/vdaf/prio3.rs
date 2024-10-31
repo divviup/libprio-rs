@@ -106,7 +106,7 @@ impl Prio3SumVec {
     }
 }
 
-/// Like [`Prio3SumVec`] except this type uses multithreading to improve sharding and preparation
+/// Like [`Prio3SumVec`] except this type uses multithreading to improve sharding
 /// time. Note that the improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
@@ -254,7 +254,7 @@ impl Prio3Histogram {
     }
 }
 
-/// Like [`Prio3Histogram`] except this type uses multithreading to improve sharding and preparation
+/// Like [`Prio3Histogram`] except this type uses multithreading to improve sharding
 /// time. Note that this improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
@@ -306,7 +306,7 @@ impl Prio3MultihotCountVec {
     }
 }
 
-/// Like [`Prio3MultihotCountVec`] except this type uses multithreading to improve sharding and preparation
+/// Like [`Prio3MultihotCountVec`] except this type uses multithreading to improve sharding
 /// time. Note that this improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
