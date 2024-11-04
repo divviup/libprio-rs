@@ -6,7 +6,6 @@ use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
-use crate::vdaf::prio3::ilog2;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
@@ -532,7 +531,7 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
 
         // The bitlength of a measurement is the number of buckets plus the bitlength of the max
         // weight
-        let bits_for_weight = ilog2(max_weight) as usize + 1;
+        let bits_for_weight = max_weight.ilog2() as usize + 1;
         let meas_length = num_buckets + bits_for_weight;
 
         // Gadget calls is ⌈meas_length / chunk_length⌉
@@ -1211,7 +1210,7 @@ mod tests {
         let nine = TestField::from(9);
 
         let encoded_weight_plus_offset = |weight| {
-            let bits_for_weight = ilog2(max_weight) as usize + 1;
+            let bits_for_weight = max_weight.ilog2() as usize + 1;
             let offset = (1 << bits_for_weight) - 1 - max_weight;
             TestField::encode_as_bitvector(
                 <TestField as FieldElementWithInteger>::Integer::try_from(weight + offset).unwrap(),
