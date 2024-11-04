@@ -11,14 +11,14 @@ and Scalable Computation of Aggregate Statistics.
 
 ## Exposure Notifications Private Analytics
 
-This crate was used in the [Exposure Notifications Private Analytics][enpa]
-system. This is referred to in various places as Prio v2. See
+Prior versions of this crate were used in the [Exposure Notifications Private
+Analytics][enpa] system. This is referred to in various places as Prio v2. See
 [`prio-server`][prio-server] or the [ENPA whitepaper][enpa-whitepaper] for more
 details.
 
 ## Verifiable Distributed Aggregation Function
 
-This crate also implements a [Verifiable Distributed Aggregation Function
+This crate implements a [Verifiable Distributed Aggregation Function
 (VDAF)][vdaf] called "Prio3", implemented in the `vdaf` module, allowing Prio to
 be used in the [Distributed Aggregation Protocol][dap] protocol being developed
 in the PPM working group at the IETF. This support is still evolving along with
@@ -26,7 +26,7 @@ the DAP and VDAF specifications.
 
 ### Draft versions and release branches
 
-The `main` branch is under continuous development and will usually be partway between VDAF drafts.
+The `main` branch is under continuous development and will sometimes be partway between VDAF drafts.
 libprio uses stable release branches to maintain implementations of different VDAF draft versions.
 Crate `prio` version `x.y.z` is released from a corresponding `release/x.y` branch. We try to
 maintain [Rust SemVer][semver] compatibility, meaning that API breaks only happen on minor version
