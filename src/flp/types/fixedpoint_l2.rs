@@ -468,7 +468,7 @@ where
         input: &[Field128],
         joint_rand: &[Field128],
         num_shares: usize,
-    ) -> Result<Field128, FlpError> {
+    ) -> Result<Vec<Field128>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         let f_num_shares = Field128::from(Field128::valid_integer_try_from::<usize>(num_shares)?);
@@ -553,7 +553,7 @@ where
         // Finally, we require both checks to be successful by computing a
         // random linear combination of them.
         let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * norm_check;
-        Ok(out)
+        Ok(vec![out])
     }
 
     fn truncate(&self, input: Vec<Field128>) -> Result<Vec<Self::Field>, FlpError> {
@@ -599,6 +599,10 @@ where
 
     fn joint_rand_len(&self) -> usize {
         2
+    }
+
+    fn eval_output_len(&self) -> usize {
+        1
     }
 
     fn prove_rand_len(&self) -> usize {

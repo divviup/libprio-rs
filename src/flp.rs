@@ -179,7 +179,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// let input: Vec<Field64> = count.encode_measurement(&true).unwrap();
     /// let joint_rand = random_vector(count.joint_rand_len()).unwrap();
     /// let v = count.valid(&mut count.gadget(), &input, &joint_rand, 1).unwrap();
-    /// assert_eq!(v, Field64::zero());
+    /// assert!(v.into_iter().all(|f| f == Field64::zero()));
     /// ```
     fn valid(
         &self,
@@ -187,7 +187,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         input: &[Self::Field],
         joint_rand: &[Self::Field],
         num_shares: usize,
-    ) -> Result<Self::Field, FlpError>;
+    ) -> Result<Vec<Self::Field>, FlpError>;
 
     /// Constructs an aggregatable output from an encoded input. Calling this method is only safe
     /// once `input` has been validated.
@@ -207,6 +207,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
     /// The length of the joint random input.
     fn joint_rand_len(&self) -> usize;
+
+    /// The length of the circuit output
+    fn eval_output_len(&self) -> usize;
 
     /// The length in field elements of the random input consumed by the prover to generate a
     /// proof. This is the same as the sum of the arity of each gadget in the validity circuit.
@@ -388,6 +391,24 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 self.query_rand_len()
             )));
         }
+        // We use query randomness to compress outputs from `valid()` (if size is > 1), as well as
+        // for gadget evaluations. Split these up
+        let (query_rand_for_validity, query_rand_for_gadgets) = if self.eval_output_len() > 1 {
+            query_rand.split_at(1)
+        } else {
+            query_rand.split_at(0)
+        };
+
+        // Another check that we have the right amount of randomness
+        let my_gadgets = self.gadget();
+        if query_rand_for_gadgets.len() != my_gadgets.len() {
+            return Err(FlpError::Query(format!(
+                "length of query randomness for gadgets doesn't match number of gadgets: \
+                got {}; want {}",
+                query_rand_for_gadgets.len(),
+                my_gadgets.len()
+            )));
+        }
 
         if joint_rand.len() != self.joint_rand_len() {
             return Err(FlpError::Query(format!(
@@ -398,15 +419,13 @@ pub trait Type: Sized + Eq + Clone + Debug {
         }
 
         let mut proof_len = 0;
-        let mut shims = self
-            .gadget()
+        let mut shims = my_gadgets
             .into_iter()
-            .enumerate()
-            .map(|(idx, gadget)| {
+            .zip(query_rand_for_gadgets)
+            .map(|(gadget, &r)| {
                 let gadget_degree = gadget.degree();
                 let gadget_arity = gadget.arity();
                 let m = (1 + gadget.calls()).next_power_of_two();
-                let r = query_rand[idx];
 
                 // Make sure the query randomness isn't a root of unity. Evaluating the gadget
                 // polynomial at any of these points would be a privacy violation, since these points
@@ -419,7 +438,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
                     )));
                 }
 
-                // Compute the length of the sub-proof corresponding to the `idx`-th gadget.
+                // Compute the length of the sub-proof corresponding to this gadget.
                 let next_len = gadget_arity + gadget_degree * (m - 1) + 1;
                 let proof_data = &proof[proof_len..proof_len + next_len];
                 proof_len += next_len;
@@ -444,10 +463,22 @@ pub trait Type: Sized + Eq + Clone + Debug {
         // should be OK, since it's possible to transform any circuit into one for which this is true.
         // (Needs security analysis.)
         let validity = self.valid(&mut shims, input, joint_rand, num_shares)?;
-        verifier.push(validity);
+        assert_eq!(validity.len(), self.eval_output_len());
+        // If `valid()` outputs multiple field elements, compress them into 1 field element using
+        // query randomness
+        let check = if validity.len() > 1 {
+            validity
+                .iter()
+                .zip(query_rand_for_validity)
+                .fold(Self::Field::zero(), |acc, (&val, &r)| acc + r * val)
+        } else {
+            // If `valid()` outputs one field element, just use that.
+            validity[0]
+        };
+        verifier.push(check);
 
         // Fill the buffer with the verifier message.
-        for (query_rand_val, shim) in query_rand[..shims.len()].iter().zip(shims.iter_mut()) {
+        for (query_rand_val, shim) in query_rand_for_gadgets.iter().zip(shims.iter_mut()) {
             let gadget = shim
                 .as_any()
                 .downcast_ref::<QueryShimGadget<Self::Field>>()
@@ -863,9 +894,9 @@ pub mod test_utils {
                 .valid(&mut gadgets, self.input, &joint_rand, 1)
                 .unwrap();
             assert_eq!(
-                v == T::Field::zero(),
+                v.iter().all(|f| f == &T::Field::zero()),
                 self.expect_valid,
-                "{name}: unexpected output of valid() returned {v}",
+                "{name}: unexpected output of valid() returned {v:?}",
             );
 
             // Generate the proof.
@@ -1056,7 +1087,7 @@ mod tests {
             input: &[F],
             joint_rand: &[F],
             _num_shares: usize,
-        ) -> Result<F, FlpError> {
+        ) -> Result<Vec<F>, FlpError> {
             let r = joint_rand[0];
             let mut res = F::zero();
 
@@ -1071,7 +1102,7 @@ mod tests {
             let x_checked = g[1].call(&[input[0]])?;
             res += (r * r) * x_checked;
 
-            Ok(res)
+            Ok(vec![res])
         }
 
         fn input_len(&self) -> usize {
@@ -1105,6 +1136,10 @@ mod tests {
         }
 
         fn joint_rand_len(&self) -> usize {
+            1
+        }
+
+        fn eval_output_len(&self) -> usize {
             1
         }
 
@@ -1190,7 +1225,7 @@ mod tests {
             input: &[F],
             _joint_rand: &[F],
             _num_shares: usize,
-        ) -> Result<F, FlpError> {
+        ) -> Result<Vec<F>, FlpError> {
             // This is a useless circuit, as it only accepts "0". Its purpose is to exercise the
             // use of multiple gadgets, each of which is called an arbitrary number of times.
             let mut res = F::zero();
@@ -1200,7 +1235,7 @@ mod tests {
             for _ in 0..self.num_gadget_calls[1] {
                 res += g[1].call(&[input[0]])?;
             }
-            Ok(res)
+            Ok(vec![res])
         }
 
         fn input_len(&self) -> usize {
@@ -1235,6 +1270,10 @@ mod tests {
 
         fn joint_rand_len(&self) -> usize {
             0
+        }
+
+        fn eval_output_len(&self) -> usize {
+            1
         }
 
         fn prove_rand_len(&self) -> usize {

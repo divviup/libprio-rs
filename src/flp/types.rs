@@ -69,9 +69,10 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        Ok(g[0].call(&[input[0], input[0]])? - input[0])
+        let out = g[0].call(&[input[0], input[0]])? - input[0];
+        Ok(vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -97,6 +98,10 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
 
     fn joint_rand_len(&self) -> usize {
         0
+    }
+
+    fn eval_output_len(&self) -> usize {
+        1
     }
 
     fn prove_rand_len(&self) -> usize {
@@ -170,9 +175,9 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0]).map(|out| vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -198,6 +203,10 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     }
 
     fn joint_rand_len(&self) -> usize {
+        1
+    }
+
+    fn eval_output_len(&self) -> usize {
         1
     }
 
@@ -265,7 +274,7 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.summer.valid(g, input, joint_rand, num_shares)
     }
 
@@ -291,6 +300,10 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
 
     fn joint_rand_len(&self) -> usize {
         self.summer.joint_rand_len()
+    }
+
+    fn eval_output_len(&self) -> usize {
+        self.summer.eval_output_len()
     }
 
     fn prove_rand_len(&self) -> usize {
@@ -402,7 +415,7 @@ where
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         // Check that each element of `input` is a 0 or 1.
@@ -422,7 +435,7 @@ where
 
         // Take a random linear combination of both checks.
         let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * sum_check;
-        Ok(out)
+        Ok(vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -448,6 +461,10 @@ where
 
     fn joint_rand_len(&self) -> usize {
         2
+    }
+
+    fn eval_output_len(&self) -> usize {
+        1
     }
 
     fn prove_rand_len(&self) -> usize {
@@ -619,7 +636,7 @@ where
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         // Check that each element of `input` is a 0 or 1.
@@ -645,7 +662,7 @@ where
 
         // Take a random linear combination of both checks.
         let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * weight_check;
-        Ok(out)
+        Ok(vec![out])
     }
 
     // Truncates the measurement, removing extra data that was necessary for validity (here, the
@@ -677,6 +694,10 @@ where
     // The number of random values needed in the validity checks
     fn joint_rand_len(&self) -> usize {
         2
+    }
+
+    fn eval_output_len(&self) -> usize {
+        1
     }
 
     fn prove_rand_len(&self) -> usize {
@@ -842,7 +863,7 @@ where
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         parallel_sum_range_checks(
@@ -852,6 +873,7 @@ where
             self.chunk_length,
             num_shares,
         )
+        .map(|out| vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -880,6 +902,10 @@ where
     }
 
     fn joint_rand_len(&self) -> usize {
+        1
+    }
+
+    fn eval_output_len(&self) -> usize {
         1
     }
 
