@@ -212,15 +212,18 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the arithmetic average.
+// This is just a `Sum` object under the hood. The only difference is that the aggregate result is
+// an f64, which we get by dividing by `num_measurements`
 #[derive(Clone, PartialEq, Eq)]
 pub struct Average<F: FftFriendlyFieldElement> {
-    bits: usize,
-    range_checker: Vec<F>,
+    summer: Sum<F>,
 }
 
 impl<F: FftFriendlyFieldElement> Debug for Average<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Average").field("bits", &self.bits).finish()
+        f.debug_struct("Average")
+            .field("bits", &self.summer.bits)
+            .finish()
     }
 }
 
@@ -228,16 +231,8 @@ impl<F: FftFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
     pub fn new(bits: usize) -> Result<Self, FlpError> {
-        if !F::valid_integer_bitlength(bits) {
-            return Err(FlpError::Encode(
-                "invalid bits: number of bits exceeds maximum number of bits in this field"
-                    .to_string(),
-            ));
-        }
-        Ok(Self {
-            bits,
-            range_checker: poly_range_check(0, 2),
-        })
+        let summer = Sum::new(bits)?;
+        Ok(Average { summer })
     }
 }
 
@@ -247,25 +242,21 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_as_bitvector(*summand, self.bits)?.collect();
-        Ok(v)
+        self.summer.encode_measurement(summand)
     }
 
     fn decode_result(&self, data: &[F], num_measurements: usize) -> Result<f64, FlpError> {
         // Compute the average from the aggregated sum.
-        let data = decode_result(data)?;
-        let data: u64 = data.try_into().map_err(|err| {
-            FlpError::Decode(format!("failed to convert {data:?} to u64: {err}",))
-        })?;
+        let sum = self.summer.decode_result(data, num_measurements)?;
+        let data: u64 = sum
+            .try_into()
+            .map_err(|err| FlpError::Decode(format!("failed to convert {sum:?} to u64: {err}",)))?;
         let result = (data as f64) / (num_measurements as f64);
         Ok(result)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.bits,
-        ))]
+        self.summer.gadget()
     }
 
     fn valid(
@@ -273,44 +264,41 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
-        _num_shares: usize,
+        num_shares: usize,
     ) -> Result<F, FlpError> {
-        self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+        self.summer.valid(g, input, joint_rand, num_shares)
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        self.truncate_call_check(&input)?;
-        let res = F::decode_bitvector(&input)?;
-        Ok(vec![res])
+        self.summer.truncate(input)
     }
 
     fn input_len(&self) -> usize {
-        self.bits
+        self.summer.bits
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
+        self.summer.proof_len()
     }
 
     fn verifier_len(&self) -> usize {
-        3
+        self.summer.verifier_len()
     }
 
     fn output_len(&self) -> usize {
-        1
+        self.summer.output_len()
     }
 
     fn joint_rand_len(&self) -> usize {
-        1
+        self.summer.joint_rand_len()
     }
 
     fn prove_rand_len(&self) -> usize {
-        1
+        self.summer.prove_rand_len()
     }
 
     fn query_rand_len(&self) -> usize {
-        1
+        self.summer.query_rand_len()
     }
 }
 
