@@ -480,8 +480,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 .zip(query_rand_for_validity)
                 .fold(Self::Field::zero(), |acc, (&val, &r)| acc + r * val)
         } else {
-            // If `valid()` outputs one field element, just use that.
-            validity[0]
+            // If `valid()` outputs one field element, just use that. If it outputs none, then it is
+            // trivially satisfied, so use 0
+            validity.first().cloned().unwrap_or(Self::Field::zero())
         };
         verifier.push(check);
 

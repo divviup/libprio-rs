@@ -173,7 +173,8 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
         _num_shares: usize,
     ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0]).map(|out| vec![out])
+        let gadget = &mut g[0];
+        input.iter().map(|&b| gadget.call(&[b])).collect()
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -199,11 +200,11 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     }
 
     fn joint_rand_len(&self) -> usize {
-        1
+        0
     }
 
     fn eval_output_len(&self) -> usize {
-        1
+        self.bits
     }
 
     fn prove_rand_len(&self) -> usize {
@@ -870,27 +871,6 @@ where
     fn prove_rand_len(&self) -> usize {
         self.chunk_length * 2
     }
-}
-
-/// Compute a random linear combination of the result of calls of `g` on each element of `input`.
-///
-/// # Arguments
-///
-/// * `g` - The gadget to be applied elementwise
-/// * `input` - The vector on whose elements to apply `g`
-/// * `rnd` - The randomness used for the linear combination
-pub(crate) fn call_gadget_on_vec_entries<F: FftFriendlyFieldElement>(
-    g: &mut Box<dyn Gadget<F>>,
-    input: &[F],
-    rnd: F,
-) -> Result<F, FlpError> {
-    let mut comb = F::zero();
-    let mut r = rnd;
-    for chunk in input.chunks(1) {
-        comb += r * g.call(chunk)?;
-        r *= rnd;
-    }
-    Ok(comb)
 }
 
 /// Given a vector `data` of field elements which should contain exactly one entry, return the

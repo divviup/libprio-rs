@@ -1665,11 +1665,6 @@ mod tests {
         let nonce = [0; 16];
 
         let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
-        input_shares[0].joint_rand_blind.as_mut().unwrap().0[0] ^= 255;
-        let result = run_vdaf_prepare(&prio3, &verify_key, &(), &nonce, public_share, input_shares);
-        assert_matches!(result, Err(VdafError::Uncategorized(_)));
-
-        let (public_share, mut input_shares) = prio3.shard(&1, &nonce).unwrap();
         assert_matches!(input_shares[0].measurement_share, Share::Leader(ref mut data) => {
             data[0] += Field128::one();
         });
@@ -2007,8 +2002,6 @@ mod tests {
                     {
                         assert_ne!(left, right);
                     }
-
-                    assert_ne!(x.joint_rand_blind, y.joint_rand_blind);
                 }
             }
         }
