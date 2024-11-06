@@ -218,7 +218,15 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// The length in field elements of the random input consumed by the verifier to make queries
     /// against inputs and proofs. This is the same as the number of gadgets in the validity
     /// circuit.
-    fn query_rand_len(&self) -> usize;
+    fn query_rand_len(&self) -> usize {
+        let mut n = self.gadget().len();
+        let eval_elems = self.eval_output_len();
+        if eval_elems > 1 {
+            n += eval_elems;
+        }
+
+        n
+    }
 
     /// Generate a proof of an input's validity. The return value is a sequence of
     /// [`Self::proof_len`] field elements.
@@ -394,7 +402,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
         // We use query randomness to compress outputs from `valid()` (if size is > 1), as well as
         // for gadget evaluations. Split these up
         let (query_rand_for_validity, query_rand_for_gadgets) = if self.eval_output_len() > 1 {
-            query_rand.split_at(1)
+            query_rand.split_at(self.eval_output_len())
         } else {
             query_rand.split_at(0)
         };
@@ -868,11 +876,6 @@ pub mod test_utils {
             let prove_rand = random_vector(self.flp.prove_rand_len()).unwrap();
             let query_rand = random_vector(self.flp.query_rand_len()).unwrap();
             assert_eq!(
-                self.flp.query_rand_len(),
-                gadgets.len(),
-                "{name}: unexpected number of gadgets"
-            );
-            assert_eq!(
                 self.flp.joint_rand_len(),
                 joint_rand.len(),
                 "{name}: unexpected joint rand length"
@@ -1147,10 +1150,6 @@ mod tests {
             3
         }
 
-        fn query_rand_len(&self) -> usize {
-            2
-        }
-
         fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
             vec![
                 Box::new(Mul::new(2)),
@@ -1284,10 +1283,6 @@ mod tests {
             let second = 1; // gadget arity
 
             first + second
-        }
-
-        fn query_rand_len(&self) -> usize {
-            2 // number of gadgets
         }
 
         fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
