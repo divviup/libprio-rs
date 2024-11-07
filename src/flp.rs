@@ -217,7 +217,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
 
     /// The length in field elements of the random input consumed by the verifier to make queries
     /// against inputs and proofs. This is the same as the number of gadgets in the validity
-    /// circuit.
+    /// circuit, plus the number of elements output by the validity circuit (if >1).
     fn query_rand_len(&self) -> usize {
         let mut n = self.gadget().len();
         let eval_elems = self.eval_output_len();
