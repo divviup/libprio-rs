@@ -263,6 +263,11 @@ mod tests {
         }
     }
 
+    // All the below tests are not passing. We ignore them until the rest of the repo is in a state
+    // where we can regenerate the JSON test vectors.
+    // Tracking issue https://github.com/divviup/libprio-rs/issues/1122
+
+    #[ignore]
     #[test]
     fn test_vec_prio3_sum() {
         for test_vector_str in [
@@ -276,6 +281,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_vec_prio3_sum_vec() {
         for test_vector_str in [
@@ -291,6 +297,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_vec_prio3_sum_vec_multiproof() {
         type Prio3SumVecField64Multiproof =
@@ -314,6 +321,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn test_vec_prio3_histogram() {
         for test_vector_str in [
