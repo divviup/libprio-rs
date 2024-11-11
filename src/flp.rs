@@ -156,6 +156,9 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// [BBCG+19]: https://ia.cr/2019/188
     fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>>;
 
+    /// Returns the number of gadgets associated with this validity circuit. This MUST equal `self.gadget().len()`.
+    fn num_gadgets(&self) -> usize;
+
     /// Evaluates the validity circuit on an input and returns the output.
     ///
     /// # Parameters
@@ -219,7 +222,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     /// against inputs and proofs. This is the same as the number of gadgets in the validity
     /// circuit, plus the number of elements output by the validity circuit (if >1).
     fn query_rand_len(&self) -> usize {
-        let mut n = self.gadget().len();
+        let mut n = self.num_gadgets();
         let eval_elems = self.eval_output_len();
         if eval_elems > 1 {
             n += eval_elems;
@@ -1158,6 +1161,10 @@ mod tests {
             ]
         }
 
+        fn num_gadgets(&self) -> usize {
+            2
+        }
+
         fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {
             Ok(vec![
                 F::from(*measurement),
@@ -1292,6 +1299,10 @@ mod tests {
                 Box::new(PolyEval::new(poly.clone(), self.num_gadget_calls[0])),
                 Box::new(PolyEval::new(poly, self.num_gadget_calls[1])),
             ]
+        }
+
+        fn num_gadgets(&self) -> usize {
+            2
         }
 
         fn encode_measurement(&self, measurement: &F::Integer) -> Result<Vec<F>, FlpError> {

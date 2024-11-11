@@ -63,6 +63,10 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
         vec![Box::new(Mul::new(1))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
@@ -165,6 +169,10 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
@@ -259,6 +267,10 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
         self.summer.gadget()
+    }
+
+    fn num_gadgets(&self) -> usize {
+        self.summer.num_gadgets()
     }
 
     fn valid(
@@ -396,6 +408,10 @@ where
             Mul::new(self.gadget_calls),
             self.chunk_length,
         ))]
+    }
+
+    fn num_gadgets(&self) -> usize {
+        1
     }
 
     fn valid(
@@ -606,6 +622,10 @@ where
             Mul::new(self.gadget_calls),
             self.chunk_length,
         ))]
+    }
+
+    fn num_gadgets(&self) -> usize {
+        1
     }
 
     fn valid(
@@ -820,6 +840,10 @@ where
             Mul::new(self.gadget_calls),
             self.chunk_length,
         ))]
+    }
+
+    fn num_gadgets(&self) -> usize {
+        1
     }
 
     fn valid(

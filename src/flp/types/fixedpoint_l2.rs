@@ -462,6 +462,10 @@ where
         vec![Box::new(gadget0), Box::new(gadget1)]
     }
 
+    fn num_gadgets(&self) -> usize {
+        2
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<Field128>>>,
