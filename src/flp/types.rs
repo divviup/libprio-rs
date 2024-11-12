@@ -63,15 +63,20 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
         vec![Box::new(Mul::new(1))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        Ok(g[0].call(&[input[0], input[0]])? - input[0])
+        let out = g[0].call(&[input[0], input[0]])? - input[0];
+        Ok(vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -99,12 +104,12 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
         0
     }
 
-    fn prove_rand_len(&self) -> usize {
-        2
+    fn eval_output_len(&self) -> usize {
+        1
     }
 
-    fn query_rand_len(&self) -> usize {
-        1
+    fn prove_rand_len(&self) -> usize {
+        2
     }
 }
 
@@ -164,15 +169,20 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+        let gadget = &mut g[0];
+        input.iter().map(|&b| gadget.call(&[b])).collect()
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -198,29 +208,32 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     }
 
     fn joint_rand_len(&self) -> usize {
-        1
+        0
+    }
+
+    fn eval_output_len(&self) -> usize {
+        self.bits
     }
 
     fn prove_rand_len(&self) -> usize {
-        1
-    }
-
-    fn query_rand_len(&self) -> usize {
         1
     }
 }
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the arithmetic average.
+// This is just a `Sum` object under the hood. The only difference is that the aggregate result is
+// an f64, which we get by dividing by `num_measurements`
 #[derive(Clone, PartialEq, Eq)]
 pub struct Average<F: FftFriendlyFieldElement> {
-    bits: usize,
-    range_checker: Vec<F>,
+    summer: Sum<F>,
 }
 
 impl<F: FftFriendlyFieldElement> Debug for Average<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Average").field("bits", &self.bits).finish()
+        f.debug_struct("Average")
+            .field("bits", &self.summer.bits)
+            .finish()
     }
 }
 
@@ -228,16 +241,8 @@ impl<F: FftFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
     /// 2^bits)`.
     pub fn new(bits: usize) -> Result<Self, FlpError> {
-        if !F::valid_integer_bitlength(bits) {
-            return Err(FlpError::Encode(
-                "invalid bits: number of bits exceeds maximum number of bits in this field"
-                    .to_string(),
-            ));
-        }
-        Ok(Self {
-            bits,
-            range_checker: poly_range_check(0, 2),
-        })
+        let summer = Sum::new(bits)?;
+        Ok(Average { summer })
     }
 }
 
@@ -247,25 +252,25 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_as_bitvector(*summand, self.bits)?.collect();
-        Ok(v)
+        self.summer.encode_measurement(summand)
     }
 
     fn decode_result(&self, data: &[F], num_measurements: usize) -> Result<f64, FlpError> {
         // Compute the average from the aggregated sum.
-        let data = decode_result(data)?;
-        let data: u64 = data.try_into().map_err(|err| {
-            FlpError::Decode(format!("failed to convert {data:?} to u64: {err}",))
-        })?;
+        let sum = self.summer.decode_result(data, num_measurements)?;
+        let data: u64 = sum
+            .try_into()
+            .map_err(|err| FlpError::Decode(format!("failed to convert {sum:?} to u64: {err}",)))?;
         let result = (data as f64) / (num_measurements as f64);
         Ok(result)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.bits,
-        ))]
+        self.summer.gadget()
+    }
+
+    fn num_gadgets(&self) -> usize {
+        self.summer.num_gadgets()
     }
 
     fn valid(
@@ -273,44 +278,41 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
-        _num_shares: usize,
-    ) -> Result<F, FlpError> {
-        self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+        num_shares: usize,
+    ) -> Result<Vec<F>, FlpError> {
+        self.summer.valid(g, input, joint_rand, num_shares)
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        self.truncate_call_check(&input)?;
-        let res = F::decode_bitvector(&input)?;
-        Ok(vec![res])
+        self.summer.truncate(input)
     }
 
     fn input_len(&self) -> usize {
-        self.bits
+        self.summer.bits
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
+        self.summer.proof_len()
     }
 
     fn verifier_len(&self) -> usize {
-        3
+        self.summer.verifier_len()
     }
 
     fn output_len(&self) -> usize {
-        1
+        self.summer.output_len()
     }
 
     fn joint_rand_len(&self) -> usize {
-        1
+        self.summer.joint_rand_len()
+    }
+
+    fn eval_output_len(&self) -> usize {
+        self.summer.eval_output_len()
     }
 
     fn prove_rand_len(&self) -> usize {
-        1
-    }
-
-    fn query_rand_len(&self) -> usize {
-        1
+        self.summer.prove_rand_len()
     }
 }
 
@@ -408,23 +410,22 @@ where
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         // Check that each element of `input` is a 0 or 1.
-        let range_check = parallel_sum_range_checks(
-            &mut g[0],
-            input,
-            joint_rand[0],
-            self.chunk_length,
-            num_shares,
-        )?;
+        let range_check =
+            parallel_sum_range_checks(&mut g[0], input, joint_rand, self.chunk_length, num_shares)?;
 
         // Check that the elements of `input` sum to 1.
         let mut sum_check = -F::from(F::valid_integer_try_from(num_shares)?).inv();
@@ -432,9 +433,7 @@ where
             sum_check += *val;
         }
 
-        // Take a random linear combination of both checks.
-        let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * sum_check;
-        Ok(out)
+        Ok(vec![range_check, sum_check])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -459,15 +458,15 @@ where
     }
 
     fn joint_rand_len(&self) -> usize {
+        self.gadget_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
         2
     }
 
     fn prove_rand_len(&self) -> usize {
         self.chunk_length * 2
-    }
-
-    fn query_rand_len(&self) -> usize {
-        1
     }
 }
 
@@ -625,23 +624,22 @@ where
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         // Check that each element of `input` is a 0 or 1.
-        let range_check = parallel_sum_range_checks(
-            &mut g[0],
-            input,
-            joint_rand[0],
-            self.chunk_length,
-            num_shares,
-        )?;
+        let range_check =
+            parallel_sum_range_checks(&mut g[0], input, joint_rand, self.chunk_length, num_shares)?;
 
         // Check that the elements of `input` sum to at most `max_weight`.
         let count_vec = &input[..self.length];
@@ -655,9 +653,7 @@ where
             offset * shares_inv + weight - offset_weight_reported
         };
 
-        // Take a random linear combination of both checks.
-        let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * weight_check;
-        Ok(out)
+        Ok(vec![range_check, weight_check])
     }
 
     // Truncates the measurement, removing extra data that was necessary for validity (here, the
@@ -688,17 +684,15 @@ where
 
     // The number of random values needed in the validity checks
     fn joint_rand_len(&self) -> usize {
+        self.gadget_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
         2
     }
 
     fn prove_rand_len(&self) -> usize {
         self.chunk_length * 2
-    }
-
-    fn query_rand_len(&self) -> usize {
-        // TODO: this will need to be increase once draft-10 is implemented and more randomness is
-        // necessary due to random linear combination computations
-        1
     }
 }
 
@@ -848,22 +842,21 @@ where
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
-        parallel_sum_range_checks(
-            &mut g[0],
-            input,
-            joint_rand[0],
-            self.chunk_length,
-            num_shares,
-        )
+        parallel_sum_range_checks(&mut g[0], input, joint_rand, self.chunk_length, num_shares)
+            .map(|out| vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -892,37 +885,16 @@ where
     }
 
     fn joint_rand_len(&self) -> usize {
+        self.gadget_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
         1
     }
 
     fn prove_rand_len(&self) -> usize {
         self.chunk_length * 2
     }
-
-    fn query_rand_len(&self) -> usize {
-        1
-    }
-}
-
-/// Compute a random linear combination of the result of calls of `g` on each element of `input`.
-///
-/// # Arguments
-///
-/// * `g` - The gadget to be applied elementwise
-/// * `input` - The vector on whose elements to apply `g`
-/// * `rnd` - The randomness used for the linear combination
-pub(crate) fn call_gadget_on_vec_entries<F: FftFriendlyFieldElement>(
-    g: &mut Box<dyn Gadget<F>>,
-    input: &[F],
-    rnd: F,
-) -> Result<F, FlpError> {
-    let mut comb = F::zero();
-    let mut r = rnd;
-    for chunk in input.chunks(1) {
-        comb += r * g.call(chunk)?;
-        r *= rnd;
-    }
-    Ok(comb)
 }
 
 /// Given a vector `data` of field elements which should contain exactly one entry, return the
@@ -970,7 +942,7 @@ pub(crate) fn decode_result_vec<F: FftFriendlyFieldElement>(
 pub(crate) fn parallel_sum_range_checks<F: FftFriendlyFieldElement>(
     gadget: &mut Box<dyn Gadget<F>>,
     input: &[F],
-    joint_randomness: F,
+    joint_randomness: &[F],
     chunk_length: usize,
     num_shares: usize,
 ) -> Result<F, FlpError> {
@@ -978,15 +950,16 @@ pub(crate) fn parallel_sum_range_checks<F: FftFriendlyFieldElement>(
     let num_shares_inverse = f_num_shares.inv();
 
     let mut output = F::zero();
-    let mut r_power = joint_randomness;
     let mut padded_chunk = vec![F::zero(); 2 * chunk_length];
 
-    for chunk in input.chunks(chunk_length) {
+    for (chunk, &r) in input.chunks(chunk_length).zip(joint_randomness) {
+        let mut r_power = r;
+
         // Construct arguments for the Mul subcircuits.
         for (input, args) in chunk.iter().zip(padded_chunk.chunks_exact_mut(2)) {
             args[0] = r_power * *input;
             args[1] = *input - num_shares_inverse;
-            r_power *= joint_randomness;
+            r_power *= r;
         }
         // If the chunk of the input is smaller than chunk_length, use zeros instead of measurement
         // inputs for the remaining calls.

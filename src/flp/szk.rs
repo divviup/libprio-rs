@@ -904,7 +904,7 @@ mod tests {
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
         let prove_rand_seed = Seed::<16>::generate().unwrap();
         let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -944,7 +944,7 @@ mod tests {
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
         let prove_rand_seed = Seed::<16>::generate().unwrap();
         let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {

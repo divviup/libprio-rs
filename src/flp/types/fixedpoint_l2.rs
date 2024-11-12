@@ -462,13 +462,17 @@ where
         vec![Box::new(gadget0), Box::new(gadget1)]
     }
 
+    fn num_gadgets(&self) -> usize {
+        2
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<Field128>>>,
         input: &[Field128],
         joint_rand: &[Field128],
         num_shares: usize,
-    ) -> Result<Field128, FlpError> {
+    ) -> Result<Vec<Field128>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         let f_num_shares = Field128::from(Field128::valid_integer_try_from::<usize>(num_shares)?);
@@ -491,7 +495,7 @@ where
         let range_check = parallel_sum_range_checks(
             &mut g[0],
             &input[..self.range_norm_end],
-            joint_rand[0],
+            joint_rand,
             self.gadget0_chunk_length,
             num_shares,
         )?;
@@ -550,10 +554,7 @@ where
 
         let norm_check = computed_norm - submitted_norm;
 
-        // Finally, we require both checks to be successful by computing a
-        // random linear combination of them.
-        let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * norm_check;
-        Ok(out)
+        Ok(vec![range_check, norm_check])
     }
 
     fn truncate(&self, input: Vec<Field128>) -> Result<Vec<Self::Field>, FlpError> {
@@ -598,15 +599,15 @@ where
     }
 
     fn joint_rand_len(&self) -> usize {
+        self.gadget0_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
         2
     }
 
     fn prove_rand_len(&self) -> usize {
         self.gadget0_chunk_length * 2 + self.gadget1_chunk_length
-    }
-
-    fn query_rand_len(&self) -> usize {
-        2
     }
 }
 
