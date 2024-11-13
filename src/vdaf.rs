@@ -298,6 +298,11 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         agg_param: &Self::AggregationParam,
         output_shares: M,
     ) -> Result<Self::AggregateShare, VdafError>;
+
+    /// Validates an aggregation parameter with respect to all previous aggregaiton parameters used
+    /// for the same input share
+    #[must_use]
+    fn is_agg_param_valid(cur: &Self::AggregationParam, prev: &[Self::AggregationParam]) -> bool;
 }
 
 /// Aggregator that implements differential privacy with Aggregator-side noise addition.

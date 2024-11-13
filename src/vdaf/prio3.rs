@@ -1441,6 +1441,11 @@ where
 
         Ok(agg_share)
     }
+
+    fn is_agg_param_valid(_cur: &Self::AggregationParam, _prev: &[Self::AggregationParam]) -> bool {
+        // Nothing to do. There are no aggregation parameters (it's the unit type)
+        true
+    }
 }
 
 #[cfg(feature = "experimental")]

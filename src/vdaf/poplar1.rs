@@ -17,6 +17,7 @@ use crate::{
 use bitvec::{prelude::Lsb0, vec::BitVec};
 use rand_core::RngCore;
 use std::{
+    collections::BTreeSet,
     convert::TryFrom,
     fmt::Debug,
     io::{Cursor, Read},
@@ -1244,6 +1245,52 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             agg_param.prefixes.len(),
             output_shares,
         )
+    }
+
+    /// Validates that no aggregation parameter with the same level as `cur` has been used with the
+    /// same input share before. `prev` contains the aggregation parameters used for the same input.
+    ///
+    /// # Panics
+    /// Panics if `prev.len() > 1`
+    fn is_agg_param_valid(cur: &Poplar1AggregationParam, prev: &[Poplar1AggregationParam]) -> bool {
+        assert!(
+            prev.len() <= 1,
+            "list of previous aggregation parameters must be of size 0 or 1"
+        );
+
+        // Helper function to determine the prefix of `input` at `last_level`.
+        fn get_ancestor(input: &IdpfInput, this_level: u16, last_level: u16) -> IdpfInput {
+            input.prefix((this_level - last_level) as usize)
+        }
+
+        // Exit early if this is the first time
+        if prev.is_empty() {
+            return true;
+        }
+
+        // Unpack this agg param and the last one in the list
+        let Poplar1AggregationParam { level, prefixes } = cur;
+        let Poplar1AggregationParam {
+            level: last_level,
+            prefixes: last_prefixes,
+        } = prev.last().as_ref().unwrap();
+        let last_prefixes_set = BTreeSet::from_iter(last_prefixes);
+
+        // Check that the level increased.
+        if level <= last_level {
+            return false;
+        }
+
+        // Check that prefixes are suffixes of the last level's prefixes.
+        for prefix in prefixes {
+            let last_prefix = get_ancestor(prefix, *level, *last_level);
+            if !last_prefixes_set.contains(&last_prefix) {
+                // Current prefix not a suffix of last level's prefixes.
+                return false;
+            }
+        }
+
+        true
     }
 }
 
