@@ -1249,27 +1249,19 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
 
     /// Validates that no aggregation parameter with the same level as `cur` has been used with the
     /// same input share before. `prev` contains the aggregation parameters used for the same input.
-    ///
-    /// # Panics
-    /// Panics if `prev.len() > 1`
+    /// `prev` MUST be sorted from least to most recently used.
     fn is_agg_param_valid(cur: &Poplar1AggregationParam, prev: &[Poplar1AggregationParam]) -> bool {
-        assert!(
-            prev.len() <= 1,
-            "list of previous aggregation parameters must be of size 0 or 1"
-        );
-
-        // Helper function to determine the prefix of `input` at `last_level`.
-        fn get_ancestor(input: &IdpfInput, this_level: u16, last_level: u16) -> IdpfInput {
-            input.prefix((this_level - last_level) as usize)
-        }
-
-        // Exit early if this is the first time
+        // Exit early if there are no previous aggregation params to compare to, i.e., this is the
+        // first time the input share has been processed
         if prev.is_empty() {
             return true;
         }
 
         // Unpack this agg param and the last one in the list
-        let Poplar1AggregationParam { level, prefixes } = cur;
+        let Poplar1AggregationParam {
+            level: cur_level,
+            prefixes: cur_prefixes,
+        } = cur;
         let Poplar1AggregationParam {
             level: last_level,
             prefixes: last_prefixes,
@@ -1277,20 +1269,15 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         let last_prefixes_set = BTreeSet::from_iter(last_prefixes);
 
         // Check that the level increased.
-        if level <= last_level {
+        if cur_level <= last_level {
             return false;
         }
 
-        // Check that prefixes are suffixes of the last level's prefixes.
-        for prefix in prefixes {
-            let last_prefix = get_ancestor(prefix, *level, *last_level);
-            if !last_prefixes_set.contains(&last_prefix) {
-                // Current prefix not a suffix of last level's prefixes.
-                return false;
-            }
-        }
-
-        true
+        // Check that current prefixes are extensions of the last level's prefixes.
+        cur_prefixes.iter().all(|cur_prefix| {
+            let last_prefix = cur_prefix.prefix(*last_level as usize);
+            last_prefixes_set.contains(&last_prefix)
+        })
     }
 }
 
@@ -2024,6 +2011,57 @@ mod tests {
         assert_matches!(err, CodecError::Other(_));
         let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 3]).unwrap_err();
         assert_matches!(err, CodecError::Other(_));
+    }
+
+    // Tests Poplar1::is_valid() functionality. This unit tests is translated from
+    // https://github.com/cfrg/draft-irtf-cfrg-vdaf/blob/a4874547794818573acd8734874c9784043b1140/poc/tests/test_vdaf_poplar1.py#L187
+    #[test]
+    fn agg_param_validity() {
+        // The actual Poplar instance doesn't matter for the parameter validity tests
+        type V = Poplar1<XofTurboShake128, 16>;
+
+        // Helper function for making aggregation params
+        fn make_agg_param(bitstrings: &[&[u8]]) -> Result<Poplar1AggregationParam, VdafError> {
+            Poplar1AggregationParam::try_from_prefixes(
+                bitstrings
+                    .iter()
+                    .map(|v| {
+                        let bools = v.iter().map(|&b| b != 0).collect::<Vec<_>>();
+                        IdpfInput::from_bools(&bools)
+                    })
+                    .collect(),
+            )
+        }
+
+        // Test `is_valid` returns False on repeated levels, and True otherwise.
+        let agg_params = [
+            make_agg_param(&[&[0], &[1]]).unwrap(),
+            make_agg_param(&[&[0, 0]]).unwrap(),
+            make_agg_param(&[&[0, 0], &[1, 0]]).unwrap(),
+        ];
+        assert!(V::is_agg_param_valid(&agg_params[0], &[]));
+        assert!(V::is_agg_param_valid(&agg_params[1], &agg_params[..1]));
+        assert!(!V::is_agg_param_valid(&agg_params[2], &agg_params[..2]));
+
+        // Test `is_valid` accepts level jumps.
+        let agg_params = [
+            make_agg_param(&[&[0], &[1]]).unwrap(),
+            make_agg_param(&[&[0, 1, 0], &[0, 1, 1], &[1, 0, 1], &[1, 1, 1]]).unwrap(),
+        ];
+        assert!(V::is_agg_param_valid(&agg_params[1], &agg_params[..1]));
+
+        // Test `is_valid` rejects unconnected prefixes.
+        let agg_params = [
+            make_agg_param(&[&[0]]).unwrap(),
+            make_agg_param(&[&[0, 1, 0], &[0, 1, 1], &[1, 0, 1], &[1, 1, 1]]).unwrap(),
+        ];
+        assert!(!V::is_agg_param_valid(&agg_params[1], &agg_params[..1]));
+
+        // Test that the `Poplar1AggregationParam` constructor rejects unsorted and duplicate
+        // prefixes.
+        assert!(make_agg_param(&[&[1], &[0]]).is_err());
+        assert!(make_agg_param(&[&[1, 0, 0], &[0, 1, 1]]).is_err());
+        assert!(make_agg_param(&[&[0, 0, 0], &[0, 1, 0], &[0, 1, 0]]).is_err());
     }
 
     #[derive(Debug, Deserialize)]

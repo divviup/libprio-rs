@@ -300,7 +300,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ) -> Result<Self::AggregateShare, VdafError>;
 
     /// Validates an aggregation parameter with respect to all previous aggregaiton parameters used
-    /// for the same input share
+    /// for the same input share. `prev` MUST be sorted from least to most recently used.
     #[must_use]
     fn is_agg_param_valid(cur: &Self::AggregationParam, prev: &[Self::AggregationParam]) -> bool;
 }
