@@ -2013,7 +2013,7 @@ mod tests {
         assert_matches!(err, CodecError::Other(_));
     }
 
-    // Tests Poplar1::is_valid() functionality. This unit tests is translated from
+    // Tests Poplar1::is_valid() functionality. This unit test is translated from
     // https://github.com/cfrg/draft-irtf-cfrg-vdaf/blob/a4874547794818573acd8734874c9784043b1140/poc/tests/test_vdaf_poplar1.py#L187
     #[test]
     fn agg_param_validity() {
