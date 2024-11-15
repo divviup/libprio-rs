@@ -166,6 +166,10 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
         }
         Ok(aggregate_share)
     }
+
+    fn is_agg_param_valid(_cur: &Self::AggregationParam, _prev: &[Self::AggregationParam]) -> bool {
+        true
+    }
 }
 
 impl vdaf::Client<16> for Vdaf {

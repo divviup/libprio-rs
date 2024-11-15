@@ -1441,6 +1441,11 @@ where
 
         Ok(agg_share)
     }
+
+    /// Returns `true` iff `prev.is_empty()`
+    fn is_agg_param_valid(_cur: &Self::AggregationParam, prev: &[Self::AggregationParam]) -> bool {
+        prev.is_empty()
+    }
 }
 
 #[cfg(feature = "experimental")]

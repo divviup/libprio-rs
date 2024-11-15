@@ -325,6 +325,11 @@ impl Aggregator<32, 16> for Prio2 {
 
         Ok(agg_share)
     }
+
+    /// Returns `true` iff `prev.is_empty()`
+    fn is_agg_param_valid(_cur: &Self::AggregationParam, prev: &[Self::AggregationParam]) -> bool {
+        prev.is_empty()
+    }
 }
 
 impl Collector for Prio2 {
