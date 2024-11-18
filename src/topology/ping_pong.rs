@@ -362,6 +362,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     fn leader_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
+        ctx: &[u8],
         agg_param: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
@@ -390,6 +391,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     fn helper_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
+        ctx: &[u8],
         agg_param: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
@@ -493,6 +495,7 @@ where
     fn leader_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
+        ctx: &[u8],
         agg_param: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
@@ -500,6 +503,7 @@ where
     ) -> Result<(Self::State, PingPongMessage), PingPongError> {
         self.prepare_init(
             verify_key,
+            ctx,
             /* Leader */ 0,
             agg_param,
             nonce,
@@ -522,6 +526,7 @@ where
     fn helper_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
+        ctx: &[u8],
         agg_param: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
@@ -531,6 +536,7 @@ where
         let (prep_state, prep_share) = self
             .prepare_init(
                 verify_key,
+                ctx,
                 /* Helper */ 1,
                 agg_param,
                 nonce,
@@ -667,6 +673,8 @@ mod tests {
     use crate::vdaf::dummy;
     use assert_matches::assert_matches;
 
+    const CTX_STR: &[u8] = b"pingpong ctx";
+
     #[test]
     fn ping_pong_one_round() {
         let verify_key = [];
@@ -683,6 +691,7 @@ mod tests {
         let (leader_state, leader_message) = leader
             .leader_initialized(
                 &verify_key,
+                CTX_STR,
                 &aggregation_param,
                 &nonce,
                 &public_share,
@@ -694,6 +703,7 @@ mod tests {
         let (helper_state, helper_message) = helper
             .helper_initialized(
                 &verify_key,
+                CTX_STR,
                 &aggregation_param,
                 &nonce,
                 &public_share,
@@ -733,6 +743,7 @@ mod tests {
         let (leader_state, leader_message) = leader
             .leader_initialized(
                 &verify_key,
+                CTX_STR,
                 &aggregation_param,
                 &nonce,
                 &public_share,
@@ -744,6 +755,7 @@ mod tests {
         let (helper_state, helper_message) = helper
             .helper_initialized(
                 &verify_key,
+                CTX_STR,
                 &aggregation_param,
                 &nonce,
                 &public_share,
@@ -795,6 +807,7 @@ mod tests {
         let (leader_state, leader_message) = leader
             .leader_initialized(
                 &verify_key,
+                CTX_STR,
                 &aggregation_param,
                 &nonce,
                 &public_share,
@@ -806,6 +819,7 @@ mod tests {
         let (helper_state, helper_message) = helper
             .helper_initialized(
                 &verify_key,
+                CTX_STR,
                 &aggregation_param,
                 &nonce,
                 &public_share,

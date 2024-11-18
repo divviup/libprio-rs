@@ -217,9 +217,10 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
     ///
     /// Implements `Vdaf::shard` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-13#section-5.1
     fn shard(
         &self,
+        ctx: &[u8],
         measurement: &Self::Measurement,
         nonce: &[u8; NONCE_SIZE],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError>;
@@ -257,6 +258,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     fn prepare_init(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
+        ctx: &[u8],
         agg_id: usize,
         agg_param: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
@@ -489,6 +491,7 @@ pub mod test_utils {
 
     /// Execute the VDAF end-to-end and return the aggregate result.
     pub fn run_vdaf<V, M, const SEED_SIZE: usize>(
+        ctx: &[u8],
         vdaf: &V,
         agg_param: &V::AggregationParam,
         measurements: M,
@@ -500,16 +503,17 @@ pub mod test_utils {
         let mut sharded_measurements = Vec::new();
         for measurement in measurements.into_iter() {
             let nonce = random();
-            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce)?;
+            let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce)?;
 
             sharded_measurements.push((public_share, nonce, input_shares));
         }
 
-        run_vdaf_sharded(vdaf, agg_param, sharded_measurements)
+        run_vdaf_sharded(ctx, vdaf, agg_param, sharded_measurements)
     }
 
     /// Execute the VDAF on sharded measurements and return the aggregate result.
     pub fn run_vdaf_sharded<V, M, I, const SEED_SIZE: usize>(
+        ctx: &[u8],
         vdaf: &V,
         agg_param: &V::AggregationParam,
         sharded_measurements: M,
@@ -530,6 +534,7 @@ pub mod test_utils {
             let out_shares = run_vdaf_prepare(
                 vdaf,
                 &verify_key,
+                ctx,
                 agg_param,
                 &nonce,
                 public_share,
@@ -579,6 +584,7 @@ pub mod test_utils {
     pub fn run_vdaf_prepare<V, M, const SEED_SIZE: usize>(
         vdaf: &V,
         verify_key: &[u8; SEED_SIZE],
+        ctx: &[u8],
         agg_param: &V::AggregationParam,
         nonce: &[u8; 16],
         public_share: V::PublicShare,
@@ -600,6 +606,7 @@ pub mod test_utils {
         for (agg_id, input_share) in input_shares.enumerate() {
             let (state, msg) = vdaf.prepare_init(
                 verify_key,
+                ctx,
                 agg_id,
                 agg_param,
                 nonce,

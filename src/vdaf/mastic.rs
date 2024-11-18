@@ -341,6 +341,7 @@ where
 {
     fn shard(
         &self,
+        ctx: &[u8],
         (attribute, weight): &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
@@ -388,6 +389,7 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     const TEST_NONCE_SIZE: usize = 16;
+    const CTX_STR: &[u8] = b"mastic ctx";
 
     #[test]
     fn test_mastic_shard_sum() {
@@ -404,7 +406,9 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
-        let (_public, _input_shares) = mastic.shard(&(first_input, 24u128), &nonce).unwrap();
+        let (_public, _input_shares) = mastic
+            .shard(CTX_STR, &(first_input, 24u128), &nonce)
+            .unwrap();
     }
 
     #[test]
@@ -422,7 +426,9 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
-        let (_, input_shares) = mastic.shard(&(first_input, 26u128), &nonce).unwrap();
+        let (_, input_shares) = mastic
+            .shard(CTX_STR, &(first_input, 26u128), &nonce)
+            .unwrap();
         let [leader_input_share, helper_input_share] = [&input_shares[0], &input_shares[1]];
 
         assert_eq!(
@@ -450,7 +456,7 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (_public, _input_shares) = mastic.shard(&(first_input, true), &nonce).unwrap();
+        let (_public, _input_shares) = mastic.shard(CTX_STR, &(first_input, true), &nonce).unwrap();
     }
 
     #[test]
@@ -470,7 +476,9 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (_public, _input_shares) = mastic.shard(&(first_input, measurement), &nonce).unwrap();
+        let (_public, _input_shares) = mastic
+            .shard(CTX_STR, &(first_input, measurement), &nonce)
+            .unwrap();
     }
 
     #[test]
@@ -490,7 +498,9 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (_public, input_shares) = mastic.shard(&(first_input, measurement), &nonce).unwrap();
+        let (_public, input_shares) = mastic
+            .shard(CTX_STR, &(first_input, measurement), &nonce)
+            .unwrap();
         let leader_input_share = &input_shares[0];
         let helper_input_share = &input_shares[1];
 
@@ -521,7 +531,9 @@ mod tests {
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let (_public, input_shares) = mastic.shard(&(first_input, measurement), &nonce).unwrap();
+        let (_public, input_shares) = mastic
+            .shard(CTX_STR, &(first_input, measurement), &nonce)
+            .unwrap();
         let leader_input_share = &input_shares[0];
         let helper_input_share = &input_shares[1];
 

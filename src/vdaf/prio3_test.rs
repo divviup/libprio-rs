@@ -39,6 +39,7 @@ struct TPrio3Prep<M> {
 
 #[derive(Deserialize, Serialize)]
 struct TPrio3<M> {
+    ctx: TEncoded,
     verify_key: TEncoded,
     shares: u8,
     prep: Vec<TPrio3Prep<M>>,
@@ -63,6 +64,7 @@ macro_rules! err {
 fn check_prep_test_vec<MS, MP, T, P, const SEED_SIZE: usize>(
     prio3: &Prio3<T, P, SEED_SIZE>,
     verify_key: &[u8; SEED_SIZE],
+    ctx: &[u8],
     test_num: usize,
     t: &TPrio3Prep<MS>,
 ) -> Vec<OutputShare<T::Field>>
@@ -100,7 +102,15 @@ where
     let mut prep_shares = Vec::new();
     for (agg_id, input_share) in input_shares.iter().enumerate() {
         let (state, prep_share) = prio3
-            .prepare_init(verify_key, agg_id, &(), &nonce, &public_share, input_share)
+            .prepare_init(
+                verify_key,
+                ctx,
+                agg_id,
+                &(),
+                &nonce,
+                &public_share,
+                input_share,
+            )
             .unwrap_or_else(|e| err!(test_num, e, "prep state init"));
         states.push(state);
         prep_shares.push(prep_share);
@@ -164,10 +174,11 @@ where
     P: Xof<SEED_SIZE>,
 {
     let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    let ctx = t.ctx.as_ref().try_into().unwrap();
 
     let mut all_output_shares = vec![Vec::new(); prio3.num_aggregators()];
     for (test_num, p) in t.prep.iter().enumerate() {
-        let output_shares = check_prep_test_vec(prio3, verify_key, test_num, p);
+        let output_shares = check_prep_test_vec(prio3, ctx, verify_key, test_num, p);
         for (aggregator_output_shares, output_share) in
             all_output_shares.iter_mut().zip(output_shares.into_iter())
         {
@@ -250,6 +261,11 @@ mod tests {
 
     use super::{check_test_vec, check_test_vec_custom_de, Prio3CountMeasurement};
 
+    // All the below tests are not passing. We ignore them until the rest of the repo is in a state
+    // where we can regenerate the JSON test vectors.
+    // Tracking issue https://github.com/divviup/libprio-rs/issues/1122
+
+    #[ignore]
     #[test]
     fn test_vec_prio3_count() {
         for test_vector_str in [
@@ -262,10 +278,6 @@ mod tests {
             );
         }
     }
-
-    // All the below tests are not passing. We ignore them until the rest of the repo is in a state
-    // where we can regenerate the JSON test vectors.
-    // Tracking issue https://github.com/divviup/libprio-rs/issues/1122
 
     #[ignore]
     #[test]
