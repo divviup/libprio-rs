@@ -280,6 +280,7 @@ impl Aggregator<32, 16> for Prio2 {
 
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Prio2PrepareShare>>(
         &self,
+        _ctx: &[u8],
         _: &Self::AggregationParam,
         inputs: M,
     ) -> Result<(), VdafError> {
@@ -302,6 +303,7 @@ impl Aggregator<32, 16> for Prio2 {
 
     fn prepare_next(
         &self,
+        _ctx: &[u8],
         state: Prio2PrepareState,
         _input: (),
     ) -> Result<PrepareTransition<Self, 32, 16>, VdafError> {
@@ -513,12 +515,16 @@ mod tests {
             let (prepare_state_2, prepare_share_2) = vdaf
                 .prepare_init(&[0; 32], CTX_STR, 1, &(), &[0; 16], &(), &input_share_2)
                 .unwrap();
-            vdaf.prepare_shares_to_prepare_message(&(), [prepare_share_1, prepare_share_2])
-                .unwrap();
-            let transition_1 = vdaf.prepare_next(prepare_state_1, ()).unwrap();
+            vdaf.prepare_shares_to_prepare_message(
+                CTX_STR,
+                &(),
+                [prepare_share_1, prepare_share_2],
+            )
+            .unwrap();
+            let transition_1 = vdaf.prepare_next(CTX_STR, prepare_state_1, ()).unwrap();
             let output_share_1 =
                 assert_matches!(transition_1, PrepareTransition::Finish(out) => out);
-            let transition_2 = vdaf.prepare_next(prepare_state_2, ()).unwrap();
+            let transition_2 = vdaf.prepare_next(CTX_STR, prepare_state_2, ()).unwrap();
             let output_share_2 =
                 assert_matches!(transition_2, PrepareTransition::Finish(out) => out);
             leader_output_shares.push(output_share_1);

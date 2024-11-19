@@ -341,7 +341,7 @@ where
 {
     fn shard(
         &self,
-        ctx: &[u8],
+        _ctx: &[u8],
         (attribute, weight): &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {

@@ -206,6 +206,7 @@ impl<
     #[allow(clippy::type_complexity)]
     pub fn evaluate(
         &self,
+        ctx: &[u8],
         vdaf: &A,
     ) -> Result<
         (
@@ -220,6 +221,7 @@ impl<
             .map_err(PingPongError::CodecPrepMessage)?;
 
         vdaf.prepare_next(
+            ctx,
             self.previous_prepare_state.clone(),
             self.current_prepare_message.clone(),
         )
@@ -429,6 +431,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.8
     fn leader_continued(
         &self,
+        ctx: &[u8],
         leader_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
@@ -464,6 +467,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.8
     fn helper_continued(
         &self,
+        ctx: &[u8],
         helper_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
@@ -476,6 +480,7 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
 {
     fn continued(
         &self,
+        ctx: &[u8],
         is_leader: bool,
         host_state: Self::State,
         agg_param: &Self::AggregationParam,
@@ -556,7 +561,7 @@ where
         };
 
         let current_prepare_message = self
-            .prepare_shares_to_prepare_message(agg_param, [inbound_prep_share, prep_share])
+            .prepare_shares_to_prepare_message(ctx, agg_param, [inbound_prep_share, prep_share])
             .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
         Ok(PingPongTransition {
@@ -567,20 +572,22 @@ where
 
     fn leader_continued(
         &self,
+        ctx: &[u8],
         leader_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(true, leader_state, agg_param, inbound)
+        self.continued(ctx, true, leader_state, agg_param, inbound)
     }
 
     fn helper_continued(
         &self,
+        ctx: &[u8],
         helper_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(false, helper_state, agg_param, inbound)
+        self.continued(ctx, false, helper_state, agg_param, inbound)
     }
 }
 
@@ -591,6 +598,7 @@ where
 {
     fn continued(
         &self,
+        ctx: &[u8],
         is_leader: bool,
         host_state: Self::State,
         agg_param: &Self::AggregationParam,
@@ -622,7 +630,7 @@ where
         let prep_msg = Self::PrepareMessage::get_decoded_with_param(&host_prep_state, prep_msg)
             .map_err(PingPongError::CodecPrepMessage)?;
         let host_prep_transition = self
-            .prepare_next(host_prep_state, prep_msg)
+            .prepare_next(ctx, host_prep_state, prep_msg)
             .map_err(PingPongError::VdafPrepareNext)?;
 
         match (host_prep_transition, next_peer_prep_share) {
@@ -640,7 +648,7 @@ where
                     prep_shares.reverse();
                 }
                 let current_prepare_message = self
-                    .prepare_shares_to_prepare_message(agg_param, prep_shares)
+                    .prepare_shares_to_prepare_message(ctx, agg_param, prep_shares)
                     .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
                 Ok(PingPongContinuedValue::WithMessage {
@@ -711,14 +719,14 @@ mod tests {
                 &leader_message,
             )
             .unwrap()
-            .evaluate(&helper)
+            .evaluate(CTX_STR, &helper)
             .unwrap();
 
         // 1 round VDAF: helper should finish immediately.
         assert_matches!(helper_state, PingPongState::Finished(_));
 
         let leader_state = leader
-            .leader_continued(leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 1 round VDAF: leader should finish when it gets helper message and emit no message.
         assert_matches!(
@@ -763,26 +771,26 @@ mod tests {
                 &leader_message,
             )
             .unwrap()
-            .evaluate(&helper)
+            .evaluate(CTX_STR, &helper)
             .unwrap();
 
         // 2 round VDAF, round 1: helper should continue.
         assert_matches!(helper_state, PingPongState::Continued(_));
 
         let leader_state = leader
-            .leader_continued(leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 2 round VDAF, round 1: leader should finish and emit a finish message.
         let leader_message = assert_matches!(
             leader_state, PingPongContinuedValue::WithMessage { transition } => {
-                let (state, message) = transition.evaluate(&leader).unwrap();
+                let (state, message) = transition.evaluate(CTX_STR,&leader).unwrap();
                 assert_matches!(state, PingPongState::Finished(_));
                 message
             }
         );
 
         let helper_state = helper
-            .helper_continued(helper_state, &aggregation_param, &leader_message)
+            .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
             .unwrap();
         // 2 round vdaf, round 1: helper should finish and emit no message.
         assert_matches!(
@@ -827,38 +835,38 @@ mod tests {
                 &leader_message,
             )
             .unwrap()
-            .evaluate(&helper)
+            .evaluate(CTX_STR, &helper)
             .unwrap();
 
         // 3 round VDAF, round 1: helper should continue.
         assert_matches!(helper_state, PingPongState::Continued(_));
 
         let leader_state = leader
-            .leader_continued(leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 3 round VDAF, round 1: leader should continue and emit a continue message.
         let (leader_state, leader_message) = assert_matches!(
             leader_state, PingPongContinuedValue::WithMessage { transition } => {
-                let (state, message) = transition.evaluate(&leader).unwrap();
+                let (state, message) = transition.evaluate(CTX_STR,&leader).unwrap();
                 assert_matches!(state, PingPongState::Continued(_));
                 (state, message)
             }
         );
 
         let helper_state = helper
-            .helper_continued(helper_state, &aggregation_param, &leader_message)
+            .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
             .unwrap();
         // 3 round vdaf, round 2: helper should finish and emit a finish message.
         let helper_message = assert_matches!(
             helper_state, PingPongContinuedValue::WithMessage { transition } => {
-                let (state, message) = transition.evaluate(&helper).unwrap();
+                let (state, message) = transition.evaluate(CTX_STR,&helper).unwrap();
                 assert_matches!(state, PingPongState::Finished(_));
                 message
             }
         );
 
         let leader_state = leader
-            .leader_continued(leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
             .unwrap();
         // 3 round VDAF, round 2: leader should finish and emit no message.
         assert_matches!(

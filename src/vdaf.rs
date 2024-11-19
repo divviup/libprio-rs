@@ -200,12 +200,16 @@ pub trait Vdaf: Clone + Debug {
 
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the XOF.
-    fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
-        let mut dst = [0_u8; 8];
+    fn domain_separation_tag(&self, usage: u16, ctx: &[u8]) -> Vec<u8> {
+        // The first 8 bytes are fixed. Copy in the appropriate values
+        let mut dst = vec![0u8; 8];
         dst[0] = VERSION;
         dst[1] = 0; // algorithm class
         dst[2..6].copy_from_slice(&(self.algorithm_id()).to_be_bytes());
         dst[6..8].copy_from_slice(&usage.to_be_bytes());
+        // Finally, append `ctx`
+        dst.extend_from_slice(ctx);
+
         dst
     }
 }
@@ -273,6 +277,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
+        ctx: &[u8],
         agg_param: &Self::AggregationParam,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError>;
@@ -290,6 +295,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_next(
         &self,
+        ctx: &[u8],
         state: Self::PrepareState,
         input: Self::PrepareMessage,
     ) -> Result<PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError>;
@@ -620,6 +626,7 @@ pub mod test_utils {
 
         let mut inbound = vdaf
             .prepare_shares_to_prepare_message(
+                ctx,
                 agg_param,
                 outbound.iter().map(|encoded| {
                     V::PrepareShare::get_decoded_with_param(&states[0], encoded)
@@ -634,6 +641,7 @@ pub mod test_utils {
             let mut outbound = Vec::new();
             for state in states.iter_mut() {
                 match vdaf.prepare_next(
+                    ctx,
                     state.clone(),
                     V::PrepareMessage::get_decoded_with_param(state, &inbound)
                         .expect("failed to decode prep message"),
@@ -652,6 +660,7 @@ pub mod test_utils {
                 // Another round is required before output shares are computed.
                 inbound = vdaf
                     .prepare_shares_to_prepare_message(
+                        ctx,
                         agg_param,
                         outbound.iter().map(|encoded| {
                             V::PrepareShare::get_decoded_with_param(&states[0], encoded)

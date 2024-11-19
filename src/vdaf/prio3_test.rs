@@ -76,7 +76,7 @@ where
 {
     let nonce = <[u8; 16]>::try_from(t.nonce.clone()).unwrap();
     let (public_share, input_shares) = prio3
-        .shard_with_random(&t.measurement.clone().into(), &nonce, &t.rand)
+        .shard_with_random(ctx, &t.measurement.clone().into(), &nonce, &t.rand)
         .expect("failed to generate input shares");
 
     assert_eq!(
@@ -132,14 +132,17 @@ where
     }
 
     let inbound = prio3
-        .prepare_shares_to_prepare_message(&(), prep_shares)
+        .prepare_shares_to_prepare_message(ctx, &(), prep_shares)
         .unwrap_or_else(|e| err!(test_num, e, "prep preprocess"));
     assert_eq!(t.prep_messages.len(), 1);
     assert_eq!(inbound.get_encoded().unwrap(), t.prep_messages[0].as_ref());
 
     let mut out_shares = Vec::new();
     for state in states.iter_mut() {
-        match prio3.prepare_next(state.clone(), inbound.clone()).unwrap() {
+        match prio3
+            .prepare_next(ctx, state.clone(), inbound.clone())
+            .unwrap()
+        {
             PrepareTransition::Finish(out_share) => {
                 out_shares.push(out_share);
             }
@@ -173,7 +176,7 @@ where
     T: Type<Measurement = MP>,
     P: Xof<SEED_SIZE>,
 {
-    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    let verify_key = t.verify_key.as_ref();
     let ctx = t.ctx.as_ref().try_into().unwrap();
 
     let mut all_output_shares = vec![Vec::new(); prio3.num_aggregators()];

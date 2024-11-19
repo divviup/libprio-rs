@@ -142,6 +142,7 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
 
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
+        _ctx: &[u8],
         _: &Self::AggregationParam,
         _: M,
     ) -> Result<Self::PrepareMessage, VdafError> {
@@ -150,6 +151,7 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
 
     fn prepare_next(
         &self,
+        _ctx: &[u8],
         state: Self::PrepareState,
         _: Self::PrepareMessage,
     ) -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
