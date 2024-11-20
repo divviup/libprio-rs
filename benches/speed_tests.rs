@@ -324,6 +324,7 @@ fn prio3(c: &mut Criterion) {
                     b.iter(|| {
                         vdaf.prepare_init(
                             &verify_key,
+                            b"",
                             0,
                             &(),
                             &nonce,
@@ -458,6 +459,7 @@ fn prio3(c: &mut Criterion) {
                     b.iter(|| {
                         vdaf.prepare_init(
                             &verify_key,
+                            b"",
                             0,
                             &(),
                             &nonce,
