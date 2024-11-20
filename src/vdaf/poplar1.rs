@@ -69,6 +69,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         &self,
         seed: &[u8; SEED_SIZE],
         usage: u16,
+        ctx: &[u8],
         binder_chunks: I,
     ) -> Prng<F, P::SeedStream>
     where
@@ -77,7 +78,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         P: Xof<SEED_SIZE>,
         F: FieldElement,
     {
-        let mut xof = P::init(seed, &self.domain_separation_tag(usage));
+        let mut xof = P::init(seed, &self.domain_separation_tag(usage, ctx));
         for binder_chunk in binder_chunks.into_iter() {
             xof.update(binder_chunk.as_ref());
         }
@@ -865,6 +866,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     fn shard_with_random(
         &self,
+        ctx: &[u8],
         input: &IdpfInput,
         nonce: &[u8; 16],
         idpf_random: &[[u8; 16]; 2],
@@ -879,7 +881,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
         // Generate the authenticator for each inner level of the IDPF tree.
         let mut prng =
-            self.init_prng::<_, _, Field64>(&poplar_random[2], DST_SHARD_RANDOMNESS, [nonce]);
+            self.init_prng::<_, _, Field64>(&poplar_random[2], DST_SHARD_RANDOMNESS, ctx, [nonce]);
         let auth_inner: Vec<Field64> = (0..self.bits - 1).map(|_| prng.get()).collect();
 
         // Generate the authenticator for the last level of the IDPF tree (i.e., the leaves).
@@ -912,11 +914,13 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         let mut corr_prng_0 = self.init_prng::<_, _, Field64>(
             corr_seed_0,
             DST_CORR_INNER,
+            ctx,
             [[0].as_slice(), nonce.as_slice()],
         );
         let mut corr_prng_1 = self.init_prng::<_, _, Field64>(
             corr_seed_1,
             DST_CORR_INNER,
+            ctx,
             [[1].as_slice(), nonce.as_slice()],
         );
         let mut corr_inner_0 = Vec::with_capacity(self.bits - 1);
@@ -933,11 +937,13 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         let mut corr_prng_0 = self.init_prng::<_, _, Field255>(
             corr_seed_0,
             DST_CORR_LEAF,
+            ctx,
             [[0].as_slice(), nonce.as_slice()],
         );
         let mut corr_prng_1 = self.init_prng::<_, _, Field255>(
             corr_seed_1,
             DST_CORR_LEAF,
+            ctx,
             [[1].as_slice(), nonce.as_slice()],
         );
         let (corr_leaf_0, corr_leaf_1) =
@@ -967,6 +973,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     fn eval_and_sketch<F>(
         &self,
         verify_key: &[u8; SEED_SIZE],
+        ctx: &[u8],
         agg_id: usize,
         nonce: &[u8; 16],
         agg_param: &Poplar1AggregationParam,
@@ -983,6 +990,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         let mut verify_prng = self.init_prng(
             verify_key,
             DST_VERIFY_RANDOMNESS,
+            ctx,
             [nonce.as_slice(), agg_param.level.to_be_bytes().as_slice()],
         );
 
@@ -1020,6 +1028,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_SIZE> {
     fn shard(
         &self,
+        ctx: &[u8],
         input: &IdpfInput,
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<SEED_SIZE>>), VdafError> {
@@ -1031,7 +1040,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
         for random_seed in poplar_random.iter_mut() {
             getrandom::getrandom(random_seed)?;
         }
-        self.shard_with_random(input, nonce, &idpf_random, &poplar_random)
+        self.shard_with_random(ctx, input, nonce, &idpf_random, &poplar_random)
     }
 }
 
@@ -1046,6 +1055,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
     fn prepare_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
+        ctx: &[u8],
         agg_id: usize,
         agg_param: &Poplar1AggregationParam,
         nonce: &[u8; 16],
@@ -1066,6 +1076,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             let mut corr_prng = self.init_prng::<_, _, Field64>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_INNER,
+                ctx,
                 [[agg_id as u8].as_slice(), nonce.as_slice()],
             );
             // Fast-forward the correlated randomness XOF to the level of the tree that we are
@@ -1076,6 +1087,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
 
             let (output_share, sketch_share) = self.eval_and_sketch::<Field64>(
                 verify_key,
+                ctx,
                 agg_id,
                 nonce,
                 agg_param,
@@ -1099,11 +1111,13 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             let corr_prng = self.init_prng::<_, _, Field255>(
                 input_share.corr_seed.as_ref(),
                 DST_CORR_LEAF,
+                ctx,
                 [[agg_id as u8].as_slice(), nonce.as_slice()],
             );
 
             let (output_share, sketch_share) = self.eval_and_sketch::<Field255>(
                 verify_key,
+                ctx,
                 agg_id,
                 nonce,
                 agg_param,
@@ -1128,6 +1142,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
 
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Poplar1FieldVec>>(
         &self,
+        _ctx: &[u8],
         _: &Poplar1AggregationParam,
         inputs: M,
     ) -> Result<Poplar1PrepareMessage, VdafError> {
@@ -1167,6 +1182,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
 
     fn prepare_next(
         &self,
+        _ctx: &[u8],
         state: Poplar1PrepareState,
         msg: Poplar1PrepareMessage,
     ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
@@ -1540,6 +1556,8 @@ mod tests {
     use serde::Deserialize;
     use std::collections::HashSet;
 
+    const CTX_STR: &[u8] = b"poplar1 ctx";
+
     fn test_prepare<P: Xof<SEED_SIZE>, const SEED_SIZE: usize>(
         vdaf: &Poplar1<P, SEED_SIZE>,
         verify_key: &[u8; SEED_SIZE],
@@ -1552,6 +1570,7 @@ mod tests {
         let out_shares = run_vdaf_prepare(
             vdaf,
             verify_key,
+            CTX_STR,
             agg_param,
             nonce,
             public_share.clone(),
@@ -1591,7 +1610,11 @@ mod tests {
             .map(|measurement| {
                 let nonce = rng.gen();
                 let (public_share, input_shares) = vdaf
-                    .shard(&IdpfInput::from_bytes(measurement.as_ref()), &nonce)
+                    .shard(
+                        CTX_STR,
+                        &IdpfInput::from_bytes(measurement.as_ref()),
+                        &nonce,
+                    )
                     .unwrap();
                 (nonce, public_share, input_shares)
             })
@@ -1615,6 +1638,7 @@ mod tests {
                 let out_shares = run_vdaf_prepare(
                     vdaf,
                     verify_key,
+                    CTX_STR,
                     &agg_param,
                     nonce,
                     public_share.clone(),
@@ -1675,7 +1699,7 @@ mod tests {
         let verify_key = rng.gen();
         let input = IdpfInput::from_bytes(b"12341324");
         let nonce = rng.gen();
-        let (public_share, input_shares) = vdaf.shard(&input, &nonce).unwrap();
+        let (public_share, input_shares) = vdaf.shard(CTX_STR, &input, &nonce).unwrap();
 
         test_prepare(
             &vdaf,
@@ -2096,6 +2120,10 @@ mod tests {
     }
 
     fn check_test_vec(input: &str) {
+        // We need to use an empty context string for these test vectors to pass.
+        // TODO: update test vectors to ones that use a real context string
+        const CTX_STR: &[u8] = b"";
+
         let test_vector: PoplarTestVector = serde_json::from_str(input).unwrap();
         assert_eq!(test_vector.prep.len(), 1);
         let prep = &test_vector.prep[0];
@@ -2133,13 +2161,14 @@ mod tests {
         // Shard measurement.
         let poplar = Poplar1::new_turboshake128(test_vector.bits);
         let (public_share, input_shares) = poplar
-            .shard_with_random(&measurement, &nonce, &idpf_random, &poplar_random)
+            .shard_with_random(CTX_STR, &measurement, &nonce, &idpf_random, &poplar_random)
             .unwrap();
 
         // Run aggregation.
         let (init_prep_state_0, init_prep_share_0) = poplar
             .prepare_init(
                 &verify_key,
+                CTX_STR,
                 0,
                 &agg_param,
                 &nonce,
@@ -2150,6 +2179,7 @@ mod tests {
         let (init_prep_state_1, init_prep_share_1) = poplar
             .prepare_init(
                 &verify_key,
+                CTX_STR,
                 1,
                 &agg_param,
                 &nonce,
@@ -2160,6 +2190,7 @@ mod tests {
 
         let r1_prep_msg = poplar
             .prepare_shares_to_prepare_message(
+                CTX_STR,
                 &agg_param,
                 [init_prep_share_0.clone(), init_prep_share_1.clone()],
             )
@@ -2167,19 +2198,20 @@ mod tests {
 
         let (r1_prep_state_0, r1_prep_share_0) = assert_matches!(
             poplar
-                .prepare_next(init_prep_state_0.clone(), r1_prep_msg.clone())
+                .prepare_next(CTX_STR,init_prep_state_0.clone(), r1_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Continue(state, share) => (state, share)
         );
         let (r1_prep_state_1, r1_prep_share_1) = assert_matches!(
             poplar
-                .prepare_next(init_prep_state_1.clone(), r1_prep_msg.clone())
+                .prepare_next(CTX_STR,init_prep_state_1.clone(), r1_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Continue(state, share) => (state, share)
         );
 
         let r2_prep_msg = poplar
             .prepare_shares_to_prepare_message(
+                CTX_STR,
                 &agg_param,
                 [r1_prep_share_0.clone(), r1_prep_share_1.clone()],
             )
@@ -2187,13 +2219,13 @@ mod tests {
 
         let out_share_0 = assert_matches!(
             poplar
-                .prepare_next(r1_prep_state_0.clone(), r2_prep_msg.clone())
+                .prepare_next(CTX_STR, r1_prep_state_0.clone(), r2_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Finish(out) => out
         );
         let out_share_1 = assert_matches!(
             poplar
-                .prepare_next(r1_prep_state_1, r2_prep_msg.clone())
+                .prepare_next(CTX_STR,r1_prep_state_1, r2_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Finish(out) => out
         );

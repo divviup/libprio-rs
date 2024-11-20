@@ -127,7 +127,7 @@ fn prio2(c: &mut Criterion) {
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
             },
         );
     }
@@ -145,10 +145,18 @@ fn prio2(c: &mut Criterion) {
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 32]);
-                let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(&verify_key, 0, &(), &nonce, &public_share, &input_shares[0])
-                        .unwrap();
+                    vdaf.prepare_init(
+                        &verify_key,
+                        b"",
+                        0,
+                        &(),
+                        &nonce,
+                        &public_share,
+                        &input_shares[0],
+                    )
+                    .unwrap();
                 });
             },
         );
@@ -164,7 +172,7 @@ fn prio3(c: &mut Criterion) {
         let vdaf = Prio3::new_count(num_shares).unwrap();
         let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
-        b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+        b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
     });
 
     c.bench_function("prio3count_prepare_init", |b| {
@@ -172,10 +180,18 @@ fn prio3(c: &mut Criterion) {
         let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
         let verify_key = black_box([0u8; 16]);
-        let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+        let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
         b.iter(|| {
-            vdaf.prepare_init(&verify_key, 0, &(), &nonce, &public_share, &input_shares[0])
-                .unwrap()
+            vdaf.prepare_init(
+                &verify_key,
+                b"",
+                0,
+                &(),
+                &nonce,
+                &public_share,
+                &input_shares[0],
+            )
+            .unwrap()
         });
     });
 
@@ -185,7 +201,7 @@ fn prio3(c: &mut Criterion) {
             let vdaf = Prio3::new_sum(num_shares, *bits).unwrap();
             let measurement = (1 << bits) - 1;
             let nonce = black_box([0u8; 16]);
-            b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+            b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
         });
     }
     group.finish();
@@ -197,10 +213,18 @@ fn prio3(c: &mut Criterion) {
             let measurement = (1 << bits) - 1;
             let nonce = black_box([0u8; 16]);
             let verify_key = black_box([0u8; 16]);
-            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+            let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
             b.iter(|| {
-                vdaf.prepare_init(&verify_key, 0, &(), &nonce, &public_share, &input_shares[0])
-                    .unwrap()
+                vdaf.prepare_init(
+                    &verify_key,
+                    b"",
+                    0,
+                    &(),
+                    &nonce,
+                    &public_share,
+                    &input_shares[0],
+                )
+                .unwrap()
             });
         });
     }
@@ -217,7 +241,7 @@ fn prio3(c: &mut Criterion) {
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
             },
         );
     }
@@ -240,7 +264,7 @@ fn prio3(c: &mut Criterion) {
                         .map(|i| i & 1)
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
                 },
             );
         }
@@ -259,10 +283,18 @@ fn prio3(c: &mut Criterion) {
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 16]);
-                let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(&verify_key, 0, &(), &nonce, &public_share, &input_shares[0])
-                        .unwrap()
+                    vdaf.prepare_init(
+                        &verify_key,
+                        b"",
+                        0,
+                        &(),
+                        &nonce,
+                        &public_share,
+                        &input_shares[0],
+                    )
+                    .unwrap()
                 });
             },
         );
@@ -287,10 +319,12 @@ fn prio3(c: &mut Criterion) {
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 16]);
-                    let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                    let (public_share, input_shares) =
+                        vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
                         vdaf.prepare_init(
                             &verify_key,
+                            b"",
                             0,
                             &(),
                             &nonce,
@@ -323,7 +357,7 @@ fn prio3(c: &mut Criterion) {
                 let vdaf = Prio3::new_histogram(num_shares, *input_length, *chunk_length).unwrap();
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
             },
         );
     }
@@ -352,7 +386,7 @@ fn prio3(c: &mut Criterion) {
                     .unwrap();
                     let measurement = black_box(0);
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
                 },
             );
         }
@@ -378,10 +412,18 @@ fn prio3(c: &mut Criterion) {
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 16]);
-                let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(&verify_key, 0, &(), &nonce, &public_share, &input_shares[0])
-                        .unwrap()
+                    vdaf.prepare_init(
+                        &verify_key,
+                        b"",
+                        0,
+                        &(),
+                        &nonce,
+                        &public_share,
+                        &input_shares[0],
+                    )
+                    .unwrap()
                 });
             },
         );
@@ -412,10 +454,12 @@ fn prio3(c: &mut Criterion) {
                     let measurement = black_box(0);
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 16]);
-                    let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                    let (public_share, input_shares) =
+                        vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
                         vdaf.prepare_init(
                             &verify_key,
+                            b"",
                             0,
                             &(),
                             &nonce,
@@ -448,7 +492,7 @@ fn prio3(c: &mut Criterion) {
                     let mut measurement = vec![FP16_ZERO; *dimension];
                     measurement[0] = FP16_HALF;
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
                 },
             );
         }
@@ -468,7 +512,7 @@ fn prio3(c: &mut Criterion) {
                         let mut measurement = vec![FP16_ZERO; *dimension];
                         measurement[0] = FP16_HALF;
                         let nonce = black_box([0u8; 16]);
-                        b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                        b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
                     },
                 );
             }
@@ -487,10 +531,12 @@ fn prio3(c: &mut Criterion) {
                     measurement[0] = FP16_HALF;
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 16]);
-                    let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                    let (public_share, input_shares) =
+                        vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
                         vdaf.prepare_init(
                             &verify_key,
+                            b"",
                             0,
                             &(),
                             &nonce,
@@ -520,10 +566,11 @@ fn prio3(c: &mut Criterion) {
                         let nonce = black_box([0u8; 16]);
                         let verify_key = black_box([0u8; 16]);
                         let (public_share, input_shares) =
-                            vdaf.shard(&measurement, &nonce).unwrap();
+                            vdaf.shard(b"", &measurement, &nonce).unwrap();
                         b.iter(|| {
                             vdaf.prepare_init(
                                 &verify_key,
+                                b"",
                                 0,
                                 &(),
                                 &nonce,
@@ -549,7 +596,7 @@ fn prio3(c: &mut Criterion) {
                     let mut measurement = vec![FP32_ZERO; *dimension];
                     measurement[0] = FP32_HALF;
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
                 },
             );
         }
@@ -569,7 +616,7 @@ fn prio3(c: &mut Criterion) {
                         let mut measurement = vec![FP32_ZERO; *dimension];
                         measurement[0] = FP32_HALF;
                         let nonce = black_box([0u8; 16]);
-                        b.iter(|| vdaf.shard(&measurement, &nonce).unwrap());
+                        b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
                     },
                 );
             }
@@ -588,10 +635,12 @@ fn prio3(c: &mut Criterion) {
                     measurement[0] = FP32_HALF;
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 16]);
-                    let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+                    let (public_share, input_shares) =
+                        vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
                         vdaf.prepare_init(
                             &verify_key,
+                            b"",
                             0,
                             &(),
                             &nonce,
@@ -621,10 +670,11 @@ fn prio3(c: &mut Criterion) {
                         let nonce = black_box([0u8; 16]);
                         let verify_key = black_box([0u8; 16]);
                         let (public_share, input_shares) =
-                            vdaf.shard(&measurement, &nonce).unwrap();
+                            vdaf.shard(b"", &measurement, &nonce).unwrap();
                         b.iter(|| {
                             vdaf.prepare_init(
                                 &verify_key,
+                                b"",
                                 0,
                                 &(),
                                 &nonce,
@@ -724,7 +774,7 @@ fn poplar1(c: &mut Criterion) {
             let measurement = IdpfInput::from_bools(&bits);
 
             b.iter(|| {
-                vdaf.shard(&measurement, &nonce).unwrap();
+                vdaf.shard(b"", &measurement, &nonce).unwrap();
             });
         });
     }
@@ -753,7 +803,7 @@ fn poplar1(c: &mut Criterion) {
             // We are benchmarking preparation of a single report. For this test, it doesn't matter
             // which measurement we generate a report for, so pick the first measurement
             // arbitrarily.
-            let (public_share, input_shares) = vdaf.shard(&measurements[0], &nonce).unwrap();
+            let (public_share, input_shares) = vdaf.shard(b"", &measurements[0], &nonce).unwrap();
             let input_share = input_shares.into_iter().next().unwrap();
 
             // For the aggregation paramter, we use the candidate prefixes from the prefix tree for
@@ -765,6 +815,7 @@ fn poplar1(c: &mut Criterion) {
             b.iter(|| {
                 vdaf.prepare_init(
                     &verify_key,
+                    b"",
                     0,
                     &agg_param,
                     &nonce,

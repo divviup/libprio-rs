@@ -15,6 +15,9 @@ use prio::{
     },
 };
 
+const PRIO2_CTX_STR: &[u8] = b"prio2 ctx";
+const PRIO3_CTX_STR: &[u8] = b"prio3 ctx";
+
 fn main() {
     let num_shares = 2;
     let nonce = [0; 16];
@@ -23,7 +26,9 @@ fn main() {
     let measurement = true;
     println!(
         "prio3 count share size = {}",
-        vdaf_input_share_size::<Prio3Count, 16>(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3Count, 16>(
+            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+        )
     );
 
     let length = 10;
@@ -32,7 +37,9 @@ fn main() {
     println!(
         "prio3 histogram ({} buckets) share size = {}",
         length,
-        vdaf_input_share_size::<Prio3Histogram, 16>(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3Histogram, 16>(
+            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+        )
     );
 
     let bits = 32;
@@ -41,7 +48,9 @@ fn main() {
     println!(
         "prio3 sum ({} bits) share size = {}",
         bits,
-        vdaf_input_share_size::<Prio3Sum, 16>(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3Sum, 16>(
+            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+        )
     );
 
     let len = 1000;
@@ -50,7 +59,9 @@ fn main() {
     println!(
         "prio3 sumvec ({} len) share size = {}",
         len,
-        vdaf_input_share_size::<Prio3SumVec, 16>(prio3.shard(&measurement, &nonce).unwrap())
+        vdaf_input_share_size::<Prio3SumVec, 16>(
+            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+        )
     );
 
     let len = 1000;
@@ -61,7 +72,7 @@ fn main() {
         "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
         len,
         vdaf_input_share_size::<Prio3FixedPointBoundedL2VecSum<FixedI16<U15>>, 16>(
-            prio3.shard(&measurement, &nonce).unwrap()
+            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
         )
     );
 
@@ -74,7 +85,9 @@ fn main() {
         println!(
             "prio2 ({} entries) size = {}",
             size,
-            vdaf_input_share_size::<Prio2, 16>(prio2.shard(&measurement, &nonce).unwrap())
+            vdaf_input_share_size::<Prio2, 16>(
+                prio2.shard(PRIO2_CTX_STR, &measurement, &nonce).unwrap()
+            )
         );
 
         // Prio3
@@ -83,7 +96,9 @@ fn main() {
         println!(
             "prio3 sumvec ({} entries) size = {}",
             size,
-            vdaf_input_share_size::<Prio3SumVec, 16>(prio3.shard(&measurement, &nonce).unwrap())
+            vdaf_input_share_size::<Prio3SumVec, 16>(
+                prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+            )
         );
     }
 }
