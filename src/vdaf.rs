@@ -201,13 +201,13 @@ pub trait Vdaf: Clone + Debug {
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the XOF.
     fn domain_separation_tag(&self, usage: u16, ctx: &[u8]) -> Vec<u8> {
-        // The first 8 bytes are fixed. Copy in the appropriate values
-        let mut dst = vec![0u8; 8];
-        dst[0] = VERSION;
-        dst[1] = 0; // algorithm class
-        dst[2..6].copy_from_slice(&(self.algorithm_id()).to_be_bytes());
-        dst[6..8].copy_from_slice(&usage.to_be_bytes());
-        // Finally, append `ctx`
+        // Prefix is 8 bytes and defined by the spec. Copy these values in
+        let mut dst = Vec::with_capacity(ctx.len() + 8);
+        dst.push(VERSION);
+        dst.push(0); // algorithm class
+        dst.extend_from_slice(self.algorithm_id().to_be_bytes().as_slice());
+        dst.extend_from_slice(usage.to_be_bytes().as_slice());
+        // Finally, append user-chosen `ctx`
         dst.extend_from_slice(ctx);
 
         dst
@@ -259,6 +259,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// Implements `Vdaf.prep_init` from [VDAF].
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
+    #[allow(clippy::too_many_arguments)]
     fn prepare_init(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],

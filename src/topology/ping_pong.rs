@@ -390,6 +390,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// `inbound` must be `PingPongMessage::Initialize` or the function will fail.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.8
+    #[allow(clippy::too_many_arguments)]
     fn helper_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],

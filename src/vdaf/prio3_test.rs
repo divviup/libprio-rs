@@ -176,12 +176,12 @@ where
     T: Type<Measurement = MP>,
     P: Xof<SEED_SIZE>,
 {
-    let verify_key = t.verify_key.as_ref();
-    let ctx = t.ctx.as_ref().try_into().unwrap();
+    let verify_key = t.verify_key.as_ref().try_into().unwrap();
+    let ctx = t.ctx.as_ref();
 
     let mut all_output_shares = vec![Vec::new(); prio3.num_aggregators()];
     for (test_num, p) in t.prep.iter().enumerate() {
-        let output_shares = check_prep_test_vec(prio3, ctx, verify_key, test_num, p);
+        let output_shares = check_prep_test_vec(prio3, verify_key, ctx, test_num, p);
         for (aggregator_output_shares, output_share) in
             all_output_shares.iter_mut().zip(output_shares.into_iter())
         {
