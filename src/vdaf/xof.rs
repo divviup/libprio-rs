@@ -361,7 +361,10 @@ impl Xof<16> for XofFixedKeyAes128 {
         let mut fixed_key_deriver = TurboShake128::from_core(TurboShake128Core::new(2u8));
         Update::update(
             &mut fixed_key_deriver,
-            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
+            u16::try_from(dst.len())
+                .expect("dst must be at most 65536 bytes")
+                .to_le_bytes()
+                .as_slice(),
         );
         Update::update(&mut fixed_key_deriver, dst);
         Self {
