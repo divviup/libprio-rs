@@ -415,8 +415,8 @@ where
         let initial_keys: [Seed<16>; 2] =
             [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
-        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(EXTEND_DOMAIN_SEP, ctx, binder);
-        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(CONVERT_DOMAIN_SEP, ctx, binder);
+        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&[EXTEND_DOMAIN_SEP, ctx], binder);
+        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&[CONVERT_DOMAIN_SEP, ctx], binder);
 
         let mut keys = [initial_keys[0].0, initial_keys[1].0];
         let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -505,8 +505,8 @@ where
     ) -> Result<IdpfOutputShare<VI, VL>, IdpfError> {
         let bits = public_share.inner_correction_words.len() + 1;
 
-        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(EXTEND_DOMAIN_SEP, ctx, binder);
-        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(CONVERT_DOMAIN_SEP, ctx, binder);
+        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&[EXTEND_DOMAIN_SEP, ctx], binder);
+        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&[CONVERT_DOMAIN_SEP, ctx], binder);
 
         let mut last_inner_output = None;
         for ((correction_word, input_bit), level) in public_share.inner_correction_words

@@ -206,6 +206,7 @@ impl Debug for SeedStreamAes128 {
 #[derive(Clone, Debug)]
 pub struct XofTurboShake128(TurboShake128);
 
+// This impl is only used in Mastic and for test purposes.
 impl Xof<16> for XofTurboShake128 {
     type SeedStream = SeedStreamTurboShake128;
 
@@ -282,28 +283,31 @@ pub struct XofFixedKeyAes128Key {
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 impl XofFixedKeyAes128Key {
-    /// Derive the fixed key from the domain separation tag and binder string.
+    /// Derive the fixed key from the binder string and the domain separator, which is concatenation
+    /// of all the items in `dst`.
     ///
     /// # Panics
-    /// Panics if `fixed_dst.len() + ctx.len() > u16::MAX`
-    pub fn new(fixed_dst: &'static [u8], ctx: &[u8], binder: &[u8]) -> Self {
+    /// Panics if  + ctx.len() > u16::MAX`
+    pub fn new(dst: &[&[u8]], binder: &[u8]) -> Self {
         let mut fixed_key_deriver = TurboShake128::from_core(TurboShake128Core::new(
             XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION,
         ));
-        // We feed the fixed part of dst, followed by ctx. The combined length of both is what we
-        // compute here
-        Update::update(
-            &mut fixed_key_deriver,
-            u16::try_from(fixed_dst.len() + ctx.len())
+        let dst_len: usize = dst.iter().map(|s| s.len()).sum();
+
+        // Feed the dst length, dst, and binder into the XOF
+        fixed_key_deriver.update(
+            u16::try_from(dst_len)
                 .expect("dst must be at most 65536 bytes")
                 .to_le_bytes()
                 .as_slice(),
         );
-        Update::update(&mut fixed_key_deriver, fixed_dst);
-        Update::update(&mut fixed_key_deriver, ctx);
-        Update::update(&mut fixed_key_deriver, binder);
+        dst.iter().for_each(|s| fixed_key_deriver.update(s));
+        fixed_key_deriver.update(binder);
+
+        // Squeeze out the key
         let mut key = GenericArray::from([0; 16]);
         XofReader::read(&mut fixed_key_deriver.finalize_xof(), key.as_mut());
+
         Self {
             cipher: Aes128::new(&key),
         }
@@ -339,20 +343,18 @@ pub struct XofFixedKeyAes128 {
     base_block: Block,
 }
 
+// This impl is ONLY used by Mastic. It does not have to comply with the VDAF spec.
+// TODO: try to remove the duplicated code below. init() It's mostly the same as
+// XofFixedKeyAes128Key::new() above
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 impl Xof<16> for XofFixedKeyAes128 {
     type SeedStream = SeedStreamFixedKeyAes128;
 
-    // TODO: try to remove the duplicated code below. It's mostly the same as
-    // XofFixedKeyAes128Key::new above
     fn init(seed_bytes: &[u8; 16], dst: &[u8]) -> Self {
         let mut fixed_key_deriver = TurboShake128::from_core(TurboShake128Core::new(2u8));
         Update::update(
             &mut fixed_key_deriver,
-            u16::try_from(dst.len())
-                .expect("dst must be at most 255 bytes")
-                .to_le_bytes()
-                .as_slice(),
+            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
         );
         Update::update(&mut fixed_key_deriver, dst);
         Self {
@@ -644,7 +646,7 @@ mod tests {
         let mut output_2_trait_api = [0u8; 32];
         stream_2_trait_api.fill(&mut output_2_trait_api);
 
-        let fixed_key = XofFixedKeyAes128Key::new(fixed_dst, ctx, binder);
+        let fixed_key = XofFixedKeyAes128Key::new(&[fixed_dst, ctx], binder);
         let mut stream_1_alternate_api = fixed_key.with_seed(seed_1.as_ref());
         let mut output_1_alternate_api = [0u8; 32];
         stream_1_alternate_api.fill(&mut output_1_alternate_api);
