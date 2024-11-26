@@ -287,16 +287,23 @@ impl XofFixedKeyAes128Key {
     /// of all the items in `dst`.
     ///
     /// # Panics
-    /// Panics if  + ctx.len() > u16::MAX`
+    /// Panics if the total length of all elements of `dst` exceeds `u16::MAX`.
     pub fn new(dst: &[&[u8]], binder: &[u8]) -> Self {
         let mut fixed_key_deriver = TurboShake128::from_core(TurboShake128Core::new(
             XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION,
         ));
-        let dst_len: usize = dst.iter().map(|s| s.len()).sum();
+        let tot_dst_len: usize = dst
+            .iter()
+            .map(|s| {
+                let len = s.len();
+                assert!(len < u16::MAX as usize, "dst must be at most 65536 bytes");
+                len
+            })
+            .sum();
 
         // Feed the dst length, dst, and binder into the XOF
         fixed_key_deriver.update(
-            u16::try_from(dst_len)
+            u16::try_from(tot_dst_len)
                 .expect("dst must be at most 65536 bytes")
                 .to_le_bytes()
                 .as_slice(),
