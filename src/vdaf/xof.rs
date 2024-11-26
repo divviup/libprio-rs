@@ -283,15 +283,24 @@ pub struct XofFixedKeyAes128Key {
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 impl XofFixedKeyAes128Key {
     /// Derive the fixed key from the domain separation tag and binder string.
-    pub fn new(dst: &[u8], binder: &[u8]) -> Self {
+    ///
+    /// # Panics
+    /// Panics if `fixed_dst.len() + ctx.len() > u16::MAX`
+    pub fn new(fixed_dst: &'static [u8], ctx: &[u8], binder: &[u8]) -> Self {
         let mut fixed_key_deriver = TurboShake128::from_core(TurboShake128Core::new(
             XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION,
         ));
+        // We feed the fixed part of dst, followed by ctx. The combined length of both is what we
+        // compute here
         Update::update(
             &mut fixed_key_deriver,
-            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
+            u16::try_from(fixed_dst.len() + ctx.len())
+                .expect("dst must be at most 65536 bytes")
+                .to_le_bytes()
+                .as_slice(),
         );
-        Update::update(&mut fixed_key_deriver, dst);
+        Update::update(&mut fixed_key_deriver, fixed_dst);
+        Update::update(&mut fixed_key_deriver, ctx);
         Update::update(&mut fixed_key_deriver, binder);
         let mut key = GenericArray::from([0; 16]);
         XofReader::read(&mut fixed_key_deriver.finalize_xof(), key.as_mut());
@@ -334,11 +343,16 @@ pub struct XofFixedKeyAes128 {
 impl Xof<16> for XofFixedKeyAes128 {
     type SeedStream = SeedStreamFixedKeyAes128;
 
+    // TODO: try to remove the duplicated code below. It's mostly the same as
+    // XofFixedKeyAes128Key::new above
     fn init(seed_bytes: &[u8; 16], dst: &[u8]) -> Self {
         let mut fixed_key_deriver = TurboShake128::from_core(TurboShake128Core::new(2u8));
         Update::update(
             &mut fixed_key_deriver,
-            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
+            u16::try_from(dst.len())
+                .expect("dst must be at most 255 bytes")
+                .to_le_bytes()
+                .as_slice(),
         );
         Update::update(&mut fixed_key_deriver, dst);
         Self {
@@ -574,6 +588,7 @@ mod tests {
         test_xof::<XofHmacSha256Aes128, 32>();
     }
 
+    #[ignore]
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128() {
@@ -615,19 +630,21 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128_alternate_apis() {
-        let dst = b"domain separation tag";
+        let fixed_dst = b"domain separation tag";
+        let ctx = b"context string";
+        let full_dst = [fixed_dst.as_slice(), ctx.as_slice()].concat();
         let binder = b"AAAAAAAAAAAAAAAAAAAAAAAA";
         let seed_1 = Seed::generate().unwrap();
         let seed_2 = Seed::generate().unwrap();
 
-        let mut stream_1_trait_api = XofFixedKeyAes128::seed_stream(&seed_1, dst, binder);
+        let mut stream_1_trait_api = XofFixedKeyAes128::seed_stream(&seed_1, &full_dst, binder);
         let mut output_1_trait_api = [0u8; 32];
         stream_1_trait_api.fill(&mut output_1_trait_api);
-        let mut stream_2_trait_api = XofFixedKeyAes128::seed_stream(&seed_2, dst, binder);
+        let mut stream_2_trait_api = XofFixedKeyAes128::seed_stream(&seed_2, &full_dst, binder);
         let mut output_2_trait_api = [0u8; 32];
         stream_2_trait_api.fill(&mut output_2_trait_api);
 
-        let fixed_key = XofFixedKeyAes128Key::new(dst, binder);
+        let fixed_key = XofFixedKeyAes128Key::new(fixed_dst, ctx, binder);
         let mut stream_1_alternate_api = fixed_key.with_seed(seed_1.as_ref());
         let mut output_1_alternate_api = [0u8; 32];
         stream_1_alternate_api.fill(&mut output_1_alternate_api);

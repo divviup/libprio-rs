@@ -712,7 +712,7 @@ fn idpf(c: &mut Criterion) {
 
             let idpf = Idpf::new((), ());
             b.iter(|| {
-                idpf.gen(&input, inner_values.clone(), leaf_value, &[0; 16])
+                idpf.gen(&input, inner_values.clone(), leaf_value, b"", &[0; 16])
                     .unwrap();
             });
         });
@@ -735,7 +735,7 @@ fn idpf(c: &mut Criterion) {
 
             let idpf = Idpf::new((), ());
             let (public_share, keys) = idpf
-                .gen(&input, inner_values, leaf_value, &[0; 16])
+                .gen(&input, inner_values, leaf_value, b"", &[0; 16])
                 .unwrap();
 
             b.iter(|| {
@@ -747,8 +747,16 @@ fn idpf(c: &mut Criterion) {
 
                 for prefix_length in 1..=size {
                     let prefix = input[..prefix_length].to_owned().into();
-                    idpf.eval(0, &public_share, &keys[0], &prefix, &[0; 16], &mut cache)
-                        .unwrap();
+                    idpf.eval(
+                        0,
+                        &public_share,
+                        &keys[0],
+                        &prefix,
+                        b"",
+                        &[0; 16],
+                        &mut cache,
+                    )
+                    .unwrap();
                 }
             });
         });
