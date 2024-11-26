@@ -206,7 +206,7 @@ impl Debug for SeedStreamAes128 {
 #[derive(Clone, Debug)]
 pub struct XofTurboShake128(TurboShake128);
 
-// This impl is only used in Mastic and for test purposes.
+// This impl is used in Mastic and Prio3, and for test purposes.
 impl Xof<16> for XofTurboShake128 {
     type SeedStream = SeedStreamTurboShake128;
 
@@ -296,7 +296,7 @@ impl XofFixedKeyAes128Key {
             .iter()
             .map(|s| {
                 let len = s.len();
-                assert!(len < u16::MAX as usize, "dst must be at most 65536 bytes");
+                assert!(len <= u16::MAX as usize, "dst must be at most 65535 bytes");
                 len
             })
             .sum();
@@ -304,7 +304,7 @@ impl XofFixedKeyAes128Key {
         // Feed the dst length, dst, and binder into the XOF
         fixed_key_deriver.update(
             u16::try_from(tot_dst_len)
-                .expect("dst must be at most 65536 bytes")
+                .expect("dst must be at most 65535 bytes")
                 .to_le_bytes()
                 .as_slice(),
         );
@@ -350,7 +350,8 @@ pub struct XofFixedKeyAes128 {
     base_block: Block,
 }
 
-// This impl is ONLY used by Mastic. It does not have to comply with the VDAF spec.
+// This impl is only used by Mastic right now. The XofFixedKeyAes128Key impl is used in cases where
+// the base XOF can be reused with different contexts. This is the case in VDAF IDPF computation.
 // TODO: try to remove the duplicated code below. init() It's mostly the same as
 // XofFixedKeyAes128Key::new() above
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -362,7 +363,7 @@ impl Xof<16> for XofFixedKeyAes128 {
         Update::update(
             &mut fixed_key_deriver,
             u16::try_from(dst.len())
-                .expect("dst must be at most 65536 bytes")
+                .expect("dst must be at most 65535 bytes")
                 .to_le_bytes()
                 .as_slice(),
         );
