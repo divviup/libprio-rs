@@ -165,7 +165,8 @@ fn idpf_poplar_gen(
     leaf_value: Poplar1IdpfValue<Field255>,
 ) {
     let idpf = Idpf::new((), ());
-    idpf.gen(input, inner_values, leaf_value, &[0; 16]).unwrap();
+    idpf.gen(input, inner_values, leaf_value, b"", &[0; 16])
+        .unwrap();
 }
 
 #[cfg(feature = "experimental")]
@@ -209,7 +210,7 @@ fn idpf_poplar_eval(
 ) {
     let mut cache = RingBufferCache::new(1);
     let idpf = Idpf::new((), ());
-    idpf.eval(0, public_share, key, input, &[0; 16], &mut cache)
+    idpf.eval(0, public_share, key, input, b"", &[0; 16], &mut cache)
         .unwrap();
 }
 
