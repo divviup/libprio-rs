@@ -206,7 +206,6 @@ impl Debug for SeedStreamAes128 {
 #[derive(Clone, Debug)]
 pub struct XofTurboShake128(TurboShake128);
 
-// This impl is used in Mastic and Prio3, and for test purposes.
 impl Xof<16> for XofTurboShake128 {
     type SeedStream = SeedStreamTurboShake128;
 
@@ -352,7 +351,7 @@ pub struct XofFixedKeyAes128 {
 
 // This impl is only used by Mastic right now. The XofFixedKeyAes128Key impl is used in cases where
 // the base XOF can be reused with different contexts. This is the case in VDAF IDPF computation.
-// TODO: try to remove the duplicated code below. init() It's mostly the same as
+//  TODO(#1147): try to remove the duplicated code below. init() It's mostly the same as
 // XofFixedKeyAes128Key::new() above
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 impl Xof<16> for XofFixedKeyAes128 {
