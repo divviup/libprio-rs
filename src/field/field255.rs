@@ -195,7 +195,7 @@ impl Neg for Field255 {
     }
 }
 
-impl<'a> Neg for &'a Field255 {
+impl Neg for &Field255 {
     type Output = Field255;
 
     fn neg(self) -> Field255 {
@@ -216,7 +216,7 @@ impl From<u64> for Field255 {
     }
 }
 
-impl<'a> TryFrom<&'a [u8]> for Field255 {
+impl TryFrom<&[u8]> for Field255 {
     type Error = FieldError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, FieldError> {
