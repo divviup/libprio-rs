@@ -394,9 +394,13 @@ mod tests {
     #[test]
     fn test_mastic_shard_sum() {
         let algorithm_id = 6;
-        let sum_typ = Sum::<Field128>::new(5).unwrap();
+        let bits = 5;
+        let max_measurement = 29;
+        let sum_typ = Sum::<Field128>::new(bits, max_measurement).unwrap();
+        let encoded_meas_len = sum_typ.input_len();
+
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(5);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(encoded_meas_len);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -414,9 +418,13 @@ mod tests {
     #[test]
     fn test_input_share_encode_sum() {
         let algorithm_id = 6;
-        let sum_typ = Sum::<Field128>::new(5).unwrap();
+        let bits = 5;
+        let max_measurement = 29;
+        let sum_typ = Sum::<Field128>::new(bits, max_measurement).unwrap();
+        let encoded_meas_len = sum_typ.input_len();
+
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(5);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(encoded_meas_len);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];

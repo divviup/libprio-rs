@@ -43,7 +43,8 @@ fn main() {
     );
 
     let bits = 32;
-    let prio3 = Prio3::new_sum(num_shares, bits).unwrap();
+    let max_measurement = 987_234; // arbitrary number
+    let prio3 = Prio3::new_sum(num_shares, bits, max_measurement).unwrap();
     let measurement = 1337;
     println!(
         "prio3 sum ({} bits) share size = {}",

@@ -126,7 +126,8 @@ fn prio3_client_histogram_10() -> Vec<Prio3InputShare<Field128, 16>> {
 }
 
 fn prio3_client_sum_32() -> Vec<Prio3InputShare<Field128, 16>> {
-    let prio3 = Prio3::new_sum(2, 16).unwrap();
+    let bits = 16;
+    let prio3 = Prio3::new_sum(2, bits, (1 << bits) - 1).unwrap();
     let measurement = 1337;
     let nonce = [0; 16];
     prio3

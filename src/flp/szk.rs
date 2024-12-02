@@ -794,8 +794,10 @@ mod tests {
     #[test]
     fn test_sum_proof_share_encode() {
         let mut nonce = [0u8; 16];
+        let bits = 5;
+        let max_measurement = 13;
         thread_rng().fill(&mut nonce[..]);
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(bits, max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
@@ -896,9 +898,11 @@ mod tests {
 
     #[test]
     fn test_sum_leader_proof_share_roundtrip() {
+        let bits = 5;
+        let max_measurement = 13;
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(bits, max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
@@ -936,9 +940,11 @@ mod tests {
 
     #[test]
     fn test_sum_helper_proof_share_roundtrip() {
+        let bits = 5;
+        let max_measurement = 13;
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(bits, max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
@@ -1138,7 +1144,9 @@ mod tests {
 
     #[test]
     fn test_sum() {
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let bits = 5;
+        let max_measurement = 13;
+        let sum = Sum::<Field128>::new(bits, max_measurement).unwrap();
 
         let five = Field128::from(5);
         let nine = sum.encode_measurement(&9).unwrap();
