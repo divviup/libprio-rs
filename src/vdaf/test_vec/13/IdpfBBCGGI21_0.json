@@ -1,0 +1,64 @@
+{
+    "alpha": [
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false,
+        false
+    ],
+    "beta_inner": [
+        [
+            "0",
+            "0"
+        ],
+        [
+            "1",
+            "1"
+        ],
+        [
+            "2",
+            "2"
+        ],
+        [
+            "3",
+            "3"
+        ],
+        [
+            "4",
+            "4"
+        ],
+        [
+            "5",
+            "5"
+        ],
+        [
+            "6",
+            "6"
+        ],
+        [
+            "7",
+            "7"
+        ],
+        [
+            "8",
+            "8"
+        ]
+    ],
+    "beta_leaf": [
+        "9",
+        "9"
+    ],
+    "bits": 10,
+    "ctx": "736f6d65206170706c69636174696f6e",
+    "keys": [
+        "000102030405060708090a0b0c0d0e0f",
+        "101112131415161718191a1b1c1d1e1f"
+    ],
+    "nonce": "000102030405060708090a0b0c0d0e0f",
+    "public_share": "7db601e4a750964ed1ae57542b1ebe0b0a08fe58d02497b9db91673fb102da7748e7e81aac58088bf47f335bd5f6159fd20170100e16a2674cebd72d9e97e429effdca443283c74886657fb376b6fa364bd9de1ca1903db51d82c91ad35bee9c41c474365afb96a24199c7d503ffdd6844673b4c8d48e8dca480bc2964b52f85d8d484dcac4fe6991e2f854cb49a5df34e27aac828957384199a8abdaf52a4e55e62c7ecfcc77e47eba098eb9c85c67f28978cb827a7963d196e3f2b9b12ebf9a2dc77dc65f218f1b9c98b27860255425b6035f6ff3d74b4ea0f89877656159eef6b6392bdb12d80c75853daeffa5105888cbb45932d9de21906089192149d57a03ab414fb695446b442feaba55ca5146c2084a107e16ac42071154b69cc67e57632cb2cc586e7e6bd554b3d3363bc51396a21c565132591a592328d3a3cbaf94339eb96ce623c1f37588537647cbde8b52a0464379b0f9f2a6d69b3781833f6ccb01b844e15291270ecc8cbd36ddaaf8e7c3d"
+}

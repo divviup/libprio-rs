@@ -272,8 +272,9 @@ mod tests {
     #[test]
     fn test_vec_prio3_count() {
         for test_vector_str in [
-            include_str!("test_vec/08/Prio3Count_0.json"),
-            include_str!("test_vec/08/Prio3Count_1.json"),
+            include_str!("test_vec/13/Prio3Count_0.json"),
+            include_str!("test_vec/13/Prio3Count_1.json"),
+            include_str!("test_vec/13/Prio3Count_2.json"),
         ] {
             check_test_vec_custom_de::<Prio3CountMeasurement, _, _, _, _, 16>(
                 test_vector_str,
@@ -287,8 +288,9 @@ mod tests {
     fn test_vec_prio3_sum() {
         const FAKE_MAX_MEASUREMENT_UPDATE_ME: u64 = 0;
         for test_vector_str in [
-            include_str!("test_vec/08/Prio3Sum_0.json"),
-            include_str!("test_vec/08/Prio3Sum_1.json"),
+            include_str!("test_vec/13/Prio3Sum_0.json"),
+            include_str!("test_vec/13/Prio3Sum_1.json"),
+            include_str!("test_vec/13/Prio3Sum_2.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
                 let _bits = json_params["bits"].as_u64().unwrap() as usize;
@@ -301,8 +303,8 @@ mod tests {
     #[test]
     fn test_vec_prio3_sum_vec() {
         for test_vector_str in [
-            include_str!("test_vec/08/Prio3SumVec_0.json"),
-            include_str!("test_vec/08/Prio3SumVec_1.json"),
+            include_str!("test_vec/13/Prio3SumVec_0.json"),
+            include_str!("test_vec/13/Prio3SumVec_1.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
                 let bits = json_params["bits"].as_u64().unwrap() as usize;
@@ -319,8 +321,8 @@ mod tests {
         type Prio3SumVecField64Multiproof =
             Prio3<SumVec<Field64, ParallelSum<Field64, Mul<Field64>>>, XofTurboShake128, 16>;
         for test_vector_str in [
-            include_str!("test_vec/08/Prio3SumVecField64Multiproof_0.json"),
-            include_str!("test_vec/08/Prio3SumVecField64Multiproof_1.json"),
+            include_str!("test_vec/13/Prio3SumVecWithMultiproof_0.json"),
+            include_str!("test_vec/13/Prio3SumVecWithMultiproof_1.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
                 let bits = json_params["bits"].as_u64().unwrap() as usize;
@@ -341,13 +343,31 @@ mod tests {
     #[test]
     fn test_vec_prio3_histogram() {
         for test_vector_str in [
-            include_str!("test_vec/08/Prio3Histogram_0.json"),
-            include_str!("test_vec/08/Prio3Histogram_1.json"),
+            include_str!("test_vec/13/Prio3Histogram_0.json"),
+            include_str!("test_vec/13/Prio3Histogram_1.json"),
+            include_str!("test_vec/13/Prio3Histogram_2.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
                 let length = json_params["length"].as_u64().unwrap() as usize;
                 let chunk_length = json_params["chunk_length"].as_u64().unwrap() as usize;
                 Prio3::new_histogram(num_shares, length, chunk_length).unwrap()
+            });
+        }
+    }
+
+    #[ignore]
+    #[test]
+    fn test_vec_prio3_multihot_count_vec() {
+        for test_vector_str in [
+            include_str!("test_vec/13/Prio3MultihotCountVec_0.json"),
+            include_str!("test_vec/13/Prio3MultihotCountVec_1.json"),
+            include_str!("test_vec/13/Prio3MultihotCountVec_2.json"),
+        ] {
+            check_test_vec(test_vector_str, |json_params, num_shares| {
+                let length = json_params["length"].as_u64().unwrap() as usize;
+                let max_weight = json_params["max_weight"].as_u64().unwrap() as usize;
+                let chunk_length = json_params["chunk_length"].as_u64().unwrap() as usize;
+                Prio3::new_multihot_count_vec(num_shares, length, max_weight, chunk_length).unwrap()
             });
         }
     }

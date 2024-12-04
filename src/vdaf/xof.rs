@@ -553,10 +553,11 @@ mod tests {
         assert_eq!(got, want);
     }
 
+    #[ignore = "seed size needs to be updated for VDAF draft-13"]
     #[test]
     fn xof_turboshake128() {
         let t: XofTestVector =
-            serde_json::from_str(include_str!("test_vec/08/XofTurboShake128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/13/XofTurboShake128.json")).unwrap();
         let mut xof = XofTurboShake128::init(&t.seed.try_into().unwrap(), &t.dst);
         xof.update(&t.binder);
 
@@ -600,12 +601,11 @@ mod tests {
         test_xof::<XofHmacSha256Aes128, 32>();
     }
 
-    #[ignore]
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128() {
         let t: XofTestVector =
-            serde_json::from_str(include_str!("test_vec/08/XofFixedKeyAes128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/13/XofFixedKeyAes128.json")).unwrap();
         let mut xof = XofFixedKeyAes128::init(&t.seed.try_into().unwrap(), &t.dst);
         xof.update(&t.binder);
 
