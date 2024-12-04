@@ -1003,19 +1003,21 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareShare<F, SEED_SIZE>
+impl<'a, T: Type, P: Xof<SEED_SIZE>, F: FftFriendlyFieldElement, const SEED_SIZE: usize>
+    ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, &'a (), usize, u16)>
+    for Prio3PrepareShare<F, SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
+        (prio3, _, _agg_id, _round): &(&'a Prio3<T, P, SEED_SIZE>, &'a (), usize, u16),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut verifiers = Vec::with_capacity(decoding_parameter.verifiers_len);
-        for _ in 0..decoding_parameter.verifiers_len {
+        let verifiers_len = prio3.num_proofs() * prio3.typ.verifier_len();
+        let mut verifiers = Vec::with_capacity(verifiers_len);
+        for _ in 0..verifiers_len {
             verifiers.push(F::decode(bytes)?);
         }
 
-        let joint_rand_part = if decoding_parameter.joint_rand_seed.is_some() {
+        let joint_rand_part = if prio3.typ.joint_rand_len() > 0 {
             Some(Seed::decode(bytes)?)
         } else {
             None
@@ -1070,14 +1072,15 @@ impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareMessage<SEED_SIZE>
+impl<'a, T: Type, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
+    ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, &'a (), u16)>
+    for Prio3PrepareMessage<SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
+        decoding_parameter: &(&'a Prio3<T, P, SEED_SIZE>, &'a (), u16),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
+        let joint_rand_seed = if decoding_parameter.0.typ.joint_rand_len() > 0 {
             Some(Seed::decode(bytes)?)
         } else {
             None
@@ -2157,7 +2160,6 @@ mod tests {
         }
 
         let mut prepare_shares = Vec::new();
-        let mut last_prepare_state = None;
         for (agg_id, input_share) in input_shares.iter().enumerate() {
             let (prepare_state, prepare_share) = prio3.prepare_init(
                 &verify_key,
@@ -2180,9 +2182,11 @@ mod tests {
             );
 
             let encoded_prepare_share = prepare_share.get_encoded().unwrap();
-            let decoded_prepare_share =
-                Prio3PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
-                    .expect("failed to decode prepare share");
+            let decoded_prepare_share = Prio3PrepareShare::get_decoded_with_param(
+                &(prio3, &(), agg_id, 0),
+                &encoded_prepare_share,
+            )
+            .expect("failed to decode prepare share");
             assert_eq!(decoded_prepare_share, prepare_share);
             assert_eq!(
                 prepare_share.encoded_len().unwrap(),
@@ -2190,7 +2194,6 @@ mod tests {
             );
 
             prepare_shares.push(prepare_share);
-            last_prepare_state = Some(prepare_state);
         }
 
         let prepare_message = prio3
@@ -2198,11 +2201,9 @@ mod tests {
             .unwrap();
 
         let encoded_prepare_message = prepare_message.get_encoded().unwrap();
-        let decoded_prepare_message = Prio3PrepareMessage::get_decoded_with_param(
-            &last_prepare_state.unwrap(),
-            &encoded_prepare_message,
-        )
-        .expect("failed to decode prepare message");
+        let decoded_prepare_message =
+            Prio3PrepareMessage::get_decoded_with_param(&(prio3, &(), 0), &encoded_prepare_message)
+                .expect("failed to decode prepare message");
         assert_eq!(decoded_prepare_message, prepare_message);
         assert_eq!(
             prepare_message.encoded_len().unwrap(),

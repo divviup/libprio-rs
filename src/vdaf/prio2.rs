@@ -233,9 +233,9 @@ impl Encode for Prio2PrepareShare {
     }
 }
 
-impl ParameterizedDecode<Prio2PrepareState> for Prio2PrepareShare {
+impl<'a> ParameterizedDecode<(&'a Prio2, &'a (), usize, u16)> for Prio2PrepareShare {
     fn decode_with_param(
-        _state: &Prio2PrepareState,
+        _: &(&Prio2, &(), usize, u16),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         Ok(Self(v2_server::VerificationMessage {
@@ -470,9 +470,11 @@ mod tests {
             );
 
             let encoded_prepare_share = prepare_share.get_encoded().unwrap();
-            let decoded_prepare_share =
-                Prio2PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
-                    .expect("failed to decode prepare share");
+            let decoded_prepare_share = Prio2PrepareShare::get_decoded_with_param(
+                &(&prio2, &(), agg_id, 0),
+                &encoded_prepare_share,
+            )
+            .expect("failed to decode prepare share");
             assert_eq!(decoded_prepare_share.0.f_r, prepare_share.0.f_r);
             assert_eq!(decoded_prepare_share.0.g_r, prepare_share.0.g_r);
             assert_eq!(decoded_prepare_share.0.h_r, prepare_share.0.h_r);

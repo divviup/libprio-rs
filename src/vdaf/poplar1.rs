@@ -482,35 +482,6 @@ impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
     }
 }
 
-impl<F: FieldElement> SketchState<F> {
-    fn decode_sketch_share(&self, bytes: &mut Cursor<&[u8]>) -> Result<Vec<F>, CodecError> {
-        match self {
-            // The sketch share is three field elements.
-            Self::RoundOne { .. } => Ok(vec![
-                F::decode(bytes)?,
-                F::decode(bytes)?,
-                F::decode(bytes)?,
-            ]),
-            // The sketch verifier share is one field element.
-            Self::RoundTwo => Ok(vec![F::decode(bytes)?]),
-        }
-    }
-
-    fn decode_sketch(&self, bytes: &mut Cursor<&[u8]>) -> Result<Option<[F; 3]>, CodecError> {
-        match self {
-            // The sketch is three field elements.
-            Self::RoundOne { .. } => Ok(Some([
-                F::decode(bytes)?,
-                F::decode(bytes)?,
-                F::decode(bytes)?,
-            ])),
-            // The sketch verifier should be zero if the sketch if valid. Instead of transmitting
-            // this zero over the wire, we just expect an empty message.
-            Self::RoundTwo => Ok(None),
-        }
-    }
-}
-
 /// Poplar1 preparation message.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Poplar1PrepareMessage(PrepareMessageVariant);
@@ -548,11 +519,15 @@ impl Encode for Poplar1PrepareMessage {
     }
 }
 
-impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
+impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
+    ParameterizedDecode<(&Poplar1<P, SEED_SIZE>, &Poplar1AggregationParam, u16)>
+    for Poplar1PrepareMessage
+{
     fn decode_with_param(
-        state: &Poplar1PrepareState,
+        (poplar1, agg_param, round): &(&Poplar1<P, SEED_SIZE>, &Poplar1AggregationParam, u16),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
+        /*
         match state.0 {
             PrepareStateVariant::Inner(ref state_variant) => Ok(Self(
                 state_variant
@@ -569,6 +544,29 @@ impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
                     .map_or(PrepareMessageVariant::Done, |sketch| {
                         PrepareMessageVariant::SketchLeaf(sketch)
                     }),
+            )),
+        }
+        */
+        let is_last_level = usize::from(agg_param.level) == poplar1.bits - 1;
+        match round {
+            0 => {
+                if is_last_level {
+                    Ok(Self(PrepareMessageVariant::SketchLeaf([
+                        Field255::decode(bytes)?,
+                        Field255::decode(bytes)?,
+                        Field255::decode(bytes)?,
+                    ])))
+                } else {
+                    Ok(Self(PrepareMessageVariant::SketchInner([
+                        Field64::decode(bytes)?,
+                        Field64::decode(bytes)?,
+                        Field64::decode(bytes)?,
+                    ])))
+                }
+            }
+            1 => Ok(Self(PrepareMessageVariant::Done)),
+            _ => Err(CodecError::Other(
+                "invalid round number in decoding parameter".into(),
             )),
         }
     }
@@ -659,17 +657,49 @@ impl<'a, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
     }
 }
 
-impl ParameterizedDecode<Poplar1PrepareState> for Poplar1FieldVec {
+impl<'a, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
+    ParameterizedDecode<(
+        &'a Poplar1<P, SEED_SIZE>,
+        &'a Poplar1AggregationParam,
+        usize,
+        u16,
+    )> for Poplar1FieldVec
+{
     fn decode_with_param(
-        state: &Poplar1PrepareState,
+        (poplar1, agg_param, _agg_id, round): &(
+            &'a Poplar1<P, SEED_SIZE>,
+            &'a Poplar1AggregationParam,
+            usize,
+            u16,
+        ),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        match state.0 {
-            PrepareStateVariant::Inner(ref state_variant) => Ok(Poplar1FieldVec::Inner(
-                state_variant.sketch.decode_sketch_share(bytes)?,
-            )),
-            PrepareStateVariant::Leaf(ref state_variant) => Ok(Poplar1FieldVec::Leaf(
-                state_variant.sketch.decode_sketch_share(bytes)?,
+        let is_last_level = usize::from(agg_param.level) == poplar1.bits - 1;
+        match round {
+            0 => {
+                if is_last_level {
+                    Ok(Self::Leaf(Vec::from([
+                        Field255::decode(bytes)?,
+                        Field255::decode(bytes)?,
+                        Field255::decode(bytes)?,
+                    ])))
+                } else {
+                    Ok(Self::Inner(Vec::from([
+                        Field64::decode(bytes)?,
+                        Field64::decode(bytes)?,
+                        Field64::decode(bytes)?,
+                    ])))
+                }
+            }
+            1 => {
+                if is_last_level {
+                    Ok(Self::Leaf(Vec::from([Field255::decode(bytes)?])))
+                } else {
+                    Ok(Self::Inner(Vec::from([Field64::decode(bytes)?])))
+                }
+            }
+            _ => Err(CodecError::Other(
+                "invalid round number in decoding parameter".into(),
             )),
         }
     }
@@ -2271,7 +2301,7 @@ mod tests {
         assert_eq!(
             init_prep_share_0,
             Poplar1FieldVec::get_decoded_with_param(
-                &init_prep_state_0,
+                &(&poplar, &agg_param, 0, 0),
                 prep.prep_shares[0][0].as_ref()
             )
             .unwrap()
@@ -2283,7 +2313,7 @@ mod tests {
         assert_eq!(
             init_prep_share_1,
             Poplar1FieldVec::get_decoded_with_param(
-                &init_prep_state_1,
+                &(&poplar, &agg_param, 1, 0),
                 prep.prep_shares[0][1].as_ref()
             )
             .unwrap()
@@ -2295,7 +2325,7 @@ mod tests {
         assert_eq!(
             r1_prep_msg,
             Poplar1PrepareMessage::get_decoded_with_param(
-                &init_prep_state_0,
+                &(&poplar, &agg_param, 0),
                 prep.prep_messages[0].as_ref()
             )
             .unwrap()
@@ -2308,7 +2338,7 @@ mod tests {
         assert_eq!(
             r1_prep_share_0,
             Poplar1FieldVec::get_decoded_with_param(
-                &r1_prep_state_0,
+                &(&poplar, &agg_param, 0, 1),
                 prep.prep_shares[1][0].as_ref()
             )
             .unwrap()
@@ -2320,7 +2350,7 @@ mod tests {
         assert_eq!(
             r1_prep_share_1,
             Poplar1FieldVec::get_decoded_with_param(
-                &r1_prep_state_0,
+                &(&poplar, &agg_param, 1, 1),
                 prep.prep_shares[1][1].as_ref()
             )
             .unwrap()
@@ -2332,7 +2362,7 @@ mod tests {
         assert_eq!(
             r2_prep_msg,
             Poplar1PrepareMessage::get_decoded_with_param(
-                &r1_prep_state_0,
+                &(&poplar, &agg_param, 1),
                 prep.prep_messages[1].as_ref()
             )
             .unwrap()
