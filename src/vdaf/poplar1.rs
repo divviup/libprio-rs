@@ -855,7 +855,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
     type AggregateShare = Poplar1FieldVec;
 
     fn algorithm_id(&self) -> u32 {
-        0x00001000
+        0x00000006
     }
 
     fn num_aggregators(&self) -> usize {
