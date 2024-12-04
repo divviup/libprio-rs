@@ -1929,6 +1929,8 @@ mod tests {
     struct IdpfTestVector {
         /// The number of bits in IDPF inputs.
         bits: usize,
+        /// The application context string.
+        ctx: Vec<u8>,
         /// The binder string used when generating and evaluating keys.
         binder: Vec<u8>,
         /// The IDPF input provided to the key generation algorithm.
@@ -1944,9 +1946,9 @@ mod tests {
     }
 
     /// Load a test vector for Idpf key generation.
-    fn load_idpfpoplar_test_vector() -> IdpfTestVector {
+    fn load_idpfbbcggi21_test_vector() -> IdpfTestVector {
         let test_vec: serde_json::Value =
-            serde_json::from_str(include_str!("vdaf/test_vec/08/IdpfPoplar_0.json")).unwrap();
+            serde_json::from_str(include_str!("vdaf/test_vec/13/IdpfBBCGGI21_0.json")).unwrap();
         let test_vec_obj = test_vec.as_object().unwrap();
 
         let bits = test_vec_obj
@@ -2010,11 +2012,15 @@ mod tests {
         let public_share_hex = test_vec_obj.get("public_share").unwrap();
         let public_share = hex::decode(public_share_hex.as_str().unwrap()).unwrap();
 
+        let ctx_hex = test_vec_obj.get("ctx").unwrap();
+        let ctx = hex::decode(ctx_hex.as_str().unwrap()).unwrap();
+
         let binder_hex = test_vec_obj.get("binder").unwrap();
         let binder = hex::decode(binder_hex.as_str().unwrap()).unwrap();
 
         IdpfTestVector {
             bits,
+            ctx,
             binder,
             alpha,
             beta_inner,
@@ -2026,15 +2032,15 @@ mod tests {
 
     #[ignore]
     #[test]
-    fn idpf_poplar_generate_test_vector() {
-        let test_vector = load_idpfpoplar_test_vector();
+    fn idpf_bbcggi21_generate_test_vector() {
+        let test_vector = load_idpfbbcggi21_test_vector();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
             .gen_with_random(
                 &test_vector.alpha,
                 test_vector.beta_inner,
                 test_vector.beta_leaf,
-                b"WRONG CTX, REPLACE ME", // TODO: Update test vectors to ones that provide ctx str
+                &test_vector.ctx,
                 &test_vector.binder,
                 &test_vector.keys,
             )

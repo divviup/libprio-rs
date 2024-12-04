@@ -2107,6 +2107,7 @@ mod tests {
         bits: usize,
         prep: Vec<PreparationTestVector>,
         verify_key: HexEncoded,
+        ctx: HexEncoded,
     }
 
     #[derive(Debug, Deserialize)]
@@ -2122,10 +2123,6 @@ mod tests {
     }
 
     fn check_test_vec(input: &str) {
-        // We need to use an empty context string for these test vectors to pass.
-        // TODO: update test vectors to ones that use a real context string
-        const CTX_STR: &[u8] = b"";
-
         let test_vector: PoplarTestVector = serde_json::from_str(input).unwrap();
         assert_eq!(test_vector.prep.len(), 1);
         let prep = &test_vector.prep[0];
@@ -2163,14 +2160,20 @@ mod tests {
         // Shard measurement.
         let poplar = Poplar1::new_turboshake128(test_vector.bits);
         let (public_share, input_shares) = poplar
-            .shard_with_random(CTX_STR, &measurement, &nonce, &idpf_random, &poplar_random)
+            .shard_with_random(
+                test_vector.ctx.as_ref(),
+                &measurement,
+                &nonce,
+                &idpf_random,
+                &poplar_random,
+            )
             .unwrap();
 
         // Run aggregation.
         let (init_prep_state_0, init_prep_share_0) = poplar
             .prepare_init(
                 &verify_key,
-                CTX_STR,
+                test_vector.ctx.as_ref(),
                 0,
                 &agg_param,
                 &nonce,
@@ -2181,7 +2184,7 @@ mod tests {
         let (init_prep_state_1, init_prep_share_1) = poplar
             .prepare_init(
                 &verify_key,
-                CTX_STR,
+                test_vector.ctx.as_ref(),
                 1,
                 &agg_param,
                 &nonce,
@@ -2192,7 +2195,7 @@ mod tests {
 
         let r1_prep_msg = poplar
             .prepare_shares_to_prepare_message(
-                CTX_STR,
+                test_vector.ctx.as_ref(),
                 &agg_param,
                 [init_prep_share_0.clone(), init_prep_share_1.clone()],
             )
@@ -2200,20 +2203,28 @@ mod tests {
 
         let (r1_prep_state_0, r1_prep_share_0) = assert_matches!(
             poplar
-                .prepare_next(CTX_STR,init_prep_state_0.clone(), r1_prep_msg.clone())
+                .prepare_next(
+                    test_vector.ctx.as_ref(),
+                    init_prep_state_0.clone(),
+                    r1_prep_msg.clone(),
+                )
                 .unwrap(),
             PrepareTransition::Continue(state, share) => (state, share)
         );
         let (r1_prep_state_1, r1_prep_share_1) = assert_matches!(
             poplar
-                .prepare_next(CTX_STR,init_prep_state_1.clone(), r1_prep_msg.clone())
+                .prepare_next(
+                    test_vector.ctx.as_ref(),
+                    init_prep_state_1.clone(),
+                    r1_prep_msg.clone(),
+                )
                 .unwrap(),
             PrepareTransition::Continue(state, share) => (state, share)
         );
 
         let r2_prep_msg = poplar
             .prepare_shares_to_prepare_message(
-                CTX_STR,
+                test_vector.ctx.as_ref(),
                 &agg_param,
                 [r1_prep_share_0.clone(), r1_prep_share_1.clone()],
             )
@@ -2221,13 +2232,17 @@ mod tests {
 
         let out_share_0 = assert_matches!(
             poplar
-                .prepare_next(CTX_STR, r1_prep_state_0.clone(), r2_prep_msg.clone())
+                .prepare_next(
+                    test_vector.ctx.as_ref(),
+                    r1_prep_state_0.clone(),
+                    r2_prep_msg.clone(),
+                )
                 .unwrap(),
             PrepareTransition::Finish(out) => out
         );
         let out_share_1 = assert_matches!(
             poplar
-                .prepare_next(CTX_STR,r1_prep_state_1, r2_prep_msg.clone())
+                .prepare_next(test_vector.ctx.as_ref(), r1_prep_state_1, r2_prep_msg.clone())
                 .unwrap(),
             PrepareTransition::Finish(out) => out
         );
@@ -2391,25 +2406,37 @@ mod tests {
     #[ignore]
     #[test]
     fn test_vec_poplar1_0() {
-        check_test_vec(include_str!("test_vec/08/Poplar1_0.json"));
+        check_test_vec(include_str!("test_vec/13/Poplar1_0.json"));
     }
 
     #[ignore]
     #[test]
     fn test_vec_poplar1_1() {
-        check_test_vec(include_str!("test_vec/08/Poplar1_1.json"));
+        check_test_vec(include_str!("test_vec/13/Poplar1_1.json"));
     }
 
     #[ignore]
     #[test]
     fn test_vec_poplar1_2() {
-        check_test_vec(include_str!("test_vec/08/Poplar1_2.json"));
+        check_test_vec(include_str!("test_vec/13/Poplar1_2.json"));
     }
 
     #[ignore]
     #[test]
     fn test_vec_poplar1_3() {
-        check_test_vec(include_str!("test_vec/08/Poplar1_3.json"));
+        check_test_vec(include_str!("test_vec/13/Poplar1_3.json"));
+    }
+
+    #[ignore]
+    #[test]
+    fn test_vec_poplar1_4() {
+        check_test_vec(include_str!("test_vec/13/Poplar1_4.json"));
+    }
+
+    #[ignore]
+    #[test]
+    fn test_vec_poplar1_5() {
+        check_test_vec(include_str!("test_vec/13/Poplar1_5.json"));
     }
 
     #[test]
