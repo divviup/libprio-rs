@@ -200,7 +200,7 @@ fn prio3(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(bits), &bits, |b, bits| {
             // Doesn't matter for speed what we use for max measurement, or measurement
             let max_measurement = (1 << bits) - 1;
-            let vdaf = Prio3::new_sum(num_shares, *bits, max_measurement).unwrap();
+            let vdaf = Prio3::new_sum(num_shares, max_measurement).unwrap();
             let measurement = max_measurement;
             let nonce = black_box([0u8; 16]);
             b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
@@ -212,7 +212,7 @@ fn prio3(c: &mut Criterion) {
     for bits in [8, 32] {
         group.bench_with_input(BenchmarkId::from_parameter(bits), &bits, |b, bits| {
             let max_measurement = (1 << bits) - 1;
-            let vdaf = Prio3::new_sum(num_shares, *bits, max_measurement).unwrap();
+            let vdaf = Prio3::new_sum(num_shares, max_measurement).unwrap();
             let measurement = max_measurement;
             let nonce = black_box([0u8; 16]);
             let verify_key = black_box([0u8; 16]);

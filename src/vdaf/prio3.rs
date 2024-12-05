@@ -143,29 +143,16 @@ impl Prio3SumVecMultithreaded {
 pub type Prio3Sum = Prio3<Sum<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Sum {
-    /// Construct an instance of `Prio3Sum` with the given number of aggregators, required bit length,
-    /// and where each summand must be in the range `[0, max_measurement)`. The bit length must not
-    /// exceed 64.
+    /// Construct an instance of `Prio3Sum` with the given number of aggregators, where each summand
+    /// must be in the range `[0, max_measurement)`.
     ///
     /// # Panics
-    /// Panics if `bits > 64` or if `2^bits <= max_measurement`
+    /// Panics if `max_measurement == 0`
     pub fn new_sum(
         num_aggregators: u8,
-        bits: usize,
         max_measurement: <Field128 as FieldElementWithInteger>::Integer,
     ) -> Result<Self, VdafError> {
-        if bits > 64 {
-            return Err(VdafError::Uncategorized(format!(
-                "bit length ({bits}) exceeds limit for aggregate type (64)"
-            )));
-        }
-
-        Prio3::new(
-            num_aggregators,
-            1,
-            0x00000001,
-            Sum::new(bits, max_measurement)?,
-        )
+        Prio3::new(num_aggregators, 1, 0x00000001, Sum::new(max_measurement)?)
     }
 }
 
@@ -355,30 +342,22 @@ impl Prio3MultihotCountVecMultithreaded {
 pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Average {
-    /// Construct an instance of `Prio3Average` with the given number of aggregators, required bit length,
-    /// and where each summand must be in the range `[0, max_measurement)`. The bit length must not
-    /// exceed 64.
+    /// Construct an instance of `Prio3Average` with the given number of aggregators, where each
+    /// summand must be in the range `[0, max_measurement)`.
     ///
     /// # Panics
-    /// Panics if `bits > 64` or if `2^bits <= max_measurement`
+    /// Panics if `max_measurement == 0`
     pub fn new_average(
         num_aggregators: u8,
-        bits: usize,
         max_measurement: <Field128 as FieldElementWithInteger>::Integer,
     ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
-
-        if bits > 64 {
-            return Err(VdafError::Uncategorized(format!(
-                "bit length ({bits}) exceeds limit for aggregate type (64)"
-            )));
-        }
 
         Ok(Prio3 {
             num_aggregators,
             num_proofs: 1,
             algorithm_id: 0xFFFF0000,
-            typ: Average::new(bits, max_measurement)?,
+            typ: Average::new(max_measurement)?,
             phantom: PhantomData,
         })
     }
@@ -1723,10 +1702,9 @@ mod tests {
 
     #[test]
     fn test_prio3_sum() {
-        let bits = 16;
         let max_measurement = 35_891;
 
-        let prio3 = Prio3::new_sum(3, bits, max_measurement).unwrap();
+        let prio3 = Prio3::new_sum(3, max_measurement).unwrap();
 
         assert_eq!(
             run_vdaf(CTX_STR, &prio3, &(), [0, max_measurement - 2, 0, 1, 1]).unwrap(),
@@ -2108,9 +2086,8 @@ mod tests {
 
     #[test]
     fn test_prio3_average() {
-        let bits = 64;
-        let max_measurement = 43_208; // arbitrary number
-        let prio3 = Prio3::new_average(2, bits, max_measurement).unwrap();
+        let max_measurement = 43_208;
+        let prio3 = Prio3::new_average(2, max_measurement).unwrap();
 
         assert_eq!(run_vdaf(CTX_STR, &prio3, &(), [17, 8]).unwrap(), 12.5f64);
         assert_eq!(run_vdaf(CTX_STR, &prio3, &(), [1, 1, 1, 1]).unwrap(), 1f64);
@@ -2126,9 +2103,8 @@ mod tests {
 
     #[test]
     fn test_prio3_input_share() {
-        let bits = 16;
         let max_measurement = 1;
-        let prio3 = Prio3::new_sum(5, bits, max_measurement).unwrap();
+        let prio3 = Prio3::new_sum(5, max_measurement).unwrap();
         let (_public_share, input_shares) = prio3.shard(CTX_STR, &1, &[0; 16]).unwrap();
 
         // Check that seed shares are distinct.
@@ -2247,9 +2223,8 @@ mod tests {
         let vdaf = Prio3::new_count(2).unwrap();
         fieldvec_roundtrip_test::<Field64, Prio3Count, OutputShare<Field64>>(&vdaf, &(), 1);
 
-        let bits = 17;
         let max_measurement = 13;
-        let vdaf = Prio3::new_sum(2, bits, max_measurement).unwrap();
+        let vdaf = Prio3::new_sum(2, max_measurement).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, OutputShare<Field128>>(&vdaf, &(), 1);
 
         let vdaf = Prio3::new_histogram(2, 12, 3).unwrap();
@@ -2261,9 +2236,8 @@ mod tests {
         let vdaf = Prio3::new_count(2).unwrap();
         fieldvec_roundtrip_test::<Field64, Prio3Count, AggregateShare<Field64>>(&vdaf, &(), 1);
 
-        let bits = 17;
         let max_measurement = 13;
-        let vdaf = Prio3::new_sum(2, bits, max_measurement).unwrap();
+        let vdaf = Prio3::new_sum(2, max_measurement).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, AggregateShare<Field128>>(&vdaf, &(), 1);
 
         let vdaf = Prio3::new_histogram(2, 12, 3).unwrap();

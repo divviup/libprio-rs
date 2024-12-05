@@ -291,8 +291,8 @@ mod tests {
             include_str!("test_vec/08/Prio3Sum_1.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
-                let bits = json_params["bits"].as_u64().unwrap() as usize;
-                Prio3::new_sum(num_shares, bits, FAKE_MAX_MEASUREMENT_UPDATE_ME).unwrap()
+                let _bits = json_params["bits"].as_u64().unwrap() as usize;
+                Prio3::new_sum(num_shares, FAKE_MAX_MEASUREMENT_UPDATE_ME).unwrap()
             });
         }
     }

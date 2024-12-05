@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`] implementations.
 
-use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
+use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt, Integer};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -121,41 +121,40 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
 /// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, PartialEq, Eq)]
 pub struct Sum<F: FftFriendlyFieldElement> {
-    bits: usize,
     max_measurement: F::Integer,
 
-    // Computed from given parameters
+    // Computed from max_measurement
     offset: F::Integer,
+    bits: usize,
     // Constant
     bit_range_checker: Vec<F>,
 }
 
 impl<F: FftFriendlyFieldElement> Debug for Sum<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Sum").field("bits", &self.bits).finish()
+        f.debug_struct("Sum")
+            .field("max_measurement", &self.max_measurement)
+            .field("bits", &self.bits)
+            .finish()
     }
 }
 
 impl<F: FftFriendlyFieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
-    /// max_measurement]` where `max_measurement < 2^bits`.
+    /// max_measurement]` where `max_measurement > 0`.
     ///
     /// # Panics
-    /// Panics if 2^bits <= max_measurement
-    pub fn new(bits: usize, max_measurement: F::Integer) -> Result<Self, FlpError> {
-        if !F::valid_integer_bitlength(bits) {
-            return Err(FlpError::Encode(
-                "invalid bits: number of bits exceeds maximum number of bits in this field"
-                    .to_string(),
-            ));
-        }
-        let one = F::Integer::try_from(1).unwrap();
+    /// Panics if `max_measurement == 0`.
+    pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
         assert!(
-            (one << bits) > max_measurement,
-            "2^bits must be greater than max_measurement"
+            max_measurement > F::Integer::zero(),
+            "max_measurement must be nonzero"
         );
+        // Number of bits needed to represent x is ⌊log₂(x)⌋ + 1
+        let bits = max_measurement.checked_ilog2().unwrap() as usize + 1;
 
         // The offset we add to the summand for range-checking purposes
+        let one = F::Integer::try_from(1).unwrap();
         let offset = (one << bits) - one - max_measurement;
 
         // Construct a range checker to ensure encoded bits are in the range [0, 2)
@@ -277,6 +276,7 @@ pub struct Average<F: FftFriendlyFieldElement> {
 impl<F: FftFriendlyFieldElement> Debug for Average<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Average")
+            .field("max_measurement", &self.summer.max_measurement)
             .field("bits", &self.summer.bits)
             .finish()
     }
@@ -284,12 +284,12 @@ impl<F: FftFriendlyFieldElement> Debug for Average<F> {
 
 impl<F: FftFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
-    /// max_measurement]` where `max_measurement < 2^bits`.
+    /// max_measurement]` where `max_measurement > 0`.
     ///
     /// # Panics
-    /// Panics if 2^bits <= max_measurement
-    pub fn new(bits: usize, max_measurement: F::Integer) -> Result<Self, FlpError> {
-        let summer = Sum::new(bits, max_measurement)?;
+    /// Panics if `max_measurement == 0`
+    pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
+        let summer = Sum::new(max_measurement)?;
         Ok(Average { summer })
     }
 }
@@ -1072,10 +1072,9 @@ mod tests {
 
     #[test]
     fn test_sum() {
-        let bits = 11;
-        let max_measurement = 1458; // arbitrary number < 2^11
+        let max_measurement = 1458;
 
-        let sum = Sum::new(bits, max_measurement).unwrap();
+        let sum = Sum::new(max_measurement).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -1096,10 +1095,9 @@ mod tests {
             &sum.encode_measurement(&1337).unwrap(),
             &[TestField::from(1337)],
         );
-        FlpTest::expect_valid::<3>(&Sum::new(0, 0).unwrap(), &[], &[zero]);
 
         {
-            let sum = Sum::new(2, 3).unwrap();
+            let sum = Sum::new(3).unwrap();
             let meas = 1;
             FlpTest::expect_valid::<3>(
                 &sum,
@@ -1109,7 +1107,7 @@ mod tests {
         }
 
         {
-            let sum = Sum::new(9, 400).unwrap();
+            let sum = Sum::new(400).unwrap();
             let meas = 237;
             FlpTest::expect_valid::<3>(
                 &sum,
@@ -1120,7 +1118,7 @@ mod tests {
 
         // Test FLP on invalid input, specifically on field elements outside of {0,1}
         {
-            let sum = Sum::new(3, (1 << 3) - 1).unwrap();
+            let sum = Sum::new((1 << 3) - 1).unwrap();
             // The sum+offset value can be whatever. The binariness test should fail first
             let sum_plus_offset = vec![zero; 3];
             FlpTest::expect_invalid::<3>(
@@ -1129,7 +1127,7 @@ mod tests {
             );
         }
         {
-            let sum = Sum::new(5, (1 << 5) - 1).unwrap();
+            let sum = Sum::new((1 << 5) - 1).unwrap();
             let sum_plus_offset = vec![zero; 5];
             FlpTest::expect_invalid::<3>(
                 &sum,
@@ -1140,10 +1138,9 @@ mod tests {
 
     #[test]
     fn test_average() {
-        let max_measurement = 13;
-        let bits = 11;
+        let max_measurement = (1 << 11) - 13;
 
-        let average = Average::new(bits, max_measurement).unwrap();
+        let average = Average::new(max_measurement).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let ten = TestField::from(10);

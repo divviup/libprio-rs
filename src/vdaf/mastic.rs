@@ -394,9 +394,8 @@ mod tests {
     #[test]
     fn test_mastic_shard_sum() {
         let algorithm_id = 6;
-        let bits = 5;
         let max_measurement = 29;
-        let sum_typ = Sum::<Field128>::new(bits, max_measurement).unwrap();
+        let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_meas_len = sum_typ.input_len();
 
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
@@ -418,9 +417,8 @@ mod tests {
     #[test]
     fn test_input_share_encode_sum() {
         let algorithm_id = 6;
-        let bits = 5;
         let max_measurement = 29;
-        let sum_typ = Sum::<Field128>::new(bits, max_measurement).unwrap();
+        let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_meas_len = sum_typ.input_len();
 
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
