@@ -388,6 +388,12 @@ mod tests {
         fn one() -> Self {
             Self::new(Vec::from([1]))
         }
+
+        fn checked_ilog2(&self) -> Option<u32> {
+            // This is a test module, and this code is never used. If we need this in the future,
+            // use BigUint::bits()
+            unimplemented!()
+        }
     }
 
     impl TestFieldElementWithInteger for Field255 {
