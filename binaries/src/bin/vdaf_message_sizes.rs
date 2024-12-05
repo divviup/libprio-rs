@@ -42,7 +42,7 @@ fn main() {
         )
     );
 
-    let max_measurement = 987_234;
+    let max_measurement = 0xffff_ffff;
     let prio3 = Prio3::new_sum(num_shares, max_measurement).unwrap();
     let measurement = 1337;
     println!(

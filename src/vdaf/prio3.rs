@@ -144,7 +144,7 @@ pub type Prio3Sum = Prio3<Sum<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Sum {
     /// Construct an instance of `Prio3Sum` with the given number of aggregators, where each summand
-    /// must be in the range `[0, max_measurement)`.
+    /// must be in the range `[0, max_measurement]`.
     ///
     /// # Panics
     /// Panics if `max_measurement == 0`
@@ -343,7 +343,7 @@ pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Average {
     /// Construct an instance of `Prio3Average` with the given number of aggregators, where each
-    /// summand must be in the range `[0, max_measurement)`.
+    /// summand must be in the range `[0, max_measurement]`.
     ///
     /// # Panics
     /// Panics if `max_measurement == 0`
@@ -1707,8 +1707,8 @@ mod tests {
         let prio3 = Prio3::new_sum(3, max_measurement).unwrap();
 
         assert_eq!(
-            run_vdaf(CTX_STR, &prio3, &(), [0, max_measurement - 2, 0, 1, 1]).unwrap(),
-            max_measurement
+            run_vdaf(CTX_STR, &prio3, &(), [0, max_measurement, 0, 1, 1]).unwrap(),
+            max_measurement + 2,
         );
 
         let mut verify_key = [0; 16];

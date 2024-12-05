@@ -182,11 +182,10 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
             )));
         }
 
-        let enc_summand: Vec<F> = F::encode_as_bitvector(*summand, self.bits)?.collect();
-        let enc_summand_plus_offset =
-            F::encode_as_bitvector(self.offset + *summand, self.bits)?.collect();
+        let enc_summand = F::encode_as_bitvector(*summand, self.bits)?;
+        let enc_summand_plus_offset = F::encode_as_bitvector(self.offset + *summand, self.bits)?;
 
-        Ok([enc_summand, enc_summand_plus_offset].concat())
+        Ok(enc_summand.chain(enc_summand_plus_offset).collect())
     }
 
     fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
@@ -264,7 +263,7 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     }
 }
 
-/// The average type. Each measurement is a integer in `[0, max_measurement]` and the aggregate is
+/// The average type. Each measurement is an integer in `[0, max_measurement]` and the aggregate is
 /// the arithmetic average of the measurements.
 // This is just a `Sum` object under the hood. The only difference is that the aggregate result is
 // an f64, which we get by dividing by `num_measurements`
@@ -640,20 +639,19 @@ where
         }
 
         // Convert bool vector to field elems
-        let multihot_vec: Vec<F> = measurement
+        let multihot_vec = measurement
             .iter()
             // We can unwrap because any Integer type can cast from bool
-            .map(|bit| F::from(F::valid_integer_try_from(*bit as usize).unwrap()))
-            .collect();
+            .map(|bit| F::from(F::valid_integer_try_from(*bit as usize).unwrap()));
 
         // Encode the measurement weight in binary (actually, the weight plus some offset)
         let offset_weight_bits = {
             let offset_weight_reported = F::valid_integer_try_from(self.offset + weight_reported)?;
-            F::encode_as_bitvector(offset_weight_reported, self.bits_for_weight)?.collect()
+            F::encode_as_bitvector(offset_weight_reported, self.bits_for_weight)?
         };
 
         // Report the concat of the two
-        Ok([multihot_vec, offset_weight_bits].concat())
+        Ok(multihot_vec.chain(offset_weight_bits).collect())
     }
 
     fn decode_result(
