@@ -140,14 +140,14 @@ impl Prio3SumVecMultithreaded {
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum = Prio3<Sum<Field128>, XofTurboShake128, 16>;
+pub type Prio3Sum = Prio3<Sum<Field64>, XofTurboShake128, 16>;
 
 impl Prio3Sum {
     /// Construct an instance of `Prio3Sum` with the given number of aggregators, where each summand
     /// must be in the range `[0, max_measurement]`. Errors if `max_measurement == 0`.
     pub fn new_sum(
         num_aggregators: u8,
-        max_measurement: <Field128 as FieldElementWithInteger>::Integer,
+        max_measurement: <Field64 as FieldElementWithInteger>::Integer,
     ) -> Result<Self, VdafError> {
         Prio3::new(num_aggregators, 1, 0x00000001, Sum::new(max_measurement)?)
     }
@@ -1711,7 +1711,7 @@ mod tests {
 
         let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce).unwrap();
         assert_matches!(input_shares[0].measurement_share, Share::Leader(ref mut data) => {
-            data[0] += Field128::one();
+            data[0] += Field64::one();
         });
         let result = run_vdaf_prepare(
             &prio3,
@@ -1726,7 +1726,7 @@ mod tests {
 
         let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce).unwrap();
         assert_matches!(input_shares[0].proofs_share, Share::Leader(ref mut data) => {
-                data[0] += Field128::one();
+                data[0] += Field64::one();
         });
         let result = run_vdaf_prepare(
             &prio3,
