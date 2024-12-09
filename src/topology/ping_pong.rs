@@ -275,20 +275,21 @@ where
     }
 }
 
-impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A, PrepareStateDecode>
-    ParameterizedDecode<PrepareStateDecode> for PingPongTransition<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+impl<'a, const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
+    ParameterizedDecode<(&'a A, &'a A::AggregationParam, usize, u16)>
+    for PingPongTransition<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 where
-    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::PrepareState: ParameterizedDecode<PrepareStateDecode> + PartialEq,
+    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE> + 'a,
+    A::PrepareState: ParameterizedDecode<(&'a A, usize)> + PartialEq,
     A::PrepareMessage: PartialEq,
 {
     fn decode_with_param(
-        decoding_param: &PrepareStateDecode,
+        (vdaf, agg_param, agg_id, round): &(&'a A, &'a A::AggregationParam, usize, u16),
         bytes: &mut std::io::Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let previous_prepare_state = A::PrepareState::decode_with_param(decoding_param, bytes)?;
+        let previous_prepare_state = A::PrepareState::decode_with_param(&(vdaf, *agg_id), bytes)?;
         let current_prepare_message =
-            A::PrepareMessage::decode_with_param(&previous_prepare_state, bytes)?;
+            A::PrepareMessage::decode_with_param(&(vdaf, agg_param, *round), bytes)?;
 
         Ok(Self {
             previous_prepare_state,
@@ -436,6 +437,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         leader_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
+        round: u16,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 
     /// PingPongContinue preparation based on the helper's current state and an incoming
@@ -472,6 +474,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         helper_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
+        round: u16,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 }
 
@@ -486,6 +489,7 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
         host_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
+        round: u16,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 }
 
@@ -552,7 +556,7 @@ where
             .map_err(PingPongError::VdafPrepareInit)?;
 
         let inbound_prep_share = if let PingPongMessage::Initialize { prep_share } = inbound {
-            Self::PrepareShare::get_decoded_with_param(&prep_state, prep_share)
+            Self::PrepareShare::get_decoded_with_param(&(self, agg_param, 1, 0), prep_share)
                 .map_err(PingPongError::CodecPrepShare)?
         } else {
             return Err(PingPongError::PeerMessageMismatch {
@@ -577,8 +581,9 @@ where
         leader_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
+        round: u16,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(ctx, true, leader_state, agg_param, inbound)
+        self.continued(ctx, true, leader_state, agg_param, inbound, round)
     }
 
     fn helper_continued(
@@ -587,8 +592,9 @@ where
         helper_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
+        round: u16,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(ctx, false, helper_state, agg_param, inbound)
+        self.continued(ctx, false, helper_state, agg_param, inbound, round)
     }
 }
 
@@ -604,6 +610,7 @@ where
         host_state: Self::State,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
+        round: u16,
     ) -> Result<Self::ContinuedValue, PingPongError> {
         let host_prep_state = if let PingPongState::Continued(state) = host_state {
             state
@@ -628,8 +635,10 @@ where
             PingPongMessage::Finish { prep_msg } => (prep_msg, None),
         };
 
-        let prep_msg = Self::PrepareMessage::get_decoded_with_param(&host_prep_state, prep_msg)
-            .map_err(PingPongError::CodecPrepMessage)?;
+        // TODO: are these the right round numbers, or are they off by one?
+        let prep_msg =
+            Self::PrepareMessage::get_decoded_with_param(&(self, agg_param, round), prep_msg)
+                .map_err(PingPongError::CodecPrepMessage)?;
         let host_prep_transition = self
             .prepare_next(ctx, host_prep_state, prep_msg)
             .map_err(PingPongError::VdafPrepareNext)?;
@@ -639,8 +648,9 @@ where
                 PrepareTransition::Continue(next_prep_state, next_host_prep_share),
                 Some(next_peer_prep_share),
             ) => {
+                let agg_id = if is_leader { 0 } else { 1 };
                 let next_peer_prep_share = Self::PrepareShare::get_decoded_with_param(
-                    &next_prep_state,
+                    &(self, agg_param, agg_id, round + 1),
                     next_peer_prep_share,
                 )
                 .map_err(PingPongError::CodecPrepShare)?;
@@ -727,7 +737,13 @@ mod tests {
         assert_matches!(helper_state, PingPongState::Finished(_));
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(
+                CTX_STR,
+                leader_state,
+                &aggregation_param,
+                &helper_message,
+                1,
+            )
             .unwrap();
         // 1 round VDAF: leader should finish when it gets helper message and emit no message.
         assert_matches!(
@@ -779,7 +795,13 @@ mod tests {
         assert_matches!(helper_state, PingPongState::Continued(_));
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(
+                CTX_STR,
+                leader_state,
+                &aggregation_param,
+                &helper_message,
+                1,
+            )
             .unwrap();
         // 2 round VDAF, round 1: leader should finish and emit a finish message.
         let leader_message = assert_matches!(
@@ -791,7 +813,13 @@ mod tests {
         );
 
         let helper_state = helper
-            .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
+            .helper_continued(
+                CTX_STR,
+                helper_state,
+                &aggregation_param,
+                &leader_message,
+                2,
+            )
             .unwrap();
         // 2 round vdaf, round 1: helper should finish and emit no message.
         assert_matches!(
@@ -843,7 +871,13 @@ mod tests {
         assert_matches!(helper_state, PingPongState::Continued(_));
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(
+                CTX_STR,
+                leader_state,
+                &aggregation_param,
+                &helper_message,
+                1,
+            )
             .unwrap();
         // 3 round VDAF, round 1: leader should continue and emit a continue message.
         let (leader_state, leader_message) = assert_matches!(
@@ -855,7 +889,13 @@ mod tests {
         );
 
         let helper_state = helper
-            .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
+            .helper_continued(
+                CTX_STR,
+                helper_state,
+                &aggregation_param,
+                &leader_message,
+                2,
+            )
             .unwrap();
         // 3 round vdaf, round 2: helper should finish and emit a finish message.
         let helper_message = assert_matches!(
@@ -867,7 +907,13 @@ mod tests {
         );
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(
+                CTX_STR,
+                leader_state,
+                &aggregation_param,
+                &helper_message,
+                3,
+            )
             .unwrap();
         // 3 round VDAF, round 2: leader should finish and emit no message.
         assert_matches!(
@@ -971,7 +1017,11 @@ mod tests {
             )
         );
 
-        let decoded = PingPongTransition::get_decoded_with_param(&(), &encoded).unwrap();
+        let decoded = PingPongTransition::get_decoded_with_param(
+            &(&dummy::Vdaf::new(1), &dummy::AggregationParam(0), 0, 0),
+            &encoded,
+        )
+        .unwrap();
         assert_eq!(transition, decoded);
 
         assert_eq!(
