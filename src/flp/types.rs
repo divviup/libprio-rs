@@ -141,15 +141,14 @@ impl<F: FftFriendlyFieldElement> Debug for Sum<F> {
 
 impl<F: FftFriendlyFieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
-    /// max_measurement]` where `max_measurement > 0`.
-    ///
-    /// # Panics
-    /// Panics if `max_measurement == 0`.
+    /// max_measurement]` where `max_measurement > 0`. Errors if `max_measurement == 0`.
     pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
-        assert!(
-            max_measurement > F::Integer::zero(),
-            "max_measurement must be nonzero"
-        );
+        if max_measurement == F::Integer::zero() {
+            return Err(FlpError::InvalidParameter(
+                "max measurement cannot be zero".to_string(),
+            ));
+        }
+
         // Number of bits needed to represent x is ⌊log₂(x)⌋ + 1
         let bits = max_measurement.checked_ilog2().unwrap() as usize + 1;
 
@@ -283,10 +282,7 @@ impl<F: FftFriendlyFieldElement> Debug for Average<F> {
 
 impl<F: FftFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
-    /// max_measurement]` where `max_measurement > 0`.
-    ///
-    /// # Panics
-    /// Panics if `max_measurement == 0`
+    /// max_measurement]` where `max_measurement > 0`. Errors if `max_measurement == 0`.
     pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
         let summer = Sum::new(max_measurement)?;
         Ok(Average { summer })

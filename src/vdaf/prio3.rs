@@ -144,10 +144,7 @@ pub type Prio3Sum = Prio3<Sum<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Sum {
     /// Construct an instance of `Prio3Sum` with the given number of aggregators, where each summand
-    /// must be in the range `[0, max_measurement]`.
-    ///
-    /// # Panics
-    /// Panics if `max_measurement == 0`
+    /// must be in the range `[0, max_measurement]`. Errors if `max_measurement == 0`.
     pub fn new_sum(
         num_aggregators: u8,
         max_measurement: <Field128 as FieldElementWithInteger>::Integer,
@@ -343,10 +340,7 @@ pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 16>;
 
 impl Prio3Average {
     /// Construct an instance of `Prio3Average` with the given number of aggregators, where each
-    /// summand must be in the range `[0, max_measurement]`.
-    ///
-    /// # Panics
-    /// Panics if `max_measurement == 0`
+    /// summand must be in the range `[0, max_measurement]`. Errors if `max_measurement == 0`.
     pub fn new_average(
         num_aggregators: u8,
         max_measurement: <Field128 as FieldElementWithInteger>::Integer,
