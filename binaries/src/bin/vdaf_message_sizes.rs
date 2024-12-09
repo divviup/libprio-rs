@@ -42,12 +42,12 @@ fn main() {
         )
     );
 
-    let bits = 32;
-    let prio3 = Prio3::new_sum(num_shares, bits).unwrap();
+    let max_measurement = 0xffff_ffff;
+    let prio3 = Prio3::new_sum(num_shares, max_measurement).unwrap();
     let measurement = 1337;
     println!(
         "prio3 sum ({} bits) share size = {}",
-        bits,
+        max_measurement.ilog2() + 1,
         vdaf_input_share_size::<Prio3Sum, 16>(
             prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
         )

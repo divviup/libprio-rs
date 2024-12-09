@@ -201,6 +201,9 @@ pub trait Integer:
 
     /// Returns one.
     fn one() -> Self;
+
+    /// Returns ⌊log₂(self)⌋, or `None` if `self == 0`
+    fn checked_ilog2(&self) -> Option<u32>;
 }
 
 /// Extension trait for field elements that can be converted back and forth to an integer type.
@@ -785,6 +788,10 @@ impl Integer for u32 {
     fn one() -> Self {
         1
     }
+
+    fn checked_ilog2(&self) -> Option<u32> {
+        u32::checked_ilog2(*self)
+    }
 }
 
 impl Integer for u64 {
@@ -798,6 +805,10 @@ impl Integer for u64 {
     fn one() -> Self {
         1
     }
+
+    fn checked_ilog2(&self) -> Option<u32> {
+        u64::checked_ilog2(*self)
+    }
 }
 
 impl Integer for u128 {
@@ -810,6 +821,10 @@ impl Integer for u128 {
 
     fn one() -> Self {
         1
+    }
+
+    fn checked_ilog2(&self) -> Option<u32> {
+        u128::checked_ilog2(*self)
     }
 }
 
