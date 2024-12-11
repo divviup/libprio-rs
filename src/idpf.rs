@@ -30,6 +30,18 @@ use std::{
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
+const EXTEND_DOMAIN_SEP: &[u8; 8] = &[
+    VERSION, 1, /* algorithm class */
+    0, 0, 0, 0, /* algorithm ID */
+    0, 0, /* usage */
+];
+
+const CONVERT_DOMAIN_SEP: &[u8; 8] = &[
+    VERSION, 1, /* algorithm class */
+    0, 0, 0, 0, /* algorithm ID */
+    0, 1, /* usage */
+];
+
 /// IDPF-related errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -394,6 +406,7 @@ where
         input: &IdpfInput,
         inner_values: M,
         leaf_value: VL,
+        ctx: &[u8],
         binder: &[u8],
         random: &[[u8; 16]; 2],
     ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError> {
@@ -402,18 +415,8 @@ where
         let initial_keys: [Seed<16>; 2] =
             [Seed::from_bytes(random[0]), Seed::from_bytes(random[1])];
 
-        let extend_dst = [
-            VERSION, 1, /* algorithm class */
-            0, 0, 0, 0, /* algorithm ID */
-            0, 0, /* usage */
-        ];
-        let convert_dst = [
-            VERSION, 1, /* algorithm class */
-            0, 0, 0, 0, /* algorithm ID */
-            0, 1, /* usage */
-        ];
-        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&extend_dst, binder);
-        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&convert_dst, binder);
+        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&[EXTEND_DOMAIN_SEP, ctx], binder);
+        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&[CONVERT_DOMAIN_SEP, ctx], binder);
 
         let mut keys = [initial_keys[0].0, initial_keys[1].0];
         let mut control_bits = [Choice::from(0u8), Choice::from(1u8)];
@@ -467,6 +470,7 @@ where
         input: &IdpfInput,
         inner_values: M,
         leaf_value: VL,
+        ctx: &[u8],
         binder: &[u8],
     ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
     where
@@ -481,7 +485,7 @@ where
         for random_seed in random.iter_mut() {
             getrandom::getrandom(random_seed)?;
         }
-        self.gen_with_random(input, inner_values, leaf_value, binder, &random)
+        self.gen_with_random(input, inner_values, leaf_value, ctx, binder, &random)
     }
 
     /// Evaluate an IDPF share on `prefix`, starting from a particular tree level with known
@@ -495,23 +499,14 @@ where
         mut key: [u8; 16],
         mut control_bit: Choice,
         prefix: &IdpfInput,
+        ctx: &[u8],
         binder: &[u8],
         cache: &mut dyn IdpfCache,
     ) -> Result<IdpfOutputShare<VI, VL>, IdpfError> {
         let bits = public_share.inner_correction_words.len() + 1;
 
-        let extend_dst = [
-            VERSION, 1, /* algorithm class */
-            0, 0, 0, 0, /* algorithm ID */
-            0, 0, /* usage */
-        ];
-        let convert_dst = [
-            VERSION, 1, /* algorithm class */
-            0, 0, 0, 0, /* algorithm ID */
-            0, 1, /* usage */
-        ];
-        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&extend_dst, binder);
-        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&convert_dst, binder);
+        let extend_xof_fixed_key = XofFixedKeyAes128Key::new(&[EXTEND_DOMAIN_SEP, ctx], binder);
+        let convert_xof_fixed_key = XofFixedKeyAes128Key::new(&[CONVERT_DOMAIN_SEP, ctx], binder);
 
         let mut last_inner_output = None;
         for ((correction_word, input_bit), level) in public_share.inner_correction_words
@@ -556,12 +551,14 @@ where
     /// The IDPF key evaluation algorithm.
     ///
     /// Evaluate an IDPF share on `prefix`.
+    #[allow(clippy::too_many_arguments)]
     pub fn eval(
         &self,
         agg_id: usize,
         public_share: &IdpfPublicShare<VI, VL>,
         key: &Seed<16>,
         prefix: &IdpfInput,
+        ctx: &[u8],
         binder: &[u8],
         cache: &mut dyn IdpfCache,
     ) -> Result<IdpfOutputShare<VI, VL>, IdpfError> {
@@ -602,6 +599,7 @@ where
                         key,
                         Choice::from(control_bit),
                         prefix,
+                        ctx,
                         binder,
                         cache,
                     );
@@ -617,6 +615,7 @@ where
             key.0,
             /* control_bit */ Choice::from((!is_leader) as u8),
             prefix,
+            ctx,
             binder,
             cache,
         )
@@ -1075,6 +1074,8 @@ mod tests {
         sync::Mutex,
     };
 
+    const CTX_STR: &[u8] = b"idpf context";
+
     use assert_matches::assert_matches;
     use bitvec::{
         bitbox,
@@ -1190,6 +1191,7 @@ mod tests {
                 &input,
                 Vec::from([Poplar1IdpfValue::new([Field64::one(), Field64::one()]); 4]),
                 Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
+                CTX_STR,
                 &nonce,
             )
             .unwrap();
@@ -1306,10 +1308,10 @@ mod tests {
     ) {
         let idpf = Idpf::new((), ());
         let share_0 = idpf
-            .eval(0, public_share, &keys[0], prefix, binder, cache_0)
+            .eval(0, public_share, &keys[0], prefix, CTX_STR, binder, cache_0)
             .unwrap();
         let share_1 = idpf
-            .eval(1, public_share, &keys[1], prefix, binder, cache_1)
+            .eval(1, public_share, &keys[1], prefix, CTX_STR, binder, cache_1)
             .unwrap();
         let output = share_0.merge(share_1).unwrap();
         assert_eq!(&output, expected_output);
@@ -1340,7 +1342,7 @@ mod tests {
         let nonce: [u8; 16] = random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
-            .gen(&input, inner_values.clone(), leaf_values, &nonce)
+            .gen(&input, inner_values.clone(), leaf_values, CTX_STR, &nonce)
             .unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
@@ -1409,7 +1411,7 @@ mod tests {
         let nonce: [u8; 16] = random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
-            .gen(&input, inner_values.clone(), leaf_values, &nonce)
+            .gen(&input, inner_values.clone(), leaf_values, CTX_STR, &nonce)
             .unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
@@ -1588,7 +1590,7 @@ mod tests {
         let nonce: [u8; 16] = random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
-            .gen(&input, inner_values.clone(), leaf_values, &nonce)
+            .gen(&input, inner_values.clone(), leaf_values, CTX_STR, &nonce)
             .unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
@@ -1624,6 +1626,7 @@ mod tests {
             &bitbox![].into(),
             Vec::<Poplar1IdpfValue<Field64>>::new(),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            CTX_STR,
             &nonce,
         )
         .unwrap_err();
@@ -1633,6 +1636,7 @@ mod tests {
                 &bitbox![0;10].into(),
                 Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 9]),
                 Poplar1IdpfValue::new([Field255::zero(); 2]),
+                CTX_STR,
                 &nonce,
             )
             .unwrap();
@@ -1642,6 +1646,7 @@ mod tests {
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 8]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            CTX_STR,
             &nonce,
         )
         .unwrap_err();
@@ -1649,6 +1654,7 @@ mod tests {
             &bitbox![0; 10].into(),
             Vec::from([Poplar1IdpfValue::new([Field64::zero(); 2]); 10]),
             Poplar1IdpfValue::new([Field255::zero(); 2]),
+            CTX_STR,
             &nonce,
         )
         .unwrap_err();
@@ -1660,6 +1666,7 @@ mod tests {
                 &public_share,
                 &keys[0],
                 &bitbox![].into(),
+                CTX_STR,
                 &nonce,
                 &mut NoCache::new(),
             )
@@ -1671,6 +1678,7 @@ mod tests {
                 &public_share,
                 &keys[0],
                 &bitbox![0; 11].into(),
+                CTX_STR,
                 &nonce,
                 &mut NoCache::new(),
             )
@@ -2016,6 +2024,7 @@ mod tests {
         }
     }
 
+    #[ignore]
     #[test]
     fn idpf_poplar_generate_test_vector() {
         let test_vector = load_idpfpoplar_test_vector();
@@ -2025,6 +2034,7 @@ mod tests {
                 &test_vector.alpha,
                 test_vector.beta_inner,
                 test_vector.beta_leaf,
+                b"WRONG CTX, REPLACE ME", // TODO: Update test vectors to ones that provide ctx str
                 &test_vector.binder,
                 &test_vector.keys,
             )
@@ -2256,6 +2266,7 @@ mod tests {
                     Field128::from(2),
                     Field128::from(3),
                 ])),
+                CTX_STR,
                 binder,
             )
             .unwrap();
@@ -2266,6 +2277,7 @@ mod tests {
                 &public_share,
                 &key_0,
                 &IdpfInput::from_bytes(b"ou"),
+                CTX_STR,
                 binder,
                 &mut NoCache::new(),
             )
@@ -2276,6 +2288,7 @@ mod tests {
                 &public_share,
                 &key_1,
                 &IdpfInput::from_bytes(b"ou"),
+                CTX_STR,
                 binder,
                 &mut NoCache::new(),
             )
@@ -2294,6 +2307,7 @@ mod tests {
                 &public_share,
                 &key_0,
                 &IdpfInput::from_bytes(b"ae"),
+                CTX_STR,
                 binder,
                 &mut NoCache::new(),
             )
@@ -2304,6 +2318,7 @@ mod tests {
                 &public_share,
                 &key_1,
                 &IdpfInput::from_bytes(b"ae"),
+                CTX_STR,
                 binder,
                 &mut NoCache::new(),
             )

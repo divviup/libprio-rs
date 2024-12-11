@@ -2,305 +2,96 @@
 
 //! Finite field arithmetic for any field GF(p) for which p < 2^128.
 
+#[macro_use]
+mod ops;
+
+pub use ops::{FieldOps, FieldParameters};
+
 /// For each set of field parameters we pre-compute the 1st, 2nd, 4th, ..., 2^20-th principal roots
 /// of unity. The largest of these is used to run the FFT algorithm on an input of size 2^20. This
 /// is the largest input size we would ever need for the cryptographic applications in this crate.
 pub(crate) const MAX_ROOTS: usize = 20;
 
-/// This structure represents the parameters of a finite field GF(p) for which p < 2^128.
-#[derive(Debug, PartialEq, Eq)]
-pub(crate) struct FieldParameters {
-    /// The prime modulus `p`.
-    pub p: u128,
-    /// `mu = -p^(-1) mod 2^64`.
-    pub mu: u64,
-    /// `r2 = (2^128)^2 mod p`.
-    pub r2: u128,
-    /// The `2^num_roots`-th -principal root of unity. This element is used to generate the
-    /// elements of `roots`.
-    pub g: u128,
-    /// The number of principal roots of unity in `roots`.
-    pub num_roots: usize,
-    /// Equal to `2^b - 1`, where `b` is the length of `p` in bits.
-    pub bit_mask: u128,
-    /// `roots[l]` is the `2^l`-th principal root of unity, i.e., `roots[l]` has order `2^l` in the
-    /// multiplicative group. `roots[0]` is equal to one by definition.
-    pub roots: [u128; MAX_ROOTS + 1],
+/// FP32 implements operations over GF(p) for which the prime
+/// modulus `p` fits in a u32 word.
+pub(crate) struct FP32;
+
+impl_field_ops_single_word!(FP32, u32, u64);
+
+impl FieldParameters<u32> for FP32 {
+    const PRIME: u32 = 4293918721;
+    const MU: u32 = 4293918719;
+    const R2: u32 = 266338049;
+    const G: u32 = 3903828692;
+    const NUM_ROOTS: usize = 20;
+    const BIT_MASK: u32 = 4294967295;
+    const ROOTS: [u32; MAX_ROOTS + 1] = [
+        1048575, 4292870146, 1189722990, 3984864191, 2523259768, 2828840154, 1658715539,
+        1534972560, 3732920810, 3229320047, 2836564014, 2170197442, 3760663902, 2144268387,
+        3849278021, 1395394315, 574397626, 125025876, 3755041587, 2680072542, 3903828692,
+    ];
+    #[cfg(test)]
+    const LOG2_BASE: usize = 32;
+    #[cfg(test)]
+    const LOG2_RADIX: usize = 32;
 }
 
-impl FieldParameters {
-    /// Addition. The result will be in [0, p), so long as both x and y are as well.
-    #[inline(always)]
-    pub fn add(&self, x: u128, y: u128) -> u128 {
-        //   0,x
-        // + 0,y
-        // =====
-        //   c,z
-        let (z, carry) = x.overflowing_add(y);
-        //     c, z
-        // -   0, p
-        // ========
-        // b1,s1,s0
-        let (s0, b0) = z.overflowing_sub(self.p);
-        let (_s1, b1) = (carry as u128).overflowing_sub(b0 as u128);
-        // if b1 == 1: return z
-        // else:       return s0
-        let m = 0u128.wrapping_sub(b1 as u128);
-        (z & m) | (s0 & !m)
-    }
+/// FP64 implements operations over GF(p) for which the prime
+/// modulus `p` fits in a u64 word.
+pub(crate) struct FP64;
 
-    /// Subtraction. The result will be in [0, p), so long as both x and y are as well.
-    #[inline(always)]
-    pub fn sub(&self, x: u128, y: u128) -> u128 {
-        //        x
-        // -      y
-        // ========
-        //    b0,z0
-        let (z0, b0) = x.overflowing_sub(y);
-        let m = 0u128.wrapping_sub(b0 as u128);
-        //      z0
-        // +     p
-        // ========
-        //   s1,s0
-        z0.wrapping_add(m & self.p)
-        // if b1 == 1: return s0
-        // else:       return z0
-    }
+impl_field_ops_single_word!(FP64, u64, u128);
 
-    /// Multiplication of field elements in the Montgomery domain. This uses the REDC algorithm
-    /// described [here][montgomery]. The result will be in [0, p).
-    ///
-    /// # Example usage
-    /// ```text
-    /// assert_eq!(fp.residue(fp.mul(fp.montgomery(23), fp.montgomery(2))), 46);
-    /// ```
-    ///
-    /// [montgomery]: https://www.ams.org/journals/mcom/1985-44-170/S0025-5718-1985-0777282-X/S0025-5718-1985-0777282-X.pdf
-    #[inline(always)]
-    pub fn mul(&self, x: u128, y: u128) -> u128 {
-        let x = [lo64(x), hi64(x)];
-        let y = [lo64(y), hi64(y)];
-        let p = [lo64(self.p), hi64(self.p)];
-        let mut zz = [0; 4];
-
-        // Integer multiplication
-        // z = x * y
-
-        //       x1,x0
-        // *     y1,y0
-        // ===========
-        // z3,z2,z1,z0
-        let mut result = x[0] * y[0];
-        let mut carry = hi64(result);
-        zz[0] = lo64(result);
-        result = x[0] * y[1];
-        let mut hi = hi64(result);
-        let mut lo = lo64(result);
-        result = lo + carry;
-        zz[1] = lo64(result);
-        let mut cc = hi64(result);
-        result = hi + cc;
-        zz[2] = lo64(result);
-
-        result = x[1] * y[0];
-        hi = hi64(result);
-        lo = lo64(result);
-        result = zz[1] + lo;
-        zz[1] = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        carry = lo64(result);
-
-        result = x[1] * y[1];
-        hi = hi64(result);
-        lo = lo64(result);
-        result = lo + carry;
-        lo = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        hi = lo64(result);
-        result = zz[2] + lo;
-        zz[2] = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        zz[3] = lo64(result);
-
-        // Montgomery Reduction
-        // z = z + p * mu*(z mod 2^64), where mu = (-p)^(-1) mod 2^64.
-
-        // z3,z2,z1,z0
-        // +     p1,p0
-        // *         w = mu*z0
-        // ===========
-        // z3,z2,z1, 0
-        let w = self.mu.wrapping_mul(zz[0] as u64);
-        result = p[0] * (w as u128);
-        hi = hi64(result);
-        lo = lo64(result);
-        result = zz[0] + lo;
-        zz[0] = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        carry = lo64(result);
-
-        result = p[1] * (w as u128);
-        hi = hi64(result);
-        lo = lo64(result);
-        result = lo + carry;
-        lo = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        hi = lo64(result);
-        result = zz[1] + lo;
-        zz[1] = lo64(result);
-        cc = hi64(result);
-        result = zz[2] + hi + cc;
-        zz[2] = lo64(result);
-        cc = hi64(result);
-        result = zz[3] + cc;
-        zz[3] = lo64(result);
-
-        //    z3,z2,z1
-        // +     p1,p0
-        // *         w = mu*z1
-        // ===========
-        //    z3,z2, 0
-        let w = self.mu.wrapping_mul(zz[1] as u64);
-        result = p[0] * (w as u128);
-        hi = hi64(result);
-        lo = lo64(result);
-        result = zz[1] + lo;
-        zz[1] = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        carry = lo64(result);
-
-        result = p[1] * (w as u128);
-        hi = hi64(result);
-        lo = lo64(result);
-        result = lo + carry;
-        lo = lo64(result);
-        cc = hi64(result);
-        result = hi + cc;
-        hi = lo64(result);
-        result = zz[2] + lo;
-        zz[2] = lo64(result);
-        cc = hi64(result);
-        result = zz[3] + hi + cc;
-        zz[3] = lo64(result);
-        cc = hi64(result);
-
-        // z = (z3,z2)
-        let prod = zz[2] | (zz[3] << 64);
-
-        // Final subtraction
-        // If z >= p, then z = z - p
-
-        //    cc, z
-        // -   0, p
-        // ========
-        // b1,s1,s0
-        let (s0, b0) = prod.overflowing_sub(self.p);
-        let (_s1, b1) = cc.overflowing_sub(b0 as u128);
-        // if b1 == 1: return z
-        // else:       return s0
-        let mask = 0u128.wrapping_sub(b1 as u128);
-        (prod & mask) | (s0 & !mask)
-    }
-
-    /// Modular exponentiation, i.e., `x^exp (mod p)` where `p` is the modulus. Note that the
-    /// runtime of this algorithm is linear in the bit length of `exp`.
-    pub fn pow(&self, x: u128, exp: u128) -> u128 {
-        let mut t = self.montgomery(1);
-        for i in (0..128 - exp.leading_zeros()).rev() {
-            t = self.mul(t, t);
-            if (exp >> i) & 1 != 0 {
-                t = self.mul(t, x);
-            }
-        }
-        t
-    }
-
-    /// Modular inversion, i.e., x^-1 (mod p) where `p` is the modulus. Note that the runtime of
-    /// this algorithm is linear in the bit length of `p`.
-    #[inline(always)]
-    pub fn inv(&self, x: u128) -> u128 {
-        self.pow(x, self.p - 2)
-    }
-
-    /// Negation, i.e., `-x (mod p)` where `p` is the modulus.
-    #[inline(always)]
-    pub fn neg(&self, x: u128) -> u128 {
-        self.sub(0, x)
-    }
-
-    /// Maps an integer to its internal representation. Field elements are mapped to the Montgomery
-    /// domain in order to carry out field arithmetic. The result will be in [0, p).
-    ///
-    /// # Example usage
-    /// ```text
-    /// let integer = 1; // Standard integer representation
-    /// let elem = fp.montgomery(integer); // Internal representation in the Montgomery domain
-    /// assert_eq!(elem, 2564090464);
-    /// ```
-    #[inline(always)]
-    pub fn montgomery(&self, x: u128) -> u128 {
-        modp(self.mul(x, self.r2), self.p)
-    }
-
-    /// Maps a field element to its representation as an integer. The result will be in [0, p).
-    ///
-    /// #Example usage
-    /// ```text
-    /// let elem = 2564090464; // Internal representation in the Montgomery domain
-    /// let integer = fp.residue(elem); // Standard integer representation
-    /// assert_eq!(integer, 1);
-    /// ```
-    #[inline(always)]
-    pub fn residue(&self, x: u128) -> u128 {
-        modp(self.mul(x, 1), self.p)
-    }
+impl FieldParameters<u64> for FP64 {
+    const PRIME: u64 = 18446744069414584321;
+    const MU: u64 = 18446744069414584319;
+    const R2: u64 = 18446744065119617025;
+    const G: u64 = 15733474329512464024;
+    const NUM_ROOTS: usize = 32;
+    const BIT_MASK: u64 = 18446744073709551615;
+    const ROOTS: [u64; MAX_ROOTS + 1] = [
+        4294967295,
+        18446744065119617026,
+        18446744069414518785,
+        18374686475393433601,
+        268435456,
+        18446673700670406657,
+        18446744069414584193,
+        576460752303421440,
+        16576810576923738718,
+        6647628942875889800,
+        10087739294013848503,
+        2135208489130820273,
+        10781050935026037169,
+        3878014442329970502,
+        1205735313231991947,
+        2523909884358325590,
+        13797134855221748930,
+        12267112747022536458,
+        430584883067102937,
+        10135969988448727187,
+        6815045114074884550,
+    ];
+    #[cfg(test)]
+    const LOG2_BASE: usize = 64;
+    #[cfg(test)]
+    const LOG2_RADIX: usize = 64;
 }
 
-#[inline(always)]
-pub(crate) fn lo64(x: u128) -> u128 {
-    x & ((1 << 64) - 1)
-}
+/// FP128 implements operations over GF(p) for which the prime
+/// modulus `p` fits in a u128 word.
+pub(crate) struct FP128;
 
-#[inline(always)]
-pub(crate) fn hi64(x: u128) -> u128 {
-    x >> 64
-}
+impl_field_ops_split_word!(FP128, u128, u64);
 
-#[inline(always)]
-fn modp(x: u128, p: u128) -> u128 {
-    let (z, carry) = x.overflowing_sub(p);
-    let m = 0u128.wrapping_sub(carry as u128);
-    z.wrapping_add(m & p)
-}
-
-pub(crate) const FP32: FieldParameters = FieldParameters {
-    p: 4293918721, // 32-bit prime
-    mu: 17302828673139736575,
-    r2: 1676699750,
-    g: 1074114499,
-    num_roots: 20,
-    bit_mask: 4294967295,
-    roots: [
-        2564090464, 1729828257, 306605458, 2294308040, 1648889905, 57098624, 2788941825,
-        2779858277, 368200145, 2760217336, 594450960, 4255832533, 1372848488, 721329415,
-        3873251478, 1134002069, 7138597, 2004587313, 2989350643, 725214187, 1074114499,
-    ],
-};
-
-pub(crate) const FP128: FieldParameters = FieldParameters {
-    p: 340282366920938462946865773367900766209, // 128-bit prime
-    mu: 18446744073709551615,
-    r2: 403909908237944342183153,
-    g: 107630958476043550189608038630704257141,
-    num_roots: 66,
-    bit_mask: 340282366920938463463374607431768211455,
-    roots: [
+impl FieldParameters<u128> for FP128 {
+    const PRIME: u128 = 340282366920938462946865773367900766209;
+    const MU: u128 = 18446744073709551615;
+    const R2: u128 = 403909908237944342183153;
+    const G: u128 = 107630958476043550189608038630704257141;
+    const NUM_ROOTS: usize = 66;
+    const BIT_MASK: u128 = 340282366920938463463374607431768211455;
+    const ROOTS: [u128; MAX_ROOTS + 1] = [
         516508834063867445247,
         340282366920938462430356939304033320962,
         129526470195413442198896969089616959958,
@@ -322,8 +113,12 @@ pub(crate) const FP128: FieldParameters = FieldParameters {
         332677126194796691532164818746739771387,
         258279638927684931537542082169183965856,
         148221243758794364405224645520862378432,
-    ],
-};
+    ];
+    #[cfg(test)]
+    const LOG2_BASE: usize = 64;
+    #[cfg(test)]
+    const LOG2_RADIX: usize = 128;
+}
 
 /// Compute the ceiling of the base-2 logarithm of `x`.
 pub(crate) fn log2(x: u128) -> u128 {
@@ -333,98 +128,14 @@ pub(crate) fn log2(x: u128) -> u128 {
 
 #[cfg(test)]
 pub(crate) mod tests {
-    use super::*;
+    use core::{cmp::max, fmt::Debug, marker::PhantomData};
     use modinverse::modinverse;
     use num_bigint::{BigInt, ToBigInt};
+    use num_traits::AsPrimitive;
     use rand::{distributions::Distribution, thread_rng, Rng};
-    use std::cmp::max;
 
-    /// This trait abstracts over the details of [`FieldParameters`] and
-    /// [`FieldParameters64`](crate::fp64::FieldParameters64) to allow reuse of test code.
-    pub(crate) trait TestFieldParameters {
-        fn p(&self) -> u128;
-        fn g(&self) -> u128;
-        fn r2(&self) -> u128;
-        fn mu(&self) -> u64;
-        fn bit_mask(&self) -> u128;
-        fn num_roots(&self) -> usize;
-        fn roots(&self) -> Vec<u128>;
-        fn montgomery(&self, x: u128) -> u128;
-        fn residue(&self, x: u128) -> u128;
-        fn add(&self, x: u128, y: u128) -> u128;
-        fn sub(&self, x: u128, y: u128) -> u128;
-        fn neg(&self, x: u128) -> u128;
-        fn mul(&self, x: u128, y: u128) -> u128;
-        fn pow(&self, x: u128, exp: u128) -> u128;
-        fn inv(&self, x: u128) -> u128;
-        fn radix(&self) -> BigInt;
-    }
-
-    impl TestFieldParameters for FieldParameters {
-        fn p(&self) -> u128 {
-            self.p
-        }
-
-        fn g(&self) -> u128 {
-            self.g
-        }
-
-        fn r2(&self) -> u128 {
-            self.r2
-        }
-
-        fn mu(&self) -> u64 {
-            self.mu
-        }
-
-        fn bit_mask(&self) -> u128 {
-            self.bit_mask
-        }
-
-        fn num_roots(&self) -> usize {
-            self.num_roots
-        }
-
-        fn roots(&self) -> Vec<u128> {
-            self.roots.to_vec()
-        }
-
-        fn montgomery(&self, x: u128) -> u128 {
-            FieldParameters::montgomery(self, x)
-        }
-
-        fn residue(&self, x: u128) -> u128 {
-            FieldParameters::residue(self, x)
-        }
-
-        fn add(&self, x: u128, y: u128) -> u128 {
-            FieldParameters::add(self, x, y)
-        }
-
-        fn sub(&self, x: u128, y: u128) -> u128 {
-            FieldParameters::sub(self, x, y)
-        }
-
-        fn neg(&self, x: u128) -> u128 {
-            FieldParameters::neg(self, x)
-        }
-
-        fn mul(&self, x: u128, y: u128) -> u128 {
-            FieldParameters::mul(self, x, y)
-        }
-
-        fn pow(&self, x: u128, exp: u128) -> u128 {
-            FieldParameters::pow(self, x, exp)
-        }
-
-        fn inv(&self, x: u128) -> u128 {
-            FieldParameters::inv(self, x)
-        }
-
-        fn radix(&self) -> BigInt {
-            BigInt::from(1) << 128
-        }
-    }
+    use super::ops::Word;
+    use crate::fp::{log2, FieldOps, FP128, FP32, FP64, MAX_ROOTS};
 
     #[test]
     fn test_log2() {
@@ -440,165 +151,213 @@ pub(crate) mod tests {
         assert_eq!(log2((1 << 127) + 13), 128);
     }
 
-    pub(crate) struct TestFieldParametersData {
-        /// The paramters being tested
-        pub fp: Box<dyn TestFieldParameters>,
+    struct TestFieldParametersData<T: FieldOps<W>, W: Word> {
         /// Expected fp.p
-        pub expected_p: u128,
+        pub expected_p: W,
         /// Expected fp.residue(fp.g)
-        pub expected_g: u128,
-        /// Expect fp.residue(fp.pow(fp.g, expected_order)) == 1
-        pub expected_order: u128,
+        pub expected_g: W,
+        /// Expect fp.residue(fp.pow(fp.g, 1 << expected_log2_order)) == 1
+        pub expected_log2_order: usize,
+
+        phantom: PhantomData<T>,
     }
 
-    #[test]
-    fn test_fp32_u128() {
-        all_field_parameters_tests(TestFieldParametersData {
-            fp: Box::new(FP32),
-            expected_p: 4293918721,
-            expected_g: 3925978153,
-            expected_order: 1 << 20,
-        });
-    }
-
-    #[test]
-    fn test_fp128_u128() {
-        all_field_parameters_tests(TestFieldParametersData {
-            fp: Box::new(FP128),
-            expected_p: 340282366920938462946865773367900766209,
-            expected_g: 145091266659756586618791329697897684742,
-            expected_order: 1 << 66,
-        });
-    }
-
-    pub(crate) fn all_field_parameters_tests(t: TestFieldParametersData) {
-        // Check that the field parameters have been constructed properly.
-        check_consistency(t.fp.as_ref(), t.expected_p, t.expected_g, t.expected_order);
+    impl<T, W> TestFieldParametersData<T, W>
+    where
+        T: FieldOps<W>,
+        W: Word + AsPrimitive<u128> + ToBigInt + for<'a> TryFrom<&'a BigInt> + Debug,
+        for<'a> <W as TryFrom<&'a BigInt>>::Error: Debug,
+    {
+        fn all_field_parameters_tests(&self) {
+            self.check_generator();
+            self.check_consistency();
+            self.arithmetic_test();
+        }
 
         // Check that the generator has the correct order.
-        assert_eq!(t.fp.residue(t.fp.pow(t.fp.g(), t.expected_order)), 1);
-        assert_ne!(t.fp.residue(t.fp.pow(t.fp.g(), t.expected_order / 2)), 1);
+        fn check_generator(&self) {
+            assert_eq!(
+                T::residue(T::pow(T::G, W::ONE << self.expected_log2_order)),
+                W::ONE
+            );
+            assert_ne!(
+                T::residue(T::pow(T::G, W::ONE << (self.expected_log2_order / 2))),
+                W::ONE
+            );
+        }
+
+        // Check that the field parameters have been constructed properly.
+        fn check_consistency(&self) {
+            assert_eq!(T::PRIME, self.expected_p, "p mismatch");
+
+            let u128_p = T::PRIME.as_();
+            let base = 1i128 << T::LOG2_BASE;
+            let mu = match modinverse((-(u128_p as i128)).rem_euclid(base), base) {
+                Some(mu) => mu as u128,
+                None => panic!("inverse of -p (mod base) is undefined"),
+            };
+            assert_eq!(T::MU.as_(), mu, "mu mismatch");
+
+            let big_p = &u128_p.to_bigint().unwrap();
+            let big_radix = BigInt::from(1) << T::LOG2_RADIX;
+            let big_r: &BigInt = &(big_radix % big_p);
+            let big_r2: &BigInt = &(&(big_r * big_r) % big_p);
+            let mut it = big_r2.iter_u64_digits();
+            let mut r2 = 0;
+            r2 |= it.next().unwrap() as u128;
+            if let Some(x) = it.next() {
+                r2 |= (x as u128) << 64;
+            }
+            assert_eq!(T::R2.as_(), r2, "r2 mismatch");
+
+            assert_eq!(T::G, T::montgomery(self.expected_g), "g mismatch");
+            assert_eq!(
+                T::residue(T::pow(T::G, W::ONE << self.expected_log2_order)),
+                W::ONE,
+                "g order incorrect"
+            );
+
+            let num_roots = self.expected_log2_order;
+            assert_eq!(T::NUM_ROOTS, num_roots, "num_roots mismatch");
+
+            let mut roots = vec![W::ZERO; max(num_roots, MAX_ROOTS) + 1];
+            roots[num_roots] = T::montgomery(self.expected_g);
+            for i in (0..num_roots).rev() {
+                roots[i] = T::mul(roots[i + 1], roots[i + 1]);
+            }
+            assert_eq!(T::ROOTS, &roots[..MAX_ROOTS + 1], "roots mismatch");
+            assert_eq!(T::residue(T::ROOTS[0]), W::ONE, "first root is not one");
+
+            let bit_mask = (BigInt::from(1) << big_p.bits()) - BigInt::from(1);
+            assert_eq!(
+                T::BIT_MASK.to_bigint().unwrap(),
+                bit_mask,
+                "bit_mask mismatch"
+            );
+        }
 
         // Test arithmetic using the field parameters.
-        arithmetic_test(t.fp.as_ref());
-    }
+        fn arithmetic_test(&self) {
+            let u128_p = T::PRIME.as_();
+            let big_p = &u128_p.to_bigint().unwrap();
+            let big_zero = &BigInt::from(0);
+            let uniform = rand::distributions::Uniform::from(0..u128_p);
+            let mut rng = thread_rng();
 
-    fn check_consistency(fp: &dyn TestFieldParameters, p: u128, g: u128, order: u128) {
-        assert_eq!(fp.p(), p, "p mismatch");
-
-        let mu = match modinverse((-(p as i128)).rem_euclid(1 << 64), 1 << 64) {
-            Some(mu) => mu as u64,
-            None => panic!("inverse of -p (mod 2^64) is undefined"),
-        };
-        assert_eq!(fp.mu(), mu, "mu mismatch");
-
-        let big_p = &p.to_bigint().unwrap();
-        let big_r: &BigInt = &(fp.radix() % big_p);
-        let big_r2: &BigInt = &(&(big_r * big_r) % big_p);
-        let mut it = big_r2.iter_u64_digits();
-        let mut r2 = 0;
-        r2 |= it.next().unwrap() as u128;
-        if let Some(x) = it.next() {
-            r2 |= (x as u128) << 64;
-        }
-        assert_eq!(fp.r2(), r2, "r2 mismatch");
-
-        assert_eq!(fp.g(), fp.montgomery(g), "g mismatch");
-        assert_eq!(fp.residue(fp.pow(fp.g(), order)), 1, "g order incorrect");
-
-        let num_roots = log2(order) as usize;
-        assert_eq!(order, 1 << num_roots, "order not a power of 2");
-        assert_eq!(fp.num_roots(), num_roots, "num_roots mismatch");
-
-        let mut roots = vec![0; max(num_roots, MAX_ROOTS) + 1];
-        roots[num_roots] = fp.montgomery(g);
-        for i in (0..num_roots).rev() {
-            roots[i] = fp.mul(roots[i + 1], roots[i + 1]);
-        }
-        assert_eq!(fp.roots(), &roots[..MAX_ROOTS + 1], "roots mismatch");
-        assert_eq!(fp.residue(fp.roots()[0]), 1, "first root is not one");
-
-        let bit_mask = (BigInt::from(1) << big_p.bits()) - BigInt::from(1);
-        assert_eq!(
-            fp.bit_mask().to_bigint().unwrap(),
-            bit_mask,
-            "bit_mask mismatch"
-        );
-    }
-
-    fn arithmetic_test(fp: &dyn TestFieldParameters) {
-        let big_p = &fp.p().to_bigint().unwrap();
-        let big_zero = &BigInt::from(0);
-        let uniform = rand::distributions::Uniform::from(0..fp.p());
-        let mut rng = thread_rng();
-
-        let mut weird_ints = Vec::from([
-            0,
-            1,
-            fp.bit_mask() - fp.p(),
-            fp.bit_mask() - fp.p() + 1,
-            fp.p() - 1,
-        ]);
-        if fp.p() > u64::MAX as u128 {
-            weird_ints.extend_from_slice(&[
-                u64::MAX as u128,
-                1 << 64,
-                fp.p() & u64::MAX as u128,
-                fp.p() & !u64::MAX as u128,
-                fp.p() & !u64::MAX as u128 | 1,
+            let mut weird_ints = Vec::from([
+                0,
+                1,
+                T::BIT_MASK.as_() - u128_p,
+                T::BIT_MASK.as_() - u128_p + 1,
+                u128_p - 1,
             ]);
-        }
-
-        let mut generate_random = || -> (u128, BigInt) {
-            // Add bias to random element generation, to explore "interesting" inputs.
-            let int = if rng.gen_ratio(1, 4) {
-                weird_ints[rng.gen_range(0..weird_ints.len())]
-            } else {
-                uniform.sample(&mut rng)
-            };
-            let bigint = int.to_bigint().unwrap();
-            let montgomery_domain = fp.montgomery(int);
-            (montgomery_domain, bigint)
-        };
-
-        for _ in 0..1000 {
-            let (x, ref big_x) = generate_random();
-            let (y, ref big_y) = generate_random();
-
-            // Test addition.
-            let got = fp.add(x, y);
-            let want = (big_x + big_y) % big_p;
-            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
-
-            // Test subtraction.
-            let got = fp.sub(x, y);
-            let want = if big_x >= big_y {
-                big_x - big_y
-            } else {
-                big_p - big_y + big_x
-            };
-            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
-
-            // Test multiplication.
-            let got = fp.mul(x, y);
-            let want = (big_x * big_y) % big_p;
-            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
-
-            // Test inversion.
-            let got = fp.inv(x);
-            let want = big_x.modpow(&(big_p - 2u128), big_p);
-            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
-            if big_x == big_zero {
-                assert_eq!(fp.residue(fp.mul(got, x)), 0);
-            } else {
-                assert_eq!(fp.residue(fp.mul(got, x)), 1);
+            if u128_p > u64::MAX as u128 {
+                weird_ints.extend_from_slice(&[
+                    u64::MAX as u128,
+                    1 << 64,
+                    u128_p & u64::MAX as u128,
+                    u128_p & !u64::MAX as u128,
+                    u128_p & !u64::MAX as u128 | 1,
+                ]);
             }
 
-            // Test negation.
-            let got = fp.neg(x);
-            let want = (big_p - big_x) % big_p;
-            assert_eq!(fp.residue(got).to_bigint().unwrap(), want);
-            assert_eq!(fp.residue(fp.add(got, x)), 0);
+            let mut generate_random = || -> (W, BigInt) {
+                // Add bias to random element generation, to explore "interesting" inputs.
+                let intu128 = if rng.gen_ratio(1, 4) {
+                    weird_ints[rng.gen_range(0..weird_ints.len())]
+                } else {
+                    uniform.sample(&mut rng)
+                };
+                let bigint = intu128.to_bigint().unwrap();
+                let int = W::try_from(&bigint).unwrap();
+                let montgomery_domain = T::montgomery(int);
+                (montgomery_domain, bigint)
+            };
+
+            for _ in 0..1000 {
+                let (x, ref big_x) = generate_random();
+                let (y, ref big_y) = generate_random();
+
+                // Test addition.
+                let got = T::add(x, y);
+                let want = (big_x + big_y) % big_p;
+                assert_eq!(T::residue(got).to_bigint().unwrap(), want);
+
+                // Test subtraction.
+                let got = T::sub(x, y);
+                let want = if big_x >= big_y {
+                    big_x - big_y
+                } else {
+                    big_p - big_y + big_x
+                };
+                assert_eq!(T::residue(got).to_bigint().unwrap(), want);
+
+                // Test multiplication.
+                let got = T::mul(x, y);
+                let want = (big_x * big_y) % big_p;
+                assert_eq!(T::residue(got).to_bigint().unwrap(), want);
+
+                // Test inversion.
+                let got = T::inv(x);
+                let want = big_x.modpow(&(big_p - 2), big_p);
+                assert_eq!(T::residue(got).to_bigint().unwrap(), want);
+                if big_x == big_zero {
+                    assert_eq!(T::residue(T::mul(got, x)), W::ZERO);
+                } else {
+                    assert_eq!(T::residue(T::mul(got, x)), W::ONE);
+                }
+
+                // Test negation.
+                let got = T::neg(x);
+                let want = (big_p - big_x) % big_p;
+                assert_eq!(T::residue(got).to_bigint().unwrap(), want);
+                assert_eq!(T::residue(T::add(got, x)), W::ZERO);
+            }
+        }
+    }
+
+    mod fp32 {
+        #[test]
+        fn check_field_parameters() {
+            use super::*;
+
+            TestFieldParametersData::<FP32, _> {
+                expected_p: 4293918721,
+                expected_g: 3925978153,
+                expected_log2_order: 20,
+                phantom: PhantomData,
+            }
+            .all_field_parameters_tests();
+        }
+    }
+
+    mod fp64 {
+        #[test]
+        fn check_field_parameters() {
+            use super::*;
+
+            TestFieldParametersData::<FP64, _> {
+                expected_p: 18446744069414584321,
+                expected_g: 1753635133440165772,
+                expected_log2_order: 32,
+                phantom: PhantomData,
+            }
+            .all_field_parameters_tests();
+        }
+    }
+
+    mod fp128 {
+        #[test]
+        fn check_field_parameters() {
+            use super::*;
+
+            TestFieldParametersData::<FP128, _> {
+                expected_p: 340282366920938462946865773367900766209,
+                expected_g: 145091266659756586618791329697897684742,
+                expected_log2_order: 66,
+                phantom: PhantomData,
+            }
+            .all_field_parameters_tests();
         }
     }
 }

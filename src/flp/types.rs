@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`] implementations.
 
-use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt};
+use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt, Integer};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -63,15 +63,20 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
         vec![Box::new(Mul::new(1))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         _num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        Ok(g[0].call(&[input[0], input[0]])? - input[0])
+        let out = g[0].call(&[input[0], input[0]])? - input[0];
+        Ok(vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -99,46 +104,66 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
         0
     }
 
+    fn eval_output_len(&self) -> usize {
+        1
+    }
+
     fn prove_rand_len(&self) -> usize {
         2
     }
-
-    fn query_rand_len(&self) -> usize {
-        1
-    }
 }
 
-/// This sum type. Each measurement is a integer in `[0, 2^bits)` and the aggregate is the sum of
-/// the measurements.
+/// The sum type. Each measurement is a integer in `[0, max_measurement]` and the aggregate is the
+/// sum of the measurements.
 ///
 /// The validity circuit is based on the SIMD circuit construction of [[BBCG+19], Theorem 5.3].
 ///
 /// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, PartialEq, Eq)]
 pub struct Sum<F: FftFriendlyFieldElement> {
+    max_measurement: F::Integer,
+
+    // Computed from max_measurement
+    offset: F::Integer,
     bits: usize,
-    range_checker: Vec<F>,
+    // Constant
+    bit_range_checker: Vec<F>,
 }
 
 impl<F: FftFriendlyFieldElement> Debug for Sum<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Sum").field("bits", &self.bits).finish()
+        f.debug_struct("Sum")
+            .field("max_measurement", &self.max_measurement)
+            .field("bits", &self.bits)
+            .finish()
     }
 }
 
 impl<F: FftFriendlyFieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
-    /// 2^bits)`.
-    pub fn new(bits: usize) -> Result<Self, FlpError> {
-        if !F::valid_integer_bitlength(bits) {
-            return Err(FlpError::Encode(
-                "invalid bits: number of bits exceeds maximum number of bits in this field"
-                    .to_string(),
+    /// max_measurement]` where `max_measurement > 0`. Errors if `max_measurement == 0`.
+    pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
+        if max_measurement == F::Integer::zero() {
+            return Err(FlpError::InvalidParameter(
+                "max measurement cannot be zero".to_string(),
             ));
         }
+
+        // Number of bits needed to represent x is ⌊log₂(x)⌋ + 1
+        let bits = max_measurement.checked_ilog2().unwrap() as usize + 1;
+
+        // The offset we add to the summand for range-checking purposes
+        let one = F::Integer::try_from(1).unwrap();
+        let offset = (one << bits) - one - max_measurement;
+
+        // Construct a range checker to ensure encoded bits are in the range [0, 2)
+        let bit_range_checker = poly_range_check(0, 2);
+
         Ok(Self {
             bits,
-            range_checker: poly_range_check(0, 2),
+            max_measurement,
+            offset,
+            bit_range_checker,
         })
     }
 }
@@ -149,8 +174,17 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_as_bitvector(*summand, self.bits)?.collect();
-        Ok(v)
+        if summand > &self.max_measurement {
+            return Err(FlpError::Encode(format!(
+                "unexpected measurement: got {:?}; want ≤{:?}",
+                summand, self.max_measurement
+            )));
+        }
+
+        let enc_summand = F::encode_as_bitvector(*summand, self.bits)?;
+        let enc_summand_plus_offset = F::encode_as_bitvector(self.offset + *summand, self.bits)?;
+
+        Ok(enc_summand.chain(enc_summand_plus_offset).collect())
     }
 
     fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
@@ -159,9 +193,13 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
         vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.bits,
+            self.bit_range_checker.clone(),
+            2 * self.bits,
         ))]
+    }
+
+    fn num_gadgets(&self) -> usize {
+        1
     }
 
     fn valid(
@@ -169,24 +207,38 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
-        _num_shares: usize,
-    ) -> Result<F, FlpError> {
+        num_shares: usize,
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+        let gadget = &mut g[0];
+        let bit_checks = input
+            .iter()
+            .map(|&b| gadget.call(&[b]))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let range_check = {
+            let offset = F::from(self.offset);
+            let shares_inv = F::from(F::valid_integer_try_from(num_shares)?).inv();
+            let sum = F::decode_bitvector(&input[..self.bits])?;
+            let sum_plus_offset = F::decode_bitvector(&input[self.bits..])?;
+            offset * shares_inv + sum - sum_plus_offset
+        };
+
+        Ok([bit_checks.as_slice(), &[range_check]].concat())
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         self.truncate_call_check(&input)?;
-        let res = F::decode_bitvector(&input)?;
+        let res = F::decode_bitvector(&input[..self.bits])?;
         Ok(vec![res])
     }
 
     fn input_len(&self) -> usize {
-        self.bits
+        2 * self.bits
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
+        2 * ((1 + 2 * self.bits).next_power_of_two() - 1) + 2
     }
 
     fn verifier_len(&self) -> usize {
@@ -198,46 +250,42 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
     }
 
     fn joint_rand_len(&self) -> usize {
-        1
+        0
+    }
+
+    fn eval_output_len(&self) -> usize {
+        2 * self.bits + 1
     }
 
     fn prove_rand_len(&self) -> usize {
         1
     }
-
-    fn query_rand_len(&self) -> usize {
-        1
-    }
 }
 
-/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
-/// aggregate is the arithmetic average.
+/// The average type. Each measurement is an integer in `[0, max_measurement]` and the aggregate is
+/// the arithmetic average of the measurements.
+// This is just a `Sum` object under the hood. The only difference is that the aggregate result is
+// an f64, which we get by dividing by `num_measurements`
 #[derive(Clone, PartialEq, Eq)]
 pub struct Average<F: FftFriendlyFieldElement> {
-    bits: usize,
-    range_checker: Vec<F>,
+    summer: Sum<F>,
 }
 
 impl<F: FftFriendlyFieldElement> Debug for Average<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Average").field("bits", &self.bits).finish()
+        f.debug_struct("Average")
+            .field("max_measurement", &self.summer.max_measurement)
+            .field("bits", &self.summer.bits)
+            .finish()
     }
 }
 
 impl<F: FftFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
-    /// 2^bits)`.
-    pub fn new(bits: usize) -> Result<Self, FlpError> {
-        if !F::valid_integer_bitlength(bits) {
-            return Err(FlpError::Encode(
-                "invalid bits: number of bits exceeds maximum number of bits in this field"
-                    .to_string(),
-            ));
-        }
-        Ok(Self {
-            bits,
-            range_checker: poly_range_check(0, 2),
-        })
+    /// max_measurement]` where `max_measurement > 0`. Errors if `max_measurement == 0`.
+    pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
+        let summer = Sum::new(max_measurement)?;
+        Ok(Average { summer })
     }
 }
 
@@ -247,25 +295,25 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
     type Field = F;
 
     fn encode_measurement(&self, summand: &F::Integer) -> Result<Vec<F>, FlpError> {
-        let v = F::encode_as_bitvector(*summand, self.bits)?.collect();
-        Ok(v)
+        self.summer.encode_measurement(summand)
     }
 
     fn decode_result(&self, data: &[F], num_measurements: usize) -> Result<f64, FlpError> {
         // Compute the average from the aggregated sum.
-        let data = decode_result(data)?;
-        let data: u64 = data.try_into().map_err(|err| {
-            FlpError::Decode(format!("failed to convert {data:?} to u64: {err}",))
-        })?;
+        let sum = self.summer.decode_result(data, num_measurements)?;
+        let data: u64 = sum
+            .try_into()
+            .map_err(|err| FlpError::Decode(format!("failed to convert {sum:?} to u64: {err}",)))?;
         let result = (data as f64) / (num_measurements as f64);
         Ok(result)
     }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
-        vec![Box::new(PolyEval::new(
-            self.range_checker.clone(),
-            self.bits,
-        ))]
+        self.summer.gadget()
+    }
+
+    fn num_gadgets(&self) -> usize {
+        self.summer.num_gadgets()
     }
 
     fn valid(
@@ -273,44 +321,41 @@ impl<F: FftFriendlyFieldElement> Type for Average<F> {
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
-        _num_shares: usize,
-    ) -> Result<F, FlpError> {
-        self.valid_call_check(input, joint_rand)?;
-        call_gadget_on_vec_entries(&mut g[0], input, joint_rand[0])
+        num_shares: usize,
+    ) -> Result<Vec<F>, FlpError> {
+        self.summer.valid(g, input, joint_rand, num_shares)
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
-        self.truncate_call_check(&input)?;
-        let res = F::decode_bitvector(&input)?;
-        Ok(vec![res])
+        self.summer.truncate(input)
     }
 
     fn input_len(&self) -> usize {
-        self.bits
+        self.summer.input_len()
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
+        self.summer.proof_len()
     }
 
     fn verifier_len(&self) -> usize {
-        3
+        self.summer.verifier_len()
     }
 
     fn output_len(&self) -> usize {
-        1
+        self.summer.output_len()
     }
 
     fn joint_rand_len(&self) -> usize {
-        1
+        self.summer.joint_rand_len()
+    }
+
+    fn eval_output_len(&self) -> usize {
+        self.summer.eval_output_len()
     }
 
     fn prove_rand_len(&self) -> usize {
-        1
-    }
-
-    fn query_rand_len(&self) -> usize {
-        1
+        self.summer.prove_rand_len()
     }
 }
 
@@ -408,23 +453,22 @@ where
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
         // Check that each element of `input` is a 0 or 1.
-        let range_check = parallel_sum_range_checks(
-            &mut g[0],
-            input,
-            joint_rand[0],
-            self.chunk_length,
-            num_shares,
-        )?;
+        let range_check =
+            parallel_sum_range_checks(&mut g[0], input, joint_rand, self.chunk_length, num_shares)?;
 
         // Check that the elements of `input` sum to 1.
         let mut sum_check = -F::from(F::valid_integer_try_from(num_shares)?).inv();
@@ -432,9 +476,7 @@ where
             sum_check += *val;
         }
 
-        // Take a random linear combination of both checks.
-        let out = joint_rand[1] * range_check + (joint_rand[1] * joint_rand[1]) * sum_check;
-        Ok(out)
+        Ok(vec![range_check, sum_check])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -459,15 +501,240 @@ where
     }
 
     fn joint_rand_len(&self) -> usize {
+        self.gadget_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
         2
     }
 
     fn prove_rand_len(&self) -> usize {
         self.chunk_length * 2
     }
+}
 
-    fn query_rand_len(&self) -> usize {
+/// The multihot counter data type. Each measurement is a list of booleans of length `length`, with
+/// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
+/// values at each position across all measurements.
+#[derive(PartialEq, Eq)]
+pub struct MultihotCountVec<F, S> {
+    // Parameters
+    /// The number of elements in the list of booleans
+    length: usize,
+    /// The max number of permissible `true` values in the list of booleans
+    max_weight: usize,
+    /// The size of the chunks fed into our gadget calls
+    chunk_length: usize,
+
+    // Calculated from parameters
+    gadget_calls: usize,
+    bits_for_weight: usize,
+    offset: usize,
+    phantom: PhantomData<(F, S)>,
+}
+
+impl<F: FftFriendlyFieldElement, S> Debug for MultihotCountVec<F, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("MultihotCountVec")
+            .field("length", &self.length)
+            .field("max_weight", &self.max_weight)
+            .field("chunk_length", &self.chunk_length)
+            .finish()
+    }
+}
+
+impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountVec<F, S> {
+    /// Return a new [`MultihotCountVec`] type with the given number of buckets.
+    pub fn new(
+        num_buckets: usize,
+        max_weight: usize,
+        chunk_length: usize,
+    ) -> Result<Self, FlpError> {
+        if num_buckets >= u32::MAX as usize {
+            return Err(FlpError::Encode(
+                "invalid num_buckets: exceeds maximum permitted".to_string(),
+            ));
+        }
+        if num_buckets == 0 {
+            return Err(FlpError::InvalidParameter(
+                "num_buckets cannot be zero".to_string(),
+            ));
+        }
+        if chunk_length == 0 {
+            return Err(FlpError::InvalidParameter(
+                "chunk_length cannot be zero".to_string(),
+            ));
+        }
+        if max_weight == 0 {
+            return Err(FlpError::InvalidParameter(
+                "max_weight cannot be zero".to_string(),
+            ));
+        }
+
+        // The bitlength of a measurement is the number of buckets plus the bitlength of the max
+        // weight
+        let bits_for_weight = max_weight.ilog2() as usize + 1;
+        let meas_length = num_buckets + bits_for_weight;
+
+        // Gadget calls is ⌈meas_length / chunk_length⌉
+        let gadget_calls = (meas_length + chunk_length - 1) / chunk_length;
+        // Offset is 2^max_weight.bitlen() - 1 - max_weight
+        let offset = (1 << bits_for_weight) - 1 - max_weight;
+
+        Ok(Self {
+            length: num_buckets,
+            max_weight,
+            chunk_length,
+            gadget_calls,
+            bits_for_weight,
+            offset,
+            phantom: PhantomData,
+        })
+    }
+}
+
+// Cannot autoderive clone because it requires F and S to be Clone, which they're not in general
+impl<F, S> Clone for MultihotCountVec<F, S> {
+    fn clone(&self) -> Self {
+        Self {
+            length: self.length,
+            max_weight: self.max_weight,
+            chunk_length: self.chunk_length,
+            bits_for_weight: self.bits_for_weight,
+            offset: self.offset,
+            gadget_calls: self.gadget_calls,
+            phantom: self.phantom,
+        }
+    }
+}
+
+impl<F, S> Type for MultihotCountVec<F, S>
+where
+    F: FftFriendlyFieldElement,
+    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+{
+    type Measurement = Vec<bool>;
+    type AggregateResult = Vec<F::Integer>;
+    type Field = F;
+
+    fn encode_measurement(&self, measurement: &Vec<bool>) -> Result<Vec<F>, FlpError> {
+        let weight_reported: usize = measurement.iter().filter(|bit| **bit).count();
+
+        if measurement.len() != self.length {
+            return Err(FlpError::Encode(format!(
+                "unexpected measurement length: got {}; want {}",
+                measurement.len(),
+                self.length
+            )));
+        }
+        if weight_reported > self.max_weight {
+            return Err(FlpError::Encode(format!(
+                "unexpected measurement weight: got {}; want ≤{}",
+                weight_reported, self.max_weight
+            )));
+        }
+
+        // Convert bool vector to field elems
+        let multihot_vec = measurement
+            .iter()
+            // We can unwrap because any Integer type can cast from bool
+            .map(|bit| F::from(F::valid_integer_try_from(*bit as usize).unwrap()));
+
+        // Encode the measurement weight in binary (actually, the weight plus some offset)
+        let offset_weight_bits = {
+            let offset_weight_reported = F::valid_integer_try_from(self.offset + weight_reported)?;
+            F::encode_as_bitvector(offset_weight_reported, self.bits_for_weight)?
+        };
+
+        // Report the concat of the two
+        Ok(multihot_vec.chain(offset_weight_bits).collect())
+    }
+
+    fn decode_result(
+        &self,
+        data: &[Self::Field],
+        _num_measurements: usize,
+    ) -> Result<Self::AggregateResult, FlpError> {
+        // The aggregate is the same as the decoded result. Just convert to integers
+        decode_result_vec(data, self.length)
+    }
+
+    fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
+        vec![Box::new(S::new(
+            Mul::new(self.gadget_calls),
+            self.chunk_length,
+        ))]
+    }
+
+    fn num_gadgets(&self) -> usize {
         1
+    }
+
+    fn valid(
+        &self,
+        g: &mut Vec<Box<dyn Gadget<F>>>,
+        input: &[F],
+        joint_rand: &[F],
+        num_shares: usize,
+    ) -> Result<Vec<F>, FlpError> {
+        self.valid_call_check(input, joint_rand)?;
+
+        // Check that each element of `input` is a 0 or 1.
+        let range_check =
+            parallel_sum_range_checks(&mut g[0], input, joint_rand, self.chunk_length, num_shares)?;
+
+        // Check that the elements of `input` sum to at most `max_weight`.
+        let count_vec = &input[..self.length];
+        let weight = count_vec.iter().fold(F::zero(), |a, b| a + *b);
+        let offset_weight_reported = F::decode_bitvector(&input[self.length..])?;
+
+        // From spec: weight_check = self.offset*shares_inv + weight - weight_reported
+        let weight_check = {
+            let offset = F::from(F::valid_integer_try_from(self.offset)?);
+            let shares_inv = F::from(F::valid_integer_try_from(num_shares)?).inv();
+            offset * shares_inv + weight - offset_weight_reported
+        };
+
+        Ok(vec![range_check, weight_check])
+    }
+
+    // Truncates the measurement, removing extra data that was necessary for validity (here, the
+    // encoded weight), but not important for aggregation
+    fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, FlpError> {
+        self.truncate_call_check(&input)?;
+        // Cut off the encoded weight
+        Ok(input[..self.length].to_vec())
+    }
+
+    // The length in field elements of the encoded input returned by [`Self::encode_measurement`].
+    fn input_len(&self) -> usize {
+        self.length + self.bits_for_weight
+    }
+
+    fn proof_len(&self) -> usize {
+        (self.chunk_length * 2) + 2 * ((1 + self.gadget_calls).next_power_of_two() - 1) + 1
+    }
+
+    fn verifier_len(&self) -> usize {
+        2 + self.chunk_length * 2
+    }
+
+    // The length of the truncated output (i.e., the output of [`Type::truncate`]).
+    fn output_len(&self) -> usize {
+        self.length
+    }
+
+    // The number of random values needed in the validity checks
+    fn joint_rand_len(&self) -> usize {
+        self.gadget_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
+        2
+    }
+
+    fn prove_rand_len(&self) -> usize {
+        self.chunk_length * 2
     }
 }
 
@@ -617,22 +884,21 @@ where
         ))]
     }
 
+    fn num_gadgets(&self) -> usize {
+        1
+    }
+
     fn valid(
         &self,
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
         num_shares: usize,
-    ) -> Result<F, FlpError> {
+    ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
 
-        parallel_sum_range_checks(
-            &mut g[0],
-            input,
-            joint_rand[0],
-            self.chunk_length,
-            num_shares,
-        )
+        parallel_sum_range_checks(&mut g[0], input, joint_rand, self.chunk_length, num_shares)
+            .map(|out| vec![out])
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
@@ -661,37 +927,16 @@ where
     }
 
     fn joint_rand_len(&self) -> usize {
+        self.gadget_calls
+    }
+
+    fn eval_output_len(&self) -> usize {
         1
     }
 
     fn prove_rand_len(&self) -> usize {
         self.chunk_length * 2
     }
-
-    fn query_rand_len(&self) -> usize {
-        1
-    }
-}
-
-/// Compute a random linear combination of the result of calls of `g` on each element of `input`.
-///
-/// # Arguments
-///
-/// * `g` - The gadget to be applied elementwise
-/// * `input` - The vector on whose elements to apply `g`
-/// * `rnd` - The randomness used for the linear combination
-pub(crate) fn call_gadget_on_vec_entries<F: FftFriendlyFieldElement>(
-    g: &mut Box<dyn Gadget<F>>,
-    input: &[F],
-    rnd: F,
-) -> Result<F, FlpError> {
-    let mut range_check = F::zero();
-    let mut r = rnd;
-    for chunk in input.chunks(1) {
-        range_check += r * g.call(chunk)?;
-        r *= rnd;
-    }
-    Ok(range_check)
 }
 
 /// Given a vector `data` of field elements which should contain exactly one entry, return the
@@ -739,7 +984,7 @@ pub(crate) fn decode_result_vec<F: FftFriendlyFieldElement>(
 pub(crate) fn parallel_sum_range_checks<F: FftFriendlyFieldElement>(
     gadget: &mut Box<dyn Gadget<F>>,
     input: &[F],
-    joint_randomness: F,
+    joint_randomness: &[F],
     chunk_length: usize,
     num_shares: usize,
 ) -> Result<F, FlpError> {
@@ -747,15 +992,16 @@ pub(crate) fn parallel_sum_range_checks<F: FftFriendlyFieldElement>(
     let num_shares_inverse = f_num_shares.inv();
 
     let mut output = F::zero();
-    let mut r_power = joint_randomness;
     let mut padded_chunk = vec![F::zero(); 2 * chunk_length];
 
-    for chunk in input.chunks(chunk_length) {
+    for (chunk, &r) in input.chunks(chunk_length).zip(joint_randomness) {
+        let mut r_power = r;
+
         // Construct arguments for the Mul subcircuits.
         for (input, args) in chunk.iter().zip(padded_chunk.chunks_exact_mut(2)) {
             args[0] = r_power * *input;
             args[1] = *input - num_shares_inverse;
-            r_power *= joint_randomness;
+            r_power *= r;
         }
         // If the chunk of the input is smaller than chunk_length, use zeros instead of measurement
         // inputs for the remaining calls.
@@ -776,7 +1022,9 @@ pub(crate) fn parallel_sum_range_checks<F: FftFriendlyFieldElement>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, Field64 as TestField, FieldElement};
+    use crate::field::{
+        random_vector, Field64 as TestField, FieldElement, FieldElementWithInteger,
+    };
     use crate::flp::gadgets::ParallelSum;
     #[cfg(feature = "multithreaded")]
     use crate::flp::gadgets::ParallelSumMultithreaded;
@@ -818,7 +1066,9 @@ mod tests {
 
     #[test]
     fn test_sum() {
-        let sum = Sum::new(11).unwrap();
+        let max_measurement = 1458;
+
+        let sum = Sum::new(max_measurement).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -839,22 +1089,52 @@ mod tests {
             &sum.encode_measurement(&1337).unwrap(),
             &[TestField::from(1337)],
         );
-        FlpTest::expect_valid::<3>(&Sum::new(0).unwrap(), &[], &[zero]);
-        FlpTest::expect_valid::<3>(&Sum::new(2).unwrap(), &[one, zero], &[one]);
-        FlpTest::expect_valid::<3>(
-            &Sum::new(9).unwrap(),
-            &[one, zero, one, one, zero, one, one, one, zero],
-            &[TestField::from(237)],
-        );
 
-        // Test FLP on invalid input.
-        FlpTest::expect_invalid::<3>(&Sum::new(3).unwrap(), &[one, nine, zero]);
-        FlpTest::expect_invalid::<3>(&Sum::new(5).unwrap(), &[zero, zero, zero, zero, nine]);
+        {
+            let sum = Sum::new(3).unwrap();
+            let meas = 1;
+            FlpTest::expect_valid::<3>(
+                &sum,
+                &sum.encode_measurement(&meas).unwrap(),
+                &[TestField::from(meas)],
+            );
+        }
+
+        {
+            let sum = Sum::new(400).unwrap();
+            let meas = 237;
+            FlpTest::expect_valid::<3>(
+                &sum,
+                &sum.encode_measurement(&meas).unwrap(),
+                &[TestField::from(meas)],
+            );
+        }
+
+        // Test FLP on invalid input, specifically on field elements outside of {0,1}
+        {
+            let sum = Sum::new((1 << 3) - 1).unwrap();
+            // The sum+offset value can be whatever. The binariness test should fail first
+            let sum_plus_offset = vec![zero; 3];
+            FlpTest::expect_invalid::<3>(
+                &sum,
+                &[&[one, nine, zero], sum_plus_offset.as_slice()].concat(),
+            );
+        }
+        {
+            let sum = Sum::new((1 << 5) - 1).unwrap();
+            let sum_plus_offset = vec![zero; 5];
+            FlpTest::expect_invalid::<3>(
+                &sum,
+                &[&[zero, zero, zero, zero, nine], sum_plus_offset.as_slice()].concat(),
+            );
+        }
     }
 
     #[test]
     fn test_average() {
-        let average = Average::new(11).unwrap();
+        let max_measurement = (1 << 11) - 13;
+
+        let average = Average::new(max_measurement).unwrap();
         let zero = TestField::zero();
         let one = TestField::one();
         let ten = TestField::from(10);
@@ -955,6 +1235,113 @@ mod tests {
         test_histogram(
             Histogram::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new,
         );
+    }
+
+    fn test_multihot<F, S>(constructor: F)
+    where
+        F: Fn(usize, usize, usize) -> Result<MultihotCountVec<TestField, S>, FlpError>,
+        S: ParallelSumGadget<TestField, Mul<TestField>> + Eq + 'static,
+    {
+        const NUM_SHARES: usize = 3;
+
+        // Chunk size for our range check gadget
+        let chunk_size = 2;
+
+        // Our test is on multihot vecs of length 3, with max weight 2
+        let num_buckets = 3;
+        let max_weight = 2;
+
+        let multihot_instance = constructor(num_buckets, max_weight, chunk_size).unwrap();
+        let zero = TestField::zero();
+        let one = TestField::one();
+        let nine = TestField::from(9);
+
+        let encoded_weight_plus_offset = |weight| {
+            let bits_for_weight = max_weight.ilog2() as usize + 1;
+            let offset = (1 << bits_for_weight) - 1 - max_weight;
+            TestField::encode_as_bitvector(
+                <TestField as FieldElementWithInteger>::Integer::try_from(weight + offset).unwrap(),
+                bits_for_weight,
+            )
+            .unwrap()
+            .collect::<Vec<TestField>>()
+        };
+
+        assert_eq!(
+            multihot_instance
+                .encode_measurement(&vec![true, true, false])
+                .unwrap(),
+            [&[one, one, zero], &*encoded_weight_plus_offset(2)].concat(),
+        );
+        assert_eq!(
+            multihot_instance
+                .encode_measurement(&vec![false, true, true])
+                .unwrap(),
+            [&[zero, one, one], &*encoded_weight_plus_offset(2)].concat(),
+        );
+
+        // Round trip
+        assert_eq!(
+            multihot_instance
+                .decode_result(
+                    &multihot_instance
+                        .truncate(
+                            multihot_instance
+                                .encode_measurement(&vec![false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap(),
+                    1
+                )
+                .unwrap(),
+            [0, 1, 1]
+        );
+
+        // Test valid inputs with weights 0, 1, and 2
+        FlpTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &multihot_instance
+                .encode_measurement(&vec![true, false, false])
+                .unwrap(),
+            &[one, zero, zero],
+        );
+
+        FlpTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &multihot_instance
+                .encode_measurement(&vec![false, true, true])
+                .unwrap(),
+            &[zero, one, one],
+        );
+
+        FlpTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &multihot_instance
+                .encode_measurement(&vec![false, false, false])
+                .unwrap(),
+            &[zero, zero, zero],
+        );
+
+        // Test invalid inputs.
+
+        // Not binary
+        FlpTest::expect_invalid::<NUM_SHARES>(
+            &multihot_instance,
+            &[&[zero, zero, nine], &*encoded_weight_plus_offset(1)].concat(),
+        );
+        // Wrong weight
+        FlpTest::expect_invalid::<NUM_SHARES>(
+            &multihot_instance,
+            &[&[zero, zero, one], &*encoded_weight_plus_offset(2)].concat(),
+        );
+        // We cannot test the case where the weight is higher than max_weight. This is because
+        // weight + offset cannot fit into a bitvector of the correct length. In other words, being
+        // out-of-range requires the prover to lie about their weight, which is tested above
+    }
+
+    #[test]
+    fn test_multihot_serial() {
+        test_multihot(MultihotCountVec::<TestField, ParallelSum<TestField, Mul<TestField>>>::new);
     }
 
     fn test_sum_vec<F, S>(f: F)

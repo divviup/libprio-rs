@@ -123,6 +123,7 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
     fn prepare_init(
         &self,
         _verify_key: &[u8; 0],
+        _ctx: &[u8],
         _: usize,
         aggregation_param: &Self::AggregationParam,
         _nonce: &[u8; 16],
@@ -141,6 +142,7 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
 
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
+        _ctx: &[u8],
         _: &Self::AggregationParam,
         _: M,
     ) -> Result<Self::PrepareMessage, VdafError> {
@@ -149,6 +151,7 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
 
     fn prepare_next(
         &self,
+        _ctx: &[u8],
         state: Self::PrepareState,
         _: Self::PrepareMessage,
     ) -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
@@ -166,11 +169,16 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
         }
         Ok(aggregate_share)
     }
+
+    fn is_agg_param_valid(_cur: &Self::AggregationParam, _prev: &[Self::AggregationParam]) -> bool {
+        true
+    }
 }
 
 impl vdaf::Client<16> for Vdaf {
     fn shard(
         &self,
+        _ctx: &[u8],
         measurement: &Self::Measurement,
         _nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
@@ -357,12 +365,14 @@ mod tests {
         let mut sharded_measurements = Vec::new();
         for measurement in measurements {
             let nonce = thread_rng().gen();
-            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce).unwrap();
+            let (public_share, input_shares) =
+                vdaf.shard(b"dummy ctx", &measurement, &nonce).unwrap();
 
             sharded_measurements.push((public_share, nonce, input_shares));
         }
 
         let result = run_vdaf_sharded(
+            b"dummy ctx",
             &vdaf,
             &AggregationParam(aggregation_parameter),
             sharded_measurements.clone(),

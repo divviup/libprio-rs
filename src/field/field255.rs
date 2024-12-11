@@ -195,7 +195,7 @@ impl Neg for Field255 {
     }
 }
 
-impl<'a> Neg for &'a Field255 {
+impl Neg for &Field255 {
     type Output = Field255;
 
     fn neg(self) -> Field255 {
@@ -216,7 +216,7 @@ impl From<u64> for Field255 {
     }
 }
 
-impl<'a> TryFrom<&'a [u8]> for Field255 {
+impl TryFrom<&[u8]> for Field255 {
     type Error = FieldError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, FieldError> {
@@ -387,6 +387,12 @@ mod tests {
 
         fn one() -> Self {
             Self::new(Vec::from([1]))
+        }
+
+        fn checked_ilog2(&self) -> Option<u32> {
+            // This is a test module, and this code is never used. If we need this in the future,
+            // use BigUint::bits()
+            unimplemented!()
         }
     }
 
