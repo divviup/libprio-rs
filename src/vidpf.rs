@@ -567,7 +567,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
         for correction_words in self.cw.iter() {
             len += correction_words.weight.encoded_len()?;
         }
-        len += self.cs.len() * 32;
+        len += self.cs.len() * VIDPF_PROOF_SIZE;
         Some(len)
     }
 }

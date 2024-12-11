@@ -398,6 +398,16 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.2.149 -> 0.2.150"
 
+[[audits.libz-rs-sys]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.4.0"
+notes = """
+This crate uses unsafe since it's for C to Rust FFI. I have reviewed and fuzzed it, and I believe it is free of any serious security problems.
+
+The only dependency is zlib-rs, which is maintained by the same maintainers as this crate.
+"""
+
 [[audits.linux-raw-sys]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -497,6 +507,11 @@ delta = "1.17.2 -> 1.18.0"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.18.0 -> 1.19.0"
+
+[[audits.once_cell]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.19.0 -> 1.20.1"
 
 [[audits.opaque-debug]]
 who = "David Cook <dcook@divviup.org>"
@@ -764,6 +779,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.40 -> 1.0.43"
 
+[[audits.thiserror]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.63 -> 1.0.64"
+
 [[audits.thiserror-impl]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
@@ -778,6 +798,11 @@ delta = "1.0.39 -> 1.0.40"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.40 -> 1.0.43"
+
+[[audits.thiserror-impl]]
+who = "Brandon Pitman <bran@bran.land>"
+criteria = "safe-to-deploy"
+delta = "1.0.63 -> 1.0.64"
 
 [[audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
@@ -823,6 +848,16 @@ version = "7.0.1"
 who = "Tim Geoghegan <timg@divviup.org>"
 criteria = "safe-to-run"
 delta = "7.0.0 -> 7.0.1"
+
+[[audits.zlib-rs]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.4.0"
+notes = """
+zlib-rs uses unsafe Rust for invoking compiler intrinsics (i.e. SIMD), eschewing bounds checks, along the FFI boundary, and for interacting with pointers sourced from C. I have extensively reviewed and fuzzed the unsafe code. All findings from that work have been resolved as of version 0.4.0. To the best of my ability, I believe it's free of any serious security problems.
+
+zlib-rs does not require any external dependencies.
+"""
 
 [[trusted.byteorder]]
 criteria = "safe-to-deploy"
@@ -942,13 +977,13 @@ end = "2024-06-08"
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-03-01"
-end = "2024-06-08"
+end = "2025-06-08"
 
 [[trusted.serde_derive]]
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-03-01"
-end = "2024-06-08"
+end = "2025-06-08"
 
 [[trusted.serde_json]]
 criteria = "safe-to-deploy"
@@ -960,19 +995,19 @@ end = "2025-07-01"
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-03-01"
-end = "2024-06-08"
+end = "2025-11-04"
 
 [[trusted.thiserror]]
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-10-09"
-end = "2024-07-25"
+end = "2025-11-04"
 
 [[trusted.thiserror-impl]]
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-10-09"
-end = "2024-07-25"
+end = "2025-11-04"
 
 [[trusted.thread_local]]
 criteria = "safe-to-deploy"

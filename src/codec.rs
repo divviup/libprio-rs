@@ -90,7 +90,7 @@ pub trait ParameterizedDecode<P>: Sized {
 
 /// Provide a blanket implementation so that any [`Decode`] can be used as a
 /// `ParameterizedDecode<T>` for any `T`.
-impl<D: Decode + ?Sized, T> ParameterizedDecode<T> for D {
+impl<D: Decode, T> ParameterizedDecode<T> for D {
     fn decode_with_param(
         _decoding_parameter: &T,
         bytes: &mut Cursor<&[u8]>,

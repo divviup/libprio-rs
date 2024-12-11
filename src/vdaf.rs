@@ -200,12 +200,16 @@ pub trait Vdaf: Clone + Debug {
 
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the XOF.
-    fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
-        let mut dst = [0_u8; 8];
-        dst[0] = VERSION;
-        dst[1] = 0; // algorithm class
-        dst[2..6].copy_from_slice(&(self.algorithm_id()).to_be_bytes());
-        dst[6..8].copy_from_slice(&usage.to_be_bytes());
+    fn domain_separation_tag(&self, usage: u16, ctx: &[u8]) -> Vec<u8> {
+        // Prefix is 8 bytes and defined by the spec. Copy these values in
+        let mut dst = Vec::with_capacity(ctx.len() + 8);
+        dst.push(VERSION);
+        dst.push(0); // algorithm class
+        dst.extend_from_slice(self.algorithm_id().to_be_bytes().as_slice());
+        dst.extend_from_slice(usage.to_be_bytes().as_slice());
+        // Finally, append user-chosen `ctx`
+        dst.extend_from_slice(ctx);
+
         dst
     }
 }
@@ -217,9 +221,10 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
     ///
     /// Implements `Vdaf::shard` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-13#section-5.1
     fn shard(
         &self,
+        ctx: &[u8],
         measurement: &Self::Measurement,
         nonce: &[u8; NONCE_SIZE],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError>;
@@ -254,9 +259,11 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// Implements `Vdaf.prep_init` from [VDAF].
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
+    #[allow(clippy::too_many_arguments)]
     fn prepare_init(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
+        ctx: &[u8],
         agg_id: usize,
         agg_param: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
@@ -271,6 +278,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
         &self,
+        ctx: &[u8],
         agg_param: &Self::AggregationParam,
         inputs: M,
     ) -> Result<Self::PrepareMessage, VdafError>;
@@ -288,6 +296,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     fn prepare_next(
         &self,
+        ctx: &[u8],
         state: Self::PrepareState,
         input: Self::PrepareMessage,
     ) -> Result<PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError>;
@@ -298,6 +307,11 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         agg_param: &Self::AggregationParam,
         output_shares: M,
     ) -> Result<Self::AggregateShare, VdafError>;
+
+    /// Validates an aggregation parameter with respect to all previous aggregaiton parameters used
+    /// for the same input share. `prev` MUST be sorted from least to most recently used.
+    #[must_use]
+    fn is_agg_param_valid(cur: &Self::AggregationParam, prev: &[Self::AggregationParam]) -> bool;
 }
 
 /// Aggregator that implements differential privacy with Aggregator-side noise addition.
@@ -484,6 +498,7 @@ pub mod test_utils {
 
     /// Execute the VDAF end-to-end and return the aggregate result.
     pub fn run_vdaf<V, M, const SEED_SIZE: usize>(
+        ctx: &[u8],
         vdaf: &V,
         agg_param: &V::AggregationParam,
         measurements: M,
@@ -495,16 +510,17 @@ pub mod test_utils {
         let mut sharded_measurements = Vec::new();
         for measurement in measurements.into_iter() {
             let nonce = random();
-            let (public_share, input_shares) = vdaf.shard(&measurement, &nonce)?;
+            let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce)?;
 
             sharded_measurements.push((public_share, nonce, input_shares));
         }
 
-        run_vdaf_sharded(vdaf, agg_param, sharded_measurements)
+        run_vdaf_sharded(ctx, vdaf, agg_param, sharded_measurements)
     }
 
     /// Execute the VDAF on sharded measurements and return the aggregate result.
     pub fn run_vdaf_sharded<V, M, I, const SEED_SIZE: usize>(
+        ctx: &[u8],
         vdaf: &V,
         agg_param: &V::AggregationParam,
         sharded_measurements: M,
@@ -525,6 +541,7 @@ pub mod test_utils {
             let out_shares = run_vdaf_prepare(
                 vdaf,
                 &verify_key,
+                ctx,
                 agg_param,
                 &nonce,
                 public_share,
@@ -574,6 +591,7 @@ pub mod test_utils {
     pub fn run_vdaf_prepare<V, M, const SEED_SIZE: usize>(
         vdaf: &V,
         verify_key: &[u8; SEED_SIZE],
+        ctx: &[u8],
         agg_param: &V::AggregationParam,
         nonce: &[u8; 16],
         public_share: V::PublicShare,
@@ -595,6 +613,7 @@ pub mod test_utils {
         for (agg_id, input_share) in input_shares.enumerate() {
             let (state, msg) = vdaf.prepare_init(
                 verify_key,
+                ctx,
                 agg_id,
                 agg_param,
                 nonce,
@@ -608,6 +627,7 @@ pub mod test_utils {
 
         let mut inbound = vdaf
             .prepare_shares_to_prepare_message(
+                ctx,
                 agg_param,
                 outbound.iter().map(|encoded| {
                     V::PrepareShare::get_decoded_with_param(&states[0], encoded)
@@ -622,6 +642,7 @@ pub mod test_utils {
             let mut outbound = Vec::new();
             for state in states.iter_mut() {
                 match vdaf.prepare_next(
+                    ctx,
                     state.clone(),
                     V::PrepareMessage::get_decoded_with_param(state, &inbound)
                         .expect("failed to decode prep message"),
@@ -640,6 +661,7 @@ pub mod test_utils {
                 // Another round is required before output shares are computed.
                 inbound = vdaf
                     .prepare_shares_to_prepare_message(
+                        ctx,
                         agg_param,
                         outbound.iter().map(|encoded| {
                             V::PrepareShare::get_decoded_with_param(&states[0], encoded)

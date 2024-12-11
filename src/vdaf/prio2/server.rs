@@ -205,6 +205,7 @@ mod tests {
             prio2::{
                 client::{proof_length, unpack_proof_mut},
                 server::test_util::Server,
+                tests::CTX_STR,
                 Prio2,
             },
             Client, Share, ShareDecodingParameter,
@@ -285,7 +286,7 @@ mod tests {
         }
 
         let vdaf = Prio2::new(dim).unwrap();
-        let (_, shares) = vdaf.shard(&data, &[0; 16]).unwrap();
+        let (_, shares) = vdaf.shard(CTX_STR, &data, &[0; 16]).unwrap();
         let share1_original = shares[0].get_encoded().unwrap();
         let share2 = shares[1].get_encoded().unwrap();
 

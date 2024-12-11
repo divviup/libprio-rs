@@ -143,6 +143,7 @@ impl Vdaf for Prio2 {
 impl Client<16> for Prio2 {
     fn shard(
         &self,
+        _ctx: &[u8],
         measurement: &Vec<u32>,
         _nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Share<FieldPrio2, 32>>), VdafError> {
@@ -253,6 +254,7 @@ impl Aggregator<32, 16> for Prio2 {
     fn prepare_init(
         &self,
         agg_key: &[u8; 32],
+        _ctx: &[u8],
         agg_id: usize,
         _agg_param: &Self::AggregationParam,
         nonce: &[u8; 16],
@@ -278,6 +280,7 @@ impl Aggregator<32, 16> for Prio2 {
 
     fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Prio2PrepareShare>>(
         &self,
+        _ctx: &[u8],
         _: &Self::AggregationParam,
         inputs: M,
     ) -> Result<(), VdafError> {
@@ -300,6 +303,7 @@ impl Aggregator<32, 16> for Prio2 {
 
     fn prepare_next(
         &self,
+        _ctx: &[u8],
         state: Prio2PrepareState,
         _input: (),
     ) -> Result<PrepareTransition<Self, 32, 16>, VdafError> {
@@ -324,6 +328,11 @@ impl Aggregator<32, 16> for Prio2 {
         }
 
         Ok(agg_share)
+    }
+
+    /// Returns `true` iff `prev.is_empty()`
+    fn is_agg_param_valid(_cur: &Self::AggregationParam, prev: &[Self::AggregationParam]) -> bool {
+        prev.is_empty()
     }
 }
 
@@ -401,12 +410,17 @@ mod tests {
     use assert_matches::assert_matches;
     use rand::prelude::*;
 
+    // The value of this string doesn't matter. Prio2 is not defined to use the context string for
+    // any computation
+    pub(crate) const CTX_STR: &[u8] = b"prio2 ctx";
+
     #[test]
     fn run_prio2() {
         let prio2 = Prio2::new(6).unwrap();
 
         assert_eq!(
             run_vdaf(
+                CTX_STR,
                 &prio2,
                 &(),
                 [
@@ -429,11 +443,12 @@ mod tests {
         let nonce = rng.gen::<[u8; 16]>();
         let data = vec![0, 0, 1, 1, 0];
         let prio2 = Prio2::new(data.len()).unwrap();
-        let (public_share, input_shares) = prio2.shard(&data, &nonce).unwrap();
+        let (public_share, input_shares) = prio2.shard(CTX_STR, &data, &nonce).unwrap();
         for (agg_id, input_share) in input_shares.iter().enumerate() {
             let (prepare_state, prepare_share) = prio2
                 .prepare_init(
                     &verify_key,
+                    CTX_STR,
                     agg_id,
                     &(),
                     &[0; 16],
@@ -495,17 +510,21 @@ mod tests {
             let input_share_1 = Share::get_decoded_with_param(&(&vdaf, 0), server_1_share).unwrap();
             let input_share_2 = Share::get_decoded_with_param(&(&vdaf, 1), server_2_share).unwrap();
             let (prepare_state_1, prepare_share_1) = vdaf
-                .prepare_init(&[0; 32], 0, &(), &[0; 16], &(), &input_share_1)
+                .prepare_init(&[0; 32], CTX_STR, 0, &(), &[0; 16], &(), &input_share_1)
                 .unwrap();
             let (prepare_state_2, prepare_share_2) = vdaf
-                .prepare_init(&[0; 32], 1, &(), &[0; 16], &(), &input_share_2)
+                .prepare_init(&[0; 32], CTX_STR, 1, &(), &[0; 16], &(), &input_share_2)
                 .unwrap();
-            vdaf.prepare_shares_to_prepare_message(&(), [prepare_share_1, prepare_share_2])
-                .unwrap();
-            let transition_1 = vdaf.prepare_next(prepare_state_1, ()).unwrap();
+            vdaf.prepare_shares_to_prepare_message(
+                CTX_STR,
+                &(),
+                [prepare_share_1, prepare_share_2],
+            )
+            .unwrap();
+            let transition_1 = vdaf.prepare_next(CTX_STR, prepare_state_1, ()).unwrap();
             let output_share_1 =
                 assert_matches!(transition_1, PrepareTransition::Finish(out) => out);
-            let transition_2 = vdaf.prepare_next(prepare_state_2, ()).unwrap();
+            let transition_2 = vdaf.prepare_next(CTX_STR, prepare_state_2, ()).unwrap();
             let output_share_2 =
                 assert_matches!(transition_2, PrepareTransition::Finish(out) => out);
             leader_output_shares.push(output_share_1);

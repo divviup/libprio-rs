@@ -257,7 +257,7 @@ pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
 /// Joint share type for the SZK proof.
 ///
-/// This is produced by [`Szk::merge_verifiers`] as the result of combining two query shares.
+/// This is produced as the result of combining two query shares.
 /// It contains the re-computed joint randomness seed, if applicable. It is consumed by [`Szk::decide`].
 pub type SzkJointShare<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
@@ -824,8 +824,9 @@ mod tests {
     #[test]
     fn test_sum_proof_share_encode() {
         let mut nonce = [0u8; 16];
+        let max_measurement = 13;
         thread_rng().fill(&mut nonce[..]);
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
@@ -926,15 +927,16 @@ mod tests {
 
     #[test]
     fn test_sum_leader_proof_share_roundtrip() {
+        let max_measurement = 13;
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
         let prove_rand_seed = Seed::<16>::generate().unwrap();
         let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -966,15 +968,16 @@ mod tests {
 
     #[test]
     fn test_sum_helper_proof_share_roundtrip() {
+        let max_measurement = 13;
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
         let prove_rand_seed = Seed::<16>::generate().unwrap();
         let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -1168,7 +1171,8 @@ mod tests {
 
     #[test]
     fn test_sum() {
-        let sum = Sum::<Field128>::new(5).unwrap();
+        let max_measurement = 13;
+        let sum = Sum::<Field128>::new(max_measurement).unwrap();
 
         let five = Field128::from(5);
         let nine = sum.encode_measurement(&9).unwrap();
