@@ -49,8 +49,6 @@
 //! tree.insert(bits!(1, 1), 'f');
 
 // TODO(#947): Remove these lines once the module gets used by Mastic implementation.
-#![allow(dead_code)]
-#![allow(unused_variables)]
 
 use core::fmt::Debug;
 use std::io::Cursor;

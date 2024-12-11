@@ -85,7 +85,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Self { weight_parameter }
     }
 
-    /// The [`Vidpf::gen`] method splits an incremental point function `F` into two private keys
+    /// Splits an incremental point function `F` into two private keys
     /// used by the aggregation servers, and a common public share.
     ///
     /// The incremental point function is defined as `F`: [`VidpfInput`] --> [`VidpfValue`]
@@ -112,7 +112,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok((public, keys))
     }
 
-    /// [`Vidpf::gen_with_keys`] works as the [`Vidpf::gen`] method, except that two different
+    /// Works as the [`Vidpf::gen`] method, except that two different
     /// keys must be provided.
     pub(crate) fn gen_with_keys(
         &self,
@@ -198,7 +198,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok(VidpfPublicShare { cw, cs })
     }
 
-    /// [`Vidpf::eval`] evaluates the entire `input` and produces a share of the
+    /// Evaluates the entire `input` and produces a share of the
     /// input's weight.
     pub fn eval(
         &self,
@@ -225,7 +225,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         })
     }
 
-    /// [`Vidpf::eval_with_cache`] evaluates the entire `input` and produces a share of the
+    /// Evaluates the entire `input` and produces a share of the
     /// input's weight. It reuses computation from previous levels available in the
     /// cache.
     pub fn eval_with_cache(
@@ -242,12 +242,12 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
             return Err(VidpfError::InvalidAttributeLength);
         }
 
-        if cache_tree.root.is_none() {
-            cache_tree.root = Some(Box::new(Node::new(VidpfEvalCache {
+        cache_tree.root.get_or_insert_with(|| {
+            Box::new(Node::new(VidpfEvalCache {
                 state: VidpfEvalState::init_from_key(id, key),
                 share: W::zero(&self.weight_parameter), // not used
-            })));
-        }
+            }))
+        });
 
         let mut sub_tree = cache_tree.root.as_mut().expect("root was visited");
         for (level, bit) in input.iter().enumerate() {
@@ -260,7 +260,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
                         share: new_share,
                     })));
                 }
-                sub_tree.left.as_mut().expect("left child was visited")
+                sub_tree.left.as_mut().expect("right child was visited")
             } else {
                 if sub_tree.right.is_none() {
                     let (new_state, new_share) =
@@ -276,7 +276,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok(sub_tree.value.to_share())
     }
 
-    /// [`Vidpf::eval_next`] evaluates the `input` at the given level using the provided initial
+    /// Evaluates the `input` at the given level using the provided initial
     /// state, and returns a new state and a share of the input's weight at that level.
     fn eval_next(
         &self,
@@ -596,7 +596,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
         }
         let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
         for _ in 0..*bits {
-            let mut proof = [0u8; 32];
+            let mut proof = [0u8; VIDPF_PROOF_SIZE];
             bytes.read_exact(&mut proof)?;
             cs.push(proof);
         }
@@ -846,7 +846,6 @@ mod tests {
                 VidpfServerId,
             },
         };
-        use std::io::Cursor;
 
         use super::{TestWeight, TEST_NONCE, TEST_NONCE_SIZE, TEST_WEIGHT_LEN};
 
@@ -856,14 +855,12 @@ mod tests {
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
             let (_, public, _, _) = vidpf_gen_setup(&input, &weight);
 
-            let mut bytes = vec![];
-            public.encode(&mut bytes).unwrap();
-
+            let bytes = public.get_encoded().unwrap();
             assert_eq!(public.encoded_len().unwrap(), bytes.len());
 
-            let decoded = VidpfPublicShare::<TestWeight>::decode_with_param(
+            let decoded = VidpfPublicShare::<TestWeight>::get_decoded_with_param(
                 &(8, TEST_WEIGHT_LEN),
-                &mut Cursor::new(&bytes),
+                &bytes,
             )
             .unwrap();
             assert_eq!(public, decoded);

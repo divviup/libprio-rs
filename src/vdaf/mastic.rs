@@ -9,6 +9,7 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, FieldElement},
     flp::{
+        FlpError,
         szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState},
         Type,
     },
@@ -385,7 +386,7 @@ where
 /// Mastic prepare state.
 ///
 /// State held by an aggregator between rounds of Mastic preparation. Includes intermediate
-/// state for [`Szk``] verification, the output shares currently being validated, and
+/// state for [`Szk`] verification, the output shares currently being validated, and
 /// parameters of Mastic used for encoding.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
@@ -626,30 +627,16 @@ where
         state: MasticPrepareState<T::Field, SEED_SIZE>,
         input: MasticPrepareMessage<SEED_SIZE>,
     ) -> Result<PrepareTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
-        match (state, input) {
-            (
-                MasticPrepareState {
-                    output_shares,
-                    szk_query_state: _,
-                    verifier_len: _,
-                },
-                None,
-            ) => Ok(PrepareTransition::Finish(output_shares)),
-            (
-                MasticPrepareState {
-                    output_shares,
-                    szk_query_state,
-                    verifier_len: _,
-                },
-                Some(ref joint_share),
-            ) => {
-                self.szk.decide(szk_query_state, joint_share)?;
-                Ok(PrepareTransition::Finish(output_shares))
-            }
-        }
+        let MasticPrepareState {
+            output_shares,
+            szk_query_state,
+            verifier_len: _,
+        } = state;
+        self.szk.decide(szk_query_state, input)?;
+        Ok(PrepareTransition::Finish(output_shares))
     }
 
-    fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
+    fn aggregate<M: IntoIterator<Item = MasticOutputShare<T::Field>>>(
         &self,
         agg_param: &MasticAggregationParam,
         output_shares: M,
@@ -680,25 +667,27 @@ where
         agg_shares: M,
         _num_measurements: usize,
     ) -> Result<Self::AggregateResult, VdafError> {
-        let n = agg_param.level_and_prefixes.prefixes().len();
+        let num_prefixes = agg_param.level_and_prefixes.prefixes().len();
         let mut agg_final = MasticAggregateShare::<T::Field>::from(vec![
             T::Field::zero();
             self.vidpf.weight_parameter
-                * n
+                * num_prefixes
         ]);
         for agg_share in agg_shares.into_iter() {
             agg_final.merge(&agg_share)?;
         }
-        let mut result = Vec::<T::AggregateResult>::with_capacity(n);
-        for i in 0..n {
-            let encoded_result = &agg_final.0
-                [i * self.vidpf.weight_parameter..(i + 1) * self.vidpf.weight_parameter];
-            result.push(
+        let mut iter = agg_final
+            .0
+            .chunks(self.vidpf.weight_parameter)
+            .take(num_prefixes);
+        let mut result = Vec::<T::AggregateResult>::with_capacity(num_prefixes);
+        iter.try_for_each(|encoded_result| -> Result<(), FlpError> {
+            Ok(result.push(
                 self.szk
                     .typ
                     .decode_result(&self.szk.typ.truncate(encoded_result.to_vec())?[..], 1)?,
-            );
-        }
+            ))
+        })?;
         Ok(result)
     }
 }
@@ -709,7 +698,7 @@ mod tests {
     use crate::field::Field128;
     use crate::flp::gadgets::{Mul, ParallelSum};
     use crate::flp::types::{Count, Sum, SumVec};
-    use crate::vdaf::test_utils::{run_vdaf, run_vdaf_prepare};
+    use crate::vdaf::test_utils::run_vdaf;
     use rand::{thread_rng, Rng};
 
     const TEST_NONCE_SIZE: usize = 16;
@@ -725,30 +714,35 @@ mod tests {
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
-        let first_input = VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]);
-        let second_input = VidpfInput::from_bytes(&[112u8, 0u8, 1u8, 4u8][..]);
-        let third_input = VidpfInput::from_bytes(&[48u8, 0u8, 1u8, 4u8][..]);
-        let fourth_input = VidpfInput::from_bytes(&[32u8, 0u8, 1u8, 4u8][..]);
-        let fifth_input = VidpfInput::from_bytes(&[0u8, 0u8, 1u8, 4u8][..]);
-        let first_prefix = VidpfInput::from_bools(&[false, false, true]);
-        let second_prefix = VidpfInput::from_bools(&[false]);
-        let third_prefix = VidpfInput::from_bools(&[true]);
+        let inputs = [
+            VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[112u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[48u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[32u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[0u8, 0u8, 1u8, 4u8][..]),
+        ];
+        let three_prefixes = vec![VidpfInput::from_bools(&[false, false, true])];
+        let individual_prefixes = vec![
+            VidpfInput::from_bools(&[false]),
+            VidpfInput::from_bools(&[true]),
+        ];
+
         let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
 
-        let first_agg_param = MasticAggregationParam::new(vec![first_prefix], true).unwrap();
-        let second_agg_param =
-            MasticAggregationParam::new(vec![second_prefix, third_prefix], true).unwrap();
+        let first_agg_param = MasticAggregationParam::new(three_prefixes.clone(), true).unwrap();
+        let second_agg_param = MasticAggregationParam::new(individual_prefixes, true).unwrap();
+        let third_agg_param = MasticAggregationParam::new(three_prefixes, false).unwrap();
 
         assert_eq!(
             run_vdaf(
                 &mastic,
                 &first_agg_param,
                 [
-                    (first_input.clone(), 24),
-                    (second_input.clone(), 0),
-                    (third_input.clone(), 0),
-                    (fourth_input.clone(), 3),
-                    (fifth_input.clone(), 28)
+                    (inputs[0].clone(), 24),
+                    (inputs[1].clone(), 0),
+                    (inputs[2].clone(), 0),
+                    (inputs[3].clone(), 3),
+                    (inputs[4].clone(), 28)
                 ]
             )
             .unwrap(),
@@ -760,40 +754,32 @@ mod tests {
                 &mastic,
                 &second_agg_param,
                 [
-                    (first_input.clone(), 24),
-                    (second_input, 0),
-                    (third_input, 0),
-                    (fourth_input, 3),
-                    (fifth_input, 28)
+                    (inputs[0].clone(), 24),
+                    (inputs[1].clone(), 0),
+                    (inputs[2].clone(), 0),
+                    (inputs[3].clone(), 3),
+                    (inputs[4].clone(), 28)
                 ]
             )
             .unwrap(),
             vec![31, 24]
         );
 
-        let (public_share, input_shares) = mastic
-            .shard(&(first_input.clone(), 24u128), &nonce)
-            .unwrap();
-        run_vdaf_prepare(
-            &mastic,
-            &verify_key,
-            &first_agg_param,
-            &nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap();
-
-        let (public_share, input_shares) = mastic.shard(&(first_input, 4u128), &nonce).unwrap();
-        run_vdaf_prepare(
-            &mastic,
-            &verify_key,
-            &first_agg_param,
-            &nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap();
+        assert_eq!(
+            run_vdaf(
+                &mastic,
+                &third_agg_param,
+                [
+                    (inputs[0].clone(), 24),
+                    (inputs[1].clone(), 0),
+                    (inputs[2].clone(), 0),
+                    (inputs[3].clone(), 3),
+                    (inputs[4].clone(), 28)
+                ]
+            )
+            .unwrap(),
+            vec![3]
+        );
     }
 
     #[test]
@@ -859,29 +845,33 @@ mod tests {
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
-        let first_input = VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]);
-        let second_input = VidpfInput::from_bytes(&[112u8, 0u8, 1u8, 4u8][..]);
-        let third_input = VidpfInput::from_bytes(&[48u8, 0u8, 1u8, 4u8][..]);
-        let fourth_input = VidpfInput::from_bytes(&[32u8, 0u8, 1u8, 4u8][..]);
-        let fifth_input = VidpfInput::from_bytes(&[0u8, 0u8, 1u8, 4u8][..]);
-        let first_prefix = VidpfInput::from_bools(&[false, false, true]);
-        let second_prefix = VidpfInput::from_bools(&[false]);
-        let third_prefix = VidpfInput::from_bools(&[true]);
+        let inputs = [
+            VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[112u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[48u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[32u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[0u8, 0u8, 1u8, 4u8][..]),
+        ];
+        let three_prefixes = vec![VidpfInput::from_bools(&[false, false, true])];
+        let individual_prefixes = vec![
+            VidpfInput::from_bools(&[false]),
+            VidpfInput::from_bools(&[true]),
+        ];
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let first_agg_param = MasticAggregationParam::new(vec![first_prefix], true).unwrap();
-        let second_agg_param =
-            MasticAggregationParam::new(vec![second_prefix, third_prefix], true).unwrap();
+        let first_agg_param = MasticAggregationParam::new(three_prefixes.clone(), true).unwrap();
+        let second_agg_param = MasticAggregationParam::new(individual_prefixes, true).unwrap();
+        let third_agg_param = MasticAggregationParam::new(three_prefixes, false).unwrap();
 
         assert_eq!(
             run_vdaf(
                 &mastic,
                 &first_agg_param,
                 [
-                    (first_input.clone(), true),
-                    (second_input.clone(), false),
-                    (third_input.clone(), false),
-                    (fourth_input.clone(), true),
-                    (fifth_input.clone(), true)
+                    (inputs[0].clone(), true),
+                    (inputs[1].clone(), false),
+                    (inputs[2].clone(), false),
+                    (inputs[3].clone(), true),
+                    (inputs[4].clone(), true)
                 ]
             )
             .unwrap(),
@@ -893,39 +883,32 @@ mod tests {
                 &mastic,
                 &second_agg_param,
                 [
-                    (first_input.clone(), true),
-                    (second_input, false),
-                    (third_input, false),
-                    (fourth_input, true),
-                    (fifth_input, true)
+                    (inputs[0].clone(), true),
+                    (inputs[1].clone(), false),
+                    (inputs[2].clone(), false),
+                    (inputs[3].clone(), true),
+                    (inputs[4].clone(), true)
                 ]
             )
             .unwrap(),
             vec![2, 1]
         );
 
-        let (public_share, input_shares) =
-            mastic.shard(&(first_input.clone(), false), &nonce).unwrap();
-        run_vdaf_prepare(
-            &mastic,
-            &verify_key,
-            &first_agg_param,
-            &nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap();
-
-        let (public_share, input_shares) = mastic.shard(&(first_input, true), &nonce).unwrap();
-        run_vdaf_prepare(
-            &mastic,
-            &verify_key,
-            &first_agg_param,
-            &nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap();
+        assert_eq!(
+            run_vdaf(
+                &mastic,
+                &third_agg_param,
+                [
+                    (inputs[0].clone(), true),
+                    (inputs[1].clone(), false),
+                    (inputs[2].clone(), false),
+                    (inputs[3].clone(), true),
+                    (inputs[4].clone(), true)
+                ]
+            )
+            .unwrap(),
+            vec![1]
+        );
     }
 
     #[test]
@@ -986,34 +969,42 @@ mod tests {
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
-        let first_input = VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]);
-        let second_input = VidpfInput::from_bytes(&[112u8, 0u8, 1u8, 4u8][..]);
-        let third_input = VidpfInput::from_bytes(&[48u8, 0u8, 1u8, 4u8][..]);
-        let fourth_input = VidpfInput::from_bytes(&[32u8, 0u8, 1u8, 4u8][..]);
-        let fifth_input = VidpfInput::from_bytes(&[0u8, 0u8, 1u8, 4u8][..]);
-        let first_measurement = vec![1u128, 16u128, 0u128];
-        let second_measurement = vec![0u128, 0u128, 0u128];
-        let third_measurement = vec![0u128, 0u128, 0u128];
-        let fourth_measurement = vec![1u128, 17u128, 31u128];
-        let fifth_measurement = vec![6u128, 4u128, 11u128];
-        let first_prefix = VidpfInput::from_bools(&[false, false, true]);
-        let second_prefix = VidpfInput::from_bools(&[false]);
-        let third_prefix = VidpfInput::from_bools(&[true]);
+        let inputs = [
+            VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[112u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[48u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[32u8, 0u8, 1u8, 4u8][..]),
+            VidpfInput::from_bytes(&[0u8, 0u8, 1u8, 4u8][..]),
+        ];
+
+        let measurements = [
+            vec![1u128, 16u128, 0u128],
+            vec![0u128, 0u128, 0u128],
+            vec![0u128, 0u128, 0u128],
+            vec![1u128, 17u128, 31u128],
+            vec![6u128, 4u128, 11u128],
+        ];
+
+        let three_prefixes = vec![VidpfInput::from_bools(&[false, false, true])];
+        let individual_prefixes = vec![
+            VidpfInput::from_bools(&[false]),
+            VidpfInput::from_bools(&[true]),
+        ];
+        let first_agg_param = MasticAggregationParam::new(three_prefixes.clone(), true).unwrap();
+        let second_agg_param = MasticAggregationParam::new(individual_prefixes, true).unwrap();
         let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
-        let first_agg_param = MasticAggregationParam::new(vec![first_prefix], true).unwrap();
-        let second_agg_param =
-            MasticAggregationParam::new(vec![second_prefix, third_prefix], true).unwrap();
+        let third_agg_param = MasticAggregationParam::new(three_prefixes, false).unwrap();
 
         assert_eq!(
             run_vdaf(
                 &mastic,
                 &first_agg_param,
                 [
-                    (first_input.clone(), first_measurement.clone()),
-                    (second_input.clone(), second_measurement.clone()),
-                    (third_input.clone(), third_measurement.clone()),
-                    (fourth_input.clone(), fourth_measurement.clone()),
-                    (fifth_input.clone(), fifth_measurement.clone())
+                    (inputs[0].clone(), measurements[0].clone()),
+                    (inputs[1].clone(), measurements[1].clone()),
+                    (inputs[2].clone(), measurements[2].clone()),
+                    (inputs[3].clone(), measurements[3].clone()),
+                    (inputs[4].clone(), measurements[4].clone()),
                 ]
             )
             .unwrap(),
@@ -1025,42 +1016,32 @@ mod tests {
                 &mastic,
                 &second_agg_param,
                 [
-                    (first_input.clone(), first_measurement.clone()),
-                    (second_input, second_measurement.clone()),
-                    (third_input, third_measurement),
-                    (fourth_input, fourth_measurement),
-                    (fifth_input, fifth_measurement)
+                    (inputs[0].clone(), measurements[0].clone()),
+                    (inputs[1].clone(), measurements[1].clone()),
+                    (inputs[2].clone(), measurements[2].clone()),
+                    (inputs[3].clone(), measurements[3].clone()),
+                    (inputs[4].clone(), measurements[4].clone()),
                 ]
             )
             .unwrap(),
             vec![vec![7, 21, 42], vec![1, 16, 0]]
         );
 
-        let (public_share, input_shares) = mastic
-            .shard(&(first_input.clone(), first_measurement.clone()), &nonce)
-            .unwrap();
-        run_vdaf_prepare(
-            &mastic,
-            &verify_key,
-            &first_agg_param,
-            &nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap();
-
-        let (public_share, input_shares) = mastic
-            .shard(&(first_input, second_measurement.clone()), &nonce)
-            .unwrap();
-        run_vdaf_prepare(
-            &mastic,
-            &verify_key,
-            &first_agg_param,
-            &nonce,
-            public_share,
-            input_shares,
-        )
-        .unwrap();
+        assert_eq!(
+            run_vdaf(
+                &mastic,
+                &third_agg_param,
+                [
+                    (inputs[0].clone(), measurements[0].clone()),
+                    (inputs[1].clone(), measurements[1].clone()),
+                    (inputs[2].clone(), measurements[2].clone()),
+                    (inputs[3].clone(), measurements[3].clone()),
+                    (inputs[4].clone(), measurements[4].clone()),
+                ]
+            )
+            .unwrap(),
+            vec![vec![1, 17, 31]]
+        );
     }
 
     #[test]

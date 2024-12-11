@@ -45,11 +45,6 @@ pub enum SzkError {
     #[error("Szk query error: {0}")]
     Query(String),
 
-    /// Returned when a user fails to store the length of the verifier so it
-    /// can be properly read upon receipt.
-    #[error("Part of Szk query state not stored")]
-    InvalidState(String),
-
     /// Returned if an FLP operation encountered an error.
     #[error("Flp error: {0}")]
     Flp(#[from] FlpError),
@@ -221,7 +216,7 @@ pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkQueryShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if let Some(ref part) = self.joint_rand_part_opt {
-            part.encode(bytes)?
+            part.encode(bytes)?;
         };
 
         encode_fieldvec(&self.flp_verifier, bytes)?;
@@ -260,44 +255,23 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 /// The state that needs to be stored by an Szk verifier between query() and decide().
 pub type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
-/// Verifier type for the SZK proof.
-pub type SzkVerifier<F> = Vec<F>;
-
-impl<F: FieldElement> Encode for SzkVerifier<F> {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        encode_fieldvec(self, bytes)?;
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        Some(self.len() * F::ENCODED_SIZE)
-    }
-}
-
-impl<F: FieldElement + Decode> ParameterizedDecode<usize> for SzkVerifier<F> {
-    fn decode_with_param(
-        verifier_len: &usize,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
-        decode_fieldvec(*verifier_len, bytes)
-    }
-}
-
 /// Joint share type for the SZK proof.
-pub type SzkJointShare<const SEED_SIZE: usize> = Option<[Seed<SEED_SIZE>; 2]>;
+///
+/// This is produced by [`Szk::merge_verifiers`] as the result of combining two query shares.
+/// It contains the re-computed joint randomness seed, if applicable. It is consumed by [`Szk::decide`].
+pub type SzkJointShare<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 
 impl<const SEED_SIZE: usize> Encode for SzkJointShare<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        if let Some([ref leader_part, ref helper_part]) = self {
-            leader_part.encode(bytes)?;
-            helper_part.encode(bytes)?;
+        if let Some(ref expected_seed) = self {
+            expected_seed.encode(bytes)?;
         };
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
         Some(match self {
-            Some(ref part) => part[0].encoded_len()? * 2,
+            Some(ref seed) => seed.encoded_len()?,
             None => 0,
         })
     }
@@ -309,10 +283,7 @@ impl<const SEED_SIZE: usize> ParameterizedDecode<bool> for SzkJointShare<SEED_SI
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         if *requires_joint_rand {
-            Ok(Some([
-                Seed::<SEED_SIZE>::decode(bytes)?,
-                Seed::<SEED_SIZE>::decode(bytes)?,
-            ]))
+            Ok(Some(Seed::<SEED_SIZE>::decode(bytes)?))
         } else {
             Ok(None)
         }
@@ -627,9 +598,11 @@ where
                 leader_share.joint_rand_part_opt,
                 helper_share.joint_rand_part_opt,
             ) {
-                (Some(leader_part), Some(helper_part)) => Ok(Some([leader_part, helper_part])),
+                (Some(ref leader_part), Some(ref helper_part)) => {
+                    Ok(Some(self.derive_joint_rand_seed(leader_part, helper_part)))
+                }
                 (None, None) => Ok(None),
-                _ => Err(SzkError::InvalidState(
+                _ => Err(SzkError::Decide(
                     "at least one of the joint randomness parts is missing".to_string(),
                 )),
             }
@@ -642,14 +615,12 @@ where
     pub fn decide(
         &self,
         query_state: SzkQueryState<SEED_SIZE>,
-        joint_share: &[Seed<SEED_SIZE>; 2],
+        joint_share: SzkJointShare<SEED_SIZE>,
     ) -> Result<(), SzkError> {
         // Check that joint randomness was properly derived from both
         // aggregators' parts
         match (query_state, joint_share) {
-            (Some(joint_rand_seed), [leader_joint_rand_part, helper_joint_rand_part]) => {
-                let expected_joint_rand_seed =
-                    self.derive_joint_rand_seed(leader_joint_rand_part, helper_joint_rand_part);
+            (Some(joint_rand_seed), Some(expected_joint_rand_seed)) => {
                 if joint_rand_seed == expected_joint_rand_seed {
                     Ok(())
                 } else {
@@ -659,7 +630,11 @@ where
                     ))
                 }
             }
-            (None, _) => Ok(()),
+
+            (None, None) => Ok(()),
+            _ => Err(SzkError::Decide(
+                "Either computed or stored joint randomness seed is missing".to_string(),
+            )),
         }
     }
 }
@@ -749,32 +724,35 @@ mod tests {
 
         let joint_share_result =
             szk_typ.merge_verifiers(l_query_share.clone(), h_query_share.clone());
-        match joint_share_result {
-            Ok(Some(ref joint_share)) => {
-                let leader_decision = szk_typ.decide(l_query_state.clone(), joint_share).is_ok();
+        let joint_share = match joint_share_result {
+            Ok(joint_share) => {
+                let leader_decision = szk_typ
+                    .decide(l_query_state.clone(), joint_share.clone())
+                    .is_ok();
                 assert_eq!(
                     leader_decision, valid,
                     "Leader incorrectly determined validity",
                 );
-                let helper_decision = szk_typ.decide(h_query_state.clone(), joint_share).is_ok();
+                let helper_decision = szk_typ
+                    .decide(h_query_state.clone(), joint_share.clone())
+                    .is_ok();
                 assert_eq!(
                     helper_decision, valid,
                     "Helper incorrectly determined validity",
                 );
+                joint_share
             }
-            Ok(None) => assert!(valid, "Aggregator incorrectly determined validity"),
             Err(_) => {
                 assert!(!valid, "Aggregator incorrectly determined validity");
+                None
             }
         };
 
         //test mutated jr seed
         if szk_typ.requires_joint_rand() {
             let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
-            if let Ok(Some(ref joint_share)) = joint_share_result {
-                if let Ok(()) = szk_typ.decide(joint_rand_seed_opt.clone(), joint_share) {
-                    panic!("Leader accepted wrong jr seed");
-                };
+            if let Ok(()) = szk_typ.decide(joint_rand_seed_opt.clone(), joint_share) {
+                panic!("Leader accepted wrong jr seed");
             };
         };
 
@@ -788,8 +766,7 @@ mod tests {
 
         let joint_share_res = szk_typ.merge_verifiers(mutated_query_share, h_query_share.clone());
         let leader_decision = match joint_share_res {
-            Ok(Some(ref joint_share)) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
-            Ok(None) => true,
+            Ok(joint_share) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
             Err(_) => false,
         };
         assert!(!leader_decision, "Leader validated after proof mutation");
@@ -805,8 +782,7 @@ mod tests {
         let joint_share_res = szk_typ.merge_verifiers(mutated_query_share, h_query_share.clone());
 
         let leader_decision = match joint_share_res {
-            Ok(Some(ref joint_share)) => szk_typ.decide(mutated_query_state, joint_share).is_ok(),
-            Ok(None) => true,
+            Ok(joint_share) => szk_typ.decide(mutated_query_state, joint_share).is_ok(),
             Err(_) => false,
         };
         assert!(!leader_decision, "Leader validated after input mutation");
@@ -839,8 +815,7 @@ mod tests {
         let joint_share_res = szk_typ.merge_verifiers(l_query_share, h_query_share.clone());
 
         let leader_decision = match joint_share_res {
-            Ok(Some(ref joint_share)) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
-            Ok(None) => true,
+            Ok(joint_share) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
             Err(_) => false,
         };
         assert!(!leader_decision, "Leader validated after proof mutation");
