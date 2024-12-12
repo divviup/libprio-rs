@@ -285,7 +285,7 @@ mod tests {
     #[ignore]
     #[test]
     fn test_vec_prio3_sum() {
-        const FAKE_MAX_MEASUREMENT_UPDATE_ME: u128 = 0;
+        const FAKE_MAX_MEASUREMENT_UPDATE_ME: u64 = 0;
         for test_vector_str in [
             include_str!("test_vec/08/Prio3Sum_0.json"),
             include_str!("test_vec/08/Prio3Sum_1.json"),
