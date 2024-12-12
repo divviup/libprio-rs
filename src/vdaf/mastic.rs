@@ -5,7 +5,7 @@
 //! [draft-mouris-cfrg-mastic-01]: https://www.ietf.org/archive/id/draft-mouris-cfrg-mastic-01.html
 
 use crate::{
-    bt::{BinaryTree, Path},
+    bt::BinaryTree,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, FieldElement},
     flp::{
@@ -72,7 +72,7 @@ where
 /// Mastic aggregation parameter.
 ///
 /// This includes the VIDPF tree level under evaluation and a set of prefixes to evaluate at that level.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MasticAggregationParam {
     /// aggregation parameter inherited from [`Poplar1`]: contains the level (attribute length) and a vector of attribute prefixes (IdpfInputs)
     level_and_prefixes: Poplar1AggregationParam,
@@ -282,7 +282,6 @@ where
         2
     }
 }
-
 impl<T, P, const SEED_SIZE: usize> Mastic<T, P, SEED_SIZE>
 where
     T: Type,
@@ -383,9 +382,9 @@ where
     }
 }
 
-/// Mastic prepare state.
+/// Mastic preparation state.
 ///
-/// State held by an aggregator between rounds of Mastic preparation. Includes intermediate
+/// State held by an aggregator waiting for a message during Mastic preparation. Includes intermediate
 /// state for [`Szk`] verification, the output shares currently being validated, and
 /// parameters of Mastic used for encoding.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -397,9 +396,9 @@ pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
     verifier_len: Option<usize>,
 }
 
-/// Mastic prepare share.
+/// Mastic preparation share.
 ///
-/// Broadcast message from an aggregator between rounds of Mastic. Includes the
+/// Broadcast message from an aggregator preparing Mastic output shares. Includes the
 /// [`Vidpf`] evaluation proof covering every prefix in the aggregation parameter, and optionally
 /// the verification message for Szk.
 #[derive(Clone, Debug)]
@@ -456,7 +455,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
     }
 }
 
-/// Mastic prepare message.
+/// Mastic preparation message.
 ///
 /// Result of preprocessing the broadcast messages of both aggregators during the
 /// preparation phase.
@@ -531,14 +530,6 @@ where
             self.vidpf.weight_parameter * agg_param.level_and_prefixes.prefixes().len(),
         );
         let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
-        let cache = VidpfEvalCache::<VidpfWeight<T::Field>>::init_from_key(
-            id,
-            &input_share.vidpf_key,
-            &self.vidpf.weight_parameter,
-        );
-        cache_tree
-            .insert(Path::empty(), cache)
-            .expect("Should alwys be able to insert into empty tree at root");
         for prefix in agg_param.level_and_prefixes.prefixes() {
             let mut value_share = self.vidpf.eval_with_cache(
                 id,
@@ -552,52 +543,46 @@ where
             output_shares.append(&mut value_share.share.0);
         }
 
-        let szk_verify_opt = if agg_param.require_weight_check {
-            let root_share = self.vidpf.eval_root_with_cache(
+        Ok(if agg_param.require_weight_check {
+            let MasticInputShare {
+                vidpf_key,
+                proof_share,
+            } = input_share;
+            let root_share = self.vidpf.get_root_weight_share(
                 id,
-                &input_share.vidpf_key,
+                vidpf_key,
                 public_share,
                 &mut cache_tree,
                 nonce,
             )?;
-            Some(self.szk.query(
-                root_share.as_ref(),
-                input_share.proof_share.clone(),
-                verify_key,
-                nonce,
-            )?)
+            let (szk_query_share, szk_query_state) =
+                self.szk
+                    .query(root_share.as_ref(), proof_share, verify_key, nonce)?;
+            let verifier_len = szk_query_share.flp_verifier.len();
+            (
+                MasticPrepareState {
+                    output_shares: MasticOutputShare::<T::Field>::from(output_shares),
+                    szk_query_state,
+                    verifier_len: Some(verifier_len),
+                },
+                MasticPrepareShare {
+                    vidpf_proof: eval_proof.into_seed(),
+                    szk_query_share_opt: Some(szk_query_share),
+                },
+            )
         } else {
-            None
-        };
-
-        let (prep_share, prep_state) =
-            if let Some((szk_query_share, szk_query_state)) = szk_verify_opt {
-                let verifier_len = szk_query_share.flp_verifier.len();
-                (
-                    MasticPrepareShare {
-                        vidpf_proof: eval_proof.into_seed(),
-                        szk_query_share_opt: Some(szk_query_share),
-                    },
-                    MasticPrepareState {
-                        output_shares: MasticOutputShare::<T::Field>::from(output_shares),
-                        szk_query_state,
-                        verifier_len: Some(verifier_len),
-                    },
-                )
-            } else {
-                (
-                    MasticPrepareShare {
-                        vidpf_proof: eval_proof.into_seed(),
-                        szk_query_share_opt: None,
-                    },
-                    MasticPrepareState {
-                        output_shares: MasticOutputShare::<T::Field>::from(output_shares),
-                        szk_query_state: None,
-                        verifier_len: None,
-                    },
-                )
-            };
-        Ok((prep_state, prep_share))
+            (
+                MasticPrepareState {
+                    output_shares: MasticOutputShare::<T::Field>::from(output_shares),
+                    szk_query_state: None,
+                    verifier_len: None,
+                },
+                MasticPrepareShare {
+                    vidpf_proof: eval_proof.into_seed(),
+                    szk_query_share_opt: None,
+                },
+            )
+        })
     }
 
     fn prepare_shares_to_prepare_message<
@@ -631,7 +616,7 @@ where
         ) {
             (Some(leader_query_share), Some(helper_query_share)) => Ok(self
                 .szk
-                .merge_verifiers(leader_query_share, helper_query_share)?),
+                .merge_query_shares(leader_query_share, helper_query_share)?),
             (None, None) => Ok(None),
             (_, _) => Err(VdafError::Uncategorized(
                 "Only one of leader and helper query shares is present".to_string(),
@@ -839,6 +824,30 @@ mod tests {
             helper_input_share.encoded_len().unwrap(),
             helper_input_share.get_encoded().unwrap().len()
         );
+    }
+
+    #[test]
+    fn test_agg_param_roundtrip() {
+        let three_prefixes = vec![VidpfInput::from_bools(&[false, false, true])];
+        let individual_prefixes = vec![
+            VidpfInput::from_bools(&[false]),
+            VidpfInput::from_bools(&[true]),
+        ];
+        let agg_params = [
+            MasticAggregationParam::new(three_prefixes.clone(), true).unwrap(),
+            MasticAggregationParam::new(individual_prefixes, true).unwrap(),
+            MasticAggregationParam::new(three_prefixes, false).unwrap(),
+        ];
+
+        let encoded_agg_params = agg_params
+            .iter()
+            .map(|agg_param| agg_param.get_encoded().unwrap());
+        let decoded_agg_params = encoded_agg_params
+            .map(|encoded_ap| MasticAggregationParam::get_decoded(&encoded_ap).unwrap());
+        agg_params
+            .iter()
+            .zip(decoded_agg_params)
+            .for_each(|(agg_param, decoded_agg_param)| assert_eq!(*agg_param, decoded_agg_param));
     }
 
     #[test]

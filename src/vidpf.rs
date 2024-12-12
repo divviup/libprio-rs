@@ -228,7 +228,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     /// Evaluates the entire `input` and produces a share of the
     /// input's weight. It reuses computation from previous levels available in the
     /// cache.
-    pub fn eval_with_cache(
+    pub(crate) fn eval_with_cache(
         &self,
         id: VidpfServerId,
         key: &VidpfKey,
@@ -326,7 +326,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok((next_state, y))
     }
 
-    pub(crate) fn eval_root_with_cache(
+    pub(crate) fn get_root_weight_share(
         &self,
         id: VidpfServerId,
         key: &VidpfKey,
@@ -470,7 +470,7 @@ impl VidpfDomainSepTag {
 /// Vidpf key.
 ///
 /// Private key of an aggregation server.
-pub type VidpfKey = Seed<16>;
+pub type VidpfKey = Seed<VIDPF_SEED_SIZE>;
 
 /// Vidpf server ID.
 ///
@@ -634,17 +634,6 @@ pub struct VidpfEvalCache<W: VidpfValue> {
 }
 
 impl<W: VidpfValue> VidpfEvalCache<W> {
-    pub(crate) fn init_from_key(
-        id: VidpfServerId,
-        key: &VidpfKey,
-        length: &W::ValueParameter,
-    ) -> Self {
-        Self {
-            state: VidpfEvalState::init_from_key(id, key),
-            share: W::zero(length),
-        }
-    }
-
     fn to_share(&self) -> VidpfValueShare<W> {
         VidpfValueShare::<W> {
             share: self.share.clone(),
@@ -663,6 +652,7 @@ pub struct VidpfValueShare<W: VidpfValue> {
 
 /// Proof size in bytes.
 const VIDPF_PROOF_SIZE: usize = 32;
+const VIDPF_SEED_SIZE: usize = 16;
 
 /// Allows to validate user input and shares after evaluation.
 type VidpfProof = [u8; VIDPF_PROOF_SIZE];
@@ -678,7 +668,7 @@ fn conditional_xor_proof(mut lhs: VidpfProof, rhs: &VidpfProof, choice: Choice) 
 }
 
 /// Feeds a pseudorandom generator during evaluation.
-type VidpfSeed = [u8; 16];
+type VidpfSeed = [u8; VIDPF_SEED_SIZE];
 
 /// Contains the seeds and control bits produced by [`Vidpf::prg`].
 struct VidpfPrgOutput {
