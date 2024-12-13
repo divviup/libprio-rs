@@ -80,7 +80,7 @@ pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 16>;
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
     pub fn new_count(num_aggregators: u8) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, 0x00000000, Count::new())
+        Prio3::new(num_aggregators, 1, 0x00000001, Count::new())
     }
 }
 
@@ -102,7 +102,7 @@ impl Prio3SumVec {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000002,
+            0x00000003,
             SumVec::new(bits, len, chunk_length)?,
         )
     }
@@ -132,7 +132,7 @@ impl Prio3SumVecMultithreaded {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000002,
+            0x00000003,
             SumVec::new(bits, len, chunk_length)?,
         )
     }
@@ -149,7 +149,7 @@ impl Prio3Sum {
         num_aggregators: u8,
         max_measurement: <Field64 as FieldElementWithInteger>::Integer,
     ) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, 0x00000001, Sum::new(max_measurement)?)
+        Prio3::new(num_aggregators, 1, 0x00000002, Sum::new(max_measurement)?)
     }
 }
 
@@ -247,7 +247,7 @@ impl Prio3Histogram {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000003,
+            0x00000004,
             Histogram::new(length, chunk_length)?,
         )
     }
@@ -275,7 +275,7 @@ impl Prio3HistogramMultithreaded {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000003,
+            0x00000004,
             Histogram::new(length, chunk_length)?,
         )
     }
@@ -299,7 +299,7 @@ impl Prio3MultihotCountVec {
         Prio3::new(
             num_aggregators,
             1,
-            0xFFFF0000,
+            0x00000005,
             MultihotCountVec::new(num_buckets, max_weight, chunk_length)?,
         )
     }
@@ -328,7 +328,7 @@ impl Prio3MultihotCountVecMultithreaded {
         Prio3::new(
             num_aggregators,
             1,
-            0xFFFF0000,
+            0x00000005,
             MultihotCountVec::new(num_buckets, max_weight, chunk_length)?,
         )
     }
