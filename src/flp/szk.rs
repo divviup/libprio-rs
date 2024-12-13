@@ -710,27 +710,37 @@ mod tests {
             &nonce,
         );
 
-        let [l_proof_share, h_proof_share] = proof_shares.unwrap();
-        let (l_query_share, l_query_state) = szk_typ
-            .query(&leader_input_share, &l_proof_share, &verify_key, &nonce)
+        let [leader_proof_share, helper_proof_share] = proof_shares.unwrap();
+        let (leader_query_share, leader_query_state) = szk_typ
+            .query(
+                &leader_input_share,
+                &leader_proof_share,
+                &verify_key,
+                &nonce,
+            )
             .unwrap();
-        let (h_query_share, h_query_state) = szk_typ
-            .query(&helper_input_share, &h_proof_share, &verify_key, &nonce)
+        let (helper_query_share, helper_query_state) = szk_typ
+            .query(
+                &helper_input_share,
+                &helper_proof_share,
+                &verify_key,
+                &nonce,
+            )
             .unwrap();
 
         let joint_share_result =
-            szk_typ.merge_query_shares(l_query_share.clone(), h_query_share.clone());
+            szk_typ.merge_query_shares(leader_query_share.clone(), helper_query_share.clone());
         let joint_share = match joint_share_result {
             Ok(joint_share) => {
                 let leader_decision = szk_typ
-                    .decide(l_query_state.clone(), joint_share.clone())
+                    .decide(leader_query_state.clone(), joint_share.clone())
                     .is_ok();
                 assert_eq!(
                     leader_decision, valid,
                     "Leader incorrectly determined validity",
                 );
                 let helper_decision = szk_typ
-                    .decide(h_query_state.clone(), joint_share.clone())
+                    .decide(helper_query_state.clone(), joint_share.clone())
                     .is_ok();
                 assert_eq!(
                     helper_decision, valid,
@@ -753,7 +763,7 @@ mod tests {
         };
 
         // test mutated verifier
-        let mut mutated_query_share = l_query_share.clone();
+        let mut mutated_query_share = leader_query_share.clone();
         for x in mutated_query_share.flp_verifier.iter_mut() {
             *x += T::Field::from(
                 <T::Field as FieldElementWithInteger>::Integer::try_from(7).unwrap(),
@@ -761,9 +771,11 @@ mod tests {
         }
 
         let joint_share_res =
-            szk_typ.merge_query_shares(mutated_query_share, h_query_share.clone());
+            szk_typ.merge_query_shares(mutated_query_share, helper_query_share.clone());
         let leader_decision = match joint_share_res {
-            Ok(joint_share) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
+            Ok(joint_share) => szk_typ
+                .decide(leader_query_state.clone(), joint_share)
+                .is_ok(),
             Err(_) => false,
         };
         assert!(!leader_decision, "Leader validated after proof mutation");
@@ -773,11 +785,11 @@ mod tests {
         mutated_input[0] *=
             T::Field::from(<T::Field as FieldElementWithInteger>::Integer::try_from(23).unwrap());
         let (mutated_query_share, mutated_query_state) = szk_typ
-            .query(&mutated_input, &l_proof_share, &verify_key, &nonce)
+            .query(&mutated_input, &leader_proof_share, &verify_key, &nonce)
             .unwrap();
 
         let joint_share_res =
-            szk_typ.merge_query_shares(mutated_query_share, h_query_share.clone());
+            szk_typ.merge_query_shares(mutated_query_share, helper_query_share.clone());
 
         let leader_decision = match joint_share_res {
             Ok(joint_share) => szk_typ.decide(mutated_query_state, joint_share).is_ok(),
@@ -786,23 +798,24 @@ mod tests {
         assert!(!leader_decision, "Leader validated after input mutation");
 
         // test mutated proof share
-        let (mut mutated_proof, leader_blind_and_helper_joint_rand_part_opt) = match l_proof_share {
-            SzkProofShare::Leader {
-                uncompressed_proof_share,
-                leader_blind_and_helper_joint_rand_part_opt,
-            } => (
-                uncompressed_proof_share,
-                leader_blind_and_helper_joint_rand_part_opt,
-            ),
-            _ => (vec![], None),
-        };
+        let (mut mutated_proof, leader_blind_and_helper_joint_rand_part_opt) =
+            match leader_proof_share {
+                SzkProofShare::Leader {
+                    uncompressed_proof_share,
+                    leader_blind_and_helper_joint_rand_part_opt,
+                } => (
+                    uncompressed_proof_share,
+                    leader_blind_and_helper_joint_rand_part_opt,
+                ),
+                _ => (vec![], None),
+            };
         mutated_proof[0] *=
             T::Field::from(<T::Field as FieldElementWithInteger>::Integer::try_from(23).unwrap());
         let mutated_proof_share = SzkProofShare::Leader {
             uncompressed_proof_share: mutated_proof,
             leader_blind_and_helper_joint_rand_part_opt,
         };
-        let (l_query_share, l_query_state) = szk_typ
+        let (leader_query_share, leader_query_state) = szk_typ
             .query(
                 &leader_input_share,
                 &mutated_proof_share,
@@ -810,10 +823,13 @@ mod tests {
                 &nonce,
             )
             .unwrap();
-        let joint_share_res = szk_typ.merge_query_shares(l_query_share, h_query_share.clone());
+        let joint_share_res =
+            szk_typ.merge_query_shares(leader_query_share, helper_query_share.clone());
 
         let leader_decision = match joint_share_res {
-            Ok(joint_share) => szk_typ.decide(l_query_state.clone(), joint_share).is_ok(),
+            Ok(joint_share) => szk_typ
+                .decide(leader_query_state.clone(), joint_share)
+                .is_ok(),
             Err(_) => false,
         };
         assert!(!leader_decision, "Leader validated after proof mutation");
@@ -837,7 +853,7 @@ mod tests {
             *x -= *y;
         }
 
-        let [l_proof_share, _] = szk_typ
+        let [leader_proof_share, _] = szk_typ
             .prove(
                 &leader_input_share,
                 &helper_input_share,
@@ -849,8 +865,8 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            l_proof_share.encoded_len().unwrap(),
-            l_proof_share.get_encoded().unwrap().len()
+            leader_proof_share.encoded_len().unwrap(),
+            leader_proof_share.get_encoded().unwrap().len()
         );
     }
 

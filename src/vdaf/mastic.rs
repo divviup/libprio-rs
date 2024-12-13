@@ -27,6 +27,7 @@ use crate::{
 use std::fmt::Debug;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
+use std::slice::from_ref;
 use subtle::{Choice, ConstantTimeEq};
 
 const DST_PATH_CHECK_BATCH: u16 = 6;
@@ -485,18 +486,18 @@ where
     type PrepareMessage = MasticPrepareMessage<SEED_SIZE>;
 
     fn is_agg_param_valid(cur: &MasticAggregationParam, prev: &[MasticAggregationParam]) -> bool {
-        // First agg param should be only one that requires weight check.
+        // First agg param should be the only one that requires weight check.
         if cur.require_weight_check != prev.is_empty() {
             return false;
         };
 
+        if prev.is_empty() {
+            return true;
+        }
         // Unpack this agg param and the last one in the list
         let cur_poplar_agg_param = &cur.level_and_prefixes;
-        let prev_poplar_agg_param = &prev.last().as_ref().unwrap().level_and_prefixes;
-        Poplar1::<P, SEED_SIZE>::is_agg_param_valid(
-            cur_poplar_agg_param,
-            &[prev_poplar_agg_param.clone()],
-        )
+        let prev_poplar_agg_param = from_ref(&prev.last().as_ref().unwrap().level_and_prefixes);
+        Poplar1::<P, SEED_SIZE>::is_agg_param_valid(cur_poplar_agg_param, prev_poplar_agg_param)
     }
 
     fn prepare_init(
@@ -614,6 +615,7 @@ where
             leader_share.szk_query_share_opt,
             helper_share.szk_query_share_opt,
         ) {
+            // The SZK is only used once, during the first round of aggregation.
             (Some(leader_query_share), Some(helper_query_share)) => Ok(self
                 .szk
                 .merge_query_shares(leader_query_share, helper_query_share)?),
