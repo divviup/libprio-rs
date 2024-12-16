@@ -17,6 +17,8 @@ use prio::dp::distributions::DiscreteGaussian;
 use prio::idpf::test_utils::generate_zipf_distributed_batch;
 #[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
+#[cfg(feature = "experimental")]
+use prio::vidpf::VidpfServerId;
 use prio::{
     benchmarked::*,
     field::{random_vector, Field128 as F, FieldElement},
@@ -878,7 +880,9 @@ fn vidpf(c: &mut Criterion) {
             let (public, keys) = vidpf.gen(&input, &weight, NONCE).unwrap();
 
             b.iter(|| {
-                let _ = vidpf.eval(&keys[0], &public, &input, NONCE).unwrap();
+                let _ = vidpf
+                    .eval(VidpfServerId::S0, &keys[0], &public, &input, NONCE)
+                    .unwrap();
             });
         });
     }
