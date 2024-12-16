@@ -620,7 +620,7 @@ where
 
     /// Returns true if the joint randomness seed used during the query phase
     /// was correctly computed from both aggregators' parts.
-    pub(crate) fn decide(
+    pub fn decide(
         &self,
         query_state: SzkQueryState<SEED_SIZE>,
         joint_share: SzkJointShare<SEED_SIZE>,
