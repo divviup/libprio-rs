@@ -408,6 +408,11 @@ This crate uses unsafe since it's for C to Rust FFI. I have reviewed and fuzzed 
 The only dependency is zlib-rs, which is maintained by the same maintainers as this crate.
 """
 
+[[audits.libz-rs-sys]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.0 -> 0.4.1"
+
 [[audits.linux-raw-sys]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -858,6 +863,11 @@ zlib-rs uses unsafe Rust for invoking compiler intrinsics (i.e. SIMD), eschewing
 
 zlib-rs does not require any external dependencies.
 """
+
+[[audits.zlib-rs]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.0 -> 0.4.1"
 
 [[trusted.byteorder]]
 criteria = "safe-to-deploy"
