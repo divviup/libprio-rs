@@ -619,7 +619,7 @@ where
             (Some(leader_query_share), Some(helper_query_share)) => Ok(self
                 .szk
                 .merge_query_shares(leader_query_share, helper_query_share)?),
-            (None, None) => Ok(None),
+            (None, None) => Ok(SzkJointShare::none()),
             (_, _) => Err(VdafError::Uncategorized(
                 "Only one of leader and helper query shares is present".to_string(),
             )),

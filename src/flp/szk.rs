@@ -259,18 +259,25 @@ pub(crate) type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
 ///
 /// This is produced as the result of combining two query shares.
 /// It contains the re-computed joint randomness seed, if applicable. It is consumed by [`Szk::decide`].
-pub(crate) type SzkJointShare<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SzkJointShare<const SEED_SIZE: usize>(Option<Seed<SEED_SIZE>>);
+
+impl<const SEED_SIZE: usize> SzkJointShare<SEED_SIZE> {
+    pub(crate) fn none() -> SzkJointShare<SEED_SIZE> {
+        SzkJointShare(None)
+    }
+}
 
 impl<const SEED_SIZE: usize> Encode for SzkJointShare<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        if let Some(ref expected_seed) = self {
+        if let Some(ref expected_seed) = self.0 {
             expected_seed.encode(bytes)?;
         };
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(match self {
+        Some(match self.0 {
             Some(ref seed) => seed.encoded_len()?,
             None => 0,
         })
@@ -283,9 +290,9 @@ impl<const SEED_SIZE: usize> ParameterizedDecode<bool> for SzkJointShare<SEED_SI
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         if *requires_joint_rand {
-            Ok(Some(Seed::<SEED_SIZE>::decode(bytes)?))
+            Ok(SzkJointShare(Some(Seed::<SEED_SIZE>::decode(bytes)?)))
         } else {
-            Ok(None)
+            Ok(SzkJointShare(None))
         }
     }
 }
@@ -598,10 +605,10 @@ where
                 leader_share.joint_rand_part_opt,
                 helper_share.joint_rand_part_opt,
             ) {
-                (Some(ref leader_part), Some(ref helper_part)) => {
-                    Ok(Some(self.derive_joint_rand_seed(leader_part, helper_part)))
-                }
-                (None, None) => Ok(None),
+                (Some(ref leader_part), Some(ref helper_part)) => Ok(SzkJointShare(Some(
+                    self.derive_joint_rand_seed(leader_part, helper_part),
+                ))),
+                (None, None) => Ok(SzkJointShare(None)),
                 _ => Err(SzkError::Decide(
                     "at least one of the joint randomness parts is missing".to_string(),
                 )),
@@ -621,7 +628,7 @@ where
         // Check that joint randomness was properly derived from both
         // aggregators' parts
         match (query_state, joint_share) {
-            (Some(joint_rand_seed), Some(expected_joint_rand_seed)) => {
+            (Some(joint_rand_seed), SzkJointShare(Some(expected_joint_rand_seed))) => {
                 if joint_rand_seed == expected_joint_rand_seed {
                     Ok(())
                 } else {
@@ -632,7 +639,7 @@ where
                 }
             }
 
-            (None, None) => Ok(()),
+            (None, SzkJointShare(None)) => Ok(()),
             _ => Err(SzkError::Decide(
                 "Either computed or stored joint randomness seed is missing".to_string(),
             )),
@@ -750,7 +757,7 @@ mod tests {
             }
             Err(_) => {
                 assert!(!valid, "Aggregator incorrectly determined validity");
-                None
+                SzkJointShare(None)
             }
         };
 

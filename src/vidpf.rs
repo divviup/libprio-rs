@@ -242,14 +242,13 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
             return Err(VidpfError::InvalidAttributeLength);
         }
 
-        cache_tree.root.get_or_insert_with(|| {
+        let mut sub_tree = cache_tree.root.get_or_insert_with(|| {
             Box::new(Node::new(VidpfEvalCache {
                 state: VidpfEvalState::init_from_key(id, key),
                 share: W::zero(&self.weight_parameter), // not used
             }))
         });
 
-        let mut sub_tree = cache_tree.root.as_mut().expect("root was visited");
         for (level, bit) in input.iter().enumerate() {
             sub_tree = if !bit {
                 if sub_tree.left.is_none() {
