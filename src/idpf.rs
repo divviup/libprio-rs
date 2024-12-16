@@ -251,7 +251,7 @@ fn extend(seed: &[u8; 16], xof_mode: &XofMode<'_>) -> ([[u8; 16]; 2], [Choice; 2
             let mut dst = Vec::with_capacity(EXTEND_DOMAIN_SEP.len() + ctx.len());
             dst.extend(EXTEND_DOMAIN_SEP);
             dst.extend(*ctx);
-            let mut xof = XofTurboShake128::init(seed, &dst);
+            let mut xof = XofTurboShake128::from_seed_slice(seed, &dst);
             xof.update(nonce);
             let mut seed_stream = xof.into_seed_stream();
             seed_stream.fill_bytes(&mut seeds[0]);
@@ -287,7 +287,7 @@ where
             let mut dst = Vec::with_capacity(CONVERT_DOMAIN_SEP.len() + ctx.len());
             dst.extend(CONVERT_DOMAIN_SEP);
             dst.extend(*ctx);
-            let mut xof = XofTurboShake128::init(seed, &dst);
+            let mut xof = XofTurboShake128::from_seed_slice(seed, &dst);
             xof.update(nonce);
             let mut seed_stream = xof.into_seed_stream();
             seed_stream.fill_bytes(&mut next_seed);

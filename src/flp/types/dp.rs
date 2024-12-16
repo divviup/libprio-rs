@@ -219,7 +219,7 @@ mod tests {
         const SIZE: usize = 10;
 
         {
-            let mut rng = XofTurboShake128::init(&[0; 16], &[]).into_seed_stream();
+            let mut rng = XofTurboShake128::init(&[0; 32], &[]).into_seed_stream();
             let [mut share1, mut share2]: [Vec<Field128>; 2] =
                 split_vector(&[Field128::zero(); SIZE], 2)
                     .unwrap()
@@ -240,22 +240,22 @@ mod tests {
             assert_eq!(
                 aggregate_result,
                 [
-                    -Field128::from(7),
+                    Field128::from(9),
+                    Field128::from(5),
+                    Field128::from(15),
                     Field128::from(3),
-                    -Field128::from(9),
-                    -Field128::from(17),
-                    -Field128::from(1),
-                    -Field128::from(7),
-                    -Field128::from(9),
+                    Field128::from(5),
                     Field128::from(0),
-                    -Field128::from(6),
-                    -Field128::from(4),
+                    -Field128::from(3),
+                    -Field128::from(30),
+                    Field128::from(2),
+                    -Field128::from(7),
                 ]
             );
         }
 
         {
-            let mut rng = XofTurboShake128::init(&[1; 16], &[]).into_seed_stream();
+            let mut rng = XofTurboShake128::init(&[1; 32], &[]).into_seed_stream();
             let [mut share1, mut share2]: [Vec<Field128>; 2] =
                 split_vector(&[Field128::zero(); SIZE], 2)
                     .unwrap()
@@ -276,16 +276,16 @@ mod tests {
             assert_eq!(
                 aggregate_result,
                 [
-                    Field128::from(81),
-                    Field128::from(33),
-                    -Field128::from(26),
-                    Field128::from(19),
-                    Field128::from(18),
-                    -Field128::from(1),
-                    -Field128::from(28),
-                    Field128::from(31),
-                    Field128::from(40),
-                    Field128::from(38),
+                    -Field128::from(36),
+                    -Field128::from(8),
+                    Field128::from(24),
+                    Field128::from(32),
+                    Field128::from(9),
+                    -Field128::from(7),
+                    -Field128::from(4),
+                    Field128::from(9),
+                    -Field128::from(8),
+                    -Field128::from(14),
                 ]
             );
         }
@@ -298,7 +298,7 @@ mod tests {
         );
         const SIZE: usize = 10;
 
-        let mut rng = XofTurboShake128::init(&[2; 16], &[]).into_seed_stream();
+        let mut rng = XofTurboShake128::init(&[2; 32], &[]).into_seed_stream();
         let [mut share1, mut share2]: [Vec<Field128>; 2] =
             split_vector(&[Field128::zero(); SIZE], 2)
                 .unwrap()
@@ -321,14 +321,14 @@ mod tests {
             [
                 Field128::from(2),
                 Field128::from(1),
-                Field128::from(0),
                 -Field128::from(1),
-                -Field128::from(1),
+                Field128::from(1),
                 Field128::from(3),
                 Field128::from(1),
-                -Field128::from(1),
+                Field128::from(0),
+                Field128::from(4),
+                Field128::from(3),
                 -Field128::from(2),
-                Field128::from(1),
             ]
         );
     }

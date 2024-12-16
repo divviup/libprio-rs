@@ -312,7 +312,7 @@ where
     phantom: PhantomData<P>,
 }
 
-impl<T: Type> Szk<T, XofTurboShake128, 16> {
+impl<T: Type> Szk<T, XofTurboShake128, 32> {
     /// Create an instance of [`Szk`] using [`XofTurboShake128`].
     pub fn new_turboshake128(typ: T, algorithm_id: u32) -> Self {
         Szk::new(typ, algorithm_id)
@@ -690,18 +690,16 @@ mod tests {
 
     fn generic_szk_test<T: Type>(typ: T, encoded_measurement: &[T::Field], valid: bool) {
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
+        let mut verify_key = [0u8; 32];
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(typ.clone(), algorithm_id);
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = if szk_typ.requires_joint_rand() {
-            Some(Seed::<16>::generate().unwrap())
-        } else {
-            None
-        };
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
+        let leader_seed_opt = szk_typ
+            .requires_joint_rand()
+            .then(|| Seed::generate().unwrap());
         let helper_input_share: Vec<T::Field> = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -763,7 +761,7 @@ mod tests {
 
         //test mutated jr seed
         if szk_typ.requires_joint_rand() {
-            let joint_rand_seed_opt = Some(Seed::<16>::generate().unwrap());
+            let joint_rand_seed_opt = Some(Seed::generate().unwrap());
             if let Ok(()) = szk_typ.decide(joint_rand_seed_opt.clone(), joint_share) {
                 panic!("Leader accepted wrong jr seed");
             };
@@ -851,9 +849,9 @@ mod tests {
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
+        let leader_seed_opt = Some(Seed::generate().unwrap());
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -886,9 +884,9 @@ mod tests {
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sumvec, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
+        let leader_seed_opt = Some(Seed::generate().unwrap());
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -920,9 +918,9 @@ mod tests {
         let encoded_measurement = count.encode_measurement(&true).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(count, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
+        let leader_seed_opt = Some(Seed::generate().unwrap());
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -955,8 +953,8 @@ mod tests {
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
@@ -996,8 +994,8 @@ mod tests {
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sum, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
@@ -1036,8 +1034,8 @@ mod tests {
         let encoded_measurement = count.encode_measurement(&true).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(count, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
@@ -1076,8 +1074,8 @@ mod tests {
         let encoded_measurement = count.encode_measurement(&true).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(count, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
@@ -1117,9 +1115,9 @@ mod tests {
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sumvec, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
+        let leader_seed_opt = Some(Seed::generate().unwrap());
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
@@ -1158,9 +1156,9 @@ mod tests {
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let algorithm_id = 5;
         let szk_typ = Szk::new_turboshake128(sumvec, algorithm_id);
-        let prove_rand_seed = Seed::<16>::generate().unwrap();
-        let helper_seed = Seed::<16>::generate().unwrap();
-        let leader_seed_opt = Some(Seed::<16>::generate().unwrap());
+        let prove_rand_seed = Seed::generate().unwrap();
+        let helper_seed = Seed::generate().unwrap();
+        let leader_seed_opt = Some(Seed::generate().unwrap());
         let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {

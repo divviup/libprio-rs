@@ -276,7 +276,7 @@ mod tests {
             include_str!("test_vec/13/Prio3Count_1.json"),
             include_str!("test_vec/13/Prio3Count_2.json"),
         ] {
-            check_test_vec_custom_de::<Prio3CountMeasurement, _, _, _, _, 16>(
+            check_test_vec_custom_de::<Prio3CountMeasurement, _, _, _, _, 32>(
                 test_vector_str,
                 |_json_params, num_shares| Prio3::new_count(num_shares).unwrap(),
             );
@@ -319,7 +319,7 @@ mod tests {
     #[test]
     fn test_vec_prio3_sum_vec_multiproof() {
         type Prio3SumVecField64Multiproof =
-            Prio3<SumVec<Field64, ParallelSum<Field64, Mul<Field64>>>, XofTurboShake128, 16>;
+            Prio3<SumVec<Field64, ParallelSum<Field64, Mul<Field64>>>, XofTurboShake128, 32>;
         for test_vector_str in [
             include_str!("test_vec/13/Prio3SumVecWithMultiproof_0.json"),
             include_str!("test_vec/13/Prio3SumVecWithMultiproof_1.json"),

@@ -421,7 +421,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         level: usize,
         seed: &VidpfSeed,
     ) -> Result<VidpfProof, VidpfError> {
-        let mut shake = XofTurboShake128::init(seed, VidpfDomainSepTag::NODE_PROOF);
+        let mut shake = XofTurboShake128::from_seed_slice(&seed[..], VidpfDomainSepTag::NODE_PROOF);
         for chunk128 in input
             .index(..=level)
             .chunks(128)
