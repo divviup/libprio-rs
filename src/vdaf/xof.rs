@@ -206,20 +206,33 @@ impl Debug for SeedStreamAes128 {
 #[derive(Clone, Debug)]
 pub struct XofTurboShake128(TurboShake128);
 
-impl Xof<16> for XofTurboShake128 {
-    type SeedStream = SeedStreamTurboShake128;
-
-    fn init(seed_bytes: &[u8; 16], dst: &[u8]) -> Self {
+impl XofTurboShake128 {
+    pub(crate) fn from_seed_slice(seed_bytes: &[u8], dst: &[u8]) -> Self {
         let mut xof = Self(TurboShake128::from_core(TurboShake128Core::new(
             XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION,
         )));
-        Update::update(
-            &mut xof.0,
-            &[dst.len().try_into().expect("dst must be at most 255 bytes")],
-        );
+
+        let Ok(dst_len) = u16::try_from(dst.len()) else {
+            panic!("dst must not exceed 65535 bytes");
+        };
+
+        let Ok(seed_len) = u8::try_from(seed_bytes.len()) else {
+            panic!("seed must not exceed 255 bytes");
+        };
+
+        Update::update(&mut xof.0, &dst_len.to_le_bytes());
         Update::update(&mut xof.0, dst);
+        Update::update(&mut xof.0, &seed_len.to_le_bytes());
         Update::update(&mut xof.0, seed_bytes);
         xof
+    }
+}
+
+impl Xof<32> for XofTurboShake128 {
+    type SeedStream = SeedStreamTurboShake128;
+
+    fn init(seed_bytes: &[u8; 32], dst: &[u8]) -> Self {
+        Self::from_seed_slice(&seed_bytes[..], dst)
     }
 
     fn update(&mut self, data: &[u8]) {
@@ -262,7 +275,7 @@ impl RngCore for SeedStreamTurboShake128 {
 /// A `rand`-compatible interface to construct XofTurboShake128 seed streams, with the domain
 /// separation tag and binder string both fixed as the empty string.
 impl SeedableRng for SeedStreamTurboShake128 {
-    type Seed = [u8; 16];
+    type Seed = [u8; 32];
 
     fn from_seed(seed: Self::Seed) -> Self {
         XofTurboShake128::init(&seed, b"").into_seed_stream()
@@ -553,7 +566,6 @@ mod tests {
         assert_eq!(got, want);
     }
 
-    #[ignore = "seed size needs to be updated for VDAF draft-13"]
     #[test]
     fn xof_turboshake128() {
         let t: XofTestVector =
@@ -574,7 +586,7 @@ mod tests {
         let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);
         assert_eq!(got, want);
 
-        test_xof::<XofTurboShake128, 16>();
+        test_xof::<XofTurboShake128, 32>();
     }
 
     #[test]

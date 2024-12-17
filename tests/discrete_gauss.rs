@@ -20,7 +20,7 @@ use serde::Deserialize;
 #[derive(Debug, Eq, PartialEq, Deserialize)]
 pub struct DiscreteGaussTestVector {
     #[serde(with = "hex")]
-    seed: [u8; 16],
+    seed: [u8; 32],
     std_num: u128,
     std_denom: u128,
     samples: Vec<i128>,

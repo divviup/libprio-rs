@@ -46,7 +46,7 @@ impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     }
 }
 
-impl Poplar1<XofTurboShake128, 16> {
+impl Poplar1<XofTurboShake128, 32> {
     /// Create an instance of [`Poplar1`] using [`XofTurboShake128`]. The caller provides the bit length of
     /// each measurement (`BITS` as defined in [[draft-irtf-cfrg-vdaf-08]]).
     ///
@@ -2044,7 +2044,7 @@ mod tests {
     #[test]
     fn agg_param_validity() {
         // The actual Poplar instance doesn't matter for the parameter validity tests
-        type V = Poplar1<XofTurboShake128, 16>;
+        type V = Poplar1<XofTurboShake128, 32>;
 
         // Helper function for making aggregation params
         fn make_agg_param(bitstrings: &[&[u8]]) -> Result<Poplar1AggregationParam, VdafError> {
@@ -2146,13 +2146,20 @@ mod tests {
         let verify_key = test_vector.verify_key.as_ref().try_into().unwrap();
         let nonce = prep.nonce.as_ref().try_into().unwrap();
 
+        let (idpf_random_bytes, poplar_random_bytes) = prep.rand.as_ref().split_at(16 * 2);
+
         let mut idpf_random = [[0u8; 16]; 2];
-        let mut poplar_random = [[0u8; 16]; 3];
-        for (input, output) in prep
-            .rand
-            .as_ref()
+        for (input, output) in idpf_random_bytes
             .chunks_exact(16)
-            .zip(idpf_random.iter_mut().chain(poplar_random.iter_mut()))
+            .zip(idpf_random.iter_mut())
+        {
+            output.copy_from_slice(input);
+        }
+
+        let mut poplar_random = [[0u8; 32]; 3];
+        for (input, output) in poplar_random_bytes
+            .chunks_exact(32)
+            .zip(poplar_random.iter_mut())
         {
             output.copy_from_slice(input);
         }

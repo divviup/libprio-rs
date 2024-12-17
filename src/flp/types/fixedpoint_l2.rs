@@ -753,19 +753,23 @@ mod tests {
         vsum.add_noise(
             &strategy,
             &mut v,
-            &mut SeedStreamTurboShake128::from_seed([0u8; 16]),
+            &mut SeedStreamTurboShake128::from_seed([0u8; 32]),
         )
         .unwrap();
         assert_eq!(
             vsum.decode_result(&v, 1).unwrap(),
             match n {
                 // sensitivity depends on encoding so the noise differs
-                16 => vec![0.288970947265625, 0.168853759765625, 0.085662841796875],
-                32 => vec![0.257810294162482, 0.10634658299386501, 0.10149003705009818],
+                16 => vec![0.344757080078125, 0.02886962890625, 0.065277099609375],
+                32 => vec![
+                    0.3447443675249815,
+                    0.028876747004687786,
+                    0.06527946796268225
+                ],
                 64 => vec![
-                    0.37697368351762867,
-                    -0.02388947667663828,
-                    0.19813152630930916
+                    0.28790505349445616,
+                    0.11632535574718131,
+                    0.10735485151738995
                 ],
                 _ => panic!("unsupported bitsize"),
             }

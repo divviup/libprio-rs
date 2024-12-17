@@ -75,7 +75,7 @@ const DST_JOINT_RAND_SEED: u16 = 6;
 const DST_JOINT_RAND_PART: u16 = 7;
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
-pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 16>;
+pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 32>;
 
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
@@ -87,7 +87,7 @@ impl Prio3Count {
 /// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
 /// aggregate is the element-wise sum.
 pub type Prio3SumVec =
-    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
@@ -115,7 +115,7 @@ impl Prio3SumVec {
 pub type Prio3SumVecMultithreaded = Prio3<
     SumVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "multithreaded")]
@@ -140,7 +140,7 @@ impl Prio3SumVecMultithreaded {
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum = Prio3<Sum<Field64>, XofTurboShake128, 16>;
+pub type Prio3Sum = Prio3<Sum<Field64>, XofTurboShake128, 32>;
 
 impl Prio3Sum {
     /// Construct an instance of `Prio3Sum` with the given number of aggregators, where each summand
@@ -174,7 +174,7 @@ pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
         ParallelSum<Field128, Mul<Field128>>,
     >,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "experimental")]
@@ -210,7 +210,7 @@ pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
         ParallelSumMultithreaded<Field128, Mul<Field128>>,
     >,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(all(feature = "experimental", feature = "multithreaded"))]
@@ -234,7 +234,7 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
 /// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
 pub type Prio3Histogram =
-    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3Histogram {
     /// Constructs an instance of Prio3Histogram with the given number of aggregators,
@@ -260,7 +260,7 @@ impl Prio3Histogram {
 pub type Prio3HistogramMultithreaded = Prio3<
     Histogram<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "multithreaded")]
@@ -285,7 +285,7 @@ impl Prio3HistogramMultithreaded {
 /// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
 /// values at each position across all measurements.
 pub type Prio3MultihotCountVec =
-    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3MultihotCountVec {
     /// Constructs an instance of Prio3MultihotCountVec with the given number of aggregators, number
@@ -312,7 +312,7 @@ impl Prio3MultihotCountVec {
 pub type Prio3MultihotCountVecMultithreaded = Prio3<
     MultihotCountVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "multithreaded")]
@@ -336,7 +336,7 @@ impl Prio3MultihotCountVecMultithreaded {
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and
 /// the aggregate is the arithmetic average.
-pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 16>;
+pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 32>;
 
 impl Prio3Average {
     /// Construct an instance of `Prio3Average` with the given number of aggregators, where each
@@ -1651,7 +1651,7 @@ mod tests {
         );
 
         let mut nonce = [0; 16];
-        let mut verify_key = [0; 16];
+        let mut verify_key = [0; 32];
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
@@ -1705,7 +1705,7 @@ mod tests {
             max_measurement + 2,
         );
 
-        let mut verify_key = [0; 16];
+        let mut verify_key = [0; 32];
         thread_rng().fill(&mut verify_key[..]);
         let nonce = [0; 16];
 
@@ -1766,7 +1766,7 @@ mod tests {
         let prio3 = Prio3::<
             SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>,
             XofTurboShake128,
-            16,
+            32,
         >::new(2, 2, 0xFFFF0000, SumVec::new(2, 20, 4).unwrap())
         .unwrap();
 
@@ -1836,7 +1836,7 @@ mod tests {
 
         fn test_fixed_vec<Fx, PE, M, const SIZE: usize>(
             fp_0: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 32>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -1929,7 +1929,7 @@ mod tests {
             fp_4_inv: Fx,
             fp_8_inv: Fx,
             fp_16_inv: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 32>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -1965,7 +1965,7 @@ mod tests {
                 vec!(0.5, 0.0, 0.0),
             );
 
-            let mut verify_key = [0; 16];
+            let mut verify_key = [0; 32];
             let mut nonce = [0; 16];
             thread_rng().fill(&mut verify_key);
             thread_rng().fill(&mut nonce);
