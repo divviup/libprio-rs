@@ -388,6 +388,20 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.1.3 -> 0.1.4"
 
+[[audits.libbz2-rs-sys]]
+who = "Ameer Ghani <inahga@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.1.1"
+notes = """
+libbz2-rs-sys mainly uses unsafe around the C FFI boundary, for libc interop,
+and for custom allocation support. Most end-user-facing decompression logic
+is in safe Rust. I have fuzzed and reviewed its code, and to the best of my
+ability I believe it's free of any serious security vulnerabilities.
+
+libbz2-rs-sys only depends on the libc crate, which is widely used and
+maintained by the Rust project.
+"""
+
 [[audits.libc]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
