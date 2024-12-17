@@ -554,18 +554,11 @@ where
 
     fn random_size(&self) -> usize {
         if self.typ.joint_rand_len() == 0 {
-            // Two seeds per helper for measurement and proof shares, plus one seed for proving
-            // randomness.
-            (usize::from(self.num_aggregators - 1) * 2 + 1) * SEED_SIZE
+            // One seed per (share, proof) pair
+            usize::from(self.num_aggregators) * SEED_SIZE
         } else {
-            (
-                // Two seeds per helper for measurement and proof shares
-                usize::from(self.num_aggregators - 1) * 2
-                // One seed for proving randomness
-                + 1
-                // One seed per aggregator for joint randomness blinds
-                + usize::from(self.num_aggregators)
-            ) * SEED_SIZE
+            // Two seed per (share, proof) pair
+            2 * usize::from(self.num_aggregators) * SEED_SIZE
         }
     }
 
@@ -605,10 +598,10 @@ where
             // the randomness slice is long enough for this VDAF. The slice-to-array conversion
             // Result is okay to unwrap because the ChunksExact iterator always returns slices of
             // the correct length.
-            let measurement_share_seed = random_seeds.next().unwrap().try_into().unwrap();
-            let proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
+            // This seed is used for both the helper measurement share and the helper proof share
+            let meas_and_proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
-                &Seed(measurement_share_seed),
+                &Seed(meas_and_proof_share_seed),
                 &self.domain_separation_tag(DST_MEASUREMENT_SHARE, ctx),
                 &[agg_id],
             ));
@@ -648,8 +641,7 @@ where
                 }
                 None
             };
-            let helper =
-                HelperShare::from_seeds(measurement_share_seed, proof_share_seed, joint_rand_blind);
+            let helper = HelperShare::from_seeds(meas_and_proof_share_seed, joint_rand_blind);
             helper_shares.push(helper);
         }
 
@@ -723,7 +715,7 @@ where
                 .iter_mut()
                 .zip(self.derive_helper_proofs_share(
                     ctx,
-                    &helper.proofs_share,
+                    &helper.meas_and_proof_share,
                     u8::try_from(j).unwrap() + 1,
                 ))
                 .take(self.typ.proof_len() * self.num_proofs())
@@ -739,14 +731,8 @@ where
             proofs_share: Share::Leader(leader_proofs_share),
             joint_rand_blind: leader_blind_opt,
         });
-
-        for helper in helper_shares.into_iter() {
-            out.push(Prio3InputShare {
-                measurement_share: Share::Helper(helper.measurement_share),
-                proofs_share: Share::Helper(helper.proofs_share),
-                joint_rand_blind: helper.joint_rand_blind,
-            });
-        }
+        // Add all the helper shares
+        out.extend(helper_shares.into_iter().map(Prio3InputShare::from));
 
         Ok((public_share, out))
     }
@@ -854,7 +840,7 @@ where
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
 #[derive(Clone, Debug)]
 pub struct Prio3InputShare<F, const SEED_SIZE: usize> {
-    /// The measurement share.
+    /// The share for measurement and proof
     measurement_share: Share<F, SEED_SIZE>,
 
     /// The proof share.
@@ -1508,21 +1494,31 @@ where
 
 #[derive(Clone)]
 struct HelperShare<const SEED_SIZE: usize> {
-    measurement_share: Seed<SEED_SIZE>,
-    proofs_share: Seed<SEED_SIZE>,
+    /// The seed used for generating both a helper measurement share and a helper proof share
+    meas_and_proof_share: Seed<SEED_SIZE>,
     joint_rand_blind: Option<Seed<SEED_SIZE>>,
 }
 
 impl<const SEED_SIZE: usize> HelperShare<SEED_SIZE> {
     fn from_seeds(
-        measurement_share: [u8; SEED_SIZE],
-        proof_share: [u8; SEED_SIZE],
+        meas_and_proof_share: [u8; SEED_SIZE],
         joint_rand_blind: Option<[u8; SEED_SIZE]>,
     ) -> Self {
         HelperShare {
-            measurement_share: Seed::from_bytes(measurement_share),
-            proofs_share: Seed::from_bytes(proof_share),
+            meas_and_proof_share: Seed::from_bytes(meas_and_proof_share),
             joint_rand_blind: joint_rand_blind.map(Seed::from_bytes),
+        }
+    }
+}
+
+impl<const SEED_SIZE: usize, F> From<HelperShare<SEED_SIZE>> for Prio3InputShare<F, SEED_SIZE> {
+    fn from(helper: HelperShare<SEED_SIZE>) -> Self {
+        Prio3InputShare {
+            // The measurement and proof share are the same (ie some random seed)
+            // when they're Helper values
+            measurement_share: Share::Helper(helper.meas_and_proof_share.clone()),
+            proofs_share: Share::Helper(helper.meas_and_proof_share),
+            joint_rand_blind: helper.joint_rand_blind,
         }
     }
 }
