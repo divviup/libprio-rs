@@ -399,7 +399,7 @@ is in safe Rust. I have fuzzed and reviewed its code, and to the best of my
 ability I believe it's free of any serious security vulnerabilities.
 
 libbz2-rs-sys only depends on the libc crate, which is widely used and
-maintained Rust developers.
+maintained by the Rust project.
 """
 
 [[audits.libc]]
