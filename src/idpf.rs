@@ -669,9 +669,9 @@ where
 {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         // Control bits need to be written within each byte in LSB-to-MSB order, and assigned into
-        // bytes in big-endian order. Thus, the first four levels will have their control bits
-        // encoded in the last byte, and the last levels will have their control bits encoded in the
-        // first byte.
+        // bytes in little-endian order. Thus, the first four levels will have their control bits
+        // encoded in the first byte, and the last levels will have their control bits encoded in the
+        // last byte.
         let mut control_bits: BitVec<u8, Lsb0> =
             BitVec::with_capacity(self.inner_correction_words.len() * 2 + 2);
         for correction_words in self.inner_correction_words.iter() {
