@@ -239,7 +239,10 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type PrepareShare: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
+    type PrepareShare: Clone
+        + Debug
+        + for<'a> ParameterizedDecode<(&'a Self, &'a Self::AggregationParam, usize, u16)>
+        + Encode;
 
     /// Result of preprocessing a round of preparation shares. This is used by all aggregators as an
     /// input to the next round of the Prepare Process.
@@ -250,7 +253,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         + Debug
         + PartialEq
         + Eq
-        + ParameterizedDecode<Self::PrepareState>
+        + for<'a> ParameterizedDecode<(&'a Self, &'a Self::AggregationParam, u16)>
         + Encode;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
@@ -629,8 +632,8 @@ pub mod test_utils {
             .prepare_shares_to_prepare_message(
                 ctx,
                 agg_param,
-                outbound.iter().map(|encoded| {
-                    V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                outbound.iter().enumerate().map(|(agg_id, encoded)| {
+                    V::PrepareShare::get_decoded_with_param(&(vdaf, agg_param, agg_id, 0), encoded)
                         .expect("failed to decode prep share")
                 }),
             )?
@@ -638,13 +641,13 @@ pub mod test_utils {
             .unwrap();
 
         let mut out_shares = Vec::new();
-        loop {
+        for round in 0.. {
             let mut outbound = Vec::new();
             for state in states.iter_mut() {
                 match vdaf.prepare_next(
                     ctx,
                     state.clone(),
-                    V::PrepareMessage::get_decoded_with_param(state, &inbound)
+                    V::PrepareMessage::get_decoded_with_param(&(vdaf, agg_param, round), &inbound)
                         .expect("failed to decode prep message"),
                 )? {
                     PrepareTransition::Continue(new_state, msg) => {
@@ -663,9 +666,12 @@ pub mod test_utils {
                     .prepare_shares_to_prepare_message(
                         ctx,
                         agg_param,
-                        outbound.iter().map(|encoded| {
-                            V::PrepareShare::get_decoded_with_param(&states[0], encoded)
-                                .expect("failed to decode prep share")
+                        outbound.iter().enumerate().map(|(agg_id, encoded)| {
+                            V::PrepareShare::get_decoded_with_param(
+                                &(vdaf, agg_param, agg_id, round + 1),
+                                encoded,
+                            )
+                            .expect("failed to decode prep share")
                         }),
                     )?
                     .get_encoded()
