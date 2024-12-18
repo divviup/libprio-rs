@@ -286,15 +286,14 @@ mod tests {
     #[ignore]
     #[test]
     fn test_vec_prio3_sum() {
-        const FAKE_MAX_MEASUREMENT_UPDATE_ME: u64 = 0;
         for test_vector_str in [
             include_str!("test_vec/13/Prio3Sum_0.json"),
             include_str!("test_vec/13/Prio3Sum_1.json"),
             include_str!("test_vec/13/Prio3Sum_2.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
-                let _bits = json_params["bits"].as_u64().unwrap() as usize;
-                Prio3::new_sum(num_shares, FAKE_MAX_MEASUREMENT_UPDATE_ME).unwrap()
+                let max_measurement = json_params["max_measurement"].as_u64().unwrap();
+                Prio3::new_sum(num_shares, max_measurement).unwrap()
             });
         }
     }
