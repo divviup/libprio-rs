@@ -14,7 +14,6 @@ use crate::{
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
     },
 };
-use bitvec::{prelude::Lsb0, vec::BitVec};
 use rand_core::RngCore;
 use std::{
     collections::BTreeSet,
@@ -776,69 +775,68 @@ impl Poplar1AggregationParam {
 
 impl Encode for Poplar1AggregationParam {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        // Okay to unwrap because `try_from_prefixes()` checks this conversion succeeds.
-        let prefix_count = u32::try_from(self.prefixes.len()).unwrap();
+        // draft-irtf-cfrg-vdaf-13, Section 8.2.6.6:
+        //
+        // struct {
+        //     uint16_t level;
+        //     uint32_t num_prefixes;
+        //     opaque encoded_prefixes[prefixes_len];
+        // } Poplar1AggParam;
+        //
+        // Level
         self.level.encode(bytes)?;
-        prefix_count.encode(bytes)?;
 
-        // The encoding of the prefixes is defined by treating the IDPF indices as integers,
-        // shifting and ORing them together, and encoding the resulting arbitrary precision integer
-        // in big endian byte order. Thus, the first prefix will appear in the last encoded byte,
-        // aligned to its least significant bit. The last prefix will appear in the first encoded
-        // byte, not necessarily aligned to a byte boundary. If the highest bits in the first byte
-        // are unused, they will be set to zero.
+        // Number of prefixes
+        let num_prefixes =
+            u32::try_from(self.prefixes.len()).map_err(|e| CodecError::Other(e.into()))?;
+        num_prefixes.encode(bytes)?;
 
-        // When an IDPF index is treated as an integer, the first bit is the integer's most
-        // significant bit, and bits are subsequently processed in order of decreasing significance.
-        // Thus, setting aside the order of bytes, bits within each byte are ordered with the
-        // [`Msb0`](bitvec::prelude::Msb0) convention, not [`Lsb0`](bitvec::prelude::Msb0). Yet,
-        // the entire integer is aligned to the least significant bit of the last byte, so we
-        // could not use `Msb0` directly without padding adjustments. Instead, we use `Lsb0`
-        // throughout and reverse the bit order of each prefix.
+        // Encoded prefixes
+        for prefix in self.prefixes.iter() {
+            bytes.append(&mut prefix.to_bytes());
+        }
 
-        let mut packed = self
-            .prefixes
-            .iter()
-            .flat_map(|input| input.iter().rev())
-            .collect::<BitVec<u8, Lsb0>>();
-        packed.set_uninitialized(false);
-        let mut packed = packed.into_vec();
-        packed.reverse();
-        bytes.append(&mut packed);
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let packed_bit_count = (usize::from(self.level) + 1) * self.prefixes.len();
+        let encoded_prefixes_len = (((self.level + 1) as usize + 7) / 8) * self.prefixes.len();
         // 4 bytes for the number of prefixes, 2 bytes for the level, and a variable number of bytes
-        // for the packed prefixes themselves.
-        Some(6 + (packed_bit_count + 7) / 8)
+        // for the encoded prefixes themselves.
+        Some(6 + encoded_prefixes_len)
     }
 }
 
 impl Decode for Poplar1AggregationParam {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        // Level
         let level = u16::decode(bytes)?;
-        let prefix_count =
+
+        // Number of prefixes
+        let num_prefixes =
             usize::try_from(u32::decode(bytes)?).map_err(|e| CodecError::Other(e.into()))?;
 
-        let packed_bit_count = (usize::from(level) + 1) * prefix_count;
-        let mut packed = vec![0u8; (packed_bit_count + 7) / 8];
-        bytes.read_exact(&mut packed)?;
-        if packed_bit_count % 8 != 0 {
-            let unused_bits = packed[0] >> (packed_bit_count % 8);
-            if unused_bits != 0 {
+        // Encoded prefixes
+        let mut prefixes = Vec::with_capacity(num_prefixes);
+        let mut buf = vec![0; ((level + 1) as usize + 7) / 8];
+        let last_byte_mask = match (level + 1) % 8 {
+            0 => 0,
+            num_bits => {
+                let mut mask = 0;
+                for bit_position in 8 - num_bits..8 {
+                    mask |= 1 << bit_position;
+                }
+                mask ^ 255
+            }
+        };
+        for _ in 0..num_prefixes {
+            bytes.read_exact(&mut buf)?;
+            // Ensure there are no trailing bits in the encoded prefix.
+            if buf.last().unwrap() & last_byte_mask > 0 {
                 return Err(CodecError::UnexpectedValue);
             }
+            prefixes.push(IdpfInput::from_bytes(&buf).prefix(level as usize));
         }
-        packed.reverse();
-        let bits = BitVec::<u8, Lsb0>::from_vec(packed);
-
-        let prefixes = bits
-            .chunks_exact(usize::from(level) + 1)
-            .take(prefix_count)
-            .map(|chunk| IdpfInput::from(chunk.iter().rev().collect::<BitVec>()))
-            .collect::<Vec<IdpfInput>>();
 
         Poplar1AggregationParam::try_from_prefixes(prefixes)
             .map_err(|e| CodecError::Other(e.into()))
@@ -1942,29 +1940,37 @@ mod tests {
 
     #[test]
     fn round_trip_agg_param() {
-        // These test cases were generated using the reference Sage implementation.
-        // (https://github.com/cfrg/draft-irtf-cfrg-vdaf/tree/main/poc) Sage statements used to
+        // These test cases were generated using the reference implementation
+        // (https://github.com/cfrg/draft-irtf-cfrg-vdaf/tree/main/poc). Python code used to
         // generate each test case are given in comments.
         for (prefixes, reference_encoding) in [
-            // poplar.encode_agg_param(0, [0])
+            // from vdaf_poc.vdaf_poplar1 import Poplar1
+            // vdaf = Poplar1(256)
+            //
+            // print(list(vdaf.encode_agg_param((0, ((False,),),))))
             (
                 Vec::from([IdpfInput::from_bools(&[false])]),
                 [0, 0, 0, 0, 0, 1, 0].as_slice(),
             ),
-            // poplar.encode_agg_param(0, [1])
+            // print(list(vdaf.encode_agg_param((0, ((True,),),))))
             (
                 Vec::from([IdpfInput::from_bools(&[true])]),
-                [0, 0, 0, 0, 0, 1, 1].as_slice(),
+                [0, 0, 0, 0, 0, 1, 128].as_slice(),
             ),
-            // poplar.encode_agg_param(0, [0, 1])
+            // print(list(vdaf.encode_agg_param((0, ((False,), (True,),),))))
             (
                 Vec::from([
                     IdpfInput::from_bools(&[false]),
                     IdpfInput::from_bools(&[true]),
                 ]),
-                [0, 0, 0, 0, 0, 2, 2].as_slice(),
+                [0, 0, 0, 0, 0, 2, 0, 128].as_slice(),
             ),
-            // poplar.encode_agg_param(1, [0b00, 0b01, 0b10, 0b11])
+            // print(list(vdaf.encode_agg_param((1, (
+            //     (False, False),
+            //     (False, True),
+            //     (True, False),
+            //     (True, True),
+            // )))))
             (
                 Vec::from([
                     IdpfInput::from_bools(&[false, false]),
@@ -1972,18 +1978,31 @@ mod tests {
                     IdpfInput::from_bools(&[true, false]),
                     IdpfInput::from_bools(&[true, true]),
                 ]),
-                [0, 1, 0, 0, 0, 4, 0xe4].as_slice(),
+                [0, 1, 0, 0, 0, 4, 0, 64, 128, 192].as_slice(),
             ),
-            // poplar.encode_agg_param(1, [0b00, 0b10, 0b11])
+            // print(list(vdaf.encode_agg_param((1, (
+            //     (False, False),
+            //     (True, False),
+            //     (True, True),
+            // )))))
             (
                 Vec::from([
                     IdpfInput::from_bools(&[false, false]),
                     IdpfInput::from_bools(&[true, false]),
                     IdpfInput::from_bools(&[true, true]),
                 ]),
-                [0, 1, 0, 0, 0, 3, 0x38].as_slice(),
+                [0, 1, 0, 0, 0, 3, 0, 128, 192].as_slice(),
             ),
-            // poplar.encode_agg_param(2, [0b000, 0b001, 0b010, 0b011, 0b100, 0b101, 0b110, 0b111])
+            // print(list(vdaf.encode_agg_param((2, (
+            //     (False, False, False),
+            //     (False, False, True),
+            //     (False, True, False),
+            //     (False, True, True),
+            //     (True, False, False),
+            //     (True, False, True),
+            //     (True, True, False),
+            //     (True, True, True),
+            // )))))
             (
                 Vec::from([
                     IdpfInput::from_bools(&[false, false, false]),
@@ -1995,9 +2014,12 @@ mod tests {
                     IdpfInput::from_bools(&[true, true, false]),
                     IdpfInput::from_bools(&[true, true, true]),
                 ]),
-                [0, 2, 0, 0, 0, 8, 0xfa, 0xc6, 0x88].as_slice(),
+                [0, 2, 0, 0, 0, 8, 0, 32, 64, 96, 128, 160, 192, 224].as_slice(),
             ),
-            // poplar.encode_agg_param(9, [0b01_1011_0010, 0b10_1101_1010])
+            // print(list(vdaf.encode_agg_param((9, (
+            //     (False, True, True, False, True, True, False, False, True, False),
+            //     (True, False, True, True, False, True, True, False, True, False),
+            // )))))
             (
                 Vec::from([
                     IdpfInput::from_bools(&[
@@ -2007,12 +2029,17 @@ mod tests {
                         true, false, true, true, false, true, true, false, true, false,
                     ]),
                 ]),
-                [0, 9, 0, 0, 0, 2, 0x0b, 0x69, 0xb2].as_slice(),
+                [0, 9, 0, 0, 0, 2, 108, 128, 182, 128].as_slice(),
             ),
-            // poplar.encode_agg_param(15, [0xcafe])
+            // print(list(vdaf.encode_agg_param((15, (
+            //     (
+            //         True, True, False, False, True, False, True, False, True, True, True,
+            //         True, True, True, True, False,
+            //     ),
+            // )))))
             (
                 Vec::from([IdpfInput::from_bytes(b"\xca\xfe")]),
-                [0, 15, 0, 0, 0, 1, 0xca, 0xfe].as_slice(),
+                [0, 15, 0, 0, 0, 1, 202, 254].as_slice(),
             ),
         ] {
             let agg_param = Poplar1AggregationParam::try_from_prefixes(prefixes).unwrap();
@@ -2024,18 +2051,63 @@ mod tests {
     }
 
     #[test]
-    fn agg_param_wrong_unused_bit() {
-        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 1, 2]).unwrap_err();
+    fn agg_param_prefix_with_trailing_bits() {
+        let encoded = [
+            0, 0, // level
+            0, 0, 0, 1, // number of prefixes
+            2, // encoded prefix with a trailing bit
+        ];
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
+        assert_matches!(err, CodecError::UnexpectedValue);
+
+        let encoded = [
+            0, 11, // level
+            0, 0, 0, 1, // number of prefixes
+            1, 7, // encoded prefix with trailing bits
+        ];
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
     }
 
     #[test]
     fn agg_param_ordering() {
-        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 1]).unwrap_err();
+        // Prefixes are out of order.
+        let encoded = Poplar1AggregationParam {
+            level: 0,
+            prefixes: vec![
+                IdpfInput::from_bools(&[true]),
+                IdpfInput::from_bools(&[false]),
+            ],
+        }
+        .get_encoded()
+        .unwrap();
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
         assert_matches!(err, CodecError::Other(_));
-        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 0]).unwrap_err();
+
+        // Prefixes repeat.
+        let encoded = Poplar1AggregationParam {
+            level: 0,
+            prefixes: vec![
+                IdpfInput::from_bools(&[false]),
+                IdpfInput::from_bools(&[false]),
+            ],
+        }
+        .get_encoded()
+        .unwrap();
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
         assert_matches!(err, CodecError::Other(_));
-        let err = Poplar1AggregationParam::get_decoded(&[0, 0, 0, 0, 0, 2, 3]).unwrap_err();
+
+        // Prefixes repeat.
+        let encoded = Poplar1AggregationParam {
+            level: 0,
+            prefixes: vec![
+                IdpfInput::from_bools(&[true]),
+                IdpfInput::from_bools(&[true]),
+            ],
+        }
+        .get_encoded()
+        .unwrap();
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
         assert_matches!(err, CodecError::Other(_));
     }
 
@@ -2101,7 +2173,7 @@ mod tests {
 
     #[derive(Debug, Deserialize)]
     struct PoplarTestVector {
-        agg_param: (usize, Vec<u64>),
+        agg_param: HexEncoded,
         agg_result: Vec<u64>,
         agg_shares: Vec<HexEncoded>,
         bits: usize,
@@ -2113,7 +2185,7 @@ mod tests {
     #[derive(Debug, Deserialize)]
     struct PreparationTestVector {
         input_shares: Vec<HexEncoded>,
-        measurement: u64,
+        measurement: Vec<bool>,
         nonce: HexEncoded,
         out_shares: Vec<Vec<HexEncoded>>,
         prep_messages: Vec<HexEncoded>,
@@ -2126,23 +2198,8 @@ mod tests {
         let test_vector: PoplarTestVector = serde_json::from_str(input).unwrap();
         assert_eq!(test_vector.prep.len(), 1);
         let prep = &test_vector.prep[0];
-        let measurement_bits = (0..test_vector.bits)
-            .rev()
-            .map(|i| (prep.measurement >> i) & 1 != 0)
-            .collect::<BitVec>();
-        let measurement = IdpfInput::from(measurement_bits);
-        let (agg_param_level, agg_param_prefixes_int) = test_vector.agg_param;
-        let agg_param_prefixes = agg_param_prefixes_int
-            .iter()
-            .map(|int| {
-                let bits = (0..=agg_param_level)
-                    .rev()
-                    .map(|i| (*int >> i) & 1 != 0)
-                    .collect::<BitVec>();
-                bits.into()
-            })
-            .collect::<Vec<IdpfInput>>();
-        let agg_param = Poplar1AggregationParam::try_from_prefixes(agg_param_prefixes).unwrap();
+        let measurement = IdpfInput::from_bools(&prep.measurement);
+        let agg_param = Poplar1AggregationParam::get_decoded(&test_vector.agg_param.0).unwrap();
         let verify_key = test_vector.verify_key.as_ref().try_into().unwrap();
         let nonce = prep.nonce.as_ref().try_into().unwrap();
 
@@ -2410,37 +2467,31 @@ mod tests {
         assert_eq!(agg_result, test_vector.agg_result);
     }
 
-    #[ignore]
     #[test]
     fn test_vec_poplar1_0() {
         check_test_vec(include_str!("test_vec/13/Poplar1_0.json"));
     }
 
-    #[ignore]
     #[test]
     fn test_vec_poplar1_1() {
         check_test_vec(include_str!("test_vec/13/Poplar1_1.json"));
     }
 
-    #[ignore]
     #[test]
     fn test_vec_poplar1_2() {
         check_test_vec(include_str!("test_vec/13/Poplar1_2.json"));
     }
 
-    #[ignore]
     #[test]
     fn test_vec_poplar1_3() {
         check_test_vec(include_str!("test_vec/13/Poplar1_3.json"));
     }
 
-    #[ignore]
     #[test]
     fn test_vec_poplar1_4() {
         check_test_vec(include_str!("test_vec/13/Poplar1_4.json"));
     }
 
-    #[ignore]
     #[test]
     fn test_vec_poplar1_5() {
         check_test_vec(include_str!("test_vec/13/Poplar1_5.json"));
