@@ -1122,7 +1122,6 @@ mod tests {
         convert::TryInto,
         io::Cursor,
         ops::{Add, AddAssign, Sub},
-        str::FromStr,
         sync::Mutex,
     };
 
@@ -1133,7 +1132,6 @@ mod tests {
         bitbox,
         prelude::{BitBox, Lsb0},
         slice::BitSlice,
-        vec::BitVec,
     };
     use num_bigint::BigUint;
     use rand::random;
@@ -2011,14 +2009,15 @@ mod tests {
             .try_into()
             .unwrap();
 
-        let alpha_str = test_vec_obj.get("alpha").unwrap().as_str().unwrap();
-        let alpha_bignum = BigUint::from_str(alpha_str).unwrap();
-        let zero_bignum = BigUint::from(0u8);
-        let one_bignum = BigUint::from(1u8);
-        let alpha_bits = (0..bits)
-            .map(|level| (&alpha_bignum >> (bits - level - 1)) & &one_bignum != zero_bignum)
-            .collect::<BitVec>();
-        let alpha = alpha_bits.into();
+        let alpha_bools = test_vec_obj
+            .get("alpha")
+            .unwrap()
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| value.as_bool().unwrap())
+            .collect::<Vec<_>>();
+        let alpha = IdpfInput::from_bools(&alpha_bools);
 
         let beta_inner_level_array = test_vec_obj.get("beta_inner").unwrap().as_array().unwrap();
         let beta_inner = beta_inner_level_array
@@ -2067,7 +2066,7 @@ mod tests {
         let ctx_hex = test_vec_obj.get("ctx").unwrap();
         let ctx = hex::decode(ctx_hex.as_str().unwrap()).unwrap();
 
-        let nonce_hex = test_vec_obj.get("binder").unwrap();
+        let nonce_hex = test_vec_obj.get("nonce").unwrap();
         let nonce = hex::decode(nonce_hex.as_str().unwrap()).unwrap();
 
         IdpfTestVector {
@@ -2082,7 +2081,6 @@ mod tests {
         }
     }
 
-    #[ignore]
     #[test]
     fn idpf_bbcggi21_generate_test_vector() {
         let test_vector = load_idpfbbcggi21_test_vector();
