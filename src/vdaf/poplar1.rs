@@ -1263,6 +1263,13 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         )
     }
 
+    fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare {
+        Poplar1FieldVec::zero(
+            usize::from(agg_param.level) == self.bits - 1,
+            agg_param.prefixes.len(),
+        )
+    }
+
     /// Validates that no aggregation parameter with the same level as `cur` has been used with the
     /// same input share before. `prev` contains the aggregation parameters used for the same input.
     /// `prev` MUST be sorted from least to most recently used.

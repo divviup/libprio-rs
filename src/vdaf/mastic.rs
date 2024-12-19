@@ -646,18 +646,22 @@ where
         agg_param: &MasticAggregationParam,
         output_shares: M,
     ) -> Result<MasticAggregateShare<T::Field>, VdafError> {
-        let mut agg_share = MasticAggregateShare::<T::Field>::from(vec![
+        let mut agg_share = self.aggregate_init(agg_param);
+        for output_share in output_shares.into_iter() {
+            agg_share.accumulate(&output_share)?;
+        }
+        Ok(agg_share)
+    }
+
+    fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare {
+        MasticAggregateShare::<T::Field>::from(vec![
             T::Field::zero();
             self.vidpf.weight_parameter
                 * agg_param
                     .level_and_prefixes
                     .prefixes()
                     .len()
-        ]);
-        for output_share in output_shares.into_iter() {
-            agg_share.accumulate(&output_share)?;
-        }
-        Ok(agg_share)
+        ])
     }
 }
 

@@ -308,6 +308,9 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         output_shares: M,
     ) -> Result<Self::AggregateShare, VdafError>;
 
+    /// Create an empty aggregate share.
+    fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare;
+
     /// Validates an aggregation parameter with respect to all previous aggregaiton parameters used
     /// for the same input share. `prev` MUST be sorted from least to most recently used.
     #[must_use]

@@ -160,14 +160,18 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
 
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
         &self,
-        _aggregation_param: &Self::AggregationParam,
+        aggregation_param: &Self::AggregationParam,
         output_shares: M,
     ) -> Result<Self::AggregateShare, VdafError> {
-        let mut aggregate_share = AggregateShare(0);
+        let mut aggregate_share = self.aggregate_init(aggregation_param);
         for output_share in output_shares {
             aggregate_share.accumulate(&output_share)?;
         }
         Ok(aggregate_share)
+    }
+
+    fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
+        AggregateShare(0)
     }
 
     fn is_agg_param_valid(_cur: &Self::AggregationParam, _prev: &[Self::AggregationParam]) -> bool {
