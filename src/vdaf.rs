@@ -306,7 +306,13 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         &self,
         agg_param: &Self::AggregationParam,
         output_shares: M,
-    ) -> Result<Self::AggregateShare, VdafError>;
+    ) -> Result<Self::AggregateShare, VdafError> {
+        let mut share = self.aggregate_init(agg_param);
+        for output_share in output_shares {
+            share.accumulate(&output_share)?;
+        }
+        Ok(share)
+    }
 
     /// Create an empty aggregate share.
     fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare;

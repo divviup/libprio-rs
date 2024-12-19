@@ -1440,20 +1440,6 @@ where
         Ok(PrepareTransition::Finish(output_share))
     }
 
-    /// Aggregates a sequence of output shares into an aggregate share.
-    fn aggregate<It: IntoIterator<Item = OutputShare<T::Field>>>(
-        &self,
-        _agg_param: &(),
-        output_shares: It,
-    ) -> Result<AggregateShare<T::Field>, VdafError> {
-        let mut agg_share = self.aggregate_init(&());
-        for output_share in output_shares.into_iter() {
-            agg_share.accumulate(&output_share)?;
-        }
-
-        Ok(agg_share)
-    }
-
     fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
         AggregateShare(vec![T::Field::zero(); self.typ.output_len()])
     }

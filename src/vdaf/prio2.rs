@@ -317,19 +317,6 @@ impl Aggregator<32, 16> for Prio2 {
         Ok(PrepareTransition::Finish(OutputShare::from(data)))
     }
 
-    fn aggregate<M: IntoIterator<Item = OutputShare<FieldPrio2>>>(
-        &self,
-        _agg_param: &Self::AggregationParam,
-        out_shares: M,
-    ) -> Result<AggregateShare<FieldPrio2>, VdafError> {
-        let mut agg_share = self.aggregate_init(&());
-        for out_share in out_shares.into_iter() {
-            agg_share.accumulate(&out_share)?;
-        }
-
-        Ok(agg_share)
-    }
-
     fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
         AggregateShare(vec![FieldPrio2::zero(); self.input_len])
     }
