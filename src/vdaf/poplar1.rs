@@ -1251,15 +1251,10 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         }
     }
 
-    fn aggregate<M: IntoIterator<Item = Poplar1FieldVec>>(
-        &self,
-        agg_param: &Poplar1AggregationParam,
-        output_shares: M,
-    ) -> Result<Poplar1FieldVec, VdafError> {
-        aggregate(
+    fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare {
+        Poplar1FieldVec::zero(
             usize::from(agg_param.level) == self.bits - 1,
             agg_param.prefixes.len(),
-            output_shares,
         )
     }
 
