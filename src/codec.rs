@@ -270,6 +270,15 @@ impl Encode for u64 {
     }
 }
 
+/// Encode `items` into `bytes` as a fixed-length vector, with no length tag.
+pub fn encode_fixlen_items<E: Encode>(bytes: &mut Vec<u8>, items: &[E]) -> Result<(), CodecError> {
+    for item in items {
+        item.encode(bytes)?;
+    }
+
+    Ok(())
+}
+
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
@@ -422,7 +431,7 @@ pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
 }
 
 /// Decode the next `length` bytes from `bytes` into as many instances of `D` as possible.
-fn decode_items<P, D: ParameterizedDecode<P>>(
+pub(crate) fn decode_items<P, D: ParameterizedDecode<P>>(
     length: usize,
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
