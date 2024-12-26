@@ -63,12 +63,12 @@ pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 
 #[derive(Clone, Debug)]
 /// An instance of the VIDPF.
-pub struct Vidpf<W: VidpfValue, const NONCE_SIZE: usize> {
+pub struct Vidpf<W: VidpfValue> {
     /// Any parameters required to instantiate a weight value.
     pub(crate) weight_parameter: W::ValueParameter,
 }
 
-impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
+impl<W: VidpfValue> Vidpf<W> {
     /// Creates a VIDPF instance.
     ///
     /// # Arguments
@@ -100,7 +100,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         &self,
         input: &VidpfInput,
         weight: &W,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<(VidpfPublicShare<W>, [VidpfKey; 2]), VidpfError> {
         let keys = [VidpfKey::generate()?, VidpfKey::generate()?];
         let public = self.gen_with_keys(&keys, input, weight, nonce)?;
@@ -113,7 +113,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         keys: &[VidpfKey; 2],
         input: &VidpfInput,
         weight: &W,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<VidpfPublicShare<W>, VidpfError> {
         let mut seed = [keys[0].0, keys[1].0];
         let mut ctrl = [
@@ -187,7 +187,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         key: &VidpfKey,
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<VidpfValueShare<W>, VidpfError> {
         let mut state = VidpfEvalState::init_from_key(id, key);
         let mut share = W::zero(&self.weight_parameter);
@@ -216,7 +216,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
         cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<VidpfValueShare<W>, VidpfError> {
         let n = input.len();
         if n > public.cw.len() {
@@ -265,7 +265,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         input: &VidpfInput,
         level: usize,
         state: &VidpfEvalState,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<(VidpfEvalState, W), VidpfError> {
         let bit = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
         let cw = public.cw.get(level).ok_or(VidpfError::IndexLevel)?;
@@ -321,7 +321,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         key: &VidpfKey,
         public_share: &VidpfPublicShare<W>,
         cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<W, VidpfError> {
         Ok(self
             .eval_with_cache(
@@ -350,7 +350,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         id: VidpfServerId,
         key: &VidpfKey,
         public_share: &VidpfPublicShare<W>,
-        nonce: &[u8; NONCE_SIZE],
+        nonce: &[u8],
     ) -> Result<W, VidpfError> {
         Ok(self
             .eval(
@@ -395,7 +395,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         }
     }
 
-    fn convert(&self, seed: VidpfSeed, nonce: &[u8; NONCE_SIZE]) -> (VidpfSeed, W) {
+    fn convert(&self, seed: VidpfSeed, nonce: &[u8]) -> (VidpfSeed, W) {
         let mut rng =
             XofFixedKeyAes128::seed_stream(&Seed(seed), VidpfDomainSepTag::CONVERT, nonce);
 
@@ -845,7 +845,7 @@ mod tests {
             input: &VidpfInput,
             weight: &TestWeight,
         ) -> (
-            Vidpf<TestWeight, TEST_NONCE_SIZE>,
+            Vidpf<TestWeight>,
             VidpfPublicShare<TestWeight>,
             [VidpfKey; 2],
             [u8; TEST_NONCE_SIZE],
@@ -915,12 +915,12 @@ mod tests {
         }
 
         fn assert_eval_at_each_level(
-            vidpf: &Vidpf<TestWeight, TEST_NONCE_SIZE>,
+            vidpf: &Vidpf<TestWeight>,
             [key_0, key_1]: &[VidpfKey; 2],
             public: &VidpfPublicShare<TestWeight>,
             input: &VidpfInput,
             weight: &TestWeight,
-            nonce: &[u8; TEST_NONCE_SIZE],
+            nonce: &[u8],
         ) {
             let mut state_0 = VidpfEvalState::init_from_key(VidpfServerId::S0, key_0);
             let mut state_1 = VidpfEvalState::init_from_key(VidpfServerId::S1, key_1);
@@ -963,11 +963,11 @@ mod tests {
         /// Ensures that VIDPF outputs match regardless of whether the path to
         /// each node is recomputed or cached during evaluation.
         fn test_equivalence_of_eval_with_caching(
-            vidpf: &Vidpf<TestWeight, TEST_NONCE_SIZE>,
+            vidpf: &Vidpf<TestWeight>,
             [key_0, key_1]: &[VidpfKey; 2],
             public: &VidpfPublicShare<TestWeight>,
             input: &VidpfInput,
-            nonce: &[u8; TEST_NONCE_SIZE],
+            nonce: &[u8],
         ) {
             let mut cache_tree_0 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();
             let mut cache_tree_1 = BinaryTree::<VidpfEvalCache<TestWeight>>::default();

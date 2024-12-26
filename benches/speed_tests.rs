@@ -859,7 +859,7 @@ fn vidpf(c: &mut Criterion) {
             let input = VidpfInput::from_bools(&bits);
             let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
 
-            let vidpf = Vidpf::<VidpfWeight<Field255>, NONCE_SIZE>::new(2);
+            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(2);
 
             b.iter(|| {
                 let _ = vidpf.gen(&input, &weight, NONCE).unwrap();
@@ -875,7 +875,7 @@ fn vidpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = VidpfInput::from_bools(&bits);
             let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
-            let vidpf = Vidpf::<VidpfWeight<Field255>, NONCE_SIZE>::new(2);
+            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(2);
 
             let (public, keys) = vidpf.gen(&input, &weight, NONCE).unwrap();
 
