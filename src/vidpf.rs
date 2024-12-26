@@ -29,7 +29,7 @@ use crate::{
     vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
 };
 
-/// VIDPF-related errors.
+/// VIDPF errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum VidpfError {
@@ -62,7 +62,7 @@ pub type VidpfInput = IdpfInput;
 pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 
 #[derive(Clone, Debug)]
-/// A VIDPF instance.
+/// An instance of the VIDPF.
 pub struct Vidpf<W: VidpfValue, const NONCE_SIZE: usize> {
     /// Any parameters required to instantiate a weight value.
     pub(crate) weight_parameter: W::ValueParameter,
@@ -107,8 +107,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok((public, keys))
     }
 
-    /// Works as the [`Vidpf::gen`] method, except that two different
-    /// keys must be provided.
+    /// Produce the public share for the given keys, input, and weight.
     pub(crate) fn gen_with_keys(
         &self,
         keys: &[VidpfKey; 2],
@@ -181,8 +180,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok(VidpfPublicShare { cw })
     }
 
-    /// Evaluates the entire `input` and produces a share of the
-    /// input's weight.
+    /// Evaluate a given VIDPF (comprised of the key and public share) at a given input.
     pub fn eval(
         &self,
         id: VidpfServerId,
@@ -447,7 +445,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     }
 }
 
-/// Vidpf domain separation tag
+/// VIDPF domain separation tag.
 ///
 /// Contains the domain separation tags for invoking different oracles.
 struct VidpfDomainSepTag;
@@ -458,12 +456,12 @@ impl VidpfDomainSepTag {
     const NODE_PROOF_ADJUST: &'static [u8] = b"NodeProofAdjust";
 }
 
-/// Vidpf key.
+/// VIDPF key.
 ///
 /// Private key of an aggregation server.
 pub type VidpfKey = Seed<VIDPF_SEED_SIZE>;
 
-/// Vidpf server ID.
+/// VIDPF server ID.
 ///
 /// Identifies the two aggregation servers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -483,9 +481,7 @@ impl From<VidpfServerId> for Choice {
     }
 }
 
-/// Vidpf correction word.
-///
-///  Adjusts values of shares during the VIDPF evaluation.
+/// VIDPF correction word.
 #[derive(Clone, Debug)]
 struct VidpfCorrectionWord<W: VidpfValue> {
     seed: VidpfSeed,
@@ -514,9 +510,7 @@ where
     }
 }
 
-/// Vidpf public share
-///
-/// Common public information used by aggregation servers.
+/// VIDPF public share.
 #[derive(Clone, Debug, PartialEq)]
 pub struct VidpfPublicShare<W: VidpfValue> {
     cw: Vec<VidpfCorrectionWord<W>>,
@@ -600,11 +594,9 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
     }
 }
 
-/// Vidpf evaluation state
-///
-/// Contains the values produced during input evaluation at a given level.
+/// VIDPF evaluation state.
 #[derive(Debug)]
-pub struct VidpfEvalState {
+pub(crate) struct VidpfEvalState {
     seed: VidpfSeed,
     control_bit: Choice,
     proof: VidpfProof,
@@ -620,11 +612,9 @@ impl VidpfEvalState {
     }
 }
 
-/// Vidpf evaluation cache
-///
-/// Contains the values produced during input evaluation at a given level.
+/// VIDPF evaluation cache.
 #[derive(Debug)]
-pub struct VidpfEvalCache<W: VidpfValue> {
+pub(crate) struct VidpfEvalCache<W: VidpfValue> {
     state: VidpfEvalState,
     share: W,
 }
@@ -638,7 +628,7 @@ impl<W: VidpfValue> VidpfEvalCache<W> {
     }
 }
 
-/// Contains a share of the input's weight together with a proof for verification.
+/// VIDPF value share, the output of [`eval()`](Vidpf::eval).
 pub struct VidpfValueShare<W: VidpfValue> {
     /// Secret share of the input's weight.
     pub share: W,
@@ -646,7 +636,6 @@ pub struct VidpfValueShare<W: VidpfValue> {
     pub proof: VidpfProof,
 }
 
-/// Proof size in bytes.
 const VIDPF_PROOF_SIZE: usize = 32;
 const VIDPF_SEED_SIZE: usize = 16;
 
