@@ -124,7 +124,6 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
 
         let n = input.len();
         let mut cw = Vec::with_capacity(n);
-        let mut cs = Vec::with_capacity(n);
 
         for level in 0..n {
             let bit = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
@@ -164,22 +163,22 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
             let mut cw_weight = weight_1 - weight_0 + weight.clone();
             cw_weight.conditional_negate(ctrl[1]);
 
-            cw.push(VidpfCorrectionWord {
-                seed: cw_seed,
-                ctrl_left: cw_ctrl_left,
-                ctrl_right: cw_ctrl_right,
-                weight: cw_weight,
-            });
-
             // Compute the correction word node proof.
             let cw_proof = xor_proof(
                 Self::node_proof(input, level, &seed[0])?,
                 &Self::node_proof(input, level, &seed[1])?,
             );
-            cs.push(cw_proof);
+
+            cw.push(VidpfCorrectionWord {
+                seed: cw_seed,
+                ctrl_left: cw_ctrl_left,
+                ctrl_right: cw_ctrl_right,
+                weight: cw_weight,
+                proof: cw_proof,
+            });
         }
 
-        Ok(VidpfPublicShare { cw, cs })
+        Ok(VidpfPublicShare { cw })
     }
 
     /// Evaluates the entire `input` and produces a share of the
@@ -272,7 +271,6 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     ) -> Result<(VidpfEvalState, W), VidpfError> {
         let bit = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
         let cw = public.cw.get(level).ok_or(VidpfError::IndexLevel)?;
-        let cs = public.cs.get(level).ok_or(VidpfError::IndexLevel)?;
 
         // Extend.
         let e = Self::extend(&state.seed, nonce);
@@ -298,8 +296,11 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         weight.conditional_negate(Choice::from(id));
 
         // Compute and correct the node proof.
-        let node_proof =
-            conditional_xor_proof(Self::node_proof(input, level, &next_seed)?, cs, next_ctrl);
+        let node_proof = conditional_xor_proof(
+            Self::node_proof(input, level, &next_seed)?,
+            &cw.proof,
+            next_ctrl,
+        );
 
         // Compute the onehot proof.
         let onehot_proof = xor_proof(
@@ -491,6 +492,7 @@ struct VidpfCorrectionWord<W: VidpfValue> {
     ctrl_left: Choice,
     ctrl_right: Choice,
     weight: W,
+    proof: VidpfProof,
 }
 
 impl<W: VidpfValue> ConstantTimeEq for VidpfCorrectionWord<W> {
@@ -499,6 +501,7 @@ impl<W: VidpfValue> ConstantTimeEq for VidpfCorrectionWord<W> {
             & self.ctrl_left.ct_eq(&other.ctrl_left)
             & self.ctrl_right.ct_eq(&other.ctrl_right)
             & self.weight.ct_eq(&other.weight)
+            & self.proof.ct_eq(&other.proof)
     }
 }
 
@@ -517,7 +520,6 @@ where
 #[derive(Clone, Debug, PartialEq)]
 pub struct VidpfPublicShare<W: VidpfValue> {
     cw: Vec<VidpfCorrectionWord<W>>,
-    cs: Vec<VidpfProof>,
 }
 
 impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
@@ -540,24 +542,30 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
         let mut packed_control = control_bits.into_vec();
         bytes.append(&mut packed_control);
 
-        for correction_words in self.cw.iter() {
-            Seed(correction_words.seed).encode(bytes)?;
-            correction_words.weight.encode(bytes)?;
-        }
-
-        for proof in &self.cs {
+        for VidpfCorrectionWord {
+            seed,
+            ctrl_left: _,
+            ctrl_right: _,
+            weight,
+            proof,
+        } in self.cw.iter()
+        {
+            bytes.extend_from_slice(seed);
+            weight.encode(bytes)?;
             bytes.extend_from_slice(proof);
         }
+
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
         let control_bits_count = (self.cw.len()) * 2;
-        let mut len = (control_bits_count + 7) / 8 + (self.cw.len()) * 16;
-        for correction_words in self.cw.iter() {
-            len += correction_words.weight.encoded_len()?;
-        }
-        len += self.cs.len() * VIDPF_PROOF_SIZE;
+        let mut len = 0;
+        len += (control_bits_count + 7) / 8; // control bits
+        let cw_encoded_len = VIDPF_SEED_SIZE
+            + VIDPF_PROOF_SIZE
+            + self.cw.first().and_then(|cw| cw.weight.encoded_len())?;
+        len += self.cw.len() * cw_encoded_len;
         Some(len)
     }
 }
@@ -577,20 +585,18 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
             let ctrl_left = (chunk[0] as u8).into();
             let ctrl_right = (chunk[1] as u8).into();
             let seed = Seed::decode(bytes)?.0;
+            let weight = W::decode_with_param(weight_parameter, bytes)?;
+            let mut proof = [0u8; VIDPF_PROOF_SIZE];
+            bytes.read_exact(&mut proof)?;
             cw.push(VidpfCorrectionWord {
                 seed,
                 ctrl_left,
                 ctrl_right,
-                weight: W::decode_with_param(weight_parameter, bytes)?,
+                weight,
+                proof,
             })
         }
-        let mut cs = Vec::<VidpfProof>::with_capacity(*bits);
-        for _ in 0..*bits {
-            let mut proof = [0u8; VIDPF_PROOF_SIZE];
-            bytes.read_exact(&mut proof)?;
-            cs.push(proof);
-        }
-        Ok(Self { cw, cs })
+        Ok(Self { cw })
     }
 }
 
