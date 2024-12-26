@@ -25,10 +25,7 @@ use crate::{
     bt::{BinaryTree, Node},
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
-    idpf::{
-        conditional_select_seed, conditional_swap_seed, conditional_xor_seeds, xor_seeds,
-        IdpfInput, IdpfValue,
-    },
+    idpf::{conditional_swap_seed, conditional_xor_seeds, xor_seeds, IdpfInput, IdpfValue},
     vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
 };
 
@@ -36,10 +33,6 @@ use crate::{
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum VidpfError {
-    /// Error when key's identifier are equal.
-    #[error("key's identifier should be different")]
-    SameKeyId,
-
     /// Error when level does not fit in a 32-bit number.
     #[error("level is not representable as a 32-bit integer")]
     LevelTooBig,
@@ -100,7 +93,9 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
     ///
     /// * `input`, determines the input of the function.
     /// * `weight`, determines the input's weight of the function.
-    /// * `nonce`, used to cryptographically bind some information.
+    /// * `nonce`, a nonce, typically the same value provided to the
+    ///   [`Client`](crate::vdaf::Client) and [`Aggregator`](crate::vdaf::Aggregator).
+    ///   APIs.
     pub fn gen(
         &self,
         input: &VidpfInput,
@@ -121,8 +116,8 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         weight: &W,
         nonce: &[u8; NONCE_SIZE],
     ) -> Result<VidpfPublicShare<W>, VidpfError> {
-        let mut s_i = [keys[0].0, keys[1].0];
-        let mut t_i = [
+        let mut seed = [keys[0].0, keys[1].0];
+        let mut ctrl = [
             Choice::from(VidpfServerId::S0),
             Choice::from(VidpfServerId::S1),
         ];
@@ -132,67 +127,56 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         let mut cs = Vec::with_capacity(n);
 
         for level in 0..n {
-            let alpha_i = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
+            let bit = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
 
-            // If alpha_i == 0 then
-            //     (same_seed, diff_seed) = (right_seed, left_seed)
-            // else
-            //     (same_seed, diff_seed) = (left_seed, right_seed)
-            let seq_0 = Self::prg(&s_i[0], nonce);
-            let (same_seed_0, diff_seed_0) = &mut (seq_0.right_seed, seq_0.left_seed);
-            conditional_swap_seed(same_seed_0, diff_seed_0, alpha_i);
+            // Extend.
+            let e = [Self::extend(&seed[0], nonce), Self::extend(&seed[1], nonce)];
 
-            let seq_1 = Self::prg(&s_i[1], nonce);
-            let (same_seed_1, diff_seed_1) = &mut (seq_1.right_seed, seq_1.left_seed);
-            conditional_swap_seed(same_seed_1, diff_seed_1, alpha_i);
+            // Select the seed and control bit.
+            let (seed_keep_0, seed_lose_0) = &mut (e[0].seed_right, e[0].seed_left);
+            conditional_swap_seed(seed_keep_0, seed_lose_0, !bit);
+            let (seed_keep_1, seed_lose_1) = &mut (e[1].seed_right, e[1].seed_left);
+            conditional_swap_seed(seed_keep_1, seed_lose_1, !bit);
+            let ctrl_keep_0 = Choice::conditional_select(&e[0].ctrl_left, &e[0].ctrl_right, bit);
+            let ctrl_keep_1 = Choice::conditional_select(&e[1].ctrl_left, &e[1].ctrl_right, bit);
 
-            // If alpha_i == 0 then
-            //    diff_control_bit = left_control_bit
-            // else
-            //    diff_control_bit = right_control_bit
-            let diff_control_bit_0 = Choice::conditional_select(
-                &seq_0.left_control_bit,
-                &seq_0.right_control_bit,
-                alpha_i,
+            // Compute the correction word seed and control bit.
+            let cw_seed = xor_seeds(seed_lose_0, seed_lose_1);
+            let cw_ctrl_left = e[0].ctrl_left ^ e[1].ctrl_left ^ bit ^ Choice::from(1);
+            let cw_ctrl_right = e[0].ctrl_right ^ e[1].ctrl_right ^ bit;
+
+            // Correct the seed and control bit.
+            let seed_keep_0 = conditional_xor_seeds(seed_keep_0, &cw_seed, ctrl[0]);
+            let seed_keep_1 = conditional_xor_seeds(seed_keep_1, &cw_seed, ctrl[1]);
+            let cw_ctrl_keep = Choice::conditional_select(&cw_ctrl_left, &cw_ctrl_right, bit);
+            let ctrl_keep_0 = ctrl_keep_0 ^ (ctrl[0] & cw_ctrl_keep);
+            let ctrl_keep_1 = ctrl_keep_1 ^ (ctrl[1] & cw_ctrl_keep);
+
+            // Convert.
+            let weight_0;
+            let weight_1;
+            (seed[0], weight_0) = self.convert(seed_keep_0, nonce);
+            (seed[1], weight_1) = self.convert(seed_keep_1, nonce);
+            ctrl[0] = ctrl_keep_0;
+            ctrl[1] = ctrl_keep_1;
+
+            // Compute the correction word payload.
+            let mut cw_weight = weight_1 - weight_0 + weight.clone();
+            cw_weight.conditional_negate(ctrl[1]);
+
+            cw.push(VidpfCorrectionWord {
+                seed: cw_seed,
+                ctrl_left: cw_ctrl_left,
+                ctrl_right: cw_ctrl_right,
+                weight: cw_weight,
+            });
+
+            // Compute the correction word node proof.
+            let cw_proof = xor_proof(
+                Self::node_proof(input, level, &seed[0])?,
+                &Self::node_proof(input, level, &seed[1])?,
             );
-            let diff_control_bit_1 = Choice::conditional_select(
-                &seq_1.left_control_bit,
-                &seq_1.right_control_bit,
-                alpha_i,
-            );
-
-            let s_cw = xor_seeds(same_seed_0, same_seed_1);
-            let t_cw_l =
-                seq_0.left_control_bit ^ seq_1.left_control_bit ^ alpha_i ^ Choice::from(1);
-            let t_cw_r = seq_0.right_control_bit ^ seq_1.right_control_bit ^ alpha_i;
-            let t_cw_diff = Choice::conditional_select(&t_cw_l, &t_cw_r, alpha_i);
-
-            let s_tilde_i_0 = conditional_xor_seeds(diff_seed_0, &s_cw, t_i[0]);
-            let s_tilde_i_1 = conditional_xor_seeds(diff_seed_1, &s_cw, t_i[1]);
-
-            t_i[0] = diff_control_bit_0 ^ (t_i[0] & t_cw_diff);
-            t_i[1] = diff_control_bit_1 ^ (t_i[1] & t_cw_diff);
-
-            let w_i_0;
-            let w_i_1;
-            (s_i[0], w_i_0) = self.convert(s_tilde_i_0, nonce);
-            (s_i[1], w_i_1) = self.convert(s_tilde_i_1, nonce);
-
-            let mut w_cw = w_i_1 - w_i_0 + weight.clone();
-            w_cw.conditional_negate(t_i[1]);
-
-            let cw_i = VidpfCorrectionWord {
-                seed: s_cw,
-                left_control_bit: t_cw_l,
-                right_control_bit: t_cw_r,
-                weight: w_cw,
-            };
-            cw.push(cw_i);
-
-            let pi_tilde_0 = Self::node_proof(input, level, &s_i[0])?;
-            let pi_tilde_1 = Self::node_proof(input, level, &s_i[1])?;
-            let cs_i = xor_proof(pi_tilde_0, &pi_tilde_1);
-            cs.push(cs_i);
+            cs.push(cw_proof);
         }
 
         Ok(VidpfPublicShare { cw, cs })
@@ -259,7 +243,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
                         share: new_share,
                     })));
                 }
-                sub_tree.left.as_mut().expect("right child was visited")
+                sub_tree.left.as_mut().unwrap()
             } else {
                 if sub_tree.right.is_none() {
                     let (new_state, new_share) =
@@ -269,7 +253,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
                         share: new_share,
                     })));
                 }
-                sub_tree.right.as_mut().expect("right child was visited")
+                sub_tree.right.as_mut().unwrap()
             }
         }
         Ok(sub_tree.value.to_share())
@@ -286,43 +270,50 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         state: &VidpfEvalState,
         nonce: &[u8; NONCE_SIZE],
     ) -> Result<(VidpfEvalState, W), VidpfError> {
+        let bit = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
         let cw = public.cw.get(level).ok_or(VidpfError::IndexLevel)?;
+        let cs = public.cs.get(level).ok_or(VidpfError::IndexLevel)?;
 
-        let seq_tilde = Self::prg(&state.seed, nonce);
+        // Extend.
+        let e = Self::extend(&state.seed, nonce);
 
-        let t_i = state.control_bit;
-        let sl = conditional_xor_seeds(&seq_tilde.left_seed, &cw.seed, t_i);
-        let sr = conditional_xor_seeds(&seq_tilde.right_seed, &cw.seed, t_i);
-        let tl = seq_tilde.left_control_bit ^ (t_i & cw.left_control_bit);
-        let tr = seq_tilde.right_control_bit ^ (t_i & cw.right_control_bit);
+        // Select the seed and control bit.
+        let (seed_keep, seed_lose) = &mut (e.seed_right, e.seed_left);
+        conditional_swap_seed(seed_keep, seed_lose, !bit);
+        let ctrl_keep = Choice::conditional_select(&e.ctrl_left, &e.ctrl_right, bit);
 
-        let x_i = Choice::from(u8::from(input.get(level).ok_or(VidpfError::IndexLevel)?));
-        let s_tilde_i = conditional_select_seed(x_i, &[sl, sr]);
+        // Correct the seed and control bit.
+        let seed_keep = conditional_xor_seeds(seed_keep, &cw.seed, state.control_bit);
+        let cw_ctrl_keep = Choice::conditional_select(&cw.ctrl_left, &cw.ctrl_right, bit);
+        let next_ctrl = ctrl_keep ^ (state.control_bit & cw_ctrl_keep);
 
-        let next_control_bit = Choice::conditional_select(&tl, &tr, x_i);
-        let (next_seed, w_i) = self.convert(s_tilde_i, nonce);
-
-        let zero = <W as IdpfValue>::zero(&self.weight_parameter);
-        let mut y = <W as IdpfValue>::conditional_select(&zero, &cw.weight, next_control_bit);
-        y += w_i;
-        y.conditional_negate(Choice::from(id));
-
-        let pi_i = &state.proof;
-        let cs_i = public.cs.get(level).ok_or(VidpfError::IndexLevel)?;
-        let pi_tilde = Self::node_proof(input, level, &next_seed)?;
-        let h2_input = xor_proof(
-            conditional_xor_proof(pi_tilde, cs_i, next_control_bit),
-            pi_i,
+        // Convert and correct the payload.
+        let (next_seed, w) = self.convert(seed_keep, nonce);
+        let mut weight = <W as IdpfValue>::conditional_select(
+            &<W as IdpfValue>::zero(&self.weight_parameter),
+            &cw.weight,
+            next_ctrl,
         );
-        let next_proof = xor_proof(Self::node_proof_adjustment(h2_input), pi_i);
+        weight += w;
+        weight.conditional_negate(Choice::from(id));
+
+        // Compute and correct the node proof.
+        let node_proof =
+            conditional_xor_proof(Self::node_proof(input, level, &next_seed)?, cs, next_ctrl);
+
+        // Compute the onehot proof.
+        let onehot_proof = xor_proof(
+            state.proof,
+            &Self::hash_proof(xor_proof(state.proof, &node_proof)),
+        );
 
         let next_state = VidpfEvalState {
             seed: next_seed,
-            control_bit: next_control_bit,
-            proof: next_proof,
+            control_bit: next_ctrl,
+            proof: onehot_proof,
         };
 
-        Ok((next_state, y))
+        Ok((next_state, weight))
     }
 
     pub(crate) fn get_root_weight_share(
@@ -382,26 +373,26 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
                 .share)
     }
 
-    fn prg(seed: &VidpfSeed, nonce: &[u8]) -> VidpfPrgOutput {
+    fn extend(seed: &VidpfSeed, nonce: &[u8]) -> ExtendedSeed {
         let mut rng = XofFixedKeyAes128::seed_stream(&Seed(*seed), VidpfDomainSepTag::PRG, nonce);
 
-        let mut left_seed = VidpfSeed::default();
-        let mut right_seed = VidpfSeed::default();
-        rng.fill_bytes(&mut left_seed);
-        rng.fill_bytes(&mut right_seed);
+        let mut seed_left = VidpfSeed::default();
+        let mut seed_right = VidpfSeed::default();
+        rng.fill_bytes(&mut seed_left);
+        rng.fill_bytes(&mut seed_right);
         // Use the LSB of seeds as control bits, and clears the bit,
         // i.e., seeds produced by `prg` always have their LSB = 0.
         // This ensures `prg` costs two AES calls only.
-        let left_control_bit = Choice::from(left_seed[0] & 0x01);
-        let right_control_bit = Choice::from(right_seed[0] & 0x01);
-        left_seed[0] &= 0xFE;
-        right_seed[0] &= 0xFE;
+        let ctrl_left = Choice::from(seed_left[0] & 0x01);
+        let ctrl_right = Choice::from(seed_right[0] & 0x01);
+        seed_left[0] &= 0xFE;
+        seed_right[0] &= 0xFE;
 
-        VidpfPrgOutput {
-            left_seed,
-            left_control_bit,
-            right_seed,
-            right_control_bit,
+        ExtendedSeed {
+            seed_left,
+            ctrl_left,
+            seed_right,
+            ctrl_right,
         }
     }
 
@@ -443,7 +434,7 @@ impl<W: VidpfValue, const NONCE_SIZE: usize> Vidpf<W, NONCE_SIZE> {
         Ok(proof)
     }
 
-    fn node_proof_adjustment(mut proof: VidpfProof) -> VidpfProof {
+    fn hash_proof(mut proof: VidpfProof) -> VidpfProof {
         let mut rng = XofTurboShake128::seed_stream(
             &Seed(Default::default()),
             VidpfDomainSepTag::NODE_PROOF_ADJUST,
@@ -497,16 +488,16 @@ impl From<VidpfServerId> for Choice {
 #[derive(Clone, Debug)]
 struct VidpfCorrectionWord<W: VidpfValue> {
     seed: VidpfSeed,
-    left_control_bit: Choice,
-    right_control_bit: Choice,
+    ctrl_left: Choice,
+    ctrl_right: Choice,
     weight: W,
 }
 
 impl<W: VidpfValue> ConstantTimeEq for VidpfCorrectionWord<W> {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.seed.ct_eq(&other.seed)
-            & self.left_control_bit.ct_eq(&other.left_control_bit)
-            & self.right_control_bit.ct_eq(&other.right_control_bit)
+            & self.ctrl_left.ct_eq(&other.ctrl_left)
+            & self.ctrl_right.ct_eq(&other.ctrl_right)
             & self.weight.ct_eq(&other.weight)
     }
 }
@@ -539,8 +530,8 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
         for correction_words in self.cw.iter() {
             control_bits.extend(
                 [
-                    bool::from(correction_words.left_control_bit),
-                    bool::from(correction_words.right_control_bit),
+                    bool::from(correction_words.ctrl_left),
+                    bool::from(correction_words.ctrl_right),
                 ]
                 .iter(),
             );
@@ -583,13 +574,13 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
 
         let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
         for chunk in unpacked_control_bits[0..(bits) * 2].chunks(2) {
-            let left_control_bit = (chunk[0] as u8).into();
-            let right_control_bit = (chunk[1] as u8).into();
+            let ctrl_left = (chunk[0] as u8).into();
+            let ctrl_right = (chunk[1] as u8).into();
             let seed = Seed::decode(bytes)?.0;
             cw.push(VidpfCorrectionWord {
                 seed,
-                left_control_bit,
-                right_control_bit,
+                ctrl_left,
+                ctrl_right,
                 weight: W::decode_with_param(weight_parameter, bytes)?,
             })
         }
@@ -669,12 +660,12 @@ fn conditional_xor_proof(mut lhs: VidpfProof, rhs: &VidpfProof, choice: Choice) 
 /// Feeds a pseudorandom generator during evaluation.
 type VidpfSeed = [u8; VIDPF_SEED_SIZE];
 
-/// Contains the seeds and control bits produced by [`Vidpf::prg`].
-struct VidpfPrgOutput {
-    left_seed: VidpfSeed,
-    left_control_bit: Choice,
-    right_seed: VidpfSeed,
-    right_control_bit: Choice,
+/// Output of [`extend()`](Vidpf::extend).
+struct ExtendedSeed {
+    seed_left: VidpfSeed,
+    ctrl_left: Choice,
+    seed_right: VidpfSeed,
+    ctrl_right: Choice,
 }
 
 /// Represents an array of field elements that implements the [`VidpfValue`] trait.
