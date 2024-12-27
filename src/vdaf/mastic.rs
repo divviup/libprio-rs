@@ -19,7 +19,7 @@ use crate::{
         PrepareTransition, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfError, VidpfEvalCache, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
+        Vidpf, VidpfError, VidpfEvalResult, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
         VidpfWeight,
     },
 };
@@ -538,7 +538,7 @@ where
         let mut output_shares = Vec::<T::Field>::with_capacity(
             self.vidpf.weight_parameter * agg_param.level_and_prefixes.prefixes().len(),
         );
-        let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
+        let mut cache_tree = BinaryTree::<VidpfEvalResult<VidpfWeight<T::Field>>>::default();
         for prefix in agg_param.level_and_prefixes.prefixes() {
             let (VidpfWeight(mut weight_share), onehot_proof_for_prefix) =
                 self.vidpf.eval_with_cache(
