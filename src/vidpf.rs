@@ -29,6 +29,11 @@ use crate::{
     vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
 };
 
+const ONEHOT_PROOF_INIT: [u8; VIDPF_PROOF_SIZE] = [
+    186, 76, 128, 104, 116, 50, 149, 133, 2, 164, 82, 118, 128, 155, 163, 239, 117, 95, 162, 196,
+    173, 31, 244, 180, 171, 86, 176, 209, 12, 221, 28, 204,
+];
+
 /// VIDPF errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
@@ -180,7 +185,7 @@ impl<W: VidpfValue> Vidpf<W> {
         public: &VidpfPublicShare<W>,
         input: &VidpfInput,
         nonce: &[u8],
-    ) -> Result<VidpfValueShare<W>, VidpfError> {
+    ) -> Result<(W, VidpfProof), VidpfError> {
         let mut state = VidpfEvalState::init_from_key(id, key);
         let mut share = W::zero(&self.weight_parameter);
 
@@ -188,14 +193,16 @@ impl<W: VidpfValue> Vidpf<W> {
             return Err(VidpfError::InvalidAttributeLength);
         }
 
+        let mut onehot_proof = ONEHOT_PROOF_INIT;
         for (idx, cw) in input.index_iter()?.zip(public.cw.iter()) {
             (state, share) = self.eval_next(id, cw, idx, &state, nonce);
+            onehot_proof = xor_proof(
+                onehot_proof,
+                &Self::hash_proof(xor_proof(onehot_proof, &state.node_proof)),
+            );
         }
 
-        Ok(VidpfValueShare {
-            share,
-            proof: state.proof,
-        })
+        Ok((share, onehot_proof))
     }
 
     /// Evaluates the entire `input` and produces a share of the
@@ -209,7 +216,7 @@ impl<W: VidpfValue> Vidpf<W> {
         input: &VidpfInput,
         cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
         nonce: &[u8],
-    ) -> Result<VidpfValueShare<W>, VidpfError> {
+    ) -> Result<(W, VidpfProof), VidpfError> {
         if input.len() > public.cw.len() {
             return Err(VidpfError::InvalidAttributeLength);
         }
@@ -221,6 +228,7 @@ impl<W: VidpfValue> Vidpf<W> {
             }))
         });
 
+        let mut onehot_proof = ONEHOT_PROOF_INIT;
         for (idx, cw) in input.index_iter()?.zip(public.cw.iter()) {
             sub_tree = if idx.bit.unwrap_u8() == 0 {
                 sub_tree.left.get_or_insert_with(|| {
@@ -240,9 +248,13 @@ impl<W: VidpfValue> Vidpf<W> {
                         share: new_share,
                     }))
                 })
-            }
+            };
+            onehot_proof = xor_proof(
+                onehot_proof,
+                &Self::hash_proof(xor_proof(onehot_proof, &sub_tree.value.state.node_proof)),
+            );
         }
-        Ok(sub_tree.value.to_share())
+        Ok((sub_tree.value.to_share(), onehot_proof))
     }
 
     /// Evaluates the `input` at the given level using the provided initial
@@ -285,49 +297,13 @@ impl<W: VidpfValue> Vidpf<W> {
             next_ctrl,
         );
 
-        // Compute the onehot proof.
-        let onehot_proof = xor_proof(
-            state.proof,
-            &Self::hash_proof(xor_proof(state.proof, &node_proof)),
-        );
-
         let next_state = VidpfEvalState {
             seed: next_seed,
             control_bit: next_ctrl,
-            proof: onehot_proof,
+            node_proof,
         };
 
         (next_state, weight)
-    }
-
-    pub(crate) fn get_root_weight_share(
-        &self,
-        id: VidpfServerId,
-        key: &VidpfKey,
-        public_share: &VidpfPublicShare<W>,
-        cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
-        nonce: &[u8],
-    ) -> Result<W, VidpfError> {
-        Ok(self
-            .eval_with_cache(
-                id,
-                key,
-                public_share,
-                &VidpfInput::from_bools(&[false]),
-                cache_tree,
-                nonce,
-            )?
-            .share
-            + self
-                .eval_with_cache(
-                    id,
-                    key,
-                    public_share,
-                    &VidpfInput::from_bools(&[true]),
-                    cache_tree,
-                    nonce,
-                )?
-                .share)
     }
 
     pub(crate) fn eval_root(
@@ -335,26 +311,28 @@ impl<W: VidpfValue> Vidpf<W> {
         id: VidpfServerId,
         key: &VidpfKey,
         public_share: &VidpfPublicShare<W>,
+        cache_tree: &mut BinaryTree<VidpfEvalCache<W>>,
         nonce: &[u8],
     ) -> Result<W, VidpfError> {
-        Ok(self
-            .eval(
-                id,
-                key,
-                public_share,
-                &VidpfInput::from_bools(&[false]),
-                nonce,
-            )?
-            .share
-            + self
-                .eval(
-                    id,
-                    key,
-                    public_share,
-                    &VidpfInput::from_bools(&[true]),
-                    nonce,
-                )?
-                .share)
+        let (weight_share_left, _onehot_proof_left) = self.eval_with_cache(
+            id,
+            key,
+            public_share,
+            &VidpfInput::from_bools(&[false]),
+            cache_tree,
+            nonce,
+        )?;
+
+        let (weight_share_right, _onehot_proof_right) = self.eval_with_cache(
+            id,
+            key,
+            public_share,
+            &VidpfInput::from_bools(&[true]),
+            cache_tree,
+            nonce,
+        )?;
+
+        Ok(weight_share_left + weight_share_right)
     }
 
     fn extend(seed: &VidpfSeed, nonce: &[u8]) -> ExtendedSeed {
@@ -551,7 +529,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
         bytes.read_exact(&mut packed)?;
         let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed);
 
-        let mut cw = Vec::<VidpfCorrectionWord<W>>::with_capacity(*bits);
+        let mut cw = Vec::with_capacity(*bits);
         for chunk in unpacked_control_bits[0..(bits) * 2].chunks(2) {
             let ctrl_left = (chunk[0] as u8).into();
             let ctrl_right = (chunk[1] as u8).into();
@@ -576,7 +554,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
 pub(crate) struct VidpfEvalState {
     seed: VidpfSeed,
     control_bit: Choice,
-    proof: VidpfProof,
+    node_proof: VidpfProof,
 }
 
 impl VidpfEvalState {
@@ -584,7 +562,7 @@ impl VidpfEvalState {
         Self {
             seed: key.0,
             control_bit: Choice::from(id),
-            proof: VidpfProof::default(),
+            node_proof: VidpfProof::default(),
         }
     }
 }
@@ -597,20 +575,9 @@ pub(crate) struct VidpfEvalCache<W: VidpfValue> {
 }
 
 impl<W: VidpfValue> VidpfEvalCache<W> {
-    fn to_share(&self) -> VidpfValueShare<W> {
-        VidpfValueShare::<W> {
-            share: self.share.clone(),
-            proof: self.state.proof,
-        }
+    fn to_share(&self) -> W {
+        self.share.clone()
     }
-}
-
-/// VIDPF value share, the output of [`eval()`](Vidpf::eval).
-pub struct VidpfValueShare<W: VidpfValue> {
-    /// Secret share of the input's weight.
-    pub share: W,
-    /// Proof used to verify the share.
-    pub proof: VidpfProof,
 }
 
 const VIDPF_PROOF_SIZE: usize = 32;
@@ -856,43 +823,37 @@ mod tests {
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
             let (vidpf, public, [key_0, key_1], nonce) = vidpf_gen_setup(&input, &weight);
 
-            let value_share_0 = vidpf
+            let (value_share_0, onehot_proof_0) = vidpf
                 .eval(VidpfServerId::S0, &key_0, &public, &input, &nonce)
                 .unwrap();
-            let value_share_1 = vidpf
+            let (value_share_1, onehot_proof_1) = vidpf
                 .eval(VidpfServerId::S1, &key_1, &public, &input, &nonce)
                 .unwrap();
 
             assert_eq!(
-                value_share_0.share + value_share_1.share,
+                value_share_0 + value_share_1,
                 weight,
                 "shares must add up to the expected weight",
             );
 
-            assert_eq!(
-                value_share_0.proof, value_share_1.proof,
-                "proofs must be equal"
-            );
+            assert_eq!(onehot_proof_0, onehot_proof_1, "proofs must be equal");
 
             let bad_input = VidpfInput::from_bytes(&[0x00]);
             let zero = TestWeight::zero(&TEST_WEIGHT_LEN);
-            let value_share_0 = vidpf
+            let (value_share_0, onehot_proof_0) = vidpf
                 .eval(VidpfServerId::S0, &key_0, &public, &bad_input, &nonce)
                 .unwrap();
-            let value_share_1 = vidpf
+            let (value_share_1, onehot_proof_1) = vidpf
                 .eval(VidpfServerId::S1, &key_1, &public, &bad_input, &nonce)
                 .unwrap();
 
             assert_eq!(
-                value_share_0.share + value_share_1.share,
+                value_share_0 + value_share_1,
                 zero,
                 "shares must add up to zero",
             );
 
-            assert_eq!(
-                value_share_0.proof, value_share_1.proof,
-                "proofs must be equal"
-            );
+            assert_eq!(onehot_proof_0, onehot_proof_1, "proofs must be equal");
         }
 
         #[test]
@@ -935,7 +896,7 @@ mod tests {
                 );
 
                 assert_eq!(
-                    state_0.proof, state_1.proof,
+                    state_0.node_proof, state_1.node_proof,
                     "proofs must be equal at the current level: {:?}",
                     level
                 );
@@ -1005,25 +966,25 @@ mod tests {
                     .unwrap();
 
                 assert_eq!(
-                    val_share_0.share, val_share_0_cached.share,
+                    val_share_0, val_share_0_cached,
                     "shares must be computed equally with or without caching: {:?}",
                     level
                 );
 
                 assert_eq!(
-                    val_share_1.share, val_share_1_cached.share,
+                    val_share_1, val_share_1_cached,
                     "shares must be computed equally with or without caching: {:?}",
                     level
                 );
 
                 assert_eq!(
-                    val_share_0.proof, val_share_0_cached.proof,
+                    val_share_0, val_share_0_cached,
                     "proofs must be equal with or without caching: {:?}",
                     level
                 );
 
                 assert_eq!(
-                    val_share_1.proof, val_share_1_cached.proof,
+                    val_share_1, val_share_1_cached,
                     "proofs must be equal with or without caching: {:?}",
                     level
                 );

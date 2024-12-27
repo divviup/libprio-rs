@@ -306,12 +306,20 @@ where
             nonce,
         )?;
 
-        let leader_measurement_share =
-            self.vidpf
-                .eval_root(VidpfServerId::S0, &vidpf_keys[0], &public_share, nonce)?;
-        let helper_measurement_share =
-            self.vidpf
-                .eval_root(VidpfServerId::S1, &vidpf_keys[1], &public_share, nonce)?;
+        let leader_measurement_share = self.vidpf.eval_root(
+            VidpfServerId::S0,
+            &vidpf_keys[0],
+            &public_share,
+            &mut BinaryTree::default(),
+            nonce,
+        )?;
+        let helper_measurement_share = self.vidpf.eval_root(
+            VidpfServerId::S1,
+            &vidpf_keys[1],
+            &public_share,
+            &mut BinaryTree::default(),
+            nonce,
+        )?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
             leader_measurement_share.as_ref(),
@@ -532,16 +540,17 @@ where
         );
         let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
         for prefix in agg_param.level_and_prefixes.prefixes() {
-            let mut value_share = self.vidpf.eval_with_cache(
-                id,
-                &input_share.vidpf_key,
-                public_share,
-                prefix,
-                &mut cache_tree,
-                nonce,
-            )?;
-            eval_proof.update(&value_share.proof);
-            output_shares.append(&mut value_share.share.0);
+            let (VidpfWeight(mut weight_share), onehot_proof_for_prefix) =
+                self.vidpf.eval_with_cache(
+                    id,
+                    &input_share.vidpf_key,
+                    public_share,
+                    prefix,
+                    &mut cache_tree,
+                    nonce,
+                )?;
+            eval_proof.update(&onehot_proof_for_prefix);
+            output_shares.append(&mut weight_share);
         }
 
         Ok(if agg_param.require_weight_check {
@@ -549,13 +558,9 @@ where
                 vidpf_key,
                 proof_share,
             } = input_share;
-            let root_share = self.vidpf.get_root_weight_share(
-                id,
-                vidpf_key,
-                public_share,
-                &mut cache_tree,
-                nonce,
-            )?;
+            let root_share =
+                self.vidpf
+                    .eval_root(id, vidpf_key, public_share, &mut cache_tree, nonce)?;
             let (szk_query_share, szk_query_state) =
                 self.szk
                     .query(root_share.as_ref(), proof_share, verify_key, nonce)?;
