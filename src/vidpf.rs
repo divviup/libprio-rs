@@ -197,14 +197,16 @@ impl<W: VidpfValue> Vidpf<W> {
 
         let mut onehot_proof = ONEHOT_PROOF_INIT;
         for (idx, cw) in input.index_iter()?.zip(public.cw.iter()) {
-            r = self.eval_next(id, cw, idx, &r.state, nonce);
+            r = self.eval_next(cw, idx, &r.state, nonce);
             onehot_proof = xor_proof(
                 onehot_proof,
                 &Self::hash_proof(xor_proof(onehot_proof, &r.state.node_proof)),
             );
         }
 
-        Ok((r.share, onehot_proof))
+        let mut weight = r.share;
+        weight.conditional_negate(Choice::from(id));
+        Ok((weight, onehot_proof))
     }
 
     /// Evaluates the entire `input` and produces a share of the
@@ -235,7 +237,6 @@ impl<W: VidpfValue> Vidpf<W> {
             sub_tree = if idx.bit.unwrap_u8() == 0 {
                 sub_tree.left.get_or_insert_with(|| {
                     Box::new(Node::new(self.eval_next(
-                        id,
                         cw,
                         idx,
                         &sub_tree.value.state,
@@ -245,7 +246,6 @@ impl<W: VidpfValue> Vidpf<W> {
             } else {
                 sub_tree.right.get_or_insert_with(|| {
                     Box::new(Node::new(self.eval_next(
-                        id,
                         cw,
                         idx,
                         &sub_tree.value.state,
@@ -258,14 +258,16 @@ impl<W: VidpfValue> Vidpf<W> {
                 &Self::hash_proof(xor_proof(onehot_proof, &sub_tree.value.state.node_proof)),
             );
         }
-        Ok((sub_tree.value.to_share(), onehot_proof))
+
+        let mut weight = sub_tree.value.to_share();
+        weight.conditional_negate(Choice::from(id));
+        Ok((weight, onehot_proof))
     }
 
     /// Evaluates the `input` at the given level using the provided initial
     /// state, and returns a new state and a share of the input's weight at that level.
     fn eval_next(
         &self,
-        id: VidpfServerId,
         cw: &VidpfCorrectionWord<W>,
         VidpfEvalIndex { bit, input, level }: VidpfEvalIndex<'_>,
         state: &VidpfEvalState,
@@ -292,7 +294,6 @@ impl<W: VidpfValue> Vidpf<W> {
             next_ctrl,
         );
         weight += w;
-        weight.conditional_negate(Choice::from(id));
 
         // Compute and correct the node proof.
         let node_proof = conditional_xor_proof(
@@ -889,11 +890,11 @@ mod tests {
             let mut state_1 = VidpfEvalState::init_from_key(VidpfServerId::S1, key_1);
 
             for (idx, cw) in input.index_iter().unwrap().zip(public.cw.iter()) {
-                let r0 = vidpf.eval_next(VidpfServerId::S0, cw, idx, &state_0, nonce);
-                let r1 = vidpf.eval_next(VidpfServerId::S1, cw, idx, &state_1, nonce);
+                let r0 = vidpf.eval_next(cw, idx, &state_0, nonce);
+                let r1 = vidpf.eval_next(cw, idx, &state_1, nonce);
 
                 assert_eq!(
-                    r0.share + r1.share,
+                    r0.share - r1.share,
                     *weight,
                     "shares must add up to the expected weight at the current level: {:?}",
                     idx.level
