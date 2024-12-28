@@ -29,7 +29,7 @@ use crate::{
     vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
 };
 
-const ONEHOT_PROOF_INIT: [u8; VIDPF_PROOF_SIZE] = [
+pub(crate) const ONEHOT_PROOF_INIT: [u8; VIDPF_PROOF_SIZE] = [
     186, 76, 128, 104, 116, 50, 149, 133, 2, 164, 82, 118, 128, 155, 163, 239, 117, 95, 162, 196,
     173, 31, 244, 180, 171, 86, 176, 209, 12, 221, 28, 204,
 ];
@@ -123,7 +123,9 @@ impl<W: VidpfValue> Vidpf<W> {
         ];
 
         let mut cw = Vec::with_capacity(input.len());
-        for VidpfEvalIndex { bit, input, level } in input.index_iter()? {
+        for idx in input.index_iter()? {
+            let bit = idx.bit;
+
             // Extend.
             let e = [Self::extend(&seed[0], nonce), Self::extend(&seed[1], nonce)];
 
@@ -160,10 +162,7 @@ impl<W: VidpfValue> Vidpf<W> {
             cw_weight.conditional_negate(ctrl[1]);
 
             // Compute the correction word node proof.
-            let cw_proof = xor_proof(
-                Self::node_proof(input, level, &seed[0]),
-                &Self::node_proof(input, level, &seed[1]),
-            );
+            let cw_proof = xor_proof(idx.node_proof(&seed[0]), &idx.node_proof(&seed[1]));
 
             cw.push(VidpfCorrectionWord {
                 seed: cw_seed,
@@ -269,10 +268,12 @@ impl<W: VidpfValue> Vidpf<W> {
     fn eval_next(
         &self,
         cw: &VidpfCorrectionWord<W>,
-        VidpfEvalIndex { bit, input, level }: VidpfEvalIndex<'_>,
+        idx: VidpfEvalIndex<'_>,
         state: &VidpfEvalState,
         nonce: &[u8],
     ) -> VidpfEvalResult<W> {
+        let bit = idx.bit;
+
         // Extend.
         let e = Self::extend(&state.seed, nonce);
 
@@ -296,11 +297,7 @@ impl<W: VidpfValue> Vidpf<W> {
         weight += w;
 
         // Compute and correct the node proof.
-        let node_proof = conditional_xor_proof(
-            Self::node_proof(input, level, &next_seed),
-            &cw.proof,
-            next_ctrl,
-        );
+        let node_proof = conditional_xor_proof(idx.node_proof(&next_seed), &cw.proof, next_ctrl);
 
         let next_state = VidpfEvalState {
             seed: next_seed,
@@ -377,26 +374,7 @@ impl<W: VidpfValue> Vidpf<W> {
         (out_seed, value)
     }
 
-    fn node_proof(input: &VidpfInput, level: u16, seed: &VidpfSeed) -> VidpfProof {
-        let mut shake = XofTurboShake128::from_seed_slice(&seed[..], VidpfDomainSepTag::NODE_PROOF);
-        for chunk128 in input
-            .index(..=usize::from(level))
-            .chunks(128)
-            .map(BitField::load_le::<u128>)
-            .map(u128::to_le_bytes)
-        {
-            shake.update(&chunk128);
-        }
-        shake.update(&level.to_le_bytes());
-        let mut rng = shake.into_seed_stream();
-
-        let mut proof = VidpfProof::default();
-        rng.fill_bytes(&mut proof);
-
-        proof
-    }
-
-    fn hash_proof(mut proof: VidpfProof) -> VidpfProof {
+    pub(crate) fn hash_proof(mut proof: VidpfProof) -> VidpfProof {
         let mut rng = XofTurboShake128::seed_stream(
             &Seed(Default::default()),
             VidpfDomainSepTag::NODE_PROOF_ADJUST,
@@ -405,6 +383,70 @@ impl<W: VidpfValue> Vidpf<W> {
         rng.fill_bytes(&mut proof);
 
         proof
+    }
+}
+
+impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
+    /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
+    /// each node in the prefix tree. The return value is the weights for the prefixes
+    /// concatenated together.
+    pub(crate) fn eval_prefix_tree_with_siblings(
+        &self,
+        id: VidpfServerId,
+        public: &VidpfPublicShare<VidpfWeight<F>>,
+        key: &VidpfKey,
+        nonce: &[u8],
+        prefixes: &[VidpfInput],
+        prefix_tree: &mut BinaryTree<VidpfEvalResult<VidpfWeight<F>>>,
+    ) -> Result<Vec<F>, VidpfError> {
+        let mut out_shares = Vec::with_capacity(self.weight_parameter * prefixes.len());
+
+        for prefix in prefixes {
+            if prefix.len() > public.cw.len() {
+                return Err(VidpfError::InvalidAttributeLength);
+            }
+
+            let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
+                Box::new(Node::new(VidpfEvalResult {
+                    state: VidpfEvalState::init_from_key(id, key),
+                    share: VidpfWeight::zero(&self.weight_parameter), // not used
+                }))
+            });
+
+            for (idx, cw) in prefix.index_iter()?.zip(public.cw.iter()) {
+                let left = sub_tree.left.get_or_insert_with(|| {
+                    Box::new(Node::new(self.eval_next(
+                        cw,
+                        idx.left_sibling(),
+                        &sub_tree.value.state,
+                        nonce,
+                    )))
+                });
+                let right = sub_tree.right.get_or_insert_with(|| {
+                    Box::new(Node::new(self.eval_next(
+                        cw,
+                        idx.right_sibling(),
+                        &sub_tree.value.state,
+                        nonce,
+                    )))
+                });
+
+                sub_tree = if idx.bit.unwrap_u8() == 0 {
+                    left
+                } else {
+                    right
+                };
+            }
+
+            out_shares.extend_from_slice(&sub_tree.value.share.0);
+        }
+
+        if id == VidpfServerId::S1 {
+            for o in out_shares.iter_mut() {
+                *o = -*o;
+            }
+        }
+        Ok(out_shares)
     }
 }
 
@@ -562,7 +604,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
 pub(crate) struct VidpfEvalState {
     seed: VidpfSeed,
     control_bit: Choice,
-    node_proof: VidpfProof,
+    pub(crate) node_proof: VidpfProof,
 }
 
 impl VidpfEvalState {
@@ -570,7 +612,7 @@ impl VidpfEvalState {
         Self {
             seed: key.0,
             control_bit: Choice::from(id),
-            node_proof: VidpfProof::default(),
+            node_proof: VidpfProof::default(), // not used
         }
     }
 }
@@ -578,8 +620,8 @@ impl VidpfEvalState {
 /// Result of VIDPF evaluation.
 #[derive(Debug)]
 pub(crate) struct VidpfEvalResult<W: VidpfValue> {
-    state: VidpfEvalState,
-    share: W,
+    pub(crate) state: VidpfEvalState,
+    pub(crate) share: W,
 }
 
 impl<W: VidpfValue> VidpfEvalResult<W> {
@@ -594,7 +636,7 @@ const VIDPF_SEED_SIZE: usize = 16;
 /// Allows to validate user input and shares after evaluation.
 type VidpfProof = [u8; VIDPF_PROOF_SIZE];
 
-fn xor_proof(mut lhs: VidpfProof, rhs: &VidpfProof) -> VidpfProof {
+pub(crate) fn xor_proof(mut lhs: VidpfProof, rhs: &VidpfProof) -> VidpfProof {
     zip(&mut lhs, rhs).for_each(|(a, b)| a.bitxor_assign(b));
     lhs
 }
@@ -756,6 +798,50 @@ struct VidpfEvalIndex<'a> {
     bit: Choice,
     input: &'a VidpfInput,
     level: u16,
+}
+
+impl VidpfEvalIndex<'_> {
+    pub(crate) fn left_sibling(&self) -> Self {
+        Self {
+            bit: Choice::from(0),
+            input: self.input,
+            level: self.level,
+        }
+    }
+
+    pub(crate) fn right_sibling(&self) -> Self {
+        Self {
+            bit: Choice::from(1),
+            input: self.input,
+            level: self.level,
+        }
+    }
+
+    fn node_proof(&self, seed: &VidpfSeed) -> VidpfProof {
+        let mut xof = XofTurboShake128::from_seed_slice(&seed[..], VidpfDomainSepTag::NODE_PROOF);
+        xof.update(&self.level.to_le_bytes());
+
+        for byte in self
+            .input
+            .index(..=usize::from(self.level))
+            .chunks(8)
+            .map(BitField::load_le::<u8>)
+            .enumerate()
+            .map(|(byte_index, mut byte)| {
+                // Typically `input[level] == bit` , but `bit` may be overwritten by either
+                // `left_sibling()` or `right_sibling()`. Adjust its value accordingly.
+                if byte_index == usize::from(self.level) / 8 {
+                    let bit_index = self.level % 8;
+                    let m = 1 << bit_index;
+                    byte = u8::conditional_select(&(byte & !m), &(byte | m), self.bit);
+                }
+                byte
+            })
+        {
+            xof.update(&[byte]);
+        }
+        xof.into_seed().0
+    }
 }
 
 impl VidpfInput {

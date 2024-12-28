@@ -19,18 +19,17 @@ use crate::{
         PrepareTransition, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfError, VidpfEvalResult, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
-        VidpfWeight,
+        xor_proof, Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
+        VidpfWeight, ONEHOT_PROOF_INIT,
     },
 };
 
-use std::fmt::Debug;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
+use std::{collections::VecDeque, fmt::Debug};
 use subtle::{Choice, ConstantTimeEq};
 
-const DST_PATH_CHECK_BATCH: u16 = 6;
 const NONCE_SIZE: usize = 16;
 
 /// The main struct implementing the Mastic VDAF.
@@ -511,7 +510,7 @@ where
     fn prepare_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
-        ctx: &[u8],
+        _ctx: &[u8],
         agg_id: usize,
         agg_param: &MasticAggregationParam,
         nonce: &[u8; NONCE_SIZE],
@@ -531,60 +530,121 @@ where
                 "Invalid aggregator ID".to_string(),
             )),
         }?;
-        let mut eval_proof = P::init(
-            verify_key,
-            &self.domain_separation_tag(DST_PATH_CHECK_BATCH, ctx),
-        );
-        let mut output_shares = Vec::<T::Field>::with_capacity(
-            self.vidpf.weight_parameter * agg_param.level_and_prefixes.prefixes().len(),
-        );
-        let mut cache_tree = BinaryTree::<VidpfEvalResult<VidpfWeight<T::Field>>>::default();
-        for prefix in agg_param.level_and_prefixes.prefixes() {
-            let (VidpfWeight(mut weight_share), onehot_proof_for_prefix) =
-                self.vidpf.eval_with_cache(
-                    id,
-                    &input_share.vidpf_key,
-                    public_share,
-                    prefix,
-                    &mut cache_tree,
-                    nonce,
-                )?;
-            eval_proof.update(&onehot_proof_for_prefix);
-            output_shares.append(&mut weight_share);
-        }
+        let prefixes = agg_param.level_and_prefixes.prefixes();
+
+        let mut prefix_tree = BinaryTree::default();
+        let out_shares = self.vidpf.eval_prefix_tree_with_siblings(
+            id,
+            public_share,
+            &input_share.vidpf_key,
+            nonce,
+            prefixes,
+            &mut prefix_tree,
+        )?;
+
+        let root = prefix_tree.root.as_ref().unwrap();
+
+        // Onehot and payload checks
+        let (payload_check, onehot_proof) = {
+            let mut payload_check_xof = P::init(&[0; SEED_SIZE], b"");
+            let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
+            let mut onehot_proof = ONEHOT_PROOF_INIT;
+
+            // Traverse the prefix tree breadth-first.
+            //
+            // TODO spec: Adjust the onehot proof computation accordingly so that we always
+            // traverse the left node then the right node. Currently we visit the on-path child
+            // then its sibling.
+            let mut q = VecDeque::with_capacity(100);
+            q.push_back(root.left.as_ref().unwrap());
+            q.push_back(root.right.as_ref().unwrap());
+            while let Some(node) = q.pop_front() {
+                // Update onehot proof.
+                onehot_proof = xor_proof(
+                    onehot_proof,
+                    &Vidpf::<VidpfWeight<T::Field>>::hash_proof(xor_proof(
+                        onehot_proof,
+                        &node.value.state.node_proof,
+                    )),
+                );
+
+                // Update payload check.
+                if let (Some(left), Some(right)) = (node.left.as_ref(), node.right.as_ref()) {
+                    for (w, (w_left, w_right)) in node
+                        .value
+                        .share
+                        .0
+                        .iter()
+                        .zip(left.value.share.0.iter().zip(right.value.share.0.iter()))
+                    {
+                        (*w - (*w_left + *w_right))
+                            .encode(&mut payload_check_buf)
+                            .unwrap();
+                        payload_check_xof.update(&payload_check_buf);
+                        payload_check_buf.clear();
+                    }
+
+                    q.push_back(left);
+                    q.push_back(right);
+                }
+            }
+
+            // TODO spec: Pre-hash the payload check.
+            let payload_check = payload_check_xof.into_seed().0;
+
+            (payload_check, onehot_proof)
+        };
+
+        let eval_proof = {
+            let mut eval_proof_xof = P::init(&[0; SEED_SIZE], b"");
+            eval_proof_xof.update(&onehot_proof);
+            eval_proof_xof.update(&payload_check);
+            eval_proof_xof.into_seed()
+        };
 
         Ok(if agg_param.require_weight_check {
-            let MasticInputShare {
-                vidpf_key,
-                proof_share,
-            } = input_share;
-            let root_share =
-                self.vidpf
-                    .eval_root(id, vidpf_key, public_share, &mut cache_tree, nonce)?;
+            let beta_share = {
+                let beta_left = &root.left.as_ref().unwrap().value.share.0;
+                let beta_right = &root.right.as_ref().unwrap().value.share.0;
+                let mut beta_share = beta_left
+                    .iter()
+                    .zip(beta_right.iter())
+                    .map(|(b_left, b_right)| *b_left + *b_right)
+                    .collect::<Vec<_>>();
+                if id == VidpfServerId::S1 {
+                    for b in beta_share.iter_mut() {
+                        *b = -*b;
+                    }
+                }
+                beta_share
+            };
+
+            // Range check.
             let (szk_query_share, szk_query_state) =
                 self.szk
-                    .query(root_share.as_ref(), proof_share, verify_key, nonce)?;
+                    .query(&beta_share, &input_share.proof_share, verify_key, nonce)?;
+
             let verifier_len = szk_query_share.flp_verifier.len();
             (
                 MasticPrepareState {
-                    output_shares: MasticOutputShare::<T::Field>::from(output_shares),
+                    output_shares: MasticOutputShare::from(out_shares),
                     szk_query_state,
                     verifier_len: Some(verifier_len),
                 },
                 MasticPrepareShare {
-                    vidpf_proof: eval_proof.into_seed(),
+                    vidpf_proof: eval_proof,
                     szk_query_share_opt: Some(szk_query_share),
                 },
             )
         } else {
             (
                 MasticPrepareState {
-                    output_shares: MasticOutputShare::<T::Field>::from(output_shares),
+                    output_shares: MasticOutputShare::from(out_shares),
                     szk_query_state: None,
                     verifier_len: None,
                 },
                 MasticPrepareShare {
-                    vidpf_proof: eval_proof.into_seed(),
+                    vidpf_proof: eval_proof,
                     szk_query_share_opt: None,
                 },
             )
