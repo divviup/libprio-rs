@@ -54,14 +54,9 @@ where
     P: Xof<SEED_SIZE>,
 {
     /// Creates a new instance of Mastic, with a specific attribute length and weight type.
-    pub fn new(
-        algorithm_id: u32,
-        szk: Szk<T, P, SEED_SIZE>,
-        vidpf: Vidpf<VidpfWeight<T::Field>>,
-        bits: usize,
-    ) -> Self {
-        // TODO Avoid this assertion by constructing vidpf and szk from an FLP.
-        assert_eq!(vidpf.weight_parameter, szk.typ.input_len() + 1);
+    pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Self {
+        let vidpf = Vidpf::new(typ.input_len() + 1);
+        let szk = Szk::new(typ, algorithm_id);
         Self {
             algorithm_id,
             szk,
@@ -778,10 +773,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::Field128;
+    use crate::field::{Field128, Field64};
     use crate::flp::gadgets::{Mul, ParallelSum};
     use crate::flp::types::{Count, Sum, SumVec};
     use crate::vdaf::test_utils::run_vdaf;
+    use crate::vdaf::xof::XofTurboShake128;
     use rand::{thread_rng, Rng};
 
     const CTX_STR: &[u8] = b"mastic ctx";
@@ -791,11 +787,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let encoded_meas_len = sum_typ.input_len();
-
-        let szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len + 1);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -876,11 +868,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let encoded_meas_len = sum_typ.input_len();
-
-        let szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len + 1);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -933,10 +921,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let encoded_meas_len = sum_typ.input_len();
-        let szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len + 1);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -959,9 +944,7 @@ mod tests {
     fn test_mastic_count() {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(2);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1039,10 +1022,8 @@ mod tests {
     #[test]
     fn test_public_share_encoded_len() {
         let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(2);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let count = Count::<Field64>::new();
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1061,10 +1042,8 @@ mod tests {
     #[test]
     fn test_public_share_roundtrip_count() {
         let algorithm_id = 6;
-        let count = Count::<Field128>::new();
-        let szk = Szk::new_turboshake128(count, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(2);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let count = Count::<Field64>::new();
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1086,9 +1065,7 @@ mod tests {
         let algorithm_id = 6;
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1178,9 +1155,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1211,9 +1186,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1246,9 +1219,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1273,9 +1244,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
-        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
