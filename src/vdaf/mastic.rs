@@ -301,20 +301,12 @@ where
         // keys for the measurement and evaluating each of them.
         let public_share = self.vidpf.gen_with_keys(&vidpf_keys, alpha, &beta, nonce)?;
 
-        let leader_beta_share = self.vidpf.eval_root(
-            VidpfServerId::S0,
-            &vidpf_keys[0],
-            &public_share,
-            &mut BinaryTree::default(),
-            nonce,
-        )?;
-        let helper_beta_share = self.vidpf.eval_root(
-            VidpfServerId::S1,
-            &vidpf_keys[1],
-            &public_share,
-            &mut BinaryTree::default(),
-            nonce,
-        )?;
+        let leader_beta_share =
+            self.vidpf
+                .get_beta_share(VidpfServerId::S0, &public_share, &vidpf_keys[0], nonce)?;
+        let helper_beta_share =
+            self.vidpf
+                .get_beta_share(VidpfServerId::S1, &public_share, &vidpf_keys[1], nonce)?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
             &leader_beta_share.as_ref()[1..],
@@ -393,7 +385,7 @@ pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
 #[derive(Clone, Debug)]
 pub struct MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
     ///  [`Vidpf`] evaluation proof, which guarantees one-hotness and payload consistency.
-    vidpf_proof: Seed<SEED_SIZE>,
+    eval_proof: Seed<SEED_SIZE>,
 
     /// If [`Szk`]` verification of the root weight is needed, a verification message.
     szk_query_share_opt: Option<SzkQueryShare<F, SEED_SIZE>>,
@@ -401,7 +393,7 @@ pub struct MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
 
 impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.vidpf_proof.encode(bytes)?;
+        self.eval_proof.encode(bytes)?;
         match &self.szk_query_share_opt {
             Some(query_share) => query_share.encode(bytes),
             None => Ok(()),
@@ -410,7 +402,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, S
 
     fn encoded_len(&self) -> Option<usize> {
         Some(
-            self.vidpf_proof.encoded_len()?
+            self.eval_proof.encoded_len()?
                 + match &self.szk_query_share_opt {
                     Some(query_share) => query_share.encoded_len()?,
                     None => 0,
@@ -426,7 +418,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
         prep_state: &MasticPrepareState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let vidpf_proof = Seed::decode(bytes)?;
+        let eval_proof = Seed::decode(bytes)?;
         let requires_joint_rand = prep_state.szk_query_state.is_some();
         let szk_query_share_opt = prep_state
             .verifier_len
@@ -438,7 +430,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
             })
             .transpose()?;
         Ok(Self {
-            vidpf_proof,
+            eval_proof,
             szk_query_share_opt,
         })
     }
@@ -596,23 +588,10 @@ where
         };
 
         Ok(if agg_param.require_weight_check {
-            let beta_share = {
-                let beta_left = &root.left.as_ref().unwrap().value.share.0;
-                let beta_right = &root.right.as_ref().unwrap().value.share.0;
-                let mut beta_share = beta_left
-                    .iter()
-                    .zip(beta_right.iter())
-                    .map(|(b_left, b_right)| *b_left + *b_right)
-                    .collect::<Vec<_>>();
-                if id == VidpfServerId::S1 {
-                    for b in beta_share.iter_mut() {
-                        *b = -*b;
-                    }
-                }
-                beta_share
-            };
-
             // Range check.
+            let VidpfWeight(beta_share) =
+                self.vidpf
+                    .get_beta_share(id, public_share, &input_share.vidpf_key, nonce)?;
             let (szk_query_share, szk_query_state) = self.szk.query(
                 &beta_share[1..],
                 &input_share.proof_share,
@@ -628,7 +607,7 @@ where
                     verifier_len: Some(verifier_len),
                 },
                 MasticPrepareShare {
-                    vidpf_proof: eval_proof,
+                    eval_proof,
                     szk_query_share_opt: Some(szk_query_share),
                 },
             )
@@ -640,7 +619,7 @@ where
                     verifier_len: None,
                 },
                 MasticPrepareShare {
-                    vidpf_proof: eval_proof,
+                    eval_proof,
                     szk_query_share_opt: None,
                 },
             )
@@ -667,7 +646,7 @@ where
                 "Received more than two prepare shares".to_string(),
             ));
         };
-        if leader_share.vidpf_proof != helper_share.vidpf_proof {
+        if leader_share.eval_proof != helper_share.eval_proof {
             return Err(VdafError::Uncategorized(
                 "Vidpf proof verification failed".to_string(),
             ));

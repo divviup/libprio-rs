@@ -176,7 +176,9 @@ impl<W: VidpfValue> Vidpf<W> {
         Ok(VidpfPublicShare { cw })
     }
 
-    /// Evaluate a given VIDPF (comprised of the key and public share) at a given input.
+    /// Evaluate a given VIDPF (comprised of the key and public share) at a given prefix. Return
+    /// the weight for that prefix along with a hash of the node proofs along the path from the
+    /// root to the prefix.
     pub fn eval(
         &self,
         id: VidpfServerId,
@@ -185,6 +187,8 @@ impl<W: VidpfValue> Vidpf<W> {
         input: &VidpfInput,
         nonce: &[u8],
     ) -> Result<(W, VidpfProof), VidpfError> {
+        use sha3::{Digest, Sha3_256};
+
         let mut r = VidpfEvalResult {
             state: VidpfEvalState::init_from_key(id, key),
             share: W::zero(&self.weight_parameter), // not used
@@ -194,73 +198,15 @@ impl<W: VidpfValue> Vidpf<W> {
             return Err(VidpfError::InvalidAttributeLength);
         }
 
-        let mut onehot_proof = ONEHOT_PROOF_INIT;
+        let mut hash = Sha3_256::new();
         for (idx, cw) in input.index_iter()?.zip(public.cw.iter()) {
             r = self.eval_next(cw, idx, &r.state, nonce);
-            onehot_proof = xor_proof(
-                onehot_proof,
-                &Self::hash_proof(xor_proof(onehot_proof, &r.state.node_proof)),
-            );
+            hash.update(r.state.node_proof);
         }
 
         let mut weight = r.share;
         weight.conditional_negate(Choice::from(id));
-        Ok((weight, onehot_proof))
-    }
-
-    /// Evaluates the entire `input` and produces a share of the
-    /// input's weight. It reuses computation from previous levels available in the
-    /// cache.
-    pub(crate) fn eval_with_cache(
-        &self,
-        id: VidpfServerId,
-        key: &VidpfKey,
-        public: &VidpfPublicShare<W>,
-        input: &VidpfInput,
-        cache_tree: &mut BinaryTree<VidpfEvalResult<W>>,
-        nonce: &[u8],
-    ) -> Result<(W, VidpfProof), VidpfError> {
-        if input.len() > public.cw.len() {
-            return Err(VidpfError::InvalidAttributeLength);
-        }
-
-        let mut sub_tree = cache_tree.root.get_or_insert_with(|| {
-            Box::new(Node::new(VidpfEvalResult {
-                state: VidpfEvalState::init_from_key(id, key),
-                share: W::zero(&self.weight_parameter), // not used
-            }))
-        });
-
-        let mut onehot_proof = ONEHOT_PROOF_INIT;
-        for (idx, cw) in input.index_iter()?.zip(public.cw.iter()) {
-            sub_tree = if idx.bit.unwrap_u8() == 0 {
-                sub_tree.left.get_or_insert_with(|| {
-                    Box::new(Node::new(self.eval_next(
-                        cw,
-                        idx,
-                        &sub_tree.value.state,
-                        nonce,
-                    )))
-                })
-            } else {
-                sub_tree.right.get_or_insert_with(|| {
-                    Box::new(Node::new(self.eval_next(
-                        cw,
-                        idx,
-                        &sub_tree.value.state,
-                        nonce,
-                    )))
-                })
-            };
-            onehot_proof = xor_proof(
-                onehot_proof,
-                &Self::hash_proof(xor_proof(onehot_proof, &sub_tree.value.state.node_proof)),
-            );
-        }
-
-        let mut weight = sub_tree.value.to_share();
-        weight.conditional_negate(Choice::from(id));
-        Ok((weight, onehot_proof))
+        Ok((weight, hash.finalize().into()))
     }
 
     /// Evaluates the `input` at the given level using the provided initial
@@ -311,32 +257,31 @@ impl<W: VidpfValue> Vidpf<W> {
         }
     }
 
-    pub(crate) fn eval_root(
+    pub(crate) fn get_beta_share(
         &self,
         id: VidpfServerId,
+        public: &VidpfPublicShare<W>,
         key: &VidpfKey,
-        public_share: &VidpfPublicShare<W>,
-        cache_tree: &mut BinaryTree<VidpfEvalResult<W>>,
         nonce: &[u8],
     ) -> Result<W, VidpfError> {
-        let (weight_share_left, _onehot_proof_left) = self.eval_with_cache(
-            id,
-            key,
-            public_share,
-            &VidpfInput::from_bools(&[false]),
-            cache_tree,
-            nonce,
-        )?;
+        let cw = public.cw.first().ok_or(VidpfError::InputTooLong)?;
 
-        let (weight_share_right, _onehot_proof_right) = self.eval_with_cache(
-            id,
-            key,
-            public_share,
-            &VidpfInput::from_bools(&[true]),
-            cache_tree,
-            nonce,
-        )?;
+        let state = VidpfEvalState::init_from_key(id, key);
+        let input_left = VidpfInput::from_bools(&[false]);
+        let idx_left = VidpfEvalIndex::try_from_input(&input_left)?;
 
+        let VidpfEvalResult {
+            state: _,
+            share: mut weight_share_left,
+        } = self.eval_next(cw, idx_left, &state, nonce);
+
+        let VidpfEvalResult {
+            state: _,
+            share: mut weight_share_right,
+        } = self.eval_next(cw, idx_left.right_sibling(), &state, nonce);
+
+        weight_share_left.conditional_negate(Choice::from(id));
+        weight_share_right.conditional_negate(Choice::from(id));
         Ok(weight_share_left + weight_share_right)
     }
 
@@ -624,12 +569,6 @@ pub(crate) struct VidpfEvalResult<W: VidpfValue> {
     pub(crate) share: W,
 }
 
-impl<W: VidpfValue> VidpfEvalResult<W> {
-    fn to_share(&self) -> W {
-        self.share.clone()
-    }
-}
-
 const VIDPF_PROOF_SIZE: usize = 32;
 const VIDPF_SEED_SIZE: usize = 16;
 
@@ -800,8 +739,14 @@ struct VidpfEvalIndex<'a> {
     level: u16,
 }
 
-impl VidpfEvalIndex<'_> {
-    pub(crate) fn left_sibling(&self) -> Self {
+impl<'a> VidpfEvalIndex<'a> {
+    fn try_from_input(input: &'a VidpfInput) -> Result<Self, VidpfError> {
+        let level = u16::try_from(input.len()).map_err(|_| VidpfError::InputTooLong)? - 1;
+        let bit = Choice::from(u8::from(input.get(usize::from(level)).unwrap()));
+        Ok(Self { bit, input, level })
+    }
+
+    fn left_sibling(&self) -> Self {
         Self {
             bit: Choice::from(0),
             input: self.input,
@@ -809,7 +754,7 @@ impl VidpfEvalIndex<'_> {
         }
     }
 
-    pub(crate) fn right_sibling(&self) -> Self {
+    fn right_sibling(&self) -> Self {
         Self {
             bit: Choice::from(1),
             input: self.input,
@@ -869,13 +814,9 @@ mod tests {
 
     mod vidpf {
         use crate::{
-            bt::BinaryTree,
             codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
-            vidpf::{
-                Vidpf, VidpfEvalResult, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare,
-                VidpfServerId,
-            },
+            vidpf::{Vidpf, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId},
         };
 
         use super::{TestWeight, TEST_NONCE, TEST_NONCE_SIZE, TEST_WEIGHT_LEN};
@@ -994,94 +935,6 @@ mod tests {
 
                 state_0 = r0.state;
                 state_1 = r1.state;
-            }
-        }
-
-        #[test]
-        fn caching_at_each_level() {
-            let input = VidpfInput::from_bytes(&[0xFF]);
-            let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
-            let (vidpf, public, keys, nonce) = vidpf_gen_setup(&input, &weight);
-
-            test_equivalence_of_eval_with_caching(&vidpf, &keys, &public, &input, &nonce);
-        }
-
-        /// Ensures that VIDPF outputs match regardless of whether the path to
-        /// each node is recomputed or cached during evaluation.
-        fn test_equivalence_of_eval_with_caching(
-            vidpf: &Vidpf<TestWeight>,
-            [key_0, key_1]: &[VidpfKey; 2],
-            public: &VidpfPublicShare<TestWeight>,
-            input: &VidpfInput,
-            nonce: &[u8],
-        ) {
-            let mut cache_tree_0 = BinaryTree::<VidpfEvalResult<TestWeight>>::default();
-            let mut cache_tree_1 = BinaryTree::<VidpfEvalResult<TestWeight>>::default();
-
-            let n = input.len();
-            for level in 0..n {
-                let val_share_0 = vidpf
-                    .eval(
-                        VidpfServerId::S0,
-                        key_0,
-                        public,
-                        &input.prefix(level),
-                        nonce,
-                    )
-                    .unwrap();
-                let val_share_1 = vidpf
-                    .eval(
-                        VidpfServerId::S1,
-                        key_1,
-                        public,
-                        &input.prefix(level),
-                        nonce,
-                    )
-                    .unwrap();
-                let val_share_0_cached = vidpf
-                    .eval_with_cache(
-                        VidpfServerId::S0,
-                        key_0,
-                        public,
-                        &input.prefix(level),
-                        &mut cache_tree_0,
-                        nonce,
-                    )
-                    .unwrap();
-                let val_share_1_cached = vidpf
-                    .eval_with_cache(
-                        VidpfServerId::S1,
-                        key_1,
-                        public,
-                        &input.prefix(level),
-                        &mut cache_tree_1,
-                        nonce,
-                    )
-                    .unwrap();
-
-                assert_eq!(
-                    val_share_0, val_share_0_cached,
-                    "shares must be computed equally with or without caching: {:?}",
-                    level
-                );
-
-                assert_eq!(
-                    val_share_1, val_share_1_cached,
-                    "shares must be computed equally with or without caching: {:?}",
-                    level
-                );
-
-                assert_eq!(
-                    val_share_0, val_share_0_cached,
-                    "proofs must be equal with or without caching: {:?}",
-                    level
-                );
-
-                assert_eq!(
-                    val_share_1, val_share_1_cached,
-                    "proofs must be equal with or without caching: {:?}",
-                    level
-                );
             }
         }
     }
