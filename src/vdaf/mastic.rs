@@ -7,10 +7,10 @@
 use crate::{
     bt::BinaryTree,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{decode_fieldvec, FieldElement},
+    field::{decode_fieldvec, FieldElement, FieldElementWithInteger},
     flp::{
         szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState},
-        FlpError, Type,
+        Type,
     },
     vdaf::{
         poplar1::{Poplar1, Poplar1AggregationParam},
@@ -42,7 +42,7 @@ where
     P: Xof<SEED_SIZE>,
 {
     algorithm_id: u32,
-    szk: Szk<T, P, SEED_SIZE>,
+    pub(crate) szk: Szk<T, P, SEED_SIZE>,
     pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>>,
     /// The length of the private attribute associated with any input.
     pub(crate) bits: usize,
@@ -60,6 +60,8 @@ where
         vidpf: Vidpf<VidpfWeight<T::Field>>,
         bits: usize,
     ) -> Self {
+        // TODO Avoid this assertion by constructing vidpf and szk from an FLP.
+        assert_eq!(vidpf.weight_parameter, szk.typ.input_len() + 1);
         Self {
             algorithm_id,
             szk,
@@ -289,30 +291,29 @@ where
 {
     fn shard_with_random(
         &self,
-        measurement_attribute: &VidpfInput,
-        measurement_weight: &VidpfWeight<T::Field>,
+        alpha: &VidpfInput,
+        weight: &T::Measurement,
         nonce: &[u8; 16],
         vidpf_keys: [VidpfKey; 2],
         szk_random: [Seed<SEED_SIZE>; 2],
         joint_random_opt: Option<Seed<SEED_SIZE>>,
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
+        // The output with which we program the VIDPF is a counter and the encoded measurement.
+        let mut beta = VidpfWeight(self.szk.typ.encode_measurement(weight)?);
+        beta.0.insert(0, T::Field::one());
+
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
-        let public_share = self.vidpf.gen_with_keys(
-            &vidpf_keys,
-            measurement_attribute,
-            measurement_weight,
-            nonce,
-        )?;
+        let public_share = self.vidpf.gen_with_keys(&vidpf_keys, alpha, &beta, nonce)?;
 
-        let leader_measurement_share = self.vidpf.eval_root(
+        let leader_beta_share = self.vidpf.eval_root(
             VidpfServerId::S0,
             &vidpf_keys[0],
             &public_share,
             &mut BinaryTree::default(),
             nonce,
         )?;
-        let helper_measurement_share = self.vidpf.eval_root(
+        let helper_beta_share = self.vidpf.eval_root(
             VidpfServerId::S1,
             &vidpf_keys[1],
             &public_share,
@@ -321,9 +322,9 @@ where
         )?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
-            leader_measurement_share.as_ref(),
-            helper_measurement_share.as_ref(),
-            measurement_weight.as_ref(),
+            &leader_beta_share.as_ref()[1..],
+            &helper_beta_share.as_ref()[1..],
+            &beta.as_ref()[1..],
             szk_random,
             joint_random_opt,
             nonce,
@@ -339,15 +340,6 @@ where
         };
         Ok((public_share, vec![leader_share, helper_share]))
     }
-
-    fn encode_measurement(
-        &self,
-        measurement: &T::Measurement,
-    ) -> Result<VidpfWeight<T::Field>, VdafError> {
-        Ok(VidpfWeight::<T::Field>::from(
-            self.szk.typ.encode_measurement(measurement)?,
-        ))
-    }
 }
 
 impl<T, P, const SEED_SIZE: usize> Client<16> for Mastic<T, P, SEED_SIZE>
@@ -358,10 +350,10 @@ where
     fn shard(
         &self,
         _ctx: &[u8],
-        (attribute, weight): &(VidpfInput, T::Measurement),
+        (input, weight): &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
-        if attribute.len() != self.bits {
+        if input.len() != self.bits {
             return Err(VdafError::Vidpf(VidpfError::InvalidAttributeLength));
         }
 
@@ -373,15 +365,9 @@ where
         };
         let szk_random = [Seed::generate()?, Seed::generate()?];
 
-        let encoded_measurement = self.encode_measurement(weight)?;
-        if encoded_measurement.as_ref().len() != self.vidpf.weight_parameter {
-            return Err(VdafError::Uncategorized(
-                "encoded_measurement is the wrong length".to_string(),
-            ));
-        }
         self.shard_with_random(
-            attribute,
-            &encoded_measurement,
+            input,
+            weight,
             nonce,
             vidpf_keys,
             szk_random,
@@ -595,10 +581,22 @@ where
             (payload_check, onehot_proof)
         };
 
+        // Counter check.
+        let counter_check = {
+            let c_left = &root.left.as_ref().unwrap().value.share.0[0];
+            let c_right = &root.right.as_ref().unwrap().value.share.0[0];
+            let mut c = *c_left + *c_right;
+            if id == VidpfServerId::S1 {
+                c += T::Field::one();
+            }
+            c.get_encoded().unwrap()
+        };
+
         let eval_proof = {
             let mut eval_proof_xof = P::init(&[0; SEED_SIZE], b"");
             eval_proof_xof.update(&onehot_proof);
             eval_proof_xof.update(&payload_check);
+            eval_proof_xof.update(&counter_check);
             eval_proof_xof.into_seed()
         };
 
@@ -620,9 +618,12 @@ where
             };
 
             // Range check.
-            let (szk_query_share, szk_query_state) =
-                self.szk
-                    .query(&beta_share, &input_share.proof_share, verify_key, nonce)?;
+            let (szk_query_share, szk_query_state) = self.szk.query(
+                &beta_share[1..],
+                &input_share.proof_share,
+                verify_key,
+                nonce,
+            )?;
 
             let verifier_len = szk_query_share.flp_verifier.len();
             (
@@ -738,27 +739,38 @@ where
         _num_measurements: usize,
     ) -> Result<Self::AggregateResult, VdafError> {
         let num_prefixes = agg_param.level_and_prefixes.prefixes().len();
-        let mut agg_final = MasticAggregateShare::<T::Field>::from(vec![
-            T::Field::zero();
-            self.vidpf.weight_parameter
-                * num_prefixes
-        ]);
-        for agg_share in agg_shares.into_iter() {
-            agg_final.merge(&agg_share)?;
+
+        let AggregateShare(agg) = agg_shares.into_iter().try_fold(
+            AggregateShare(vec![
+                T::Field::zero();
+                num_prefixes * self.vidpf.weight_parameter
+            ]),
+            |mut agg, agg_share| {
+                agg.merge(&agg_share)?;
+                Result::<_, VdafError>::Ok(agg)
+            },
+        )?;
+
+        let mut result = Vec::with_capacity(num_prefixes);
+        for agg_for_prefix in agg.chunks(self.vidpf.weight_parameter) {
+            let encoded_agg_result = agg_for_prefix[1..].to_vec();
+            let num_measurements = agg_for_prefix[0];
+            let num_measurements =
+                <T::Field as FieldElementWithInteger>::Integer::from(num_measurements);
+            let num_measurements: u64 = num_measurements.try_into().map_err(|e| {
+                VdafError::Uncategorized(format!("failed to convert num_measurements to u64: {e}"))
+            })?;
+            let num_measurements = usize::try_from(num_measurements).map_err(|e| {
+                VdafError::Uncategorized(format!(
+                    "failed to convert num_measurements to usize: {e}"
+                ))
+            })?;
+            result.push(self.szk.typ.decode_result(
+                &self.szk.typ.truncate(encoded_agg_result)?,
+                num_measurements,
+            )?);
         }
-        let mut iter = agg_final
-            .0
-            .chunks(self.vidpf.weight_parameter)
-            .take(num_prefixes);
-        let mut result = Vec::<T::AggregateResult>::with_capacity(num_prefixes);
-        iter.try_for_each(|encoded_result| -> Result<(), FlpError> {
-            result.push(
-                self.szk
-                    .typ
-                    .decode_result(&self.szk.typ.truncate(encoded_result.to_vec())?[..], 1)?,
-            );
-            Ok(())
-        })?;
+
         Ok(result)
     }
 }
@@ -781,8 +793,9 @@ mod tests {
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_meas_len = sum_typ.input_len();
 
-        let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len);
+        let szk = Szk::new_turboshake128(sum_typ, algorithm_id);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len + 1);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -802,7 +815,6 @@ mod tests {
             VidpfInput::from_bools(&[true]),
         ];
 
-        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
         let first_agg_param = MasticAggregationParam::new(three_prefixes.clone(), true).unwrap();
         let second_agg_param = MasticAggregationParam::new(individual_prefixes, true).unwrap();
         let third_agg_param = MasticAggregationParam::new(three_prefixes, false).unwrap();
@@ -866,8 +878,9 @@ mod tests {
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_meas_len = sum_typ.input_len();
 
-        let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len);
+        let szk = Szk::new_turboshake128(sum_typ, algorithm_id);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len + 1);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -876,7 +889,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
         let (_, input_shares) = mastic
             .shard(CTX_STR, &(first_input, 26u128), &nonce)
             .unwrap();
@@ -922,8 +934,9 @@ mod tests {
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_meas_len = sum_typ.input_len();
-        let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len);
+        let szk = Szk::new_turboshake128(sum_typ, algorithm_id);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len + 1);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -932,7 +945,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, sum_szk, sum_vidpf, 32);
         let (public, _) = mastic
             .shard(CTX_STR, &(first_input, 4u128), &nonce)
             .unwrap();
@@ -948,7 +960,8 @@ mod tests {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
         let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(1);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(2);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -967,7 +980,6 @@ mod tests {
             VidpfInput::from_bools(&[false]),
             VidpfInput::from_bools(&[true]),
         ];
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let first_agg_param = MasticAggregationParam::new(three_prefixes.clone(), true).unwrap();
         let second_agg_param = MasticAggregationParam::new(individual_prefixes, true).unwrap();
         let third_agg_param = MasticAggregationParam::new(three_prefixes, false).unwrap();
@@ -1029,7 +1041,8 @@ mod tests {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
         let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(1);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(2);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1037,7 +1050,6 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (public, _) = mastic.shard(CTX_STR, &(first_input, true), &nonce).unwrap();
 
         assert_eq!(
@@ -1051,7 +1063,8 @@ mod tests {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
         let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(1);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(2);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1060,7 +1073,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (public, _) = mastic.shard(CTX_STR, &(first_input, true), &nonce).unwrap();
 
         let encoded_public = public.get_encoded().unwrap();
@@ -1075,7 +1087,8 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1105,7 +1118,6 @@ mod tests {
         ];
         let first_agg_param = MasticAggregationParam::new(three_prefixes.clone(), true).unwrap();
         let second_agg_param = MasticAggregationParam::new(individual_prefixes, true).unwrap();
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let third_agg_param = MasticAggregationParam::new(three_prefixes, false).unwrap();
 
         assert_eq!(
@@ -1167,7 +1179,8 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1176,7 +1189,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (_public, input_shares) = mastic
             .shard(CTX_STR, &(first_input, measurement), &nonce)
             .unwrap();
@@ -1200,7 +1212,8 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1209,7 +1222,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (_public, input_shares) = mastic
             .shard(CTX_STR, &(first_input, measurement), &nonce)
             .unwrap();
@@ -1235,7 +1247,8 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1244,7 +1257,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (public, _) = mastic
             .shard(CTX_STR, &(first_input, measurement), &nonce)
             .unwrap();
@@ -1262,7 +1274,8 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
+        let vidpf = Vidpf::<VidpfWeight<Field128>>::new(16);
+        let mastic = Mastic::new(algorithm_id, szk, vidpf, 32);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1271,7 +1284,6 @@ mod tests {
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
-        let mastic = Mastic::new(algorithm_id, szk, sum_vidpf, 32);
         let (public, _) = mastic
             .shard(CTX_STR, &(first_input, measurement), &nonce)
             .unwrap();
