@@ -859,10 +859,12 @@ fn vidpf(c: &mut Criterion) {
             let input = VidpfInput::from_bools(&bits);
             let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
 
-            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(2);
+            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(bits.len(), 2).unwrap();
 
             b.iter(|| {
-                let _ = vidpf.gen(&input, &weight, NONCE).unwrap();
+                let _ = vidpf
+                    .gen(b"some application", &input, &weight, NONCE)
+                    .unwrap();
             });
         });
     }
@@ -875,13 +877,22 @@ fn vidpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = VidpfInput::from_bools(&bits);
             let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
-            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(2);
+            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(bits.len(), 2).unwrap();
 
-            let (public, keys) = vidpf.gen(&input, &weight, NONCE).unwrap();
+            let (public, keys) = vidpf
+                .gen(b"some application", &input, &weight, NONCE)
+                .unwrap();
 
             b.iter(|| {
                 let _ = vidpf
-                    .eval(VidpfServerId::S0, &keys[0], &public, &input, NONCE)
+                    .eval(
+                        b"some application",
+                        VidpfServerId::S0,
+                        &keys[0],
+                        &public,
+                        &input,
+                        NONCE,
+                    )
                     .unwrap();
             });
         });

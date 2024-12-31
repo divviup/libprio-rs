@@ -26,28 +26,25 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::FieldElement,
     idpf::{conditional_swap_seed, conditional_xor_seeds, xor_seeds, IdpfInput, IdpfValue},
-    vdaf::xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
+    vdaf::{
+        mastic,
+        xof::{Seed, Xof, XofFixedKeyAes128, XofTurboShake128},
+    },
 };
-
-pub(crate) const ONEHOT_PROOF_INIT: [u8; VIDPF_PROOF_SIZE] = [
-    186, 76, 128, 104, 116, 50, 149, 133, 2, 164, 82, 118, 128, 155, 163, 239, 117, 95, 162, 196,
-    173, 31, 244, 180, 171, 86, 176, 209, 12, 221, 28, 204,
-];
 
 /// VIDPF errors.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum VidpfError {
     /// Input is too long to be represented.
-    #[error("input too long")]
-    InputTooLong,
+    #[error("bit length too long")]
+    BitLengthTooLong,
 
-    /// Error when input attribute has too few or many bits to be a path in an initialized
-    /// VIDPF tree.
-    #[error("invalid attribute length")]
-    InvalidAttributeLength,
+    /// Error when an input has an unexpected bit length.
+    #[error("invalid input length")]
+    InvalidInputLength,
 
-    /// Error when weight's length mismatches the length in weight's parameter.
+    /// Error when a weight has an unexpected length.
     #[error("invalid weight length")]
     InvalidWeightLength,
 
@@ -65,7 +62,7 @@ pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 #[derive(Clone, Debug)]
 /// An instance of the VIDPF.
 pub struct Vidpf<W: VidpfValue> {
-    /// Any parameters required to instantiate a weight value.
+    pub(crate) bits: u16,
     pub(crate) weight_parameter: W::ValueParameter,
 }
 
@@ -74,9 +71,14 @@ impl<W: VidpfValue> Vidpf<W> {
     ///
     /// # Arguments
     ///
-    /// * `weight_parameter`, any parameters required to instantiate a weight value.
-    pub const fn new(weight_parameter: W::ValueParameter) -> Self {
-        Self { weight_parameter }
+    /// * `bits`, the length of the input in bits.
+    /// * `weight_parameter`, the length of the weight in number of field elements.
+    pub fn new(bits: usize, weight_parameter: W::ValueParameter) -> Result<Self, VidpfError> {
+        let bits = u16::try_from(bits).map_err(|_| VidpfError::BitLengthTooLong)?;
+        Ok(Self {
+            bits,
+            weight_parameter,
+        })
     }
 
     /// Splits an incremental point function `F` into two private keys
@@ -99,18 +101,20 @@ impl<W: VidpfValue> Vidpf<W> {
     ///   APIs.
     pub fn gen(
         &self,
+        ctx: &[u8],
         input: &VidpfInput,
         weight: &W,
         nonce: &[u8],
     ) -> Result<(VidpfPublicShare<W>, [VidpfKey; 2]), VidpfError> {
         let keys = [VidpfKey::generate()?, VidpfKey::generate()?];
-        let public = self.gen_with_keys(&keys, input, weight, nonce)?;
+        let public = self.gen_with_keys(ctx, &keys, input, weight, nonce)?;
         Ok((public, keys))
     }
 
     /// Produce the public share for the given keys, input, and weight.
     pub(crate) fn gen_with_keys(
         &self,
+        ctx: &[u8],
         keys: &[VidpfKey; 2],
         input: &VidpfInput,
         weight: &W,
@@ -123,11 +127,14 @@ impl<W: VidpfValue> Vidpf<W> {
         ];
 
         let mut cw = Vec::with_capacity(input.len());
-        for idx in input.index_iter()? {
+        for idx in self.index_iter(input)? {
             let bit = idx.bit;
 
             // Extend.
-            let e = [Self::extend(&seed[0], nonce), Self::extend(&seed[1], nonce)];
+            let e = [
+                Self::extend(seed[0], ctx, nonce),
+                Self::extend(seed[1], ctx, nonce),
+            ];
 
             // Select the seed and control bit.
             let (seed_keep_0, seed_lose_0) = &mut (e[0].seed_right, e[0].seed_left);
@@ -152,8 +159,8 @@ impl<W: VidpfValue> Vidpf<W> {
             // Convert.
             let weight_0;
             let weight_1;
-            (seed[0], weight_0) = self.convert(seed_keep_0, nonce);
-            (seed[1], weight_1) = self.convert(seed_keep_1, nonce);
+            (seed[0], weight_0) = self.convert(seed_keep_0, ctx, nonce);
+            (seed[1], weight_1) = self.convert(seed_keep_1, ctx, nonce);
             ctrl[0] = ctrl_keep_0;
             ctrl[1] = ctrl_keep_1;
 
@@ -162,7 +169,10 @@ impl<W: VidpfValue> Vidpf<W> {
             cw_weight.conditional_negate(ctrl[1]);
 
             // Compute the correction word node proof.
-            let cw_proof = xor_proof(idx.node_proof(&seed[0]), &idx.node_proof(&seed[1]));
+            let cw_proof = xor_proof(
+                idx.node_proof(&seed[0], ctx),
+                &idx.node_proof(&seed[1], ctx),
+            );
 
             cw.push(VidpfCorrectionWord {
                 seed: cw_seed,
@@ -181,6 +191,7 @@ impl<W: VidpfValue> Vidpf<W> {
     /// root to the prefix.
     pub fn eval(
         &self,
+        ctx: &[u8],
         id: VidpfServerId,
         key: &VidpfKey,
         public: &VidpfPublicShare<W>,
@@ -195,12 +206,12 @@ impl<W: VidpfValue> Vidpf<W> {
         };
 
         if input.len() > public.cw.len() {
-            return Err(VidpfError::InvalidAttributeLength);
+            return Err(VidpfError::InvalidInputLength);
         }
 
         let mut hash = Sha3_256::new();
-        for (idx, cw) in input.index_iter()?.zip(public.cw.iter()) {
-            r = self.eval_next(cw, idx, &r.state, nonce);
+        for (idx, cw) in self.index_iter(input)?.zip(public.cw.iter()) {
+            r = self.eval_next(ctx, cw, idx, &r.state, nonce);
             hash.update(r.state.node_proof);
         }
 
@@ -213,6 +224,7 @@ impl<W: VidpfValue> Vidpf<W> {
     /// state, and returns a new state and a share of the input's weight at that level.
     fn eval_next(
         &self,
+        ctx: &[u8],
         cw: &VidpfCorrectionWord<W>,
         idx: VidpfEvalIndex<'_>,
         state: &VidpfEvalState,
@@ -221,7 +233,7 @@ impl<W: VidpfValue> Vidpf<W> {
         let bit = idx.bit;
 
         // Extend.
-        let e = Self::extend(&state.seed, nonce);
+        let e = Self::extend(state.seed, ctx, nonce);
 
         // Select the seed and control bit.
         let (seed_keep, seed_lose) = &mut (e.seed_right, e.seed_left);
@@ -234,7 +246,7 @@ impl<W: VidpfValue> Vidpf<W> {
         let next_ctrl = ctrl_keep ^ (state.control_bit & cw_ctrl_keep);
 
         // Convert and correct the payload.
-        let (next_seed, w) = self.convert(seed_keep, nonce);
+        let (next_seed, w) = self.convert(seed_keep, ctx, nonce);
         let mut weight = <W as IdpfValue>::conditional_select(
             &<W as IdpfValue>::zero(&self.weight_parameter),
             &cw.weight,
@@ -243,7 +255,8 @@ impl<W: VidpfValue> Vidpf<W> {
         weight += w;
 
         // Compute and correct the node proof.
-        let node_proof = conditional_xor_proof(idx.node_proof(&next_seed), &cw.proof, next_ctrl);
+        let node_proof =
+            conditional_xor_proof(idx.node_proof(&next_seed, ctx), &cw.proof, next_ctrl);
 
         let next_state = VidpfEvalState {
             seed: next_seed,
@@ -259,35 +272,39 @@ impl<W: VidpfValue> Vidpf<W> {
 
     pub(crate) fn get_beta_share(
         &self,
+        ctx: &[u8],
         id: VidpfServerId,
         public: &VidpfPublicShare<W>,
         key: &VidpfKey,
         nonce: &[u8],
     ) -> Result<W, VidpfError> {
-        let cw = public.cw.first().ok_or(VidpfError::InputTooLong)?;
+        let cw = public.cw.first().ok_or(VidpfError::InvalidInputLength)?;
 
         let state = VidpfEvalState::init_from_key(id, key);
         let input_left = VidpfInput::from_bools(&[false]);
-        let idx_left = VidpfEvalIndex::try_from_input(&input_left)?;
+        let idx_left = self.index(&input_left)?;
 
         let VidpfEvalResult {
             state: _,
             share: mut weight_share_left,
-        } = self.eval_next(cw, idx_left, &state, nonce);
+        } = self.eval_next(ctx, cw, idx_left, &state, nonce);
 
         let VidpfEvalResult {
             state: _,
             share: mut weight_share_right,
-        } = self.eval_next(cw, idx_left.right_sibling(), &state, nonce);
+        } = self.eval_next(ctx, cw, idx_left.right_sibling(), &state, nonce);
 
         weight_share_left.conditional_negate(Choice::from(id));
         weight_share_right.conditional_negate(Choice::from(id));
         Ok(weight_share_left + weight_share_right)
     }
 
-    fn extend(seed: &VidpfSeed, nonce: &[u8]) -> ExtendedSeed {
-        let mut rng =
-            XofFixedKeyAes128::seed_stream(&Seed(*seed), &[VidpfDomainSepTag::PRG], &[nonce]);
+    fn extend(seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> ExtendedSeed {
+        let mut rng = XofFixedKeyAes128::seed_stream(
+            &Seed(seed),
+            &[&mastic::dst_usage(mastic::USAGE_EXTEND), ctx],
+            &[nonce],
+        );
 
         let mut seed_left = VidpfSeed::default();
         let mut seed_right = VidpfSeed::default();
@@ -309,9 +326,12 @@ impl<W: VidpfValue> Vidpf<W> {
         }
     }
 
-    fn convert(&self, seed: VidpfSeed, nonce: &[u8]) -> (VidpfSeed, W) {
-        let mut rng =
-            XofFixedKeyAes128::seed_stream(&Seed(seed), &[VidpfDomainSepTag::CONVERT], &[nonce]);
+    fn convert(&self, seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> (VidpfSeed, W) {
+        let mut rng = XofFixedKeyAes128::seed_stream(
+            &Seed(seed),
+            &[&mastic::dst_usage(mastic::USAGE_CONVERT), ctx],
+            &[nonce],
+        );
 
         let mut out_seed = VidpfSeed::default();
         rng.fill_bytes(&mut out_seed);
@@ -320,15 +340,36 @@ impl<W: VidpfValue> Vidpf<W> {
         (out_seed, value)
     }
 
-    pub(crate) fn hash_proof(mut proof: VidpfProof) -> VidpfProof {
-        let mut rng = XofTurboShake128::seed_stream(
-            &Seed(Default::default()),
-            &[VidpfDomainSepTag::NODE_PROOF_ADJUST],
-            &[&proof],
-        );
-        rng.fill_bytes(&mut proof);
+    fn index_iter<'a>(
+        &'a self,
+        input: &'a VidpfInput,
+    ) -> Result<impl Iterator<Item = VidpfEvalIndex<'a>>, VidpfError> {
+        let n = u16::try_from(input.len()).map_err(|_| VidpfError::InvalidInputLength)?;
+        if n > self.bits {
+            return Err(VidpfError::InvalidInputLength);
+        }
+        Ok(Box::new((0..n).zip(input.iter()).map(
+            move |(level, bit)| VidpfEvalIndex {
+                bit: Choice::from(u8::from(bit)),
+                input,
+                level,
+                bits: self.bits,
+            },
+        )))
+    }
 
-        proof
+    fn index<'a>(&self, input: &'a VidpfInput) -> Result<VidpfEvalIndex<'a>, VidpfError> {
+        let level = u16::try_from(input.len()).map_err(|_| VidpfError::InvalidInputLength)? - 1;
+        if level >= self.bits {
+            return Err(VidpfError::InvalidInputLength);
+        }
+        let bit = Choice::from(u8::from(input.get(usize::from(level)).unwrap()));
+        Ok(VidpfEvalIndex {
+            bit,
+            input,
+            level,
+            bits: self.bits,
+        })
     }
 }
 
@@ -336,8 +377,10 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
     /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
     /// each node in the prefix tree. The return value is the weights for the prefixes
     /// concatenated together.
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn eval_prefix_tree_with_siblings(
         &self,
+        ctx: &[u8],
         id: VidpfServerId,
         public: &VidpfPublicShare<VidpfWeight<F>>,
         key: &VidpfKey,
@@ -349,7 +392,7 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
 
         for prefix in prefixes {
             if prefix.len() > public.cw.len() {
-                return Err(VidpfError::InvalidAttributeLength);
+                return Err(VidpfError::InvalidInputLength);
             }
 
             let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
@@ -359,9 +402,10 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
                 }))
             });
 
-            for (idx, cw) in prefix.index_iter()?.zip(public.cw.iter()) {
+            for (idx, cw) in self.index_iter(prefix)?.zip(public.cw.iter()) {
                 let left = sub_tree.left.get_or_insert_with(|| {
                     Box::new(Node::new(self.eval_next(
+                        ctx,
                         cw,
                         idx.left_sibling(),
                         &sub_tree.value.state,
@@ -370,6 +414,7 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
                 });
                 let right = sub_tree.right.get_or_insert_with(|| {
                     Box::new(Node::new(self.eval_next(
+                        ctx,
                         cw,
                         idx.right_sibling(),
                         &sub_tree.value.state,
@@ -394,17 +439,6 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
         }
         Ok(out_shares)
     }
-}
-
-/// VIDPF domain separation tag.
-///
-/// Contains the domain separation tags for invoking different oracles.
-struct VidpfDomainSepTag;
-impl VidpfDomainSepTag {
-    const PRG: &'static [u8] = b"Prg";
-    const CONVERT: &'static [u8] = b"Convert";
-    const NODE_PROOF: &'static [u8] = b"NodeProof";
-    const NODE_PROOF_ADJUST: &'static [u8] = b"NodeProofAdjust";
 }
 
 /// VIDPF key.
@@ -574,7 +608,7 @@ const VIDPF_PROOF_SIZE: usize = 32;
 const VIDPF_SEED_SIZE: usize = 16;
 
 /// Allows to validate user input and shares after evaluation.
-type VidpfProof = [u8; VIDPF_PROOF_SIZE];
+pub(crate) type VidpfProof = [u8; VIDPF_PROOF_SIZE];
 
 pub(crate) fn xor_proof(mut lhs: VidpfProof, rhs: &VidpfProof) -> VidpfProof {
     zip(&mut lhs, rhs).for_each(|(a, b)| a.bitxor_assign(b));
@@ -738,20 +772,16 @@ struct VidpfEvalIndex<'a> {
     bit: Choice,
     input: &'a VidpfInput,
     level: u16,
+    bits: u16,
 }
 
-impl<'a> VidpfEvalIndex<'a> {
-    fn try_from_input(input: &'a VidpfInput) -> Result<Self, VidpfError> {
-        let level = u16::try_from(input.len()).map_err(|_| VidpfError::InputTooLong)? - 1;
-        let bit = Choice::from(u8::from(input.get(usize::from(level)).unwrap()));
-        Ok(Self { bit, input, level })
-    }
-
+impl VidpfEvalIndex<'_> {
     fn left_sibling(&self) -> Self {
         Self {
             bit: Choice::from(0),
             input: self.input,
             level: self.level,
+            bits: self.bits,
         }
     }
 
@@ -760,12 +790,16 @@ impl<'a> VidpfEvalIndex<'a> {
             bit: Choice::from(1),
             input: self.input,
             level: self.level,
+            bits: self.bits,
         }
     }
 
-    fn node_proof(&self, seed: &VidpfSeed) -> VidpfProof {
-        let mut xof =
-            XofTurboShake128::from_seed_slice(&seed[..], &[VidpfDomainSepTag::NODE_PROOF]);
+    fn node_proof(&self, seed: &VidpfSeed, ctx: &[u8]) -> VidpfProof {
+        let mut xof = XofTurboShake128::from_seed_slice(
+            &seed[..],
+            &[&mastic::dst_usage(mastic::USAGE_NODE_PROOF), ctx],
+        );
+        xof.update(&self.bits.to_le_bytes());
         xof.update(&self.level.to_le_bytes());
 
         for byte in self
@@ -788,17 +822,6 @@ impl<'a> VidpfEvalIndex<'a> {
             xof.update(&[byte]);
         }
         xof.into_seed().0
-    }
-}
-
-impl VidpfInput {
-    fn index_iter(&self) -> Result<impl Iterator<Item = VidpfEvalIndex<'_>>, VidpfError> {
-        let n = u16::try_from(self.len()).map_err(|_| VidpfError::InputTooLong)?;
-        Ok((0..n).zip(self.iter()).map(|(level, bit)| VidpfEvalIndex {
-            bit: Choice::from(u8::from(bit)),
-            input: self,
-            level,
-        }))
     }
 }
 
@@ -825,9 +848,10 @@ mod tests {
 
         #[test]
         fn roundtrip_codec() {
+            let ctx = b"appliction context";
             let input = VidpfInput::from_bytes(&[0xFF]);
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
-            let (_, public, _, _) = vidpf_gen_setup(&input, &weight);
+            let (_, public, _, _) = vidpf_gen_setup(ctx, &input, &weight);
 
             let bytes = public.get_encoded().unwrap();
             assert_eq!(public.encoded_len().unwrap(), bytes.len());
@@ -841,6 +865,7 @@ mod tests {
         }
 
         fn vidpf_gen_setup(
+            ctx: &[u8],
             input: &VidpfInput,
             weight: &TestWeight,
         ) -> (
@@ -849,22 +874,23 @@ mod tests {
             [VidpfKey; 2],
             [u8; TEST_NONCE_SIZE],
         ) {
-            let vidpf = Vidpf::new(TEST_WEIGHT_LEN);
-            let (public, keys) = vidpf.gen(input, weight, TEST_NONCE).unwrap();
+            let vidpf = Vidpf::new(input.len(), TEST_WEIGHT_LEN).unwrap();
+            let (public, keys) = vidpf.gen(ctx, input, weight, TEST_NONCE).unwrap();
             (vidpf, public, keys, *TEST_NONCE)
         }
 
         #[test]
         fn correctness_at_last_level() {
+            let ctx = b"some application";
             let input = VidpfInput::from_bytes(&[0xFF]);
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
-            let (vidpf, public, [key_0, key_1], nonce) = vidpf_gen_setup(&input, &weight);
+            let (vidpf, public, [key_0, key_1], nonce) = vidpf_gen_setup(ctx, &input, &weight);
 
             let (value_share_0, onehot_proof_0) = vidpf
-                .eval(VidpfServerId::S0, &key_0, &public, &input, &nonce)
+                .eval(ctx, VidpfServerId::S0, &key_0, &public, &input, &nonce)
                 .unwrap();
             let (value_share_1, onehot_proof_1) = vidpf
-                .eval(VidpfServerId::S1, &key_1, &public, &input, &nonce)
+                .eval(ctx, VidpfServerId::S1, &key_1, &public, &input, &nonce)
                 .unwrap();
 
             assert_eq!(
@@ -878,10 +904,10 @@ mod tests {
             let bad_input = VidpfInput::from_bytes(&[0x00]);
             let zero = TestWeight::zero(&TEST_WEIGHT_LEN);
             let (value_share_0, onehot_proof_0) = vidpf
-                .eval(VidpfServerId::S0, &key_0, &public, &bad_input, &nonce)
+                .eval(ctx, VidpfServerId::S0, &key_0, &public, &bad_input, &nonce)
                 .unwrap();
             let (value_share_1, onehot_proof_1) = vidpf
-                .eval(VidpfServerId::S1, &key_1, &public, &bad_input, &nonce)
+                .eval(ctx, VidpfServerId::S1, &key_1, &public, &bad_input, &nonce)
                 .unwrap();
 
             assert_eq!(
@@ -895,20 +921,22 @@ mod tests {
 
         #[test]
         fn correctness_at_each_level() {
+            let ctx = b"application context";
             let input = VidpfInput::from_bytes(&[0xFF]);
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
-            let (vidpf, public, keys, nonce) = vidpf_gen_setup(&input, &weight);
+            let (vidpf, public, keys, nonce) = vidpf_gen_setup(ctx, &input, &weight);
 
-            assert_eval_at_each_level(&vidpf, &keys, &public, &input, &weight, &nonce);
+            assert_eval_at_each_level(&vidpf, ctx, &keys, &public, &input, &weight, &nonce);
 
             let bad_input = VidpfInput::from_bytes(&[0x00]);
             let zero = TestWeight::zero(&TEST_WEIGHT_LEN);
 
-            assert_eval_at_each_level(&vidpf, &keys, &public, &bad_input, &zero, &nonce);
+            assert_eval_at_each_level(&vidpf, ctx, &keys, &public, &bad_input, &zero, &nonce);
         }
 
         fn assert_eval_at_each_level(
             vidpf: &Vidpf<TestWeight>,
+            ctx: &[u8],
             [key_0, key_1]: &[VidpfKey; 2],
             public: &VidpfPublicShare<TestWeight>,
             input: &VidpfInput,
@@ -918,9 +946,9 @@ mod tests {
             let mut state_0 = VidpfEvalState::init_from_key(VidpfServerId::S0, key_0);
             let mut state_1 = VidpfEvalState::init_from_key(VidpfServerId::S1, key_1);
 
-            for (idx, cw) in input.index_iter().unwrap().zip(public.cw.iter()) {
-                let r0 = vidpf.eval_next(cw, idx, &state_0, nonce);
-                let r1 = vidpf.eval_next(cw, idx, &state_1, nonce);
+            for (idx, cw) in vidpf.index_iter(input).unwrap().zip(public.cw.iter()) {
+                let r0 = vidpf.eval_next(ctx, cw, idx, &state_0, nonce);
+                let r1 = vidpf.eval_next(ctx, cw, idx, &state_1, nonce);
 
                 assert_eq!(
                     r0.share - r1.share,
