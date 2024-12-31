@@ -348,7 +348,7 @@ where
     fn derive_prove_rand(&self, prove_rand_seed: &Seed<SEED_SIZE>) -> Vec<T::Field> {
         P::seed_stream(
             prove_rand_seed,
-            &self.domain_separation_tag(DST_PROVE_RANDOMNESS),
+            &[&self.domain_separation_tag(DST_PROVE_RANDOMNESS)],
             &[],
         )
         .into_field_vec(self.typ.prove_rand_len())
@@ -362,7 +362,7 @@ where
     ) -> Result<Seed<SEED_SIZE>, SzkError> {
         let mut xof = P::init(
             aggregator_blind.as_ref(),
-            &self.domain_separation_tag(DST_JOINT_RAND_PART),
+            &[&self.domain_separation_tag(DST_JOINT_RAND_PART)],
         );
         xof.update(nonce);
         // Encode measurement_share (currently an array of field elements) into
@@ -383,7 +383,7 @@ where
     ) -> Seed<SEED_SIZE> {
         let mut xof = P::init(
             &[0; SEED_SIZE],
-            &self.domain_separation_tag(DST_JOINT_RAND_SEED),
+            &[&self.domain_separation_tag(DST_JOINT_RAND_SEED)],
         );
         xof.update(&leader_joint_rand_part.0);
         xof.update(&helper_joint_rand_part.0);
@@ -399,7 +399,7 @@ where
             self.derive_joint_rand_seed(leader_joint_rand_part, helper_joint_rand_part);
         let joint_rand = P::seed_stream(
             &joint_rand_seed,
-            &self.domain_separation_tag(DST_JOINT_RANDOMNESS),
+            &[&self.domain_separation_tag(DST_JOINT_RANDOMNESS)],
             &[],
         )
         .into_field_vec(self.typ.joint_rand_len());
@@ -410,7 +410,7 @@ where
     fn derive_helper_proof_share(&self, proof_share_seed: &Seed<SEED_SIZE>) -> Vec<T::Field> {
         Prng::from_seed_stream(P::seed_stream(
             proof_share_seed,
-            &self.domain_separation_tag(DST_PROOF_SHARE),
+            &[&self.domain_separation_tag(DST_PROOF_SHARE)],
             &[],
         ))
         .take(self.typ.proof_len())
@@ -420,7 +420,7 @@ where
     fn derive_query_rand(&self, verify_key: &[u8; SEED_SIZE], nonce: &[u8; 16]) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
-            &self.domain_separation_tag(DST_QUERY_RANDOMNESS),
+            &[&self.domain_separation_tag(DST_QUERY_RANDOMNESS)],
         );
         xof.update(nonce);
         xof.into_seed_stream()

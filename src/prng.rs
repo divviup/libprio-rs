@@ -234,14 +234,14 @@ mod tests {
         .unwrap();
         let expected = Field64::from(4857131209231097247);
 
-        let seed_stream = XofTurboShake128::seed_stream(&seed, b"", b"");
+        let seed_stream = XofTurboShake128::seed_stream(&seed, &[], &[]);
         let mut prng = Prng::<Field64, _>::from_seed_stream(seed_stream);
         let actual = prng.nth(13882).unwrap();
         assert_eq!(actual, expected);
 
         #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
         {
-            let mut seed_stream = XofTurboShake128::seed_stream(&seed, b"", b"");
+            let mut seed_stream = XofTurboShake128::seed_stream(&seed, &[], &[]);
             let mut actual = <Field64 as FieldElement>::zero();
             for _ in 0..=13882 {
                 actual = <Field64 as crate::idpf::IdpfValue>::generate(&mut seed_stream, &());
@@ -257,11 +257,11 @@ mod tests {
         let seed = Seed::generate().unwrap();
 
         let mut prng: Prng<Field64, SeedStreamTurboShake128> =
-            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
 
         // Construct a `Prng` with a longer-than-usual buffer.
         let mut prng_weird_buffer_size: Prng<Field64, SeedStreamTurboShake128> =
-            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
         let mut extra = [0; 7];
         prng_weird_buffer_size.seed_stream.fill_bytes(&mut extra);
         prng_weird_buffer_size.buffer.extend_from_slice(&extra);
@@ -278,7 +278,7 @@ mod tests {
     fn into_different_field() {
         let seed = Seed::generate().unwrap();
         let want: Prng<Field64, SeedStreamTurboShake128> =
-            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
         let want_buffer = want.buffer.clone();
 
         let got: Prng<Field128, _> = want.into_new_field();

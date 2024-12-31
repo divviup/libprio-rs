@@ -286,7 +286,8 @@ impl<W: VidpfValue> Vidpf<W> {
     }
 
     fn extend(seed: &VidpfSeed, nonce: &[u8]) -> ExtendedSeed {
-        let mut rng = XofFixedKeyAes128::seed_stream(&Seed(*seed), VidpfDomainSepTag::PRG, nonce);
+        let mut rng =
+            XofFixedKeyAes128::seed_stream(&Seed(*seed), &[VidpfDomainSepTag::PRG], &[nonce]);
 
         let mut seed_left = VidpfSeed::default();
         let mut seed_right = VidpfSeed::default();
@@ -310,7 +311,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
     fn convert(&self, seed: VidpfSeed, nonce: &[u8]) -> (VidpfSeed, W) {
         let mut rng =
-            XofFixedKeyAes128::seed_stream(&Seed(seed), VidpfDomainSepTag::CONVERT, nonce);
+            XofFixedKeyAes128::seed_stream(&Seed(seed), &[VidpfDomainSepTag::CONVERT], &[nonce]);
 
         let mut out_seed = VidpfSeed::default();
         rng.fill_bytes(&mut out_seed);
@@ -322,8 +323,8 @@ impl<W: VidpfValue> Vidpf<W> {
     pub(crate) fn hash_proof(mut proof: VidpfProof) -> VidpfProof {
         let mut rng = XofTurboShake128::seed_stream(
             &Seed(Default::default()),
-            VidpfDomainSepTag::NODE_PROOF_ADJUST,
-            &proof,
+            &[VidpfDomainSepTag::NODE_PROOF_ADJUST],
+            &[&proof],
         );
         rng.fill_bytes(&mut proof);
 
@@ -763,7 +764,8 @@ impl<'a> VidpfEvalIndex<'a> {
     }
 
     fn node_proof(&self, seed: &VidpfSeed) -> VidpfProof {
-        let mut xof = XofTurboShake128::from_seed_slice(&seed[..], VidpfDomainSepTag::NODE_PROOF);
+        let mut xof =
+            XofTurboShake128::from_seed_slice(&seed[..], &[VidpfDomainSepTag::NODE_PROOF]);
         xof.update(&self.level.to_le_bytes());
 
         for byte in self

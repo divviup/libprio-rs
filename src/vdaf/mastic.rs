@@ -519,7 +519,7 @@ where
 
         // Onehot and payload checks
         let (payload_check, onehot_proof) = {
-            let mut payload_check_xof = P::init(&[0; SEED_SIZE], b"");
+            let mut payload_check_xof = P::init(&[0; SEED_SIZE], &[]);
             let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
             let mut onehot_proof = ONEHOT_PROOF_INIT;
 
@@ -580,7 +580,7 @@ where
         };
 
         let eval_proof = {
-            let mut eval_proof_xof = P::init(&[0; SEED_SIZE], b"");
+            let mut eval_proof_xof = P::init(&[0; SEED_SIZE], &[]);
             eval_proof_xof.update(&onehot_proof);
             eval_proof_xof.update(&payload_check);
             eval_proof_xof.update(&counter_check);
