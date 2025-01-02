@@ -202,7 +202,7 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
     joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     pub(crate) flp_verifier: Vec<F>,
