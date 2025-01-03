@@ -19,18 +19,47 @@ use crate::{
         PrepareTransition, Vdaf, VdafError,
     },
     vidpf::{
-        xor_proof, Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
-        VidpfWeight, ONEHOT_PROOF_INIT,
+        xor_proof, Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfProof, VidpfPublicShare,
+        VidpfServerId, VidpfWeight,
     },
 };
 
+use rand::RngCore;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
 use std::{collections::VecDeque, fmt::Debug};
 use subtle::{Choice, ConstantTimeEq};
 
+use super::xof::XofTurboShake128;
+
 const NONCE_SIZE: usize = 16;
+
+// draft-jimouris-cfrg-mastic:
+//
+// ONEHOT_PROOF_INIT = XofTurboShake128(zeros(XofTurboShake128.SEED_SIZE),
+//                                      dst(b'', USAGE_ONEHOT_PROOF_INIT),
+//                                      b'').next(PROOF_SIZE)
+pub(crate) const ONEHOT_PROOF_INIT: [u8; 32] = [
+    186, 76, 128, 104, 116, 50, 149, 133, 2, 164, 82, 118, 128, 155, 163, 239, 117, 95, 162, 196,
+    173, 31, 244, 180, 171, 86, 176, 209, 12, 221, 28, 204,
+];
+
+pub(crate) const USAGE_PROVE_RAND: u8 = 0;
+pub(crate) const USAGE_PROOF_SHARE: u8 = 1;
+pub(crate) const USAGE_QUERY_RAND: u8 = 2;
+pub(crate) const USAGE_JOINT_RAND_SEED: u8 = 3;
+pub(crate) const USAGE_JOINT_RAND_PART: u8 = 4;
+pub(crate) const USAGE_JOINT_RAND: u8 = 5;
+pub(crate) const USAGE_ONEHOT_PROOF_HASH: u8 = 7;
+pub(crate) const USAGE_NODE_PROOF: u8 = 8;
+pub(crate) const USAGE_EVAL_PROOF: u8 = 9;
+pub(crate) const USAGE_EXTEND: u8 = 10;
+pub(crate) const USAGE_CONVERT: u8 = 11;
+
+pub(crate) fn dst_usage(usage: u8) -> [u8; 11] {
+    [b'm', b'a', b's', b't', b'i', b'c', 0, 0, 0, 0, usage]
+}
 
 /// The main struct implementing the Mastic VDAF.
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
@@ -54,15 +83,15 @@ where
     P: Xof<SEED_SIZE>,
 {
     /// Creates a new instance of Mastic, with a specific attribute length and weight type.
-    pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Self {
-        let vidpf = Vidpf::new(typ.input_len() + 1);
-        let szk = Szk::new(typ, algorithm_id);
-        Self {
+    pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Result<Self, VdafError> {
+        let vidpf = Vidpf::new(bits, typ.input_len() + 1)?;
+        let szk = Szk::new(typ);
+        Ok(Self {
             algorithm_id,
             szk,
             vidpf,
             bits,
-        }
+        })
     }
 }
 
@@ -286,29 +315,44 @@ where
 {
     fn shard_with_random(
         &self,
-        alpha: &VidpfInput,
-        weight: &T::Measurement,
+        ctx: &[u8],
+        (alpha, weight): &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
         vidpf_keys: [VidpfKey; 2],
         szk_random: [Seed<SEED_SIZE>; 2],
         joint_random_opt: Option<Seed<SEED_SIZE>>,
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
+        if alpha.len() != self.bits {
+            return Err(VdafError::Vidpf(VidpfError::InvalidInputLength));
+        }
+
         // The output with which we program the VIDPF is a counter and the encoded measurement.
         let mut beta = VidpfWeight(self.szk.typ.encode_measurement(weight)?);
         beta.0.insert(0, T::Field::one());
 
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
-        let public_share = self.vidpf.gen_with_keys(&vidpf_keys, alpha, &beta, nonce)?;
+        let public_share = self
+            .vidpf
+            .gen_with_keys(ctx, &vidpf_keys, alpha, &beta, nonce)?;
 
-        let leader_beta_share =
-            self.vidpf
-                .get_beta_share(VidpfServerId::S0, &public_share, &vidpf_keys[0], nonce)?;
-        let helper_beta_share =
-            self.vidpf
-                .get_beta_share(VidpfServerId::S1, &public_share, &vidpf_keys[1], nonce)?;
+        let leader_beta_share = self.vidpf.get_beta_share(
+            ctx,
+            VidpfServerId::S0,
+            &public_share,
+            &vidpf_keys[0],
+            nonce,
+        )?;
+        let helper_beta_share = self.vidpf.get_beta_share(
+            ctx,
+            VidpfServerId::S1,
+            &public_share,
+            &vidpf_keys[1],
+            nonce,
+        )?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
+            ctx,
             &leader_beta_share.as_ref()[1..],
             &helper_beta_share.as_ref()[1..],
             &beta.as_ref()[1..],
@@ -336,14 +380,10 @@ where
 {
     fn shard(
         &self,
-        _ctx: &[u8],
-        (input, weight): &(VidpfInput, T::Measurement),
+        ctx: &[u8],
+        measurement: &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
-        if input.len() != self.bits {
-            return Err(VdafError::Vidpf(VidpfError::InvalidAttributeLength));
-        }
-
         let vidpf_keys = [VidpfKey::generate()?, VidpfKey::generate()?];
         let joint_random_opt = if self.szk.requires_joint_rand() {
             Some(Seed::<SEED_SIZE>::generate()?)
@@ -353,8 +393,8 @@ where
         let szk_random = [Seed::generate()?, Seed::generate()?];
 
         self.shard_with_random(
-            input,
-            weight,
+            ctx,
+            measurement,
             nonce,
             vidpf_keys,
             szk_random,
@@ -483,7 +523,7 @@ where
     fn prepare_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
-        _ctx: &[u8],
+        ctx: &[u8],
         agg_id: usize,
         agg_param: &MasticAggregationParam,
         nonce: &[u8; NONCE_SIZE],
@@ -507,6 +547,7 @@ where
 
         let mut prefix_tree = BinaryTree::default();
         let out_shares = self.vidpf.eval_prefix_tree_with_siblings(
+            ctx,
             id,
             public_share,
             &input_share.vidpf_key,
@@ -525,9 +566,8 @@ where
 
             // Traverse the prefix tree breadth-first.
             //
-            // TODO spec: Adjust the onehot proof computation accordingly so that we always
-            // traverse the left node then the right node. Currently we visit the on-path child
-            // then its sibling.
+            // TODO spec: Adjust the onehot and payload checks accordingly. For the onehot check,
+            // we need to make sure to always visit the left node before the right.
             let mut q = VecDeque::with_capacity(100);
             q.push_back(root.left.as_ref().unwrap());
             q.push_back(root.right.as_ref().unwrap());
@@ -535,10 +575,7 @@ where
                 // Update onehot proof.
                 onehot_proof = xor_proof(
                     onehot_proof,
-                    &Vidpf::<VidpfWeight<T::Field>>::hash_proof(xor_proof(
-                        onehot_proof,
-                        &node.value.state.node_proof,
-                    )),
+                    &hash_proof(xor_proof(onehot_proof, &node.value.state.node_proof), ctx),
                 );
 
                 // Update payload check.
@@ -580,7 +617,8 @@ where
         };
 
         let eval_proof = {
-            let mut eval_proof_xof = P::init(&[0; SEED_SIZE], &[]);
+            // TODO spec: Use a zero seed.
+            let mut eval_proof_xof = P::init(&[0; SEED_SIZE], &[&dst_usage(USAGE_EVAL_PROOF), ctx]);
             eval_proof_xof.update(&onehot_proof);
             eval_proof_xof.update(&payload_check);
             eval_proof_xof.update(&counter_check);
@@ -591,8 +629,14 @@ where
             // Range check.
             let VidpfWeight(beta_share) =
                 self.vidpf
-                    .get_beta_share(id, public_share, &input_share.vidpf_key, nonce)?;
+                    .get_beta_share(ctx, id, public_share, &input_share.vidpf_key, nonce)?;
             let (szk_query_share, szk_query_state) = self.szk.query(
+                ctx,
+                agg_param
+                    .level_and_prefixes
+                    .level()
+                    .try_into()
+                    .map_err(|_| VdafError::Vidpf(VidpfError::InvalidInputLength))?,
                 &beta_share[1..],
                 &input_share.proof_share,
                 verify_key,
@@ -630,7 +674,7 @@ where
         M: IntoIterator<Item = MasticPrepareShare<T::Field, SEED_SIZE>>,
     >(
         &self,
-        _ctx: &[u8],
+        ctx: &[u8],
         _agg_param: &MasticAggregationParam,
         inputs: M,
     ) -> Result<MasticPrepareMessage<SEED_SIZE>, VdafError> {
@@ -658,7 +702,7 @@ where
             // The SZK is only used once, during the first round of aggregation.
             (Some(leader_query_share), Some(helper_query_share)) => Ok(self
                 .szk
-                .merge_query_shares(leader_query_share, helper_query_share)?),
+                .merge_query_shares(ctx, leader_query_share, helper_query_share)?),
             (None, None) => Ok(SzkJointShare::none()),
             (_, _) => Err(VdafError::Uncategorized(
                 "Only one of leader and helper query shares is present".to_string(),
@@ -749,6 +793,14 @@ where
     }
 }
 
+fn hash_proof(mut proof: VidpfProof, ctx: &[u8]) -> VidpfProof {
+    let mut xof =
+        XofTurboShake128::from_seed_slice(&[], &[&dst_usage(USAGE_ONEHOT_PROOF_HASH), ctx]);
+    xof.update(&proof);
+    xof.into_seed_stream().fill_bytes(&mut proof);
+    proof
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -766,7 +818,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -847,7 +899,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -900,7 +952,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -923,7 +975,7 @@ mod tests {
     fn test_mastic_count() {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1002,7 +1054,7 @@ mod tests {
     fn test_public_share_encoded_len() {
         let algorithm_id = 6;
         let count = Count::<Field64>::new();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1022,7 +1074,7 @@ mod tests {
     fn test_public_share_roundtrip_count() {
         let algorithm_id = 6;
         let count = Count::<Field64>::new();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1044,7 +1096,7 @@ mod tests {
         let algorithm_id = 6;
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1134,7 +1186,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1165,7 +1217,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1198,7 +1250,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1223,7 +1275,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32);
+        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
