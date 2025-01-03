@@ -19,7 +19,7 @@ use crate::{
         PrepareTransition, Vdaf, VdafError,
     },
     vidpf::{
-        Vidpf, VidpfError, VidpfEvalCache, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
+        Vidpf, VidpfError, VidpfEvalResult, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId,
         VidpfWeight,
     },
 };
@@ -44,7 +44,7 @@ where
 {
     algorithm_id: u32,
     szk: Szk<T, P, SEED_SIZE>,
-    pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>, 16>,
+    pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>>,
     /// The length of the private attribute associated with any input.
     pub(crate) bits: usize,
 }
@@ -58,7 +58,7 @@ where
     pub fn new(
         algorithm_id: u32,
         szk: Szk<T, P, SEED_SIZE>,
-        vidpf: Vidpf<VidpfWeight<T::Field>, 16>,
+        vidpf: Vidpf<VidpfWeight<T::Field>>,
         bits: usize,
     ) -> Self {
         Self {
@@ -306,12 +306,20 @@ where
             nonce,
         )?;
 
-        let leader_measurement_share =
-            self.vidpf
-                .eval_root(VidpfServerId::S0, &vidpf_keys[0], &public_share, nonce)?;
-        let helper_measurement_share =
-            self.vidpf
-                .eval_root(VidpfServerId::S1, &vidpf_keys[1], &public_share, nonce)?;
+        let leader_measurement_share = self.vidpf.eval_root(
+            VidpfServerId::S0,
+            &vidpf_keys[0],
+            &public_share,
+            &mut BinaryTree::default(),
+            nonce,
+        )?;
+        let helper_measurement_share = self.vidpf.eval_root(
+            VidpfServerId::S1,
+            &vidpf_keys[1],
+            &public_share,
+            &mut BinaryTree::default(),
+            nonce,
+        )?;
 
         let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
             leader_measurement_share.as_ref(),
@@ -530,18 +538,19 @@ where
         let mut output_shares = Vec::<T::Field>::with_capacity(
             self.vidpf.weight_parameter * agg_param.level_and_prefixes.prefixes().len(),
         );
-        let mut cache_tree = BinaryTree::<VidpfEvalCache<VidpfWeight<T::Field>>>::default();
+        let mut cache_tree = BinaryTree::<VidpfEvalResult<VidpfWeight<T::Field>>>::default();
         for prefix in agg_param.level_and_prefixes.prefixes() {
-            let mut value_share = self.vidpf.eval_with_cache(
-                id,
-                &input_share.vidpf_key,
-                public_share,
-                prefix,
-                &mut cache_tree,
-                nonce,
-            )?;
-            eval_proof.update(&value_share.proof);
-            output_shares.append(&mut value_share.share.0);
+            let (VidpfWeight(mut weight_share), onehot_proof_for_prefix) =
+                self.vidpf.eval_with_cache(
+                    id,
+                    &input_share.vidpf_key,
+                    public_share,
+                    prefix,
+                    &mut cache_tree,
+                    nonce,
+                )?;
+            eval_proof.update(&onehot_proof_for_prefix);
+            output_shares.append(&mut weight_share);
         }
 
         Ok(if agg_param.require_weight_check {
@@ -549,13 +558,9 @@ where
                 vidpf_key,
                 proof_share,
             } = input_share;
-            let root_share = self.vidpf.get_root_weight_share(
-                id,
-                vidpf_key,
-                public_share,
-                &mut cache_tree,
-                nonce,
-            )?;
+            let root_share =
+                self.vidpf
+                    .eval_root(id, vidpf_key, public_share, &mut cache_tree, nonce)?;
             let (szk_query_share, szk_query_state) =
                 self.szk
                     .query(root_share.as_ref(), proof_share, verify_key, nonce)?;
@@ -707,7 +712,6 @@ mod tests {
     use crate::vdaf::test_utils::run_vdaf;
     use rand::{thread_rng, Rng};
 
-    const TEST_NONCE_SIZE: usize = 16;
     const CTX_STR: &[u8] = b"mastic ctx";
 
     #[test]
@@ -718,7 +722,7 @@ mod tests {
         let encoded_meas_len = sum_typ.input_len();
 
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(encoded_meas_len);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -803,7 +807,7 @@ mod tests {
         let encoded_meas_len = sum_typ.input_len();
 
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(encoded_meas_len);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -859,7 +863,7 @@ mod tests {
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_meas_len = sum_typ.input_len();
         let sum_szk = Szk::new_turboshake128(sum_typ, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(encoded_meas_len);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(encoded_meas_len);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -884,7 +888,7 @@ mod tests {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
         let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(1);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -965,7 +969,7 @@ mod tests {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
         let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(1);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -987,7 +991,7 @@ mod tests {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
         let szk = Szk::new_turboshake128(count, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(1);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(1);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1011,7 +1015,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1103,7 +1107,7 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1136,7 +1140,7 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1171,7 +1175,7 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
@@ -1198,7 +1202,7 @@ mod tests {
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
         let szk = Szk::new_turboshake128(sumvec, algorithm_id);
-        let sum_vidpf = Vidpf::<VidpfWeight<Field128>, TEST_NONCE_SIZE>::new(15);
+        let sum_vidpf = Vidpf::<VidpfWeight<Field128>>::new(15);
 
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 16];
