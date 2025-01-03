@@ -77,7 +77,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         P: Xof<SEED_SIZE>,
         F: FieldElement,
     {
-        let mut xof = P::init(seed, &self.domain_separation_tag(usage, ctx));
+        let mut xof = P::init(seed, &[&self.domain_separation_tag(usage), ctx]);
         for binder_chunk in binder_chunks.into_iter() {
             xof.update(binder_chunk.as_ref());
         }
