@@ -26,7 +26,7 @@ use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 8;
+pub(crate) const VERSION: u8 = 12;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -200,16 +200,13 @@ pub trait Vdaf: Clone + Debug {
 
     /// Generate the domain separation tag for this VDAF. The output is used for domain separation
     /// by the XOF.
-    fn domain_separation_tag(&self, usage: u16, ctx: &[u8]) -> Vec<u8> {
+    fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
         // Prefix is 8 bytes and defined by the spec. Copy these values in
-        let mut dst = Vec::with_capacity(ctx.len() + 8);
-        dst.push(VERSION);
-        dst.push(0); // algorithm class
-        dst.extend_from_slice(self.algorithm_id().to_be_bytes().as_slice());
-        dst.extend_from_slice(usage.to_be_bytes().as_slice());
-        // Finally, append user-chosen `ctx`
-        dst.extend_from_slice(ctx);
-
+        let mut dst = [0; 8];
+        dst[0] = VERSION;
+        dst[1] = 0; // algorithm class
+        dst[2..6].clone_from_slice(self.algorithm_id().to_be_bytes().as_slice());
+        dst[6..8].clone_from_slice(usage.to_be_bytes().as_slice());
         dst
     }
 }

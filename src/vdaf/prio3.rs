@@ -35,7 +35,9 @@ use crate::codec::{
 };
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
-use crate::field::{decode_fieldvec, FftFriendlyFieldElement, FieldElement};
+use crate::field::{
+    decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldElementWithInteger,
+};
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
@@ -75,19 +77,19 @@ const DST_JOINT_RAND_SEED: u16 = 6;
 const DST_JOINT_RAND_PART: u16 = 7;
 
 /// The count type. Each measurement is an integer in `[0,2)` and the aggregate result is the sum.
-pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 16>;
+pub type Prio3Count = Prio3<Count<Field64>, XofTurboShake128, 32>;
 
 impl Prio3Count {
     /// Construct an instance of Prio3Count with the given number of aggregators.
     pub fn new_count(num_aggregators: u8) -> Result<Self, VdafError> {
-        Prio3::new(num_aggregators, 1, 0x00000000, Count::new())
+        Prio3::new(num_aggregators, 1, 0x00000001, Count::new())
     }
 }
 
 /// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
 /// aggregate is the element-wise sum.
 pub type Prio3SumVec =
-    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
@@ -102,7 +104,7 @@ impl Prio3SumVec {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000002,
+            0x00000003,
             SumVec::new(bits, len, chunk_length)?,
         )
     }
@@ -115,7 +117,7 @@ impl Prio3SumVec {
 pub type Prio3SumVecMultithreaded = Prio3<
     SumVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "multithreaded")]
@@ -132,7 +134,7 @@ impl Prio3SumVecMultithreaded {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000002,
+            0x00000003,
             SumVec::new(bits, len, chunk_length)?,
         )
     }
@@ -140,19 +142,16 @@ impl Prio3SumVecMultithreaded {
 
 /// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
 /// aggregate is the sum.
-pub type Prio3Sum = Prio3<Sum<Field128>, XofTurboShake128, 16>;
+pub type Prio3Sum = Prio3<Sum<Field64>, XofTurboShake128, 32>;
 
 impl Prio3Sum {
-    /// Construct an instance of Prio3Sum with the given number of aggregators and required bit
-    /// length. The bit length must not exceed 64.
-    pub fn new_sum(num_aggregators: u8, bits: usize) -> Result<Self, VdafError> {
-        if bits > 64 {
-            return Err(VdafError::Uncategorized(format!(
-                "bit length ({bits}) exceeds limit for aggregate type (64)"
-            )));
-        }
-
-        Prio3::new(num_aggregators, 1, 0x00000001, Sum::new(bits)?)
+    /// Construct an instance of `Prio3Sum` with the given number of aggregators, where each summand
+    /// must be in the range `[0, max_measurement]`. Errors if `max_measurement == 0`.
+    pub fn new_sum(
+        num_aggregators: u8,
+        max_measurement: <Field64 as FieldElementWithInteger>::Integer,
+    ) -> Result<Self, VdafError> {
+        Prio3::new(num_aggregators, 1, 0x00000002, Sum::new(max_measurement)?)
     }
 }
 
@@ -177,7 +176,7 @@ pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
         ParallelSum<Field128, Mul<Field128>>,
     >,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "experimental")]
@@ -213,7 +212,7 @@ pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
         ParallelSumMultithreaded<Field128, Mul<Field128>>,
     >,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(all(feature = "experimental", feature = "multithreaded"))]
@@ -237,7 +236,7 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
 /// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
 pub type Prio3Histogram =
-    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3Histogram {
     /// Constructs an instance of Prio3Histogram with the given number of aggregators,
@@ -250,7 +249,7 @@ impl Prio3Histogram {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000003,
+            0x00000004,
             Histogram::new(length, chunk_length)?,
         )
     }
@@ -263,7 +262,7 @@ impl Prio3Histogram {
 pub type Prio3HistogramMultithreaded = Prio3<
     Histogram<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "multithreaded")]
@@ -278,7 +277,7 @@ impl Prio3HistogramMultithreaded {
         Prio3::new(
             num_aggregators,
             1,
-            0x00000003,
+            0x00000004,
             Histogram::new(length, chunk_length)?,
         )
     }
@@ -288,7 +287,7 @@ impl Prio3HistogramMultithreaded {
 /// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
 /// values at each position across all measurements.
 pub type Prio3MultihotCountVec =
-    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 16>;
+    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3MultihotCountVec {
     /// Constructs an instance of Prio3MultihotCountVec with the given number of aggregators, number
@@ -302,7 +301,7 @@ impl Prio3MultihotCountVec {
         Prio3::new(
             num_aggregators,
             1,
-            0xFFFF0000,
+            0x00000005,
             MultihotCountVec::new(num_buckets, max_weight, chunk_length)?,
         )
     }
@@ -315,7 +314,7 @@ impl Prio3MultihotCountVec {
 pub type Prio3MultihotCountVecMultithreaded = Prio3<
     MultihotCountVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
     XofTurboShake128,
-    16,
+    32,
 >;
 
 #[cfg(feature = "multithreaded")]
@@ -331,7 +330,7 @@ impl Prio3MultihotCountVecMultithreaded {
         Prio3::new(
             num_aggregators,
             1,
-            0xFFFF0000,
+            0x00000005,
             MultihotCountVec::new(num_buckets, max_weight, chunk_length)?,
         )
     }
@@ -339,25 +338,22 @@ impl Prio3MultihotCountVecMultithreaded {
 
 /// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and
 /// the aggregate is the arithmetic average.
-pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 16>;
+pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 32>;
 
 impl Prio3Average {
-    /// Construct an instance of Prio3Average with the given number of aggregators and required bit
-    /// length. The bit length must not exceed 64.
-    pub fn new_average(num_aggregators: u8, bits: usize) -> Result<Self, VdafError> {
+    /// Construct an instance of `Prio3Average` with the given number of aggregators, where each
+    /// summand must be in the range `[0, max_measurement]`. Errors if `max_measurement == 0`.
+    pub fn new_average(
+        num_aggregators: u8,
+        max_measurement: <Field128 as FieldElementWithInteger>::Integer,
+    ) -> Result<Self, VdafError> {
         check_num_aggregators(num_aggregators)?;
-
-        if bits > 64 {
-            return Err(VdafError::Uncategorized(format!(
-                "bit length ({bits}) exceeds limit for aggregate type (64)"
-            )));
-        }
 
         Ok(Prio3 {
             num_aggregators,
             num_proofs: 1,
             algorithm_id: 0xFFFF0000,
-            typ: Average::new(bits)?,
+            typ: Average::new(max_measurement)?,
             phantom: PhantomData,
         })
     }
@@ -488,8 +484,8 @@ where
     fn derive_prove_rands(&self, ctx: &[u8], prove_rand_seed: &Seed<SEED_SIZE>) -> Vec<T::Field> {
         P::seed_stream(
             prove_rand_seed,
-            &self.domain_separation_tag(DST_PROVE_RANDOMNESS, ctx),
-            &[self.num_proofs],
+            &[&self.domain_separation_tag(DST_PROVE_RANDOMNESS), ctx],
+            &[&[self.num_proofs]],
         )
         .into_field_vec(self.typ.prove_rand_len() * self.num_proofs())
     }
@@ -501,7 +497,7 @@ where
     ) -> Seed<SEED_SIZE> {
         let mut xof = P::init(
             &[0; SEED_SIZE],
-            &self.domain_separation_tag(DST_JOINT_RAND_SEED, ctx),
+            &[&self.domain_separation_tag(DST_JOINT_RAND_SEED), ctx],
         );
         for part in joint_rand_parts {
             xof.update(part.as_ref());
@@ -517,8 +513,8 @@ where
         let joint_rand_seed = self.derive_joint_rand_seed(ctx, joint_rand_parts);
         let joint_rands = P::seed_stream(
             &joint_rand_seed,
-            &self.domain_separation_tag(DST_JOINT_RANDOMNESS, ctx),
-            &[self.num_proofs],
+            &[&self.domain_separation_tag(DST_JOINT_RANDOMNESS), ctx],
+            &[&[self.num_proofs]],
         )
         .into_field_vec(self.typ.joint_rand_len() * self.num_proofs());
 
@@ -533,8 +529,8 @@ where
     ) -> Prng<T::Field, P::SeedStream> {
         Prng::from_seed_stream(P::seed_stream(
             proofs_share_seed,
-            &self.domain_separation_tag(DST_PROOF_SHARE, ctx),
-            &[self.num_proofs, agg_id],
+            &[&self.domain_separation_tag(DST_PROOF_SHARE), ctx],
+            &[&[self.num_proofs, agg_id]],
         ))
     }
 
@@ -546,7 +542,7 @@ where
     ) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
-            &self.domain_separation_tag(DST_QUERY_RANDOMNESS, ctx),
+            &[&self.domain_separation_tag(DST_QUERY_RANDOMNESS), ctx],
         );
         xof.update(&[self.num_proofs]);
         xof.update(nonce);
@@ -612,8 +608,8 @@ where
             let meas_and_proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
                 &Seed(meas_and_proof_share_seed),
-                &self.domain_separation_tag(DST_MEASUREMENT_SHARE, ctx),
-                &[agg_id],
+                &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
+                &[&[agg_id]],
             ));
             let joint_rand_blind = if let Some(helper_joint_rand_parts) =
                 helper_joint_rand_parts.as_mut()
@@ -621,7 +617,7 @@ where
                 let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
                 let mut joint_rand_part_xof = P::init(
                     &joint_rand_blind,
-                    &self.domain_separation_tag(DST_JOINT_RAND_PART, ctx),
+                    &[&self.domain_separation_tag(DST_JOINT_RAND_PART), ctx],
                 );
                 joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
                 joint_rand_part_xof.update(nonce);
@@ -668,7 +664,7 @@ where
 
                         let mut joint_rand_part_xof = P::init(
                             leader_blind.as_ref(),
-                            &self.domain_separation_tag(DST_JOINT_RAND_PART, ctx),
+                            &[&self.domain_separation_tag(DST_JOINT_RAND_PART), ctx],
                         );
                         joint_rand_part_xof.update(&[0]); // Aggregator ID
                         joint_rand_part_xof.update(nonce);
@@ -1379,8 +1375,8 @@ where
                 let measurement_share = Cow::Owned(
                     P::seed_stream(
                         meas_and_proofs_share,
-                        &self.domain_separation_tag(DST_MEASUREMENT_SHARE, ctx),
-                        &[agg_id],
+                        &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
+                        &[&[agg_id]],
                     )
                     .into_field_vec(self.typ.input_len()),
                 );
@@ -1396,8 +1392,8 @@ where
         // Compute the joint randomness.
         let (joint_rand_seed, joint_rand_part, joint_rands) = if self.typ.joint_rand_len() > 0 {
             let mut joint_rand_part_xof = P::init(
-                msg.joint_rand_blind().unwrap().as_ref(),
-                &self.domain_separation_tag(DST_JOINT_RAND_PART, ctx),
+                msg.joint_rand_blind().as_ref().unwrap().as_ref(),
+                &[&self.domain_separation_tag(DST_JOINT_RAND_PART), ctx],
             );
             joint_rand_part_xof.update(&[agg_id]);
             joint_rand_part_xof.update(nonce);
@@ -1559,10 +1555,12 @@ where
         // Compute the output share.
         let measurement_share = match step.measurement_share {
             Share::Leader(data) => data,
-            Share::Helper(seed) => {
-                let dst = self.domain_separation_tag(DST_MEASUREMENT_SHARE, ctx);
-                P::seed_stream(&seed, &dst, &[step.agg_id]).into_field_vec(self.typ.input_len())
-            }
+            Share::Helper(seed) => P::seed_stream(
+                &seed,
+                &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
+                &[&[step.agg_id]],
+            )
+            .into_field_vec(self.typ.input_len()),
         };
 
         let output_share = match self.typ.truncate(measurement_share) {
@@ -1794,7 +1792,7 @@ mod tests {
         );
 
         let mut nonce = [0; 16];
-        let mut verify_key = [0; 16];
+        let mut verify_key = [0; 32];
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
@@ -1839,14 +1837,16 @@ mod tests {
 
     #[test]
     fn test_prio3_sum() {
-        let prio3 = Prio3::new_sum(3, 16).unwrap();
+        let max_measurement = 35_891;
+
+        let prio3 = Prio3::new_sum(3, max_measurement).unwrap();
 
         assert_eq!(
-            run_vdaf(CTX_STR, &prio3, &(), [0, (1 << 16) - 1, 0, 1, 1]).unwrap(),
-            (1 << 16) + 1
+            run_vdaf(CTX_STR, &prio3, &(), [0, max_measurement, 0, 1, 1]).unwrap(),
+            max_measurement + 2,
         );
 
-        let mut verify_key = [0; 16];
+        let mut verify_key = [0; 32];
         thread_rng().fill(&mut verify_key[..]);
         let nonce = [0; 16];
 
@@ -1854,7 +1854,7 @@ mod tests {
         assert_matches!(
             &mut input_shares[0],
             Prio3InputShare::Leader { ref mut measurement_share, ..} => {
-                measurement_share[0] += Field128::one();
+                measurement_share[0] += Field64::one();
             }
         );
         let result = run_vdaf_prepare(
@@ -1872,7 +1872,7 @@ mod tests {
         assert_matches!(
             &mut input_shares[0],
             Prio3InputShare::Leader { ref mut proofs_share, ..} => {
-                proofs_share[0] += Field128::one();
+                proofs_share[0] += Field64::one();
             }
         );
         let result = run_vdaf_prepare(
@@ -1913,7 +1913,7 @@ mod tests {
         let prio3 = Prio3::<
             SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>,
             XofTurboShake128,
-            16,
+            32,
         >::new(2, 2, 0xFFFF0000, SumVec::new(2, 20, 4).unwrap())
         .unwrap();
 
@@ -1983,7 +1983,7 @@ mod tests {
 
         fn test_fixed_vec<Fx, PE, M, const SIZE: usize>(
             fp_0: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 32>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -2076,7 +2076,7 @@ mod tests {
             fp_4_inv: Fx,
             fp_8_inv: Fx,
             fp_16_inv: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 16>,
+            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 32>,
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
@@ -2112,7 +2112,7 @@ mod tests {
                 vec!(0.5, 0.0, 0.0),
             );
 
-            let mut verify_key = [0; 16];
+            let mut verify_key = [0; 32];
             let mut nonce = [0; 16];
             thread_rng().fill(&mut verify_key);
             thread_rng().fill(&mut nonce);
@@ -2233,7 +2233,8 @@ mod tests {
 
     #[test]
     fn test_prio3_average() {
-        let prio3 = Prio3::new_average(2, 64).unwrap();
+        let max_measurement = 43_208;
+        let prio3 = Prio3::new_average(2, max_measurement).unwrap();
 
         assert_eq!(run_vdaf(CTX_STR, &prio3, &(), [17, 8]).unwrap(), 12.5f64);
         assert_eq!(run_vdaf(CTX_STR, &prio3, &(), [1, 1, 1, 1]).unwrap(), 1f64);
@@ -2249,7 +2250,8 @@ mod tests {
 
     #[test]
     fn test_prio3_input_share() {
-        let prio3 = Prio3::new_sum(5, 16).unwrap();
+        let max_measurement = 1;
+        let prio3 = Prio3::new_sum(5, max_measurement).unwrap();
         let (_public_share, input_shares) = prio3.shard(CTX_STR, &1, &[0; 16]).unwrap();
 
         // Check that seed shares are distinct.
@@ -2368,7 +2370,8 @@ mod tests {
         let vdaf = Prio3::new_count(2).unwrap();
         fieldvec_roundtrip_test::<Field64, Prio3Count, OutputShare<Field64>>(&vdaf, &(), 1);
 
-        let vdaf = Prio3::new_sum(2, 17).unwrap();
+        let max_measurement = 13;
+        let vdaf = Prio3::new_sum(2, max_measurement).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, OutputShare<Field128>>(&vdaf, &(), 1);
 
         let vdaf = Prio3::new_histogram(2, 12, 3).unwrap();
@@ -2380,7 +2383,8 @@ mod tests {
         let vdaf = Prio3::new_count(2).unwrap();
         fieldvec_roundtrip_test::<Field64, Prio3Count, AggregateShare<Field64>>(&vdaf, &(), 1);
 
-        let vdaf = Prio3::new_sum(2, 17).unwrap();
+        let max_measurement = 13;
+        let vdaf = Prio3::new_sum(2, max_measurement).unwrap();
         fieldvec_roundtrip_test::<Field128, Prio3Sum, AggregateShare<Field128>>(&vdaf, &(), 1);
 
         let vdaf = Prio3::new_histogram(2, 12, 3).unwrap();

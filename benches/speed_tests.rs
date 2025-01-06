@@ -17,6 +17,8 @@ use prio::dp::distributions::DiscreteGaussian;
 use prio::idpf::test_utils::generate_zipf_distributed_batch;
 #[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
+#[cfg(feature = "experimental")]
+use prio::vidpf::VidpfServerId;
 use prio::{
     benchmarked::*,
     field::{random_vector, Field128 as F, FieldElement},
@@ -179,7 +181,7 @@ fn prio3(c: &mut Criterion) {
         let vdaf = Prio3::new_count(num_shares).unwrap();
         let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
-        let verify_key = black_box([0u8; 16]);
+        let verify_key = black_box([0u8; 32]);
         let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
         b.iter(|| {
             vdaf.prepare_init(
@@ -198,8 +200,10 @@ fn prio3(c: &mut Criterion) {
     let mut group = c.benchmark_group("prio3sum_shard");
     for bits in [8, 32] {
         group.bench_with_input(BenchmarkId::from_parameter(bits), &bits, |b, bits| {
-            let vdaf = Prio3::new_sum(num_shares, *bits).unwrap();
-            let measurement = (1 << bits) - 1;
+            // Doesn't matter for speed what we use for max measurement, or measurement
+            let max_measurement = (1 << bits) - 1;
+            let vdaf = Prio3::new_sum(num_shares, max_measurement).unwrap();
+            let measurement = max_measurement;
             let nonce = black_box([0u8; 16]);
             b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
         });
@@ -209,10 +213,11 @@ fn prio3(c: &mut Criterion) {
     let mut group = c.benchmark_group("prio3sum_prepare_init");
     for bits in [8, 32] {
         group.bench_with_input(BenchmarkId::from_parameter(bits), &bits, |b, bits| {
-            let vdaf = Prio3::new_sum(num_shares, *bits).unwrap();
-            let measurement = (1 << bits) - 1;
+            let max_measurement = (1 << bits) - 1;
+            let vdaf = Prio3::new_sum(num_shares, max_measurement).unwrap();
+            let measurement = max_measurement;
             let nonce = black_box([0u8; 16]);
-            let verify_key = black_box([0u8; 16]);
+            let verify_key = black_box([0u8; 32]);
             let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
             b.iter(|| {
                 vdaf.prepare_init(
@@ -282,7 +287,7 @@ fn prio3(c: &mut Criterion) {
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
-                let verify_key = black_box([0u8; 16]);
+                let verify_key = black_box([0u8; 32]);
                 let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
                     vdaf.prepare_init(
@@ -318,7 +323,7 @@ fn prio3(c: &mut Criterion) {
                         .map(|i| i & 1)
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
-                    let verify_key = black_box([0u8; 16]);
+                    let verify_key = black_box([0u8; 32]);
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
@@ -411,7 +416,7 @@ fn prio3(c: &mut Criterion) {
                 let vdaf = Prio3::new_histogram(num_shares, *input_length, *chunk_length).unwrap();
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
-                let verify_key = black_box([0u8; 16]);
+                let verify_key = black_box([0u8; 32]);
                 let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
                     vdaf.prepare_init(
@@ -453,7 +458,7 @@ fn prio3(c: &mut Criterion) {
                     .unwrap();
                     let measurement = black_box(0);
                     let nonce = black_box([0u8; 16]);
-                    let verify_key = black_box([0u8; 16]);
+                    let verify_key = black_box([0u8; 32]);
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
@@ -487,7 +492,7 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("serial", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 32> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![FP16_ZERO; *dimension];
                     measurement[0] = FP16_HALF;
@@ -504,7 +509,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 32> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -525,12 +530,12 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("series", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 32> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![FP16_ZERO; *dimension];
                     measurement[0] = FP16_HALF;
                     let nonce = black_box([0u8; 16]);
-                    let verify_key = black_box([0u8; 16]);
+                    let verify_key = black_box([0u8; 32]);
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
@@ -556,7 +561,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F15, _, _>, _, 32> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -564,7 +569,7 @@ fn prio3(c: &mut Criterion) {
                         let mut measurement = vec![FP16_ZERO; *dimension];
                         measurement[0] = FP16_HALF;
                         let nonce = black_box([0u8; 16]);
-                        let verify_key = black_box([0u8; 16]);
+                        let verify_key = black_box([0u8; 32]);
                         let (public_share, input_shares) =
                             vdaf.shard(b"", &measurement, &nonce).unwrap();
                         b.iter(|| {
@@ -591,7 +596,7 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("serial", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 32> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![FP32_ZERO; *dimension];
                     measurement[0] = FP32_HALF;
@@ -608,7 +613,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 32> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -629,12 +634,12 @@ fn prio3(c: &mut Criterion) {
                 BenchmarkId::new("series", dimension),
                 &dimension,
                 |b, dimension| {
-                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
+                    let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 32> =
                         Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, *dimension).unwrap();
                     let mut measurement = vec![FP32_ZERO; *dimension];
                     measurement[0] = FP32_HALF;
                     let nonce = black_box([0u8; 16]);
-                    let verify_key = black_box([0u8; 16]);
+                    let verify_key = black_box([0u8; 32]);
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
@@ -660,7 +665,7 @@ fn prio3(c: &mut Criterion) {
                     BenchmarkId::new("parallel", dimension),
                     &dimension,
                     |b, dimension| {
-                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 16> =
+                        let vdaf: Prio3<FixedPointBoundedL2VecSum<I1F31, _, _>, _, 32> =
                             Prio3::new_fixedpoint_boundedl2_vec_sum_multithreaded(
                                 num_shares, *dimension,
                             )
@@ -668,7 +673,7 @@ fn prio3(c: &mut Criterion) {
                         let mut measurement = vec![FP32_ZERO; *dimension];
                         measurement[0] = FP32_HALF;
                         let nonce = black_box([0u8; 16]);
-                        let verify_key = black_box([0u8; 16]);
+                        let verify_key = black_box([0u8; 32]);
                         let (public_share, input_shares) =
                             vdaf.shard(b"", &measurement, &nonce).unwrap();
                         b.iter(|| {
@@ -794,7 +799,7 @@ fn poplar1(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
-            let verify_key: [u8; 16] = rng.gen();
+            let verify_key: [u8; 32] = rng.gen();
             let nonce: [u8; 16] = rng.gen();
 
             // Parameters are chosen to match Chris Wood's experimental setup:
@@ -854,10 +859,12 @@ fn vidpf(c: &mut Criterion) {
             let input = VidpfInput::from_bools(&bits);
             let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
 
-            let vidpf = Vidpf::<VidpfWeight<Field255>, NONCE_SIZE>::new(2);
+            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(bits.len(), 2).unwrap();
 
             b.iter(|| {
-                let _ = vidpf.gen(&input, &weight, NONCE).unwrap();
+                let _ = vidpf
+                    .gen(b"some application", &input, &weight, NONCE)
+                    .unwrap();
             });
         });
     }
@@ -870,12 +877,23 @@ fn vidpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = VidpfInput::from_bools(&bits);
             let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
-            let vidpf = Vidpf::<VidpfWeight<Field255>, NONCE_SIZE>::new(2);
+            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(bits.len(), 2).unwrap();
 
-            let (public, keys) = vidpf.gen(&input, &weight, NONCE).unwrap();
+            let (public, keys) = vidpf
+                .gen(b"some application", &input, &weight, NONCE)
+                .unwrap();
 
             b.iter(|| {
-                let _ = vidpf.eval(&keys[0], &public, &input, NONCE).unwrap();
+                let _ = vidpf
+                    .eval(
+                        b"some application",
+                        VidpfServerId::S0,
+                        &keys[0],
+                        &public,
+                        &input,
+                        NONCE,
+                    )
+                    .unwrap();
             });
         });
     }

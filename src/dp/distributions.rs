@@ -391,15 +391,15 @@ mod tests {
             DiscreteGaussian::new(Ratio::<BigUint>::from_integer(BigUint::from(5u8))).unwrap();
 
         // check samples are consistent
-        let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+        let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
         let samples: Vec<i8> = (0..10)
             .map(|_| i8::try_from(sampler.sample(&mut rng)).unwrap())
             .collect();
         let samples1: Vec<i8> = (0..10)
             .map(|_| i8::try_from(sampler.sample(&mut rng)).unwrap())
             .collect();
-        assert_eq!(samples, vec![0, -3, -2, 3, 2, -1, -5, 4, -7, -5]);
-        assert_eq!(samples1, vec![2, 7, -8, -3, 1, -3, -3, 6, -3, -1]);
+        assert_eq!(samples, [10, 7, 2, 1, -1, -2, -1, 3, -3, -1]);
+        assert_eq!(samples1, [3, 6, 3, -7, -8, -1, 2, -4, -11, -4]);
     }
 
     #[test]
@@ -410,7 +410,7 @@ mod tests {
         // sample from a manually created distribution
         let sampler1 =
             DiscreteGaussian::new(Ratio::<BigUint>::from_integer(BigUint::from(4u8))).unwrap();
-        let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+        let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
         let samples1: Vec<i8> = (0..10)
             .map(|_| i8::try_from(sampler1.sample(&mut rng)).unwrap())
             .collect();
@@ -422,7 +422,7 @@ mod tests {
         let sampler2 = zcdp
             .create_distribution(Ratio::<BigUint>::from_integer(1u8.into()))
             .unwrap();
-        let mut rng2 = SeedStreamTurboShake128::from_seed([0u8; 16]);
+        let mut rng2 = SeedStreamTurboShake128::from_seed([0u8; 32]);
         let samples2: Vec<i8> = (0..10)
             .map(|_| i8::try_from(sampler2.sample(&mut rng2)).unwrap())
             .collect();
@@ -570,7 +570,7 @@ mod tests {
             .unwrap();
 
         // collect that number of samples
-        let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+        let mut rng = SeedStreamTurboShake128::from_seed([1u8; 32]);
         let samples: Vec<BigInt> = (1..n_samples)
             .map(|_| {
                 sample_discrete_gaussian(&Ratio::<BigUint>::from_integer(sigma.clone()), &mut rng)
@@ -604,7 +604,7 @@ mod tests {
     #[test]
     fn empirical_test_gauss() {
         [100, 2000, 20000].iter().for_each(|p| {
-            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
             let sampler = || {
                 sample_discrete_gaussian(
                     &Ratio::<BigUint>::from_integer((*p).to_biguint().unwrap()),
@@ -626,7 +626,7 @@ mod tests {
     #[test]
     fn empirical_test_bernoulli_mean() {
         [2u8, 5u8, 7u8, 9u8].iter().for_each(|p| {
-            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
             let sampler = || {
                 if sample_bernoulli(
                     &Ratio::<BigUint>::new(BigUint::one(), (*p).into()),
@@ -650,7 +650,7 @@ mod tests {
     #[test]
     fn empirical_test_geometric_mean() {
         [2u8, 5u8, 7u8, 9u8].iter().for_each(|p| {
-            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
             let sampler = || {
                 sample_geometric_exp(
                     &Ratio::<BigUint>::new(BigUint::one(), (*p).into()),
@@ -673,7 +673,7 @@ mod tests {
     #[test]
     fn empirical_test_laplace_mean() {
         [2u8, 5u8, 7u8, 9u8].iter().for_each(|p| {
-            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 16]);
+            let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
             let sampler = || {
                 sample_discrete_laplace(
                     &Ratio::<BigUint>::new(BigUint::one(), (*p).into()),

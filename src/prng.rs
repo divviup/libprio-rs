@@ -227,22 +227,23 @@ mod tests {
         // These constants were found in a brute-force search, and they test that the XOF performs
         // rejection sampling correctly when the raw output exceeds the prime modulus.
         let seed = Seed::get_decoded(&[
-            0xd5, 0x3f, 0xff, 0x5d, 0x88, 0x8c, 0x60, 0x4e, 0x9f, 0x24, 0x16, 0xe1, 0xa2, 0x0a,
-            0x62, 0x34,
+            0x44, 0x34, 0x1d, 0xc5, 0x2d, 0x71, 0xa2, 0xff, 0x2e, 0x4c, 0x30, 0x5e, 0x93, 0x35,
+            0xda, 0x9b, 0x19, 0xaf, 0xc6, 0x8e, 0x10, 0xb8, 0xb5, 0x43, 0x69, 0x0d, 0xad, 0x9d,
+            0x3b, 0xbb, 0x46, 0xba,
         ])
         .unwrap();
-        let expected = Field64::from(3401316594827516850);
+        let expected = Field64::from(4857131209231097247);
 
-        let seed_stream = XofTurboShake128::seed_stream(&seed, b"", b"");
+        let seed_stream = XofTurboShake128::seed_stream(&seed, &[], &[]);
         let mut prng = Prng::<Field64, _>::from_seed_stream(seed_stream);
-        let actual = prng.nth(662).unwrap();
+        let actual = prng.nth(13882).unwrap();
         assert_eq!(actual, expected);
 
         #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
         {
-            let mut seed_stream = XofTurboShake128::seed_stream(&seed, b"", b"");
+            let mut seed_stream = XofTurboShake128::seed_stream(&seed, &[], &[]);
             let mut actual = <Field64 as FieldElement>::zero();
-            for _ in 0..=662 {
+            for _ in 0..=13882 {
                 actual = <Field64 as crate::idpf::IdpfValue>::generate(&mut seed_stream, &());
             }
             assert_eq!(actual, expected);
@@ -256,11 +257,11 @@ mod tests {
         let seed = Seed::generate().unwrap();
 
         let mut prng: Prng<Field64, SeedStreamTurboShake128> =
-            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
 
         // Construct a `Prng` with a longer-than-usual buffer.
         let mut prng_weird_buffer_size: Prng<Field64, SeedStreamTurboShake128> =
-            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
         let mut extra = [0; 7];
         prng_weird_buffer_size.seed_stream.fill_bytes(&mut extra);
         prng_weird_buffer_size.buffer.extend_from_slice(&extra);
@@ -277,7 +278,7 @@ mod tests {
     fn into_different_field() {
         let seed = Seed::generate().unwrap();
         let want: Prng<Field64, SeedStreamTurboShake128> =
-            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, b"", b""));
+            Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
         let want_buffer = want.buffer.clone();
 
         let got: Prng<Field128, _> = want.into_new_field();
