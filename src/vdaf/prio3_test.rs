@@ -264,11 +264,6 @@ mod tests {
 
     use super::{check_test_vec, check_test_vec_custom_de, Prio3CountMeasurement};
 
-    // All the below tests are not passing. We ignore them until the rest of the repo is in a state
-    // where we can regenerate the JSON test vectors.
-    // Tracking issue https://github.com/divviup/libprio-rs/issues/1122
-
-    #[ignore]
     #[test]
     fn test_vec_prio3_count() {
         for test_vector_str in [
@@ -283,23 +278,20 @@ mod tests {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_vec_prio3_sum() {
-        const FAKE_MAX_MEASUREMENT_UPDATE_ME: u64 = 0;
         for test_vector_str in [
             include_str!("test_vec/13/Prio3Sum_0.json"),
             include_str!("test_vec/13/Prio3Sum_1.json"),
             include_str!("test_vec/13/Prio3Sum_2.json"),
         ] {
             check_test_vec(test_vector_str, |json_params, num_shares| {
-                let _bits = json_params["bits"].as_u64().unwrap() as usize;
-                Prio3::new_sum(num_shares, FAKE_MAX_MEASUREMENT_UPDATE_ME).unwrap()
+                let max_measurement = json_params["max_measurement"].as_u64().unwrap();
+                Prio3::new_sum(num_shares, max_measurement).unwrap()
             });
         }
     }
 
-    #[ignore]
     #[test]
     fn test_vec_prio3_sum_vec() {
         for test_vector_str in [
@@ -315,11 +307,13 @@ mod tests {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_vec_prio3_sum_vec_multiproof() {
         type Prio3SumVecField64Multiproof =
             Prio3<SumVec<Field64, ParallelSum<Field64, Mul<Field64>>>, XofTurboShake128, 32>;
+        let num_proofs = 3;
+        let alg_id = 0xFFFFFFFF;
+
         for test_vector_str in [
             include_str!("test_vec/13/Prio3SumVecWithMultiproof_0.json"),
             include_str!("test_vec/13/Prio3SumVecWithMultiproof_1.json"),
@@ -330,8 +324,8 @@ mod tests {
                 let chunk_length = json_params["chunk_length"].as_u64().unwrap() as usize;
                 Prio3SumVecField64Multiproof::new(
                     num_shares,
-                    3,
-                    0xFFFFFFFF,
+                    num_proofs,
+                    alg_id,
                     SumVec::new(bits, length, chunk_length).unwrap(),
                 )
                 .unwrap()
@@ -339,7 +333,6 @@ mod tests {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_vec_prio3_histogram() {
         for test_vector_str in [
@@ -355,7 +348,6 @@ mod tests {
         }
     }
 
-    #[ignore]
     #[test]
     fn test_vec_prio3_multihot_count_vec() {
         for test_vector_str in [
