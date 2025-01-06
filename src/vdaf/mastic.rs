@@ -725,23 +725,15 @@ where
         Ok(PrepareTransition::Finish(output_shares))
     }
 
-    fn aggregate<M: IntoIterator<Item = MasticOutputShare<T::Field>>>(
-        &self,
-        agg_param: &MasticAggregationParam,
-        output_shares: M,
-    ) -> Result<MasticAggregateShare<T::Field>, VdafError> {
-        let mut agg_share = MasticAggregateShare::<T::Field>::from(vec![
+    fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare {
+        MasticAggregateShare::<T::Field>::from(vec![
             T::Field::zero();
             self.vidpf.weight_parameter
                 * agg_param
                     .level_and_prefixes
                     .prefixes()
                     .len()
-        ]);
-        for output_share in output_shares.into_iter() {
-            agg_share.accumulate(&output_share)?;
-        }
-        Ok(agg_share)
+        ])
     }
 }
 
