@@ -197,18 +197,6 @@ pub trait Vdaf: Clone + Debug {
     /// The number of Aggregators. The Client generates as many input shares as there are
     /// Aggregators.
     fn num_aggregators(&self) -> usize;
-
-    /// Generate the domain separation tag for this VDAF. The output is used for domain separation
-    /// by the XOF.
-    fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
-        // Prefix is 8 bytes and defined by the spec. Copy these values in
-        let mut dst = [0; 8];
-        dst[0] = VERSION;
-        dst[1] = 0; // algorithm class
-        dst[2..6].clone_from_slice(self.algorithm_id().to_be_bytes().as_slice());
-        dst[6..8].clone_from_slice(usage.to_be_bytes().as_slice());
-        dst
-    }
 }
 
 /// The Client's role in the execution of a VDAF.
