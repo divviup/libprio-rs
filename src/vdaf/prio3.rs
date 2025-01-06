@@ -30,9 +30,7 @@
 use super::xof::XofTurboShake128;
 #[cfg(feature = "experimental")]
 use super::AggregatorWithNoise;
-use crate::codec::{
-    decode_items, encode_fixlen_items, CodecError, Decode, Encode, ParameterizedDecode,
-};
+use crate::codec::{encode_fixlen_items, CodecError, Decode, Encode, ParameterizedDecode};
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{
@@ -1031,14 +1029,8 @@ where
             .map_err(|e| CodecError::Other(Box::new(e)))?;
 
         if agg_id == 0 {
-            // Find the precise number of bytes we're decoding first
-            let measurement_len = T::Field::ENCODED_SIZE * prio3.typ.input_len();
-            let proof_len = T::Field::ENCODED_SIZE * prio3.typ.proof_len() * prio3.num_proofs();
-
-            // TODO optimization: Use a decoding routine that preallocates using knowledge of the
-            // expected output len
-            let measurement_share = decode_items(measurement_len, &(), bytes)?;
-            let proofs_share = decode_items(proof_len, &(), bytes)?;
+            let measurement_share = decode_fieldvec(prio3.typ.input_len(), bytes)?;
+            let proofs_share = decode_fieldvec(prio3.typ.proof_len() * prio3.num_proofs(), bytes)?;
 
             let joint_rand_blind = if prio3.typ.joint_rand_len() > 0 {
                 let blind = Seed::decode(bytes)?;
