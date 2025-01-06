@@ -528,11 +528,17 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let control_bits_count = self.cw.len() * 2;
-        let mut len = (control_bits_count + 7) / 8 + self.cw.len() * 48;
-        for cw in self.cw.iter() {
-            len += cw.weight.encoded_len()?;
-        }
+        // We assume the weight has the same length at each level of the tree.
+        let weight_parameter = self
+            .cw
+            .first()
+            .map_or(Some(0), |cw| cw.weight.encoded_len())?;
+
+        let mut len = 0;
+        len += (2 * self.cw.len() + 7) / 8; // packed control bits
+        len += self.cw.len() * VIDPF_SEED_SIZE; // seeds
+        len += self.cw.len() * weight_parameter; // weights
+        len += self.cw.len() * VIDPF_PROOF_SIZE; // nod proofs
         Some(len)
     }
 }
@@ -864,7 +870,10 @@ mod tests {
         use crate::{
             codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
-            vidpf::{Vidpf, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId},
+            vidpf::{
+                Vidpf, VidpfCorrectionWord, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare,
+                VidpfServerId,
+            },
         };
 
         use super::{TestWeight, TEST_NONCE, TEST_NONCE_SIZE, TEST_WEIGHT_LEN};
@@ -988,6 +997,18 @@ mod tests {
 
                 state_0 = r0.state;
                 state_1 = r1.state;
+            }
+        }
+
+        // Assert that the length of the weight is the same at each level of the tree. This
+        // assumption is made in `PublicShare::encoded_len()`.
+        #[test]
+        fn public_share_weight_len() {
+            let input = VidpfInput::from_bools(&vec![false; 237]);
+            let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
+            let (vidpf, public, _, _) = vidpf_gen_setup(b"some application", &input, &weight);
+            for VidpfCorrectionWord { weight, .. } in public.cw {
+                assert_eq!(weight.0.len(), vidpf.weight_parameter);
             }
         }
     }
