@@ -431,7 +431,7 @@ pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
 }
 
 /// Decode the next `length` bytes from `bytes` into as many instances of `D` as possible.
-pub(crate) fn decode_items<P, D: ParameterizedDecode<P>>(
+fn decode_items<P, D: ParameterizedDecode<P>>(
     length: usize,
     decoding_parameter: &P,
     bytes: &mut Cursor<&[u8]>,
