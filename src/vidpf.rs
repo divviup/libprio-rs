@@ -298,6 +298,70 @@ impl<W: VidpfValue> Vidpf<W> {
         Ok(beta_share)
     }
 
+    /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
+    /// each node in the prefix tree. The return value is the weights for the prefixes
+    /// concatenated together.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn eval_prefix_tree_with_siblings(
+        &self,
+        ctx: &[u8],
+        id: VidpfServerId,
+        public: &VidpfPublicShare<W>,
+        key: &VidpfKey,
+        nonce: &[u8],
+        prefixes: &[VidpfInput],
+        prefix_tree: &mut BinaryTree<VidpfEvalResult<W>>,
+    ) -> Result<Vec<W>, VidpfError> {
+        let mut out_shares = Vec::with_capacity(prefixes.len());
+
+        for prefix in prefixes {
+            if prefix.len() > public.cw.len() {
+                return Err(VidpfError::InvalidInputLength);
+            }
+
+            let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
+                Box::new(Node::new(VidpfEvalResult {
+                    state: VidpfEvalState::init_from_key(id, key),
+                    share: W::zero(&self.weight_parameter), // not used
+                }))
+            });
+
+            for (idx, cw) in self.index_iter(prefix)?.zip(public.cw.iter()) {
+                let left = sub_tree.left.get_or_insert_with(|| {
+                    Box::new(Node::new(self.eval_next(
+                        ctx,
+                        cw,
+                        idx.left_sibling(),
+                        &sub_tree.value.state,
+                        nonce,
+                    )))
+                });
+                let right = sub_tree.right.get_or_insert_with(|| {
+                    Box::new(Node::new(self.eval_next(
+                        ctx,
+                        cw,
+                        idx.right_sibling(),
+                        &sub_tree.value.state,
+                        nonce,
+                    )))
+                });
+
+                sub_tree = if idx.bit.unwrap_u8() == 0 {
+                    left
+                } else {
+                    right
+                };
+            }
+
+            out_shares.push(sub_tree.value.share.clone());
+        }
+
+        for out_share in out_shares.iter_mut() {
+            out_share.conditional_negate(Choice::from(id));
+        }
+        Ok(out_shares)
+    }
+
     fn extend(seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> ExtendedSeed {
         let mut rng = XofFixedKeyAes128::seed_stream(
             &Seed(seed),
@@ -368,72 +432,6 @@ impl<W: VidpfValue> Vidpf<W> {
             level,
             bits: self.bits,
         })
-    }
-}
-
-impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
-    /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
-    /// each node in the prefix tree. The return value is the weights for the prefixes
-    /// concatenated together.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn eval_prefix_tree_with_siblings(
-        &self,
-        ctx: &[u8],
-        id: VidpfServerId,
-        public: &VidpfPublicShare<VidpfWeight<F>>,
-        key: &VidpfKey,
-        nonce: &[u8],
-        prefixes: &[VidpfInput],
-        prefix_tree: &mut BinaryTree<VidpfEvalResult<VidpfWeight<F>>>,
-    ) -> Result<Vec<VidpfWeight<F>>, VidpfError> {
-        let mut out_shares = Vec::with_capacity(prefixes.len());
-
-        for prefix in prefixes {
-            if prefix.len() > public.cw.len() {
-                return Err(VidpfError::InvalidInputLength);
-            }
-
-            let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
-                Box::new(Node::new(VidpfEvalResult {
-                    state: VidpfEvalState::init_from_key(id, key),
-                    share: VidpfWeight::zero(&self.weight_parameter), // not used
-                }))
-            });
-
-            for (idx, cw) in self.index_iter(prefix)?.zip(public.cw.iter()) {
-                let left = sub_tree.left.get_or_insert_with(|| {
-                    Box::new(Node::new(self.eval_next(
-                        ctx,
-                        cw,
-                        idx.left_sibling(),
-                        &sub_tree.value.state,
-                        nonce,
-                    )))
-                });
-                let right = sub_tree.right.get_or_insert_with(|| {
-                    Box::new(Node::new(self.eval_next(
-                        ctx,
-                        cw,
-                        idx.right_sibling(),
-                        &sub_tree.value.state,
-                        nonce,
-                    )))
-                });
-
-                sub_tree = if idx.bit.unwrap_u8() == 0 {
-                    left
-                } else {
-                    right
-                };
-            }
-
-            out_shares.push(sub_tree.value.share.clone());
-        }
-
-        for out_share in out_shares.iter_mut() {
-            out_share.conditional_negate(Choice::from(id));
-        }
-        Ok(out_shares)
     }
 }
 
