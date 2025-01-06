@@ -866,8 +866,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let inputs = [
@@ -947,8 +945,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
@@ -1000,8 +996,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
@@ -1023,8 +1017,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let inputs = [
@@ -1102,8 +1094,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -1122,8 +1112,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
@@ -1144,8 +1132,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let inputs = [
@@ -1234,8 +1220,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
@@ -1265,8 +1249,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
@@ -1298,8 +1280,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
@@ -1323,8 +1303,6 @@ mod tests {
         let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        let mut verify_key = [0u8; 16];
-        thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
