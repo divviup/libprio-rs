@@ -1039,6 +1039,8 @@ where
             let measurement_len = T::Field::ENCODED_SIZE * prio3.typ.input_len();
             let proof_len = T::Field::ENCODED_SIZE * prio3.typ.proof_len() * prio3.num_proofs();
 
+            // TODO optimization: Use a decoding routine that preallocates using knowledge of the
+            // expected output len
             let measurement_share = decode_items(measurement_len, &(), bytes)?;
             let proofs_share = decode_items(proof_len, &(), bytes)?;
 
@@ -1464,7 +1466,7 @@ where
 
         Ok((
             Prio3PrepareState {
-                measurement_share: msg.measurement_share().clone(),
+                measurement_share: msg.measurement_share(),
                 joint_rand_seed,
                 agg_id,
                 verifiers_len: verifiers_share.len(),
