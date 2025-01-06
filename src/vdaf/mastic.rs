@@ -94,6 +94,11 @@ where
             bits,
         })
     }
+
+    fn agg_share_len(&self, agg_param: &MasticAggregationParam) -> usize {
+        // The aggregate share consists of the counter and truncated weight for each candidate prefix.
+        (1 + self.szk.typ.output_len()) * agg_param.level_and_prefixes.prefixes().len()
+    }
 }
 
 /// Mastic aggregation parameter.
@@ -252,8 +257,7 @@ where
         (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let len = (1 + mastic.szk.typ.output_len()) * agg_param.level_and_prefixes.prefixes().len();
-        decode_fieldvec(len, bytes).map(AggregateShare)
+        decode_fieldvec(mastic.agg_share_len(agg_param), bytes).map(AggregateShare)
     }
 }
 
@@ -268,8 +272,7 @@ where
         (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let len = (1 + mastic.szk.typ.output_len()) * agg_param.level_and_prefixes.prefixes().len();
-        decode_fieldvec(len, bytes).map(OutputShare)
+        decode_fieldvec(mastic.agg_share_len(agg_param), bytes).map(OutputShare)
     }
 }
 
@@ -425,10 +428,10 @@ impl<'a, T: Type, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
     for MasticPrepareState<T::Field, SEED_SIZE>
 {
     fn decode_with_param(
-        (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        decoder @ (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let output_shares = MasticOutputShare::decode_with_param(&(*mastic, *agg_param), bytes)?;
+        let output_shares = MasticOutputShare::decode_with_param(decoder, bytes)?;
         let szk_query_state = (mastic.szk.typ.joint_rand_len() > 0
             && agg_param.require_weight_check)
             .then(|| Seed::decode(bytes))
@@ -774,14 +777,7 @@ where
         output_shares: M,
     ) -> Result<MasticAggregateShare<T::Field>, VdafError> {
         let mut agg_share =
-            MasticAggregateShare::<T::Field>::from(vec![
-                T::Field::zero();
-                (1 + self.szk.typ.output_len())
-                    * agg_param
-                        .level_and_prefixes
-                        .prefixes()
-                        .len()
-            ]);
+            MasticAggregateShare::from(vec![T::Field::zero(); self.agg_share_len(agg_param)]);
         for output_share in output_shares.into_iter() {
             agg_share.accumulate(&output_share)?;
         }
@@ -803,10 +799,7 @@ where
         let num_prefixes = agg_param.level_and_prefixes.prefixes().len();
 
         let AggregateShare(agg) = agg_shares.into_iter().try_fold(
-            AggregateShare(vec![
-                T::Field::zero();
-                num_prefixes * (1 + self.szk.typ.output_len())
-            ]),
+            AggregateShare(vec![T::Field::zero(); self.agg_share_len(agg_param)]),
             |mut agg, agg_share| {
                 agg.merge(&agg_share)?;
                 Result::<_, VdafError>::Ok(agg)
