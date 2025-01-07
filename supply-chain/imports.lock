@@ -107,15 +107,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde]]
-version = "1.0.216"
-when = "2024-12-11"
+version = "1.0.217"
+when = "2024-12-27"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_derive]]
-version = "1.0.216"
-when = "2024-12-11"
+version = "1.0.217"
+when = "2024-12-27"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
