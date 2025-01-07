@@ -1566,6 +1566,24 @@ mod tests {
         }
 
         #[test]
+        fn count_2() {
+            check_test_vec(
+                0xFFFF0001,
+                |_type_params| Count::<Field64>::new(),
+                include_str!("test_vec/mastic/04/MasticCount_2.json"),
+            );
+        }
+
+        #[test]
+        fn count_3() {
+            check_test_vec(
+                0xFFFF0001,
+                |_type_params| Count::<Field64>::new(),
+                include_str!("test_vec/mastic/04/MasticCount_3.json"),
+            );
+        }
+
+        #[test]
         fn sum_0() {
             check_test_vec(
                 0xFFFF0002,
