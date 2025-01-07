@@ -14,7 +14,6 @@ use core::{
     ops::{Add, AddAssign, BitXor, BitXorAssign, Index, Sub},
 };
 
-use bitvec::field::BitField;
 use bitvec::prelude::{BitVec, Lsb0};
 use rand_core::RngCore;
 use std::fmt::Debug;
@@ -286,17 +285,17 @@ impl<W: VidpfValue> Vidpf<W> {
 
         let VidpfEvalResult {
             state: _,
-            share: mut weight_share_left,
+            share: weight_share_left,
         } = self.eval_next(ctx, cw, idx_left, &state, nonce);
 
         let VidpfEvalResult {
             state: _,
-            share: mut weight_share_right,
+            share: weight_share_right,
         } = self.eval_next(ctx, cw, idx_left.right_sibling(), &state, nonce);
 
-        weight_share_left.conditional_negate(Choice::from(id));
-        weight_share_right.conditional_negate(Choice::from(id));
-        Ok(weight_share_left + weight_share_right)
+        let mut beta_share = weight_share_left + weight_share_right;
+        beta_share.conditional_negate(Choice::from(id));
+        Ok(beta_share)
     }
 
     fn extend(seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> ExtendedSeed {
@@ -327,17 +326,16 @@ impl<W: VidpfValue> Vidpf<W> {
     }
 
     fn convert(&self, seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> (VidpfSeed, W) {
-        let mut rng = XofFixedKeyAes128::seed_stream(
+        let mut seed_stream = XofFixedKeyAes128::seed_stream(
             &Seed(seed),
             &[&mastic::dst_usage(mastic::USAGE_CONVERT), ctx],
             &[nonce],
         );
 
-        let mut out_seed = VidpfSeed::default();
-        rng.fill_bytes(&mut out_seed);
-        let value = <W as IdpfValue>::generate(&mut rng, &self.weight_parameter);
-
-        (out_seed, value)
+        let mut next_seed = VidpfSeed::default();
+        seed_stream.fill_bytes(&mut next_seed);
+        let weight = W::generate(&mut seed_stream, &self.weight_parameter);
+        (next_seed, weight)
     }
 
     fn index_iter<'a>(
@@ -387,8 +385,8 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
         nonce: &[u8],
         prefixes: &[VidpfInput],
         prefix_tree: &mut BinaryTree<VidpfEvalResult<VidpfWeight<F>>>,
-    ) -> Result<Vec<F>, VidpfError> {
-        let mut out_shares = Vec::with_capacity(self.weight_parameter * prefixes.len());
+    ) -> Result<Vec<VidpfWeight<F>>, VidpfError> {
+        let mut out_shares = Vec::with_capacity(prefixes.len());
 
         for prefix in prefixes {
             if prefix.len() > public.cw.len() {
@@ -429,13 +427,11 @@ impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
                 };
             }
 
-            out_shares.extend_from_slice(&sub_tree.value.share.0);
+            out_shares.push(sub_tree.value.share.clone());
         }
 
-        if id == VidpfServerId::S1 {
-            for o in out_shares.iter_mut() {
-                *o = -*o;
-            }
+        for out_share in out_shares.iter_mut() {
+            out_share.conditional_negate(Choice::from(id));
         }
         Ok(out_shares)
     }
@@ -503,48 +499,40 @@ pub struct VidpfPublicShare<W: VidpfValue> {
 
 impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        // Control bits need to be written within each byte in LSB-to-MSB order, and assigned into
-        // bytes in big-endian order. Thus, the first four levels will have their control bits
-        // encoded in the last byte, and the last levels will have their control bits encoded in the
-        // first byte.
+        // Control bits
         let mut control_bits: BitVec<u8, Lsb0> = BitVec::with_capacity(self.cw.len() * 2);
-        for correction_words in self.cw.iter() {
-            control_bits.extend(
-                [
-                    bool::from(correction_words.ctrl_left),
-                    bool::from(correction_words.ctrl_right),
-                ]
-                .iter(),
-            );
+        for cw in self.cw.iter() {
+            control_bits.push(bool::from(cw.ctrl_left));
+            control_bits.push(bool::from(cw.ctrl_right));
         }
         control_bits.set_uninitialized(false);
         let mut packed_control = control_bits.into_vec();
         bytes.append(&mut packed_control);
 
-        for VidpfCorrectionWord {
-            seed,
-            ctrl_left: _,
-            ctrl_right: _,
-            weight,
-            proof,
-        } in self.cw.iter()
-        {
-            bytes.extend_from_slice(seed);
-            weight.encode(bytes)?;
-            bytes.extend_from_slice(proof);
+        // Seeds
+        for cw in self.cw.iter() {
+            bytes.extend_from_slice(&cw.seed);
+        }
+
+        // Weights
+        for cw in self.cw.iter() {
+            cw.weight.encode(bytes)?;
+        }
+
+        // Node proofs
+        for cw in self.cw.iter() {
+            bytes.extend_from_slice(&cw.proof);
         }
 
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let control_bits_count = (self.cw.len()) * 2;
-        let mut len = 0;
-        len += (control_bits_count + 7) / 8; // control bits
-        let cw_encoded_len = VIDPF_SEED_SIZE
-            + VIDPF_PROOF_SIZE
-            + self.cw.first().and_then(|cw| cw.weight.encoded_len())?;
-        len += self.cw.len() * cw_encoded_len;
+        let control_bits_count = self.cw.len() * 2;
+        let mut len = (control_bits_count + 7) / 8 + self.cw.len() * 48;
+        for cw in self.cw.iter() {
+            len += cw.weight.encoded_len()?;
+        }
         Some(len)
     }
 }
@@ -555,26 +543,57 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let packed_control_len = (bits + 3) / 4;
-        let mut packed = vec![0u8; packed_control_len];
-        bytes.read_exact(&mut packed)?;
-        let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed);
+        let mut packed_control_bits = vec![0u8; packed_control_len];
+        bytes.read_exact(&mut packed_control_bits)?;
+        let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed_control_bits);
 
-        let mut cw = Vec::with_capacity(*bits);
-        for chunk in unpacked_control_bits[0..(bits) * 2].chunks(2) {
-            let ctrl_left = (chunk[0] as u8).into();
-            let ctrl_right = (chunk[1] as u8).into();
-            let seed = Seed::decode(bytes)?.0;
-            let weight = W::decode_with_param(weight_parameter, bytes)?;
-            let mut proof = [0u8; VIDPF_PROOF_SIZE];
-            bytes.read_exact(&mut proof)?;
-            cw.push(VidpfCorrectionWord {
-                seed,
-                ctrl_left,
-                ctrl_right,
-                weight,
-                proof,
-            })
+        // Control bits
+        let mut control_bits = Vec::with_capacity(*bits);
+        for chunk in unpacked_control_bits[0..bits * 2].chunks(2) {
+            control_bits.push([(chunk[0] as u8).into(), (chunk[1] as u8).into()]);
         }
+
+        // Check that unused packed bits are zero.
+        if unpacked_control_bits[bits * 2..].any() {
+            return Err(CodecError::UnexpectedValue);
+        }
+
+        // Seeds
+        let seeds = std::iter::repeat_with(|| Seed::decode(bytes).map(|seed| seed.0))
+            .take(*bits)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // Weights
+        let weights = std::iter::repeat_with(|| W::decode_with_param(weight_parameter, bytes))
+            .take(*bits)
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let proofs = std::iter::repeat_with(|| {
+            let mut proof = [0; VIDPF_PROOF_SIZE];
+            bytes.read_exact(&mut proof)?;
+            Ok::<_, CodecError>(proof)
+        })
+        .take(*bits)
+        .collect::<Result<Vec<_>, _>>()?;
+
+        let cw = seeds
+            .into_iter()
+            .zip(
+                control_bits
+                    .into_iter()
+                    .zip(weights.into_iter().zip(proofs)),
+            )
+            .map(
+                |(seed, ([ctrl_left, ctrl_right], (weight, proof)))| VidpfCorrectionWord {
+                    seed,
+                    ctrl_left,
+                    ctrl_right,
+                    weight,
+                    proof,
+                },
+            )
+            .collect::<Vec<_>>();
+
         Ok(Self { cw })
     }
 }
@@ -806,14 +825,18 @@ impl VidpfEvalIndex<'_> {
             .input
             .index(..=usize::from(self.level))
             .chunks(8)
-            .map(BitField::load_le::<u8>)
             .enumerate()
-            .map(|(byte_index, mut byte)| {
+            .map(|(byte_index, chunk)| {
+                let mut byte = 0;
+                for (bit_index, bit) in chunk.iter().enumerate() {
+                    byte |= u8::from(*bit) << (7 - bit_index);
+                }
+
                 // Typically `input[level] == bit` , but `bit` may be overwritten by either
                 // `left_sibling()` or `right_sibling()`. Adjust its value accordingly.
                 if byte_index == usize::from(self.level) / 8 {
                     let bit_index = self.level % 8;
-                    let m = 1 << bit_index;
+                    let m = 1 << (7 - bit_index);
                     byte = u8::conditional_select(&(byte & !m), &(byte | m), self.bit);
                 }
                 byte

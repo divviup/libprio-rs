@@ -56,6 +56,7 @@ pub(crate) const USAGE_NODE_PROOF: u8 = 8;
 pub(crate) const USAGE_EVAL_PROOF: u8 = 9;
 pub(crate) const USAGE_EXTEND: u8 = 10;
 pub(crate) const USAGE_CONVERT: u8 = 11;
+pub(crate) const USAGE_PAYLOAD_CHECK: u8 = 12;
 
 pub(crate) fn dst_usage(usage: u8) -> [u8; 11] {
     [b'm', b'a', b's', b't', b'i', b'c', 0, 0, 0, 0, usage]
@@ -157,10 +158,7 @@ where
         mastic: &Mastic<T, P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        MasticPublicShare::<VidpfWeight<T::Field>>::decode_with_param(
-            &(mastic.bits, mastic.vidpf.weight_parameter),
-            bytes,
-        )
+        VidpfPublicShare::decode_with_param(&(mastic.bits, mastic.vidpf.weight_parameter), bytes)
     }
 }
 
@@ -251,17 +249,11 @@ where
     P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        decoding_parameter: &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let (mastic, agg_param) = decoding_parameter;
-        let l = mastic
-            .vidpf
-            .weight_parameter
-            .checked_mul(agg_param.level_and_prefixes.prefixes().len())
-            .ok_or_else(|| CodecError::Other("multiplication overflow".into()))?;
-        let result = decode_fieldvec(l, bytes)?;
-        Ok(AggregateShare(result))
+        let len = (1 + mastic.szk.typ.output_len()) * agg_param.level_and_prefixes.prefixes().len();
+        decode_fieldvec(len, bytes).map(AggregateShare)
     }
 }
 
@@ -273,17 +265,11 @@ where
     P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        decoding_parameter: &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let (mastic, agg_param) = decoding_parameter;
-        let l = mastic
-            .vidpf
-            .weight_parameter
-            .checked_mul(agg_param.level_and_prefixes.prefixes().len())
-            .ok_or_else(|| CodecError::Other("multiplication overflow".into()))?;
-        let result = decode_fieldvec(l, bytes)?;
-        Ok(OutputShare(result))
+        let len = (1 + mastic.szk.typ.output_len()) * agg_param.level_and_prefixes.prefixes().len();
+        decode_fieldvec(len, bytes).map(OutputShare)
     }
 }
 
@@ -422,7 +408,7 @@ pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
 /// Broadcast message from an aggregator preparing Mastic output shares. Includes the
 /// [`Vidpf`] evaluation proof covering every prefix in the aggregation parameter, and optionally
 /// the verification message for Szk.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
     ///  [`Vidpf`] evaluation proof, which guarantees one-hotness and payload consistency.
     eval_proof: Seed<SEED_SIZE>,
@@ -560,14 +546,12 @@ where
 
         // Onehot and payload checks
         let (payload_check, onehot_proof) = {
-            let mut payload_check_xof = P::init(&[0; SEED_SIZE], &[]);
+            let mut payload_check_xof =
+                P::init(&[0; SEED_SIZE], &[&dst_usage(USAGE_PAYLOAD_CHECK), ctx]);
             let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
             let mut onehot_proof = ONEHOT_PROOF_INIT;
 
             // Traverse the prefix tree breadth-first.
-            //
-            // TODO spec: Adjust the onehot and payload checks accordingly. For the onehot check,
-            // we need to make sure to always visit the left node before the right.
             let mut q = VecDeque::with_capacity(100);
             q.push_back(root.left.as_ref().unwrap());
             q.push_back(root.right.as_ref().unwrap());
@@ -599,7 +583,6 @@ where
                 }
             }
 
-            // TODO spec: Pre-hash the payload check.
             let payload_check = payload_check_xof.into_seed().0;
 
             (payload_check, onehot_proof)
@@ -617,13 +600,20 @@ where
         };
 
         let eval_proof = {
-            // TODO spec: Use a zero seed.
             let mut eval_proof_xof = P::init(&[0; SEED_SIZE], &[&dst_usage(USAGE_EVAL_PROOF), ctx]);
             eval_proof_xof.update(&onehot_proof);
-            eval_proof_xof.update(&payload_check);
             eval_proof_xof.update(&counter_check);
+            eval_proof_xof.update(&payload_check);
             eval_proof_xof.into_seed()
         };
+
+        let mut truncated_out_shares =
+            Vec::with_capacity(self.szk.typ.output_len() * prefixes.len());
+        for VidpfWeight(mut out_share) in out_shares.into_iter() {
+            let mut truncated_out_share = self.szk.typ.truncate(out_share.drain(1..).collect())?;
+            truncated_out_shares.append(&mut out_share);
+            truncated_out_shares.append(&mut truncated_out_share);
+        }
 
         Ok(if agg_param.require_weight_check {
             // Range check.
@@ -646,7 +636,7 @@ where
             let verifier_len = szk_query_share.flp_verifier.len();
             (
                 MasticPrepareState {
-                    output_shares: MasticOutputShare::from(out_shares),
+                    output_shares: MasticOutputShare::from(truncated_out_shares),
                     szk_query_state,
                     verifier_len: Some(verifier_len),
                 },
@@ -658,7 +648,7 @@ where
         } else {
             (
                 MasticPrepareState {
-                    output_shares: MasticOutputShare::from(out_shares),
+                    output_shares: MasticOutputShare::from(truncated_out_shares),
                     szk_query_state: None,
                     verifier_len: None,
                 },
@@ -728,12 +718,32 @@ where
     fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare {
         MasticAggregateShare::<T::Field>::from(vec![
             T::Field::zero();
-            self.vidpf.weight_parameter
+            (1 + self.szk.typ.output_len())
                 * agg_param
                     .level_and_prefixes
                     .prefixes()
                     .len()
         ])
+    }
+
+    fn aggregate<M: IntoIterator<Item = MasticOutputShare<T::Field>>>(
+        &self,
+        agg_param: &MasticAggregationParam,
+        output_shares: M,
+    ) -> Result<MasticAggregateShare<T::Field>, VdafError> {
+        let mut agg_share =
+            MasticAggregateShare::<T::Field>::from(vec![
+                T::Field::zero();
+                (1 + self.szk.typ.output_len())
+                    * agg_param
+                        .level_and_prefixes
+                        .prefixes()
+                        .len()
+            ]);
+        for output_share in output_shares.into_iter() {
+            agg_share.accumulate(&output_share)?;
+        }
+        Ok(agg_share)
     }
 }
 
@@ -753,7 +763,7 @@ where
         let AggregateShare(agg) = agg_shares.into_iter().try_fold(
             AggregateShare(vec![
                 T::Field::zero();
-                num_prefixes * self.vidpf.weight_parameter
+                num_prefixes * (1 + self.szk.typ.output_len())
             ]),
             |mut agg, agg_share| {
                 agg.merge(&agg_share)?;
@@ -762,8 +772,7 @@ where
         )?;
 
         let mut result = Vec::with_capacity(num_prefixes);
-        for agg_for_prefix in agg.chunks(self.vidpf.weight_parameter) {
-            let encoded_agg_result = agg_for_prefix[1..].to_vec();
+        for agg_for_prefix in agg.chunks(1 + self.szk.typ.output_len()) {
             let num_measurements = agg_for_prefix[0];
             let num_measurements =
                 <T::Field as FieldElementWithInteger>::Integer::from(num_measurements);
@@ -775,10 +784,12 @@ where
                     "failed to convert num_measurements to usize: {e}"
                 ))
             })?;
-            result.push(self.szk.typ.decode_result(
-                &self.szk.typ.truncate(encoded_agg_result)?,
-                num_measurements,
-            )?);
+            let encoded_agg_result = &agg_for_prefix[1..];
+            result.push(
+                self.szk
+                    .typ
+                    .decode_result(encoded_agg_result, num_measurements)?,
+            );
         }
 
         Ok(result)
@@ -1284,5 +1295,353 @@ mod tests {
         let decoded_public_share =
             MasticPublicShare::get_decoded_with_param(&mastic, &encoded_public_share[..]).unwrap();
         assert_eq!(public, decoded_public_share);
+    }
+
+    mod test_vec {
+        use serde::Deserialize;
+        use std::collections::HashMap;
+
+        use super::*;
+        use crate::{
+            flp::{
+                types::{Histogram, MultihotCountVec},
+                Type,
+            },
+            idpf::IdpfInput,
+        };
+
+        #[derive(Debug, Deserialize)]
+        struct HexEncoded(#[serde(with = "hex")] Vec<u8>);
+
+        fn check_test_vec<T: Type>(
+            algorithm_id: u32,
+            new_typ: impl Fn(&HashMap<String, serde_json::Value>) -> T,
+            test_vec_str: &str,
+        ) where
+            T::Measurement: for<'a> Deserialize<'a>,
+            T::AggregateResult: for<'a> Deserialize<'a> + PartialEq,
+        {
+            #[derive(Debug, Deserialize)]
+            struct TestVector<T>
+            where
+                T: Type,
+                T::Measurement: for<'a> Deserialize<'a>,
+                T::AggregateResult: for<'a> Deserialize<'a>,
+            {
+                agg_param: HexEncoded,
+                agg_result: Vec<T::AggregateResult>,
+                agg_shares: [HexEncoded; 2],
+                vidpf_bits: usize,
+                ctx: HexEncoded,
+                prep: Vec<PrepTestVector<T::Measurement>>,
+                #[serde(flatten)]
+                type_params: HashMap<String, serde_json::Value>,
+                shares: usize,
+                verify_key: HexEncoded,
+            }
+
+            #[derive(Debug, Deserialize)]
+            struct PrepTestVector<M> {
+                input_shares: [HexEncoded; 2],
+                measurement: (Vec<bool>, M),
+                nonce: HexEncoded,
+                out_shares: [Vec<HexEncoded>; 2],
+                prep_messages: [HexEncoded; 1],
+                prep_shares: [[HexEncoded; 2]; 1],
+                public_share: HexEncoded,
+                rand: HexEncoded,
+            }
+
+            let test_vec: TestVector<T> = serde_json::from_str(test_vec_str).unwrap();
+
+            let mastic = Mastic::<_, XofTurboShake128, 32>::new(
+                algorithm_id,
+                new_typ(&test_vec.type_params),
+                test_vec.vidpf_bits,
+            )
+            .unwrap();
+
+            let agg_param = MasticAggregationParam::get_decoded(&test_vec.agg_param.0).unwrap();
+
+            let verify_key = <[u8; 32]>::try_from(&test_vec.verify_key.0[..]).unwrap();
+
+            let HexEncoded(ctx) = &test_vec.ctx;
+
+            let mut out_shares_0 = Vec::new();
+            let mut out_shares_1 = Vec::new();
+            for prep in &test_vec.prep {
+                let measurement = (
+                    IdpfInput::from_bools(&prep.measurement.0),
+                    prep.measurement.1.clone(),
+                );
+                let nonce = <[u8; NONCE_SIZE]>::try_from(&prep.nonce.0[..]).unwrap();
+                let (vidpf_keys, szk_random, joint_random_opt) = {
+                    let mut r = Cursor::new(prep.rand.0.as_ref());
+                    let vidpf_keys = [Seed::decode(&mut r).unwrap(), Seed::decode(&mut r).unwrap()];
+                    let szk_random = [Seed::decode(&mut r).unwrap(), Seed::decode(&mut r).unwrap()];
+
+                    let joint_random_opt = mastic
+                        .szk
+                        .requires_joint_rand()
+                        .then(|| Seed::decode(&mut r).unwrap());
+                    (vidpf_keys, szk_random, joint_random_opt)
+                };
+
+                // Sharding.
+                let (public_share, input_shares) = mastic
+                    .shard_with_random(
+                        ctx,
+                        &measurement,
+                        &nonce,
+                        vidpf_keys,
+                        szk_random,
+                        joint_random_opt,
+                    )
+                    .unwrap();
+                {
+                    let expected_public_share =
+                        MasticPublicShare::get_decoded_with_param(&mastic, &prep.public_share.0)
+                            .unwrap();
+                    assert_eq!(public_share, expected_public_share);
+                    assert_eq!(public_share.get_encoded().unwrap(), prep.public_share.0);
+
+                    let expected_input_shares = prep
+                        .input_shares
+                        .iter()
+                        .enumerate()
+                        .map(|(agg_id, HexEncoded(bytes))| {
+                            MasticInputShare::get_decoded_with_param(&(&mastic, agg_id), bytes)
+                                .unwrap()
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(input_shares, expected_input_shares);
+                    assert_eq!(
+                        input_shares[0].get_encoded().unwrap(),
+                        prep.input_shares[0].0
+                    );
+                    assert_eq!(
+                        input_shares[1].get_encoded().unwrap(),
+                        prep.input_shares[1].0
+                    );
+                }
+
+                // Preparation.
+                let (prep_state_0, prep_share_0) = mastic
+                    .prepare_init(
+                        &verify_key,
+                        ctx,
+                        0,
+                        &agg_param,
+                        &nonce,
+                        &public_share,
+                        &input_shares[0],
+                    )
+                    .unwrap();
+                let (prep_state_1, prep_share_1) = mastic
+                    .prepare_init(
+                        &verify_key,
+                        ctx,
+                        1,
+                        &agg_param,
+                        &nonce,
+                        &public_share,
+                        &input_shares[1],
+                    )
+                    .unwrap();
+
+                {
+                    let expected_prep_share_0 = MasticPrepareShare::get_decoded_with_param(
+                        &prep_state_0,
+                        &prep.prep_shares[0][0].0,
+                    )
+                    .unwrap();
+                    assert_eq!(prep_share_0, expected_prep_share_0);
+                    assert_eq!(
+                        prep_share_0.get_encoded().unwrap(),
+                        prep.prep_shares[0][0].0
+                    );
+
+                    let expected_prep_share_1 = MasticPrepareShare::get_decoded_with_param(
+                        &prep_state_1,
+                        &prep.prep_shares[0][1].0,
+                    )
+                    .unwrap();
+                    assert_eq!(prep_share_1, expected_prep_share_1);
+                    assert_eq!(
+                        prep_share_1.get_encoded().unwrap(),
+                        prep.prep_shares[0][1].0
+                    );
+                }
+
+                let prep_msg = mastic
+                    .prepare_shares_to_prepare_message(
+                        ctx,
+                        &agg_param,
+                        [prep_share_0, prep_share_1],
+                    )
+                    .unwrap();
+                {
+                    let expected_prep_msg = MasticPrepareMessage::get_decoded_with_param(
+                        &prep_state_0,
+                        &prep.prep_messages[0].0,
+                    )
+                    .unwrap();
+                    assert_eq!(prep_msg, expected_prep_msg);
+                    assert_eq!(prep_msg.get_encoded().unwrap(), prep.prep_messages[0].0);
+                }
+
+                let PrepareTransition::Finish(out_share_0) = mastic
+                    .prepare_next(ctx, prep_state_0, prep_msg.clone())
+                    .unwrap()
+                else {
+                    panic!("unexpected transition");
+                };
+                let PrepareTransition::Finish(out_share_1) =
+                    mastic.prepare_next(ctx, prep_state_1, prep_msg).unwrap()
+                else {
+                    panic!("unexpected transition");
+                };
+                {
+                    let expected_out_shares = prep
+                        .out_shares
+                        .iter()
+                        .map(|out_share| {
+                            MasticOutputShare::from(
+                                out_share
+                                    .iter()
+                                    .map(|HexEncoded(bytes)| T::Field::get_decoded(bytes).unwrap())
+                                    .collect::<Vec<_>>(),
+                            )
+                        })
+                        .collect::<Vec<_>>();
+                    assert_eq!(out_share_0, expected_out_shares[0]);
+                    assert_eq!(out_share_1, expected_out_shares[1]);
+                }
+
+                out_shares_0.push(out_share_0);
+                out_shares_1.push(out_share_1);
+            }
+
+            // Aggregation.
+            let agg_share_0 = mastic.aggregate(&agg_param, out_shares_0).unwrap();
+            let agg_share_1 = mastic.aggregate(&agg_param, out_shares_1).unwrap();
+            {
+                let expected_agg_shares = test_vec
+                    .agg_shares
+                    .iter()
+                    .map(|HexEncoded(bytes)| {
+                        MasticAggregateShare::get_decoded_with_param(&(&mastic, &agg_param), bytes)
+                            .unwrap()
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(agg_share_0, expected_agg_shares[0]);
+                assert_eq!(agg_share_1, expected_agg_shares[1]);
+            }
+
+            // Unsharding.
+            let agg_result = mastic
+                .unshard(&agg_param, [agg_share_0, agg_share_1], test_vec.prep.len())
+                .unwrap();
+            assert_eq!(agg_result, test_vec.agg_result);
+
+            assert_eq!(test_vec.shares, 2);
+        }
+
+        #[test]
+        fn count_0() {
+            check_test_vec(
+                0xFFFF0001,
+                |_type_params| Count::<Field64>::new(),
+                include_str!("test_vec/mastic/04/MasticCount_0.json"),
+            );
+        }
+
+        #[test]
+        fn count_1() {
+            check_test_vec(
+                0xFFFF0001,
+                |_type_params| Count::<Field64>::new(),
+                include_str!("test_vec/mastic/04/MasticCount_1.json"),
+            );
+        }
+
+        #[test]
+        fn sum_0() {
+            check_test_vec(
+                0xFFFF0002,
+                |type_params| {
+                    let max_measurement = type_params["max_measurement"].as_u64().unwrap();
+                    Sum::<Field64>::new(max_measurement).unwrap()
+                },
+                include_str!("test_vec/mastic/04/MasticSum_0.json"),
+            );
+        }
+
+        #[test]
+        fn sum_1() {
+            check_test_vec(
+                0xFFFF0002,
+                |type_params| {
+                    let max_measurement = type_params["max_measurement"].as_u64().unwrap();
+                    Sum::<Field64>::new(max_measurement).unwrap()
+                },
+                include_str!("test_vec/mastic/04/MasticSum_1.json"),
+            );
+        }
+
+        #[test]
+        fn sum_vec_0() {
+            check_test_vec(
+                0xFFFF0003,
+                |type_params| {
+                    let bits = type_params["bits"].as_u64().unwrap() as usize;
+                    let length = type_params["length"].as_u64().unwrap() as usize;
+                    let chunk_length = type_params["chunk_length"].as_u64().unwrap() as usize;
+                    SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(
+                        bits,
+                        length,
+                        chunk_length,
+                    )
+                    .unwrap()
+                },
+                include_str!("test_vec/mastic/04/MasticSumVec_0.json"),
+            );
+        }
+
+        #[test]
+        fn histogram_0() {
+            check_test_vec(
+                0xFFFF0004,
+                |type_params| {
+                    let length = type_params["length"].as_u64().unwrap() as usize;
+                    let chunk_length = type_params["chunk_length"].as_u64().unwrap() as usize;
+                    Histogram::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(
+                        length,
+                        chunk_length,
+                    )
+                    .unwrap()
+                },
+                include_str!("test_vec/mastic/04/MasticHistogram_0.json"),
+            );
+        }
+
+        #[test]
+        fn multihot_count_vec_0() {
+            check_test_vec(
+                0xFFFF0005,
+                |type_params| {
+                    let length = type_params["length"].as_u64().unwrap() as usize;
+                    let max_weight = type_params["max_weight"].as_u64().unwrap() as usize;
+                    let chunk_length = type_params["chunk_length"].as_u64().unwrap() as usize;
+                    MultihotCountVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(
+                        length,
+                        max_weight,
+                        chunk_length,
+                    )
+                    .unwrap()
+                },
+                include_str!("test_vec/mastic/04/MasticMultihotCountVec_0.json"),
+            );
+        }
     }
 }
