@@ -298,6 +298,70 @@ impl<W: VidpfValue> Vidpf<W> {
         Ok(beta_share)
     }
 
+    /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
+    /// each node in the prefix tree. The return value is the weights for the prefixes
+    /// concatenated together.
+    #[allow(clippy::too_many_arguments)]
+    pub(crate) fn eval_prefix_tree_with_siblings(
+        &self,
+        ctx: &[u8],
+        id: VidpfServerId,
+        public: &VidpfPublicShare<W>,
+        key: &VidpfKey,
+        nonce: &[u8],
+        prefixes: &[VidpfInput],
+        prefix_tree: &mut BinaryTree<VidpfEvalResult<W>>,
+    ) -> Result<Vec<W>, VidpfError> {
+        let mut out_shares = Vec::with_capacity(prefixes.len());
+
+        for prefix in prefixes {
+            if prefix.len() > public.cw.len() {
+                return Err(VidpfError::InvalidInputLength);
+            }
+
+            let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
+                Box::new(Node::new(VidpfEvalResult {
+                    state: VidpfEvalState::init_from_key(id, key),
+                    share: W::zero(&self.weight_parameter), // not used
+                }))
+            });
+
+            for (idx, cw) in self.index_iter(prefix)?.zip(public.cw.iter()) {
+                let left = sub_tree.left.get_or_insert_with(|| {
+                    Box::new(Node::new(self.eval_next(
+                        ctx,
+                        cw,
+                        idx.left_sibling(),
+                        &sub_tree.value.state,
+                        nonce,
+                    )))
+                });
+                let right = sub_tree.right.get_or_insert_with(|| {
+                    Box::new(Node::new(self.eval_next(
+                        ctx,
+                        cw,
+                        idx.right_sibling(),
+                        &sub_tree.value.state,
+                        nonce,
+                    )))
+                });
+
+                sub_tree = if idx.bit.unwrap_u8() == 0 {
+                    left
+                } else {
+                    right
+                };
+            }
+
+            out_shares.push(sub_tree.value.share.clone());
+        }
+
+        for out_share in out_shares.iter_mut() {
+            out_share.conditional_negate(Choice::from(id));
+        }
+        Ok(out_shares)
+    }
+
     fn extend(seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> ExtendedSeed {
         let mut rng = XofFixedKeyAes128::seed_stream(
             &Seed(seed),
@@ -368,72 +432,6 @@ impl<W: VidpfValue> Vidpf<W> {
             level,
             bits: self.bits,
         })
-    }
-}
-
-impl<F: FieldElement> Vidpf<VidpfWeight<F>> {
-    /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
-    /// each node in the prefix tree. The return value is the weights for the prefixes
-    /// concatenated together.
-    #[allow(clippy::too_many_arguments)]
-    pub(crate) fn eval_prefix_tree_with_siblings(
-        &self,
-        ctx: &[u8],
-        id: VidpfServerId,
-        public: &VidpfPublicShare<VidpfWeight<F>>,
-        key: &VidpfKey,
-        nonce: &[u8],
-        prefixes: &[VidpfInput],
-        prefix_tree: &mut BinaryTree<VidpfEvalResult<VidpfWeight<F>>>,
-    ) -> Result<Vec<VidpfWeight<F>>, VidpfError> {
-        let mut out_shares = Vec::with_capacity(prefixes.len());
-
-        for prefix in prefixes {
-            if prefix.len() > public.cw.len() {
-                return Err(VidpfError::InvalidInputLength);
-            }
-
-            let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
-                Box::new(Node::new(VidpfEvalResult {
-                    state: VidpfEvalState::init_from_key(id, key),
-                    share: VidpfWeight::zero(&self.weight_parameter), // not used
-                }))
-            });
-
-            for (idx, cw) in self.index_iter(prefix)?.zip(public.cw.iter()) {
-                let left = sub_tree.left.get_or_insert_with(|| {
-                    Box::new(Node::new(self.eval_next(
-                        ctx,
-                        cw,
-                        idx.left_sibling(),
-                        &sub_tree.value.state,
-                        nonce,
-                    )))
-                });
-                let right = sub_tree.right.get_or_insert_with(|| {
-                    Box::new(Node::new(self.eval_next(
-                        ctx,
-                        cw,
-                        idx.right_sibling(),
-                        &sub_tree.value.state,
-                        nonce,
-                    )))
-                });
-
-                sub_tree = if idx.bit.unwrap_u8() == 0 {
-                    left
-                } else {
-                    right
-                };
-            }
-
-            out_shares.push(sub_tree.value.share.clone());
-        }
-
-        for out_share in out_shares.iter_mut() {
-            out_share.conditional_negate(Choice::from(id));
-        }
-        Ok(out_shares)
     }
 }
 
@@ -528,11 +526,17 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let control_bits_count = self.cw.len() * 2;
-        let mut len = (control_bits_count + 7) / 8 + self.cw.len() * 48;
-        for cw in self.cw.iter() {
-            len += cw.weight.encoded_len()?;
-        }
+        // We assume the weight has the same length at each level of the tree.
+        let weight_parameter = self
+            .cw
+            .first()
+            .map_or(Some(0), |cw| cw.weight.encoded_len())?;
+
+        let mut len = 0;
+        len += (2 * self.cw.len() + 7) / 8; // packed control bits
+        len += self.cw.len() * VIDPF_SEED_SIZE; // seeds
+        len += self.cw.len() * weight_parameter; // weights
+        len += self.cw.len() * VIDPF_PROOF_SIZE; // nod proofs
         Some(len)
     }
 }
@@ -864,7 +868,10 @@ mod tests {
         use crate::{
             codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
-            vidpf::{Vidpf, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId},
+            vidpf::{
+                Vidpf, VidpfCorrectionWord, VidpfEvalState, VidpfInput, VidpfKey, VidpfPublicShare,
+                VidpfServerId,
+            },
         };
 
         use super::{TestWeight, TEST_NONCE, TEST_NONCE_SIZE, TEST_WEIGHT_LEN};
@@ -988,6 +995,18 @@ mod tests {
 
                 state_0 = r0.state;
                 state_1 = r1.state;
+            }
+        }
+
+        // Assert that the length of the weight is the same at each level of the tree. This
+        // assumption is made in `PublicShare::encoded_len()`.
+        #[test]
+        fn public_share_weight_len() {
+            let input = VidpfInput::from_bools(&vec![false; 237]);
+            let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
+            let (vidpf, public, _, _) = vidpf_gen_setup(b"some application", &input, &weight);
+            for VidpfCorrectionWord { weight, .. } in public.cw {
+                assert_eq!(weight.0.len(), vidpf.weight_parameter);
             }
         }
     }

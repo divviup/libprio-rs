@@ -11,7 +11,7 @@ use crate::{
     prng::Prng,
     vdaf::{
         xof::{Seed, Xof, XofTurboShake128},
-        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError,
+        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError, VERSION,
     },
 };
 use rand_core::RngCore;
@@ -862,6 +862,18 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Vdaf for Poplar1<P, SEED_SIZE> {
 }
 
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
+    /// Generate the domain separation tag for this VDAF. The output is used for domain separation
+    /// by the XOF.
+    fn domain_separation_tag(&self, usage: u16) -> [u8; 8] {
+        // Prefix is 8 bytes and defined by the spec. Copy these values in
+        let mut dst = [0; 8];
+        dst[0] = VERSION;
+        dst[1] = 0; // algorithm class
+        dst[2..6].clone_from_slice(self.algorithm_id().to_be_bytes().as_slice());
+        dst[6..8].clone_from_slice(usage.to_be_bytes().as_slice());
+        dst
+    }
+
     fn shard_with_random(
         &self,
         ctx: &[u8],
