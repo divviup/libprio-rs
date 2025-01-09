@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_poly_eval() {
-        let poly: Vec<TestField> = random_vector(10).unwrap();
+        let poly: Vec<TestField> = random_vector(10);
 
         let num_calls = FFT_THRESHOLD / 2;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
@@ -531,7 +531,7 @@ mod tests {
             let degree = g.degree();
 
             // Test that both gadgets evaluate to the same value when run on scalar inputs.
-            let inp: Vec<TestField> = random_vector(arity).unwrap();
+            let inp: Vec<TestField> = random_vector(arity);
             let result = g.call(&inp).unwrap();
             let result_serial = g_serial.call(&inp).unwrap();
             assert_eq!(result, result_serial);
@@ -541,7 +541,7 @@ mod tests {
                 vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
             let mut poly_outp_serial =
                 vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
-            let mut prng: Prng<TestField, _> = Prng::new().unwrap();
+            let mut prng: Prng<TestField, _> = Prng::new();
             let poly_inp: Vec<_> = iter::repeat_with(|| {
                 iter::repeat_with(|| prng.get())
                     .take(1 + num_calls)
@@ -562,7 +562,7 @@ mod tests {
     /// to evaluating each of the inputs at the same point and applying g.call() on the results.
     fn gadget_test<F: FftFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
         let wire_poly_len = (1 + num_calls).next_power_of_two();
-        let mut prng = Prng::new().unwrap();
+        let mut prng = Prng::new();
         let mut inp = vec![F::zero(); g.arity()];
         let mut gadget_poly = vec![F::zero(); gadget_poly_fft_mem_len(g.degree(), num_calls)];
         let mut wire_polys = vec![vec![F::zero(); wire_poly_len]; g.arity()];

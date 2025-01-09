@@ -2,17 +2,9 @@
 
 //! Test vectors of serialized Prio inputs, enabling backward compatibility testing.
 
-use crate::{field::FieldPrio2, vdaf::prio2::client::ClientError};
+use crate::field::FieldPrio2;
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-
-/// Errors propagated by functions in this module.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum TestVectorError {
-    /// Error from Prio client
-    #[error("Prio client error {0}")]
-    Client(#[from] ClientError),
-}
 
 /// A test vector of serialized Priov2 inputs, along with a reference sum. The field is always
 /// [`FieldPrio2`].

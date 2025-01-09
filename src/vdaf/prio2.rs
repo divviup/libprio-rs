@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use hmac::{Hmac, Mac};
-use rand_core::RngCore;
+use rand::prelude::*;
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
@@ -147,6 +147,7 @@ impl Client<16> for Prio2 {
         measurement: &Vec<u32>,
         _nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Share<FieldPrio2, 32>>), VdafError> {
+        let mut rng = thread_rng();
         if measurement.len() != self.input_len {
             return Err(VdafError::Uncategorized("incorrect input length".into()));
         }
@@ -161,15 +162,15 @@ impl Client<16> for Prio2 {
         };
         let mut leader_data = mem.prove_with(self.input_len, copy_data);
 
-        let helper_seed = Seed::generate()?;
-        let helper_prng = Prng::from_prio2_seed(helper_seed.as_ref());
+        let helper_seed = rng.gen();
+        let helper_prng = Prng::from_prio2_seed(&helper_seed);
         for (s1, d) in leader_data.iter_mut().zip(helper_prng.into_iter()) {
             *s1 -= d;
         }
 
         Ok((
             (),
-            vec![Share::Leader(leader_data), Share::Helper(helper_seed)],
+            vec![Share::Leader(leader_data), Share::Helper(Seed(helper_seed))],
         ))
     }
 }
@@ -399,7 +400,6 @@ mod tests {
         test_utils::run_vdaf,
     };
     use assert_matches::assert_matches;
-    use rand::prelude::*;
 
     // The value of this string doesn't matter. Prio2 is not defined to use the context string for
     // any computation
