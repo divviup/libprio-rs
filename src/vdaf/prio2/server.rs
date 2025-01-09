@@ -5,7 +5,6 @@
 use crate::{
     field::{FftFriendlyFieldElement, FieldError},
     polynomial::poly_interpret_eval,
-    prng::PrngError,
     vdaf::prio2::client::{unpack_proof, SerializeError},
 };
 use serde::{Deserialize, Serialize};
@@ -23,12 +22,6 @@ pub enum ServerError {
     /// Serialization/deserialization error
     #[error("serialization/deserialization error")]
     Serialize(#[from] SerializeError),
-    /// Failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
-    /// PRNG error.
-    #[error("prng error: {0}")]
-    Prng(#[from] PrngError),
 }
 
 /// Verification message for proof validation
@@ -224,8 +217,7 @@ mod tests {
         ];
 
         let proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
-        let [share1, share2]: [Vec<FieldPrio2>; 2] =
-            split_vector(&proof, 2).unwrap().try_into().unwrap();
+        let [share1, share2]: [Vec<FieldPrio2>; 2] = split_vector(&proof, 2).try_into().unwrap();
         let eval_at = FieldPrio2::from(12313);
 
         let v1 = generate_verification_message(dim, eval_at, &share1, true).unwrap();
@@ -243,8 +235,7 @@ mod tests {
         ];
 
         let proof: Vec<FieldPrio2> = proof_u32.iter().map(|x| FieldPrio2::from(*x)).collect();
-        let [share1, share2]: [Vec<FieldPrio2>; 2] =
-            split_vector(&proof, 2).unwrap().try_into().unwrap();
+        let [share1, share2]: [Vec<FieldPrio2>; 2] = split_vector(&proof, 2).try_into().unwrap();
         let eval_at = FieldPrio2::from(12313);
 
         let v1 = generate_verification_message(dim, eval_at, &share1, true).unwrap();

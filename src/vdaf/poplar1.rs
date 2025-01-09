@@ -14,7 +14,7 @@ use crate::{
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError, VERSION,
     },
 };
-use rand_core::RngCore;
+use rand::prelude::*;
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
@@ -1044,13 +1044,14 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
         input: &IdpfInput,
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<SEED_SIZE>>), VdafError> {
+        let mut rng = thread_rng();
         let mut idpf_random = [[0u8; 16]; 2];
         let mut poplar_random = [[0u8; SEED_SIZE]; 3];
         for random_seed in idpf_random.iter_mut() {
-            getrandom::getrandom(random_seed)?;
+            rng.fill(random_seed);
         }
         for random_seed in poplar_random.iter_mut() {
-            getrandom::getrandom(random_seed)?;
+            rng.fill(&mut random_seed[..]);
         }
         self.shard_with_random(ctx, input, nonce, &idpf_random, &poplar_random)
     }
@@ -1559,7 +1560,6 @@ mod tests {
     use super::*;
     use crate::vdaf::{equality_comparison_test, test_utils::run_vdaf_prepare};
     use assert_matches::assert_matches;
-    use rand::prelude::*;
     use serde::Deserialize;
     use std::collections::HashSet;
 
@@ -1761,10 +1761,12 @@ mod tests {
 
     #[test]
     fn encoded_len() {
+        let mut rng = thread_rng();
+
         // Input share
         let input_share = Poplar1InputShare {
-            idpf_key: Seed::<16>::generate().unwrap(),
-            corr_seed: Seed::<16>::generate().unwrap(),
+            idpf_key: rng.gen::<Seed<16>>(),
+            corr_seed: rng.gen::<Seed<16>>(),
             corr_inner: vec![
                 [Field64::one(), <Field64 as FieldElement>::zero()],
                 [Field64::one(), <Field64 as FieldElement>::zero()],

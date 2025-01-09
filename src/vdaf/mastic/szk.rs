@@ -15,7 +15,6 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, encode_fieldvec, FieldElement},
     flp::{FlpError, Type},
-    prng::PrngError,
     vdaf::{
         mastic::{self, NONCE_SIZE, SEED_SIZE, USAGE_PROOF_SHARE},
         xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
@@ -43,10 +42,6 @@ pub enum SzkError {
     /// Returned if an FLP operation encountered an error.
     #[error("Flp error: {0}")]
     Flp(#[from] FlpError),
-
-    /// PRNG error.
-    #[error("prng error: {0}")]
-    Prng(#[from] PrngError),
 
     /// Codec error.
     #[error("codec error: {0}")]
@@ -676,18 +671,17 @@ mod tests {
     use rand::{thread_rng, Rng};
 
     fn generic_szk_test<T: Type>(typ: T, encoded_measurement: &[T::Field], valid: bool) {
+        let mut rng = thread_rng();
         let ctx = b"some application context";
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 32];
         let szk_typ = Szk::new(typ.clone(), 0);
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
-        let leader_seed_opt = szk_typ
-            .requires_joint_rand()
-            .then(|| Seed::generate().unwrap());
-        let helper_input_share: Vec<T::Field> = random_vector(szk_typ.typ.input_len()).unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
+        let leader_seed_opt = szk_typ.requires_joint_rand().then(|| rng.gen());
+        let helper_input_share: Vec<T::Field> = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -753,7 +747,7 @@ mod tests {
 
         //test mutated jr seed
         if szk_typ.requires_joint_rand() {
-            let joint_rand_seed_opt = Some(Seed::generate().unwrap());
+            let joint_rand_seed_opt = Some(rng.gen());
             if let Ok(()) = szk_typ.decide(joint_rand_seed_opt.clone(), joint_share) {
                 panic!("Leader accepted wrong jr seed");
             };
@@ -843,16 +837,17 @@ mod tests {
 
     #[test]
     fn test_sum_proof_share_encode() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         let max_measurement = 13;
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let szk_typ = Szk::new(sum, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
-        let leader_seed_opt = Some(Seed::generate().unwrap());
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
+        let leader_seed_opt = Some(rng.gen());
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -878,16 +873,17 @@ mod tests {
 
     #[test]
     fn test_sumvec_proof_share_encode() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let szk_typ = Szk::new(sumvec, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
-        let leader_seed_opt = Some(Seed::generate().unwrap());
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
+        let leader_seed_opt = Some(rng.gen());
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -913,15 +909,16 @@ mod tests {
 
     #[test]
     fn test_count_proof_share_encode() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
         let szk_typ = Szk::new(count, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
-        let leader_seed_opt = Some(Seed::generate().unwrap());
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
+        let leader_seed_opt = Some(rng.gen());
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -947,16 +944,17 @@ mod tests {
 
     #[test]
     fn test_sum_leader_proof_share_roundtrip() {
+        let mut rng = thread_rng();
         let max_measurement = 13;
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let szk_typ = Szk::new(sum, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -988,16 +986,17 @@ mod tests {
 
     #[test]
     fn test_sum_helper_proof_share_roundtrip() {
+        let mut rng = thread_rng();
         let max_measurement = 13;
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
         let szk_typ = Szk::new(sum, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -1029,15 +1028,16 @@ mod tests {
 
     #[test]
     fn test_count_leader_proof_share_roundtrip() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
         let szk_typ = Szk::new(count, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -1069,15 +1069,16 @@ mod tests {
 
     #[test]
     fn test_count_helper_proof_share_roundtrip() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
         let szk_typ = Szk::new(count, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -1109,16 +1110,17 @@ mod tests {
 
     #[test]
     fn test_sumvec_leader_proof_share_roundtrip() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let szk_typ = Szk::new(sumvec, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
-        let leader_seed_opt = Some(Seed::generate().unwrap());
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
+        let leader_seed_opt = Some(rng.gen());
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;
@@ -1150,16 +1152,17 @@ mod tests {
 
     #[test]
     fn test_sumvec_helper_proof_share_roundtrip() {
+        let mut rng = thread_rng();
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let szk_typ = Szk::new(sumvec, 0);
-        let prove_rand_seed = Seed::generate().unwrap();
-        let helper_seed = Seed::generate().unwrap();
-        let leader_seed_opt = Some(Seed::generate().unwrap());
-        let helper_input_share = random_vector(szk_typ.typ.input_len()).unwrap();
+        let prove_rand_seed = rng.gen();
+        let helper_seed = rng.gen();
+        let leader_seed_opt = Some(rng.gen());
+        let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
             *x -= *y;

@@ -30,16 +30,16 @@
 //! // check the proof. The application needs to ensure that the prover
 //! // "commits" to the input before this point. In Prio3, the joint
 //! // randomness is derived from additive shares of the input.
-//! let joint_rand = random_vector(count.joint_rand_len()).unwrap();
+//! let joint_rand = random_vector(count.joint_rand_len());
 //!
 //! // The prover generates the proof.
-//! let prove_rand = random_vector(count.prove_rand_len()).unwrap();
+//! let prove_rand = random_vector(count.prove_rand_len());
 //! let proof = count.prove(&input, &prove_rand, &joint_rand).unwrap();
 //!
 //! // The verifier checks the proof. In the first step, the verifier "queries"
 //! // the input and proof, getting the "verifier message" in response. It then
 //! // inspects the verifier to decide if the input is valid.
-//! let query_rand = random_vector(count.query_rand_len()).unwrap();
+//! let query_rand = random_vector(count.query_rand_len());
 //! let verifier = count.query(&input, &proof, &query_rand, &joint_rand, 1).unwrap();
 //! assert!(count.decide(&verifier).unwrap());
 //! ```
@@ -178,7 +178,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     ///
     /// let count = Count::new();
     /// let input: Vec<Field64> = count.encode_measurement(&true).unwrap();
-    /// let joint_rand = random_vector(count.joint_rand_len()).unwrap();
+    /// let joint_rand = random_vector(count.joint_rand_len());
     /// let v = count.valid(&mut count.gadget(), &input, &joint_rand, 1).unwrap();
     /// assert!(v.into_iter().all(|f| f == Field64::zero()));
     /// ```
@@ -874,9 +874,9 @@ pub mod test_utils {
             );
 
             let mut gadgets = self.flp.gadget();
-            let joint_rand = random_vector(self.flp.joint_rand_len()).unwrap();
-            let prove_rand = random_vector(self.flp.prove_rand_len()).unwrap();
-            let query_rand = random_vector(self.flp.query_rand_len()).unwrap();
+            let joint_rand = random_vector(self.flp.joint_rand_len());
+            let prove_rand = random_vector(self.flp.prove_rand_len());
+            let query_rand = random_vector(self.flp.query_rand_len());
             assert_eq!(
                 self.flp.joint_rand_len(),
                 joint_rand.len(),
@@ -999,8 +999,7 @@ pub mod test_utils {
         outp.push(inp.to_vec());
 
         for _ in 1..SHARES {
-            let share: Vec<F> =
-                random_vector(inp.len()).expect("failed to generate a random vector");
+            let share: Vec<F> = random_vector(inp.len());
             for (x, y) in outp[0].iter_mut().zip(&share) {
                 *x -= *y;
             }
@@ -1031,21 +1030,18 @@ mod tests {
         assert_eq!(input.len(), typ.input_len());
 
         let input_shares: Vec<Vec<Field128>> = split_vector(input.as_slice(), NUM_SHARES)
-            .unwrap()
             .into_iter()
             .collect();
 
-        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
-        let query_rand = random_vector(typ.query_rand_len()).unwrap();
+        let joint_rand = random_vector(typ.joint_rand_len());
+        let prove_rand = random_vector(typ.prove_rand_len());
+        let query_rand = random_vector(typ.query_rand_len());
 
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         assert_eq!(proof.len(), typ.proof_len());
 
-        let proof_shares: Vec<Vec<Field128>> = split_vector(&proof, NUM_SHARES)
-            .unwrap()
-            .into_iter()
-            .collect();
+        let proof_shares: Vec<Vec<Field128>> =
+            split_vector(&proof, NUM_SHARES).into_iter().collect();
 
         let verifier: Vec<Field128> = (0..NUM_SHARES)
             .map(|i| {
@@ -1191,9 +1187,9 @@ mod tests {
         let typ: Issue254Type<Field128> = Issue254Type::new();
         let input = typ.encode_measurement(&0).unwrap();
         assert_eq!(input.len(), typ.input_len());
-        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
-        let query_rand = random_vector(typ.query_rand_len()).unwrap();
+        let joint_rand = random_vector(typ.joint_rand_len());
+        let prove_rand = random_vector(typ.prove_rand_len());
+        let query_rand = random_vector(typ.query_rand_len());
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         let verifier = typ
             .query(&input, &proof, &query_rand, &joint_rand, 1)

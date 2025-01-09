@@ -58,6 +58,7 @@ use crate::vdaf::{
 };
 #[cfg(feature = "experimental")]
 use fixed::traits::Fixed;
+use rand::prelude::*;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -1221,7 +1222,7 @@ where
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, SEED_SIZE>>), VdafError> {
         let mut random = vec![0u8; self.random_size()];
-        getrandom::getrandom(&mut random)?;
+        thread_rng().fill(&mut random[..]);
         self.shard_with_random(ctx, measurement, nonce, &random)
     }
 }
@@ -1743,7 +1744,6 @@ mod tests {
         },
         FixedI16, FixedI32, FixedI64,
     };
-    use rand::prelude::*;
 
     const CTX_STR: &[u8] = b"prio3 ctx";
 

@@ -323,13 +323,14 @@ impl<T: Type> Client<16> for Mastic<T> {
         measurement: &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
-        let vidpf_keys = [VidpfKey::generate()?, VidpfKey::generate()?];
+        let mut rng = thread_rng();
+        let vidpf_keys = rng.gen();
         let joint_random_opt = if self.szk.requires_joint_rand() {
-            Some(Seed::generate()?)
+            Some(rng.gen())
         } else {
             None
         };
-        let szk_random = [Seed::generate()?, Seed::generate()?];
+        let szk_random = rng.gen();
 
         self.shard_with_random(
             ctx,
