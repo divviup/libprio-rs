@@ -41,8 +41,8 @@ const NONCE_SIZE: usize = 16;
 //                                      dst(b'', USAGE_ONEHOT_PROOF_INIT),
 //                                      b'').next(PROOF_SIZE)
 pub(crate) const ONEHOT_PROOF_INIT: [u8; 32] = [
-    186, 76, 128, 104, 116, 50, 149, 133, 2, 164, 82, 118, 128, 155, 163, 239, 117, 95, 162, 196,
-    173, 31, 244, 180, 171, 86, 176, 209, 12, 221, 28, 204,
+    253, 211, 45, 179, 139, 135, 183, 67, 202, 144, 13, 205, 241, 39, 165, 73, 232, 54, 57, 193,
+    106, 154, 133, 22, 15, 194, 223, 162, 79, 108, 60, 133,
 ];
 
 pub(crate) const USAGE_PROVE_RAND: u8 = 0;
@@ -58,8 +58,9 @@ pub(crate) const USAGE_EXTEND: u8 = 10;
 pub(crate) const USAGE_CONVERT: u8 = 11;
 pub(crate) const USAGE_PAYLOAD_CHECK: u8 = 12;
 
-pub(crate) fn dst_usage(usage: u8) -> [u8; 11] {
-    [b'm', b'a', b's', b't', b'i', b'c', 0, 0, 0, 0, usage]
+pub(crate) fn dst_usage(usage: u8) -> [u8; 8] {
+    const VERSION: u8 = 0;
+    [b'm', b'a', b's', b't', b'i', b'c', VERSION, usage]
 }
 
 /// The main struct implementing the Mastic VDAF.
@@ -71,7 +72,7 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    algorithm_id: u32,
+    id: [u8; 4],
     pub(crate) szk: Szk<T, P, SEED_SIZE>,
     pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>>,
     /// The length of the private attribute associated with any input.
@@ -86,9 +87,9 @@ where
     /// Creates a new instance of Mastic, with a specific attribute length and weight type.
     pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Result<Self, VdafError> {
         let vidpf = Vidpf::new(bits, typ.input_len() + 1)?;
-        let szk = Szk::new(typ);
+        let szk = Szk::new(typ, algorithm_id);
         Ok(Self {
-            algorithm_id,
+            id: algorithm_id.to_le_bytes(),
             szk,
             vidpf,
             bits,
@@ -290,7 +291,7 @@ where
     type AggregateShare = MasticAggregateShare<T::Field>;
 
     fn algorithm_id(&self) -> u32 {
-        self.algorithm_id
+        u32::from_be_bytes(self.id)
     }
 
     fn num_aggregators(&self) -> usize {
@@ -359,6 +360,16 @@ where
             proof_share: helper_szk_proof_share,
         };
         Ok((public_share, vec![leader_share, helper_share]))
+    }
+
+    fn hash_proof(&self, mut proof: VidpfProof, ctx: &[u8]) -> VidpfProof {
+        let mut xof = XofTurboShake128::from_seed_slice(
+            &[],
+            &[&dst_usage(USAGE_ONEHOT_PROOF_HASH), &self.id, ctx],
+        );
+        xof.update(&proof);
+        xof.into_seed_stream().fill_bytes(&mut proof);
+        proof
     }
 }
 
@@ -591,8 +602,10 @@ where
 
         // Onehot and payload checks
         let (payload_check, onehot_proof) = {
-            let mut payload_check_xof =
-                P::init(&[0; SEED_SIZE], &[&dst_usage(USAGE_PAYLOAD_CHECK), ctx]);
+            let mut payload_check_xof = P::init(
+                &[0; SEED_SIZE],
+                &[&dst_usage(USAGE_PAYLOAD_CHECK), &self.id, ctx],
+            );
             let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
             let mut onehot_proof = ONEHOT_PROOF_INIT;
 
@@ -604,7 +617,7 @@ where
                 // Update onehot proof.
                 onehot_proof = xor_proof(
                     onehot_proof,
-                    &hash_proof(xor_proof(onehot_proof, &node.value.state.node_proof), ctx),
+                    &self.hash_proof(xor_proof(onehot_proof, &node.value.state.node_proof), ctx),
                 );
 
                 // Update payload check.
@@ -645,7 +658,10 @@ where
         };
 
         let eval_proof = {
-            let mut eval_proof_xof = P::init(&[0; SEED_SIZE], &[&dst_usage(USAGE_EVAL_PROOF), ctx]);
+            let mut eval_proof_xof = P::init(
+                &[0; SEED_SIZE],
+                &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx],
+            );
             eval_proof_xof.update(&onehot_proof);
             eval_proof_xof.update(&counter_check);
             eval_proof_xof.update(&payload_check);
@@ -829,14 +845,6 @@ where
 
         Ok(result)
     }
-}
-
-fn hash_proof(mut proof: VidpfProof, ctx: &[u8]) -> VidpfProof {
-    let mut xof =
-        XofTurboShake128::from_seed_slice(&[], &[&dst_usage(USAGE_ONEHOT_PROOF_HASH), ctx]);
-    xof.update(&proof);
-    xof.into_seed_stream().fill_bytes(&mut proof);
-    proof
 }
 
 #[cfg(test)]
