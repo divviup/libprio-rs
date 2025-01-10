@@ -1112,19 +1112,25 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareShare<F, SEED_SIZE>
+impl<T, P, const SEED_SIZE: usize>
+    ParameterizedDecode<(
+        &Prio3<T, P, SEED_SIZE>,
+        &Prio3PrepareState<T::Field, SEED_SIZE>,
+    )> for Prio3PrepareShare<T::Field, SEED_SIZE>
+where
+    T: Type,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
+        (prio3, prep_state): &(
+            &Prio3<T, P, SEED_SIZE>,
+            &Prio3PrepareState<T::Field, SEED_SIZE>,
+        ),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut verifiers = Vec::with_capacity(decoding_parameter.verifiers_len);
-        for _ in 0..decoding_parameter.verifiers_len {
-            verifiers.push(F::decode(bytes)?);
-        }
+        let verifiers = decode_fieldvec(prio3.typ.verifier_len() * prio3.num_proofs(), bytes)?;
 
-        let joint_rand_part = if decoding_parameter.joint_rand_seed.is_some() {
+        let joint_rand_part = if prep_state.joint_rand_seed.is_some() {
             Some(Seed::decode(bytes)?)
         } else {
             None
@@ -1179,14 +1185,24 @@ impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareMessage<SEED_SIZE>
+// XXX Maybe we don't need Vdaf for decoding prep message?
+impl<T, P, const SEED_SIZE: usize>
+    ParameterizedDecode<(
+        &Prio3<T, P, SEED_SIZE>,
+        &Prio3PrepareState<T::Field, SEED_SIZE>,
+    )> for Prio3PrepareMessage<SEED_SIZE>
+where
+    T: Type,
+    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
+        (_prio3, prep_state): &(
+            &Prio3<T, P, SEED_SIZE>,
+            &Prio3PrepareState<T::Field, SEED_SIZE>,
+        ),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
+        let joint_rand_seed = if prep_state.joint_rand_seed.is_some() {
             Some(Seed::decode(bytes)?)
         } else {
             None

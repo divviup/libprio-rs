@@ -547,9 +547,9 @@ impl Encode for Poplar1PrepareMessage {
     }
 }
 
-impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
+impl ParameterizedDecode<(&Poplar1, &Poplar1PrepareState)> for Poplar1PrepareMessage {
     fn decode_with_param(
-        state: &Poplar1PrepareState,
+        (_poplar1, state): &(&Poplar1, &Poplar1PrepareState),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match state.0 {

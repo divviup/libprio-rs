@@ -236,7 +236,10 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type PrepareShare: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
+    type PrepareShare: Clone
+        + Debug
+        + Encode
+        + for<'a> ParameterizedDecode<(&'a Self, &'a Self::PrepareState)>;
 
     /// Result of preprocessing a round of preparation shares. This is used by all aggregators as an
     /// input to the next round of the Prepare Process.
@@ -247,8 +250,8 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         + Debug
         + PartialEq
         + Eq
-        + ParameterizedDecode<Self::PrepareState>
-        + Encode;
+        + Encode
+        + for<'a> ParameterizedDecode<(&'a Self, &'a Self::PrepareState)>;
 
     /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
     /// is passed to [`Self::prepare_next`] to get this aggregator's first-round prepare message.
@@ -636,7 +639,7 @@ pub mod test_utils {
                 ctx,
                 agg_param,
                 outbound.iter().map(|encoded| {
-                    V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                    V::PrepareShare::get_decoded_with_param(&(&vdaf, &states[0]), encoded)
                         .expect("failed to decode prep share")
                 }),
             )?
@@ -650,7 +653,7 @@ pub mod test_utils {
                 match vdaf.prepare_next(
                     ctx,
                     state.clone(),
-                    V::PrepareMessage::get_decoded_with_param(state, &inbound)
+                    V::PrepareMessage::get_decoded_with_param(&(&vdaf, state), &inbound)
                         .expect("failed to decode prep message"),
                 )? {
                     PrepareTransition::Continue(new_state, msg) => {
@@ -670,7 +673,7 @@ pub mod test_utils {
                         ctx,
                         agg_param,
                         outbound.iter().map(|encoded| {
-                            V::PrepareShare::get_decoded_with_param(&states[0], encoded)
+                            V::PrepareShare::get_decoded_with_param(&(&vdaf, &states[0]), encoded)
                                 .expect("failed to decode prep share")
                         }),
                     )?

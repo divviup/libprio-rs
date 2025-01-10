@@ -233,9 +233,9 @@ impl Encode for Prio2PrepareShare {
     }
 }
 
-impl ParameterizedDecode<Prio2PrepareState> for Prio2PrepareShare {
+impl ParameterizedDecode<(&Prio2, &Prio2PrepareState)> for Prio2PrepareShare {
     fn decode_with_param(
-        _state: &Prio2PrepareState,
+        _decoding_parameter: &(&Prio2, &Prio2PrepareState),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         Ok(Self(v2_server::VerificationMessage {

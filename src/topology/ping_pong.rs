@@ -275,6 +275,7 @@ where
     }
 }
 
+/*
 impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A, PrepareStateDecode>
     ParameterizedDecode<PrepareStateDecode> for PingPongTransition<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 where
@@ -288,7 +289,7 @@ where
     ) -> Result<Self, CodecError> {
         let previous_prepare_state = A::PrepareState::decode_with_param(decoding_param, bytes)?;
         let current_prepare_message =
-            A::PrepareMessage::decode_with_param(&previous_prepare_state, bytes)?;
+            A::PrepareMessage::decode_with_param(&(&self, &previous_prepare_state), bytes)?;
 
         Ok(Self {
             previous_prepare_state,
@@ -296,6 +297,7 @@ where
         })
     }
 }
+*/
 
 /// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF].
 /// VDAF describes `Start` and `Rejected` states, but the `Start` state is never instantiated in
@@ -552,7 +554,7 @@ where
             .map_err(PingPongError::VdafPrepareInit)?;
 
         let inbound_prep_share = if let PingPongMessage::Initialize { prep_share } = inbound {
-            Self::PrepareShare::get_decoded_with_param(&prep_state, prep_share)
+            Self::PrepareShare::get_decoded_with_param(&(&self, &prep_state), prep_share)
                 .map_err(PingPongError::CodecPrepShare)?
         } else {
             return Err(PingPongError::PeerMessageMismatch {
@@ -628,8 +630,9 @@ where
             PingPongMessage::Finish { prep_msg } => (prep_msg, None),
         };
 
-        let prep_msg = Self::PrepareMessage::get_decoded_with_param(&host_prep_state, prep_msg)
-            .map_err(PingPongError::CodecPrepMessage)?;
+        let prep_msg =
+            Self::PrepareMessage::get_decoded_with_param(&(&self, &host_prep_state), prep_msg)
+                .map_err(PingPongError::CodecPrepMessage)?;
         let host_prep_transition = self
             .prepare_next(ctx, host_prep_state, prep_msg)
             .map_err(PingPongError::VdafPrepareNext)?;
@@ -640,7 +643,7 @@ where
                 Some(next_peer_prep_share),
             ) => {
                 let next_peer_prep_share = Self::PrepareShare::get_decoded_with_param(
-                    &next_prep_state,
+                    &(&self, &next_prep_state),
                     next_peer_prep_share,
                 )
                 .map_err(PingPongError::CodecPrepShare)?;
