@@ -5,14 +5,14 @@
         1
     ],
     "agg_shares": [
-        "3e9d16bcf3364f0b855cecb7b6c54efdb5f87e0adad194cb9a4b489d3f726b60",
-        "c362e9430bc9b0f47ca31348483ab1024d0781f5242e6b3468b4b762bf8d949f"
+        "5af9ab8b843705149280f1ccca8f6fd27b2a8e20fffc93386561e426cb661abe",
+        "a70654747ac8faeb6f7f0e333470902d87d571dfff026cc79d9e1bd93399e541"
     ],
     "ctx": "736f6d65206170706c69636174696f6e",
     "prep": [
         {
             "input_shares": [
-                "000102030405060708090a0b0c0d0e0f2712998769f26b6277b32c9f3a40c040110fbc523feaddcea2f553d5770bb55232e052d8e61616f7",
+                "000102030405060708090a0b0c0d0e0f3a5ce17b0f2a658b62d021849c8078cc153daebc91baff47cafe696f8a727550eabecb1d9d526dbcb160fe0688ff228e",
                 "101112131415161718191a1b1c1d1e1f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f"
             ],
             "measurement": [
@@ -25,16 +25,16 @@
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
                 [
-                    "3e9d16bcf3364f0b",
-                    "855cecb7b6c54efd",
-                    "b5f87e0adad194cb",
-                    "9a4b489d3f726b60"
+                    "5af9ab8b84370514",
+                    "9280f1ccca8f6fd2",
+                    "7b2a8e20fffc9338",
+                    "6561e426cb661abe"
                 ],
                 [
-                    "c362e9430bc9b0f4",
-                    "7ca31348483ab102",
-                    "4d0781f5242e6b34",
-                    "68b4b762bf8d949f"
+                    "a70654747ac8faeb",
+                    "6f7f0e333470902d",
+                    "87d571dfff026cc7",
+                    "9d9e1bd93399e541"
                 ]
             ],
             "prep_messages": [
@@ -42,11 +42,11 @@
             ],
             "prep_shares": [
                 [
-                    "e5633260ecd70036482bbf2c93887bf4347c130f587247d63fe537250bb3c49382518600b8bd84150c9df3154968eb00fd6949610bbaa838f528e845e9b134bf",
-                    "e5633260ecd70036482bbf2c93887bf4347c130f587247d63fe537250bb3c4937fae79ff46427bea6814d366e7d3bd95781ac4b7ab90e6a99f6399ebb8914e6d"
+                    "dd752fe3b326ead90c6c15b9e88eb68d66bc6c3027ffe47cd30adc6a676768bc5844bbdc64f5c59673f8175353ab579a89d7292b5633f55789cefa7a75c23285",
+                    "dd752fe3b326ead90c6c15b9e88eb68d66bc6c3027ffe47cd30adc6a676768bca9bb44239a0a3a69f4717d9b89198300c1b3deaa8e061c1f41e575da38079978"
                 ]
             ],
-            "public_share": "0e30118b55bf77ff34817d80025c5c736b1ee2188425350e71cc1dc5a779de3e6ff0676312c362381937b2713cf2d65c6bfd5e3a8400fe1b3f71da0726d672f55f893f521233758b42d37212b7a0c5d64e450af652ace0e50986026a123de440e13432801b02eeda044017d8cc739b4f93ea6360a4887c1b1f4e688c4a6b02a111",
+            "public_share": "069034cf44d5ccc95a21fe1c957e4cb148fa1e3550974a7e201b5836e2e3a63986e03b75ef8ad65e277199e80a0654e867d0fa4377137a8dafd9937992c6f5cac40610ec917a421217c881c9e01c372d5cf72aa01238da8c11d770bdc1a43eb88140d93fa618f9481f8b99db46e5b989a85713fa72c327c92f65754d1ee4269e40",
             "rand": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f404142434445464748494a4b4c4d4e4f505152535455565758595a5b5c5d5e5f"
         }
     ],

@@ -9,7 +9,7 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, FieldElement, FieldElementWithInteger},
     flp::{
-        szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState},
+        szk::{Szk, SzkInputShare, SzkJointShare, SzkQueryShare, SzkQueryState},
         Type,
     },
     vdaf::{
@@ -20,7 +20,7 @@ use crate::{
     },
     vidpf::{
         Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
-        VIDPF_PROOF_SIZE,
+        VIDPF_PROOF_SIZE, VIDPF_SEED_SIZE,
     },
 };
 
@@ -35,17 +35,18 @@ use super::xof::XofTurboShake128;
 const NONCE_SIZE: usize = 16;
 
 pub(crate) const USAGE_PROVE_RAND: u8 = 0;
-pub(crate) const USAGE_PROOF_SHARE: u8 = 1;
-pub(crate) const USAGE_QUERY_RAND: u8 = 2;
-pub(crate) const USAGE_JOINT_RAND_SEED: u8 = 3;
-pub(crate) const USAGE_JOINT_RAND_PART: u8 = 4;
-pub(crate) const USAGE_JOINT_RAND: u8 = 5;
-pub(crate) const USAGE_ONEHOT_CHECK: u8 = 6;
-pub(crate) const USAGE_PAYLOAD_CHECK: u8 = 7;
-pub(crate) const USAGE_EVAL_PROOF: u8 = 8;
-pub(crate) const USAGE_NODE_PROOF: u8 = 9;
-pub(crate) const USAGE_EXTEND: u8 = 10;
-pub(crate) const USAGE_CONVERT: u8 = 11;
+pub(crate) const USAGE_WEIGHT_SHARE: u8 = 1;
+pub(crate) const USAGE_PROOF_SHARE: u8 = 2;
+pub(crate) const USAGE_QUERY_RAND: u8 = 3;
+pub(crate) const USAGE_JOINT_RAND_SEED: u8 = 4;
+pub(crate) const USAGE_JOINT_RAND_PART: u8 = 5;
+pub(crate) const USAGE_JOINT_RAND: u8 = 6;
+pub(crate) const USAGE_ONEHOT_CHECK: u8 = 7;
+pub(crate) const USAGE_PAYLOAD_CHECK: u8 = 8;
+pub(crate) const USAGE_EVAL_PROOF: u8 = 9;
+pub(crate) const USAGE_NODE_PROOF: u8 = 10;
+pub(crate) const USAGE_EXTEND: u8 = 11;
+pub(crate) const USAGE_CONVERT: u8 = 12;
 
 pub(crate) fn dst_usage(usage: u8) -> [u8; 8] {
     const VERSION: u8 = 0;
@@ -67,7 +68,7 @@ pub struct Mastic<T: Type> {
 impl<T: Type> Mastic<T> {
     /// Creates a new instance of Mastic, with a specific attribute length and weight type.
     pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Result<Self, VdafError> {
-        let vidpf = Vidpf::new(bits, typ.input_len() + 1)?;
+        let vidpf = Vidpf::new(bits, 1 + typ.output_len())?;
         let szk = Szk::new(typ, algorithm_id);
         Ok(Self {
             id: algorithm_id.to_le_bytes(),
@@ -152,19 +153,19 @@ pub struct MasticInputShare<F: FieldElement> {
     /// VIDPF key share.
     vidpf_key: VidpfKey,
 
-    /// The proof share.
-    proof_share: SzkProofShare<F>,
+    /// SZK input share.
+    szk_input_share: SzkInputShare<F>,
 }
 
 impl<F: FieldElement> Encode for MasticInputShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         bytes.extend_from_slice(&self.vidpf_key.0[..]);
-        self.proof_share.encode(bytes)?;
+        self.szk_input_share.encode(bytes)?;
         Ok(())
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        Some(16 + self.proof_share.encoded_len()?)
+        Some(VIDPF_SEED_SIZE + self.szk_input_share.encoded_len()?)
     }
 }
 
@@ -177,17 +178,11 @@ impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, usize)> for MasticInputSha
             return Err(CodecError::UnexpectedValue);
         }
         let vidpf_key = VidpfKey::decode(bytes)?;
-        let proof_share = SzkProofShare::decode_with_param(
-            &(
-                *agg_id == 0,
-                mastic.szk.typ.proof_len(),
-                mastic.szk.typ.joint_rand_len() != 0,
-            ),
-            bytes,
-        )?;
+        let szk_input_share =
+            SzkInputShare::decode_with_param(&(&mastic.szk, *agg_id == 0), bytes)?;
         Ok(Self {
             vidpf_key,
-            proof_share,
+            szk_input_share,
         })
     }
 }
@@ -202,7 +197,7 @@ impl<F: FieldElement> ConstantTimeEq for MasticInputShare<F> {
     fn ct_eq(&self, other: &MasticInputShare<F>) -> Choice {
         self.vidpf_key
             .ct_eq(&other.vidpf_key)
-            .bitand(self.proof_share.ct_eq(&other.proof_share))
+            .bitand(self.szk_input_share.ct_eq(&other.szk_input_share))
     }
 }
 
@@ -270,47 +265,28 @@ impl<T: Type> Mastic<T> {
         }
 
         // The output with which we program the VIDPF is a counter and the encoded measurement.
-        let mut beta = VidpfWeight(self.szk.typ.encode_measurement(weight)?);
-        beta.0.insert(0, T::Field::one());
+        let encoded_weight = self.szk.typ.encode_measurement(weight)?;
+        let mut beta = Vec::with_capacity(1 + self.szk.typ.output_len());
+        beta.push(T::Field::one());
+        beta.append(&mut self.szk.typ.truncate(encoded_weight.clone())?);
 
         // Compute the measurement shares for each aggregator by generating VIDPF
         // keys for the measurement and evaluating each of them.
-        let public_share = self
-            .vidpf
-            .gen_with_keys(ctx, &vidpf_keys, alpha, &beta, nonce)?;
+        let public_share =
+            self.vidpf
+                .gen_with_keys(ctx, &vidpf_keys, alpha, &VidpfWeight(beta), nonce)?;
 
-        let leader_beta_share = self.vidpf.get_beta_share(
-            ctx,
-            VidpfServerId::S0,
-            &public_share,
-            &vidpf_keys[0],
-            nonce,
-        )?;
-        let helper_beta_share = self.vidpf.get_beta_share(
-            ctx,
-            VidpfServerId::S1,
-            &public_share,
-            &vidpf_keys[1],
-            nonce,
-        )?;
-
-        let [leader_szk_proof_share, helper_szk_proof_share] = self.szk.prove(
-            ctx,
-            &leader_beta_share.as_ref()[1..],
-            &helper_beta_share.as_ref()[1..],
-            &beta.as_ref()[1..],
-            szk_random,
-            joint_random_opt,
-            nonce,
-        )?;
+        let [leader_szk_input_share, helper_szk_input_share] =
+            self.szk
+                .prove(ctx, &encoded_weight, szk_random, joint_random_opt, nonce)?;
         let [leader_vidpf_key, helper_vidpf_key] = vidpf_keys;
         let leader_share = MasticInputShare {
             vidpf_key: leader_vidpf_key,
-            proof_share: leader_szk_proof_share,
+            szk_input_share: leader_szk_input_share,
         };
         let helper_share = MasticInputShare {
             vidpf_key: helper_vidpf_key,
-            proof_share: helper_szk_proof_share,
+            szk_input_share: helper_szk_input_share,
         };
         Ok((public_share, vec![leader_share, helper_share]))
     }
@@ -405,7 +381,7 @@ impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, &'a MasticAggregationParam
 #[derive(Clone, Debug, PartialEq)]
 pub struct MasticPrepareShare<F: FieldElement> {
     ///  [`Vidpf`] evaluation proof, which guarantees one-hotness and payload consistency.
-    eval_proof: [u8; VIDPF_PROOF_SIZE],
+    vidpf_eval_proof: [u8; VIDPF_PROOF_SIZE],
 
     /// If [`Szk`]` verification of the root weight is needed, a verification message.
     szk_query_share_opt: Option<SzkQueryShare<F>>,
@@ -413,7 +389,7 @@ pub struct MasticPrepareShare<F: FieldElement> {
 
 impl<F: FieldElement> Encode for MasticPrepareShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.extend_from_slice(&self.eval_proof);
+        bytes.extend_from_slice(&self.vidpf_eval_proof);
         match &self.szk_query_share_opt {
             Some(query_share) => query_share.encode(bytes),
             None => Ok(()),
@@ -436,8 +412,8 @@ impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepa
         prep_state: &MasticPrepareState<F>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut eval_proof = [0; VIDPF_PROOF_SIZE];
-        bytes.read_exact(&mut eval_proof[..])?;
+        let mut vidpf_eval_proof = [0; VIDPF_PROOF_SIZE];
+        bytes.read_exact(&mut vidpf_eval_proof[..])?;
         let requires_joint_rand = prep_state.szk_query_state.is_some();
         let szk_query_share_opt = prep_state
             .verifier_len
@@ -446,7 +422,7 @@ impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepa
             })
             .transpose()?;
         Ok(Self {
-            eval_proof,
+            vidpf_eval_proof,
             szk_query_share_opt,
         })
     }
@@ -523,6 +499,32 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
             &mut prefix_tree,
         )?;
 
+        // Set the weight of the root node to the weight we expect for each level of the three.
+        {
+            let encoded_weight_share = match input_share.szk_input_share {
+                SzkInputShare::Leader {
+                    ref uncompressed_meas_share,
+                    ..
+                } => uncompressed_meas_share.clone(),
+                SzkInputShare::Helper {
+                    ref share_seed_and_blind,
+                    ..
+                } => self.szk.derive_helper_meas_share(share_seed_and_blind, ctx),
+            };
+
+            let mut beta_share = Vec::with_capacity(1 + self.szk.typ.output_len());
+            beta_share.push(T::Field::zero());
+            beta_share.append(&mut self.szk.typ.truncate(encoded_weight_share)?);
+            if agg_id == 1 {
+                beta_share[0] = T::Field::one();
+                for x in beta_share.iter_mut() {
+                    *x = -*x;
+                }
+            }
+
+            prefix_tree.root.as_mut().unwrap().value.share = VidpfWeight(beta_share);
+        }
+
         let root = prefix_tree.root.as_ref().unwrap();
 
         // Onehot and payload checks
@@ -539,11 +541,12 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
 
             // Traverse the prefix tree breadth-first.
             let mut q = VecDeque::with_capacity(100);
-            q.push_back(root.left.as_ref().unwrap());
-            q.push_back(root.right.as_ref().unwrap());
+            q.push_back(root);
             while let Some(node) = q.pop_front() {
                 // Update onehot proof.
-                onehot_check_xof.update(&node.value.state.node_proof);
+                if let Some(ref node_proof) = node.value.state.node_proof {
+                    onehot_check_xof.update(node_proof);
+                }
 
                 // Update payload check.
                 if let (Some(left), Some(right)) = (node.left.as_ref(), node.right.as_ref()) {
@@ -583,7 +586,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
             c.get_encoded().unwrap()
         };
 
-        let eval_proof = {
+        let vidpf_eval_proof = {
             let mut eval_proof_xof =
                 XofTurboShake128::init(verify_key, &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx]);
             eval_proof_xof.update(&onehot_check);
@@ -592,19 +595,15 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
             eval_proof_xof.into_seed().0
         };
 
-        let mut truncated_out_shares =
-            Vec::with_capacity(self.szk.typ.output_len() * prefixes.len());
-        for VidpfWeight(mut out_share) in out_shares.into_iter() {
-            let mut truncated_out_share = self.szk.typ.truncate(out_share.drain(1..).collect())?;
-            truncated_out_shares.append(&mut out_share);
-            truncated_out_shares.append(&mut truncated_out_share);
-        }
+        let output_shares = MasticOutputShare::from(
+            out_shares
+                .into_iter()
+                .flat_map(|VidpfWeight(out_share)| out_share)
+                .collect::<Vec<_>>(),
+        );
 
         Ok(if agg_param.require_weight_check {
             // Range check.
-            let VidpfWeight(beta_share) =
-                self.vidpf
-                    .get_beta_share(ctx, id, public_share, &input_share.vidpf_key, nonce)?;
             let (szk_query_share, szk_query_state) = self.szk.query(
                 ctx,
                 agg_param
@@ -612,8 +611,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                     .level()
                     .try_into()
                     .map_err(|_| VdafError::Vidpf(VidpfError::InvalidInputLength))?,
-                &beta_share[1..],
-                &input_share.proof_share,
+                &input_share.szk_input_share,
                 verify_key,
                 nonce,
             )?;
@@ -621,24 +619,24 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
             let verifier_len = szk_query_share.flp_verifier.len();
             (
                 MasticPrepareState {
-                    output_shares: MasticOutputShare::from(truncated_out_shares),
+                    output_shares,
                     szk_query_state,
                     verifier_len: Some(verifier_len),
                 },
                 MasticPrepareShare {
-                    eval_proof,
+                    vidpf_eval_proof,
                     szk_query_share_opt: Some(szk_query_share),
                 },
             )
         } else {
             (
                 MasticPrepareState {
-                    output_shares: MasticOutputShare::from(truncated_out_shares),
+                    output_shares,
                     szk_query_state: None,
                     verifier_len: None,
                 },
                 MasticPrepareShare {
-                    eval_proof,
+                    vidpf_eval_proof,
                     szk_query_share_opt: None,
                 },
             )
@@ -663,7 +661,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                 "Received more than two prepare shares".to_string(),
             ));
         };
-        if leader_share.eval_proof != helper_share.eval_proof {
+        if leader_share.vidpf_eval_proof != helper_share.vidpf_eval_proof {
             return Err(VdafError::Uncategorized(
                 "Vidpf proof verification failed".to_string(),
             ));

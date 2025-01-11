@@ -211,7 +211,9 @@ impl<W: VidpfValue> Vidpf<W> {
         let mut hash = Sha3_256::new();
         for (idx, cw) in self.index_iter(input)?.zip(public.cw.iter()) {
             r = self.eval_next(ctx, cw, idx, &r.state, nonce);
-            hash.update(r.state.node_proof);
+            if let Some(ref node_proof) = r.state.node_proof {
+                hash.update(node_proof);
+            }
         }
 
         let mut weight = r.share;
@@ -260,42 +262,13 @@ impl<W: VidpfValue> Vidpf<W> {
         let next_state = VidpfEvalState {
             seed: next_seed,
             control_bit: next_ctrl,
-            node_proof,
+            node_proof: Some(node_proof),
         };
 
         VidpfEvalResult {
             state: next_state,
             share: weight,
         }
-    }
-
-    pub(crate) fn get_beta_share(
-        &self,
-        ctx: &[u8],
-        id: VidpfServerId,
-        public: &VidpfPublicShare<W>,
-        key: &VidpfKey,
-        nonce: &[u8],
-    ) -> Result<W, VidpfError> {
-        let cw = public.cw.first().ok_or(VidpfError::InvalidInputLength)?;
-
-        let state = VidpfEvalState::init_from_key(id, key);
-        let input_left = VidpfInput::from_bools(&[false]);
-        let idx_left = self.index(&input_left)?;
-
-        let VidpfEvalResult {
-            state: _,
-            share: weight_share_left,
-        } = self.eval_next(ctx, cw, idx_left, &state, nonce);
-
-        let VidpfEvalResult {
-            state: _,
-            share: weight_share_right,
-        } = self.eval_next(ctx, cw, idx_left.right_sibling(), &state, nonce);
-
-        let mut beta_share = weight_share_left + weight_share_right;
-        beta_share.conditional_negate(Choice::from(id));
-        Ok(beta_share)
     }
 
     /// Ensure `prefix_tree` contains the prefix tree for `prefixes`, as well as the sibling of
@@ -418,20 +391,6 @@ impl<W: VidpfValue> Vidpf<W> {
                 bits: self.bits,
             },
         )))
-    }
-
-    fn index<'a>(&self, input: &'a VidpfInput) -> Result<VidpfEvalIndex<'a>, VidpfError> {
-        let level = u16::try_from(input.len()).map_err(|_| VidpfError::InvalidInputLength)? - 1;
-        if level >= self.bits {
-            return Err(VidpfError::InvalidInputLength);
-        }
-        let bit = Choice::from(u8::from(input.get(usize::from(level)).unwrap()));
-        Ok(VidpfEvalIndex {
-            bit,
-            input,
-            level,
-            bits: self.bits,
-        })
     }
 }
 
@@ -607,7 +566,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
 pub(crate) struct VidpfEvalState {
     seed: VidpfSeed,
     control_bit: Choice,
-    pub(crate) node_proof: VidpfProof,
+    pub(crate) node_proof: Option<VidpfProof>,
 }
 
 impl VidpfEvalState {
@@ -615,7 +574,7 @@ impl VidpfEvalState {
         Self {
             seed: key.0,
             control_bit: Choice::from(id),
-            node_proof: VidpfProof::default(), // not used
+            node_proof: None,
         }
     }
 }
@@ -628,7 +587,7 @@ pub(crate) struct VidpfEvalResult<W: VidpfValue> {
 }
 
 pub(crate) const VIDPF_PROOF_SIZE: usize = 32;
-const VIDPF_SEED_SIZE: usize = 16;
+pub(crate) const VIDPF_SEED_SIZE: usize = 16;
 
 /// Allows to validate user input and shares after evaluation.
 pub(crate) type VidpfProof = [u8; VIDPF_PROOF_SIZE];
