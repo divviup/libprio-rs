@@ -20,11 +20,11 @@ use crate::{
     },
     vidpf::{
         xor_proof, Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfProof, VidpfPublicShare,
-        VidpfServerId, VidpfWeight,
+        VidpfServerId, VidpfWeight, VIDPF_PROOF_SIZE,
     },
 };
 
-use rand::RngCore;
+use rand::prelude::*;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
@@ -67,23 +67,15 @@ pub(crate) fn dst_usage(usage: u8) -> [u8; 8] {
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
 /// distributed point function.
 #[derive(Clone, Debug)]
-pub struct Mastic<T, P, const SEED_SIZE: usize>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+pub struct Mastic<T: Type> {
     id: [u8; 4],
-    pub(crate) szk: Szk<T, P, SEED_SIZE>,
+    pub(crate) szk: Szk<T>,
     pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>>,
     /// The length of the private attribute associated with any input.
     pub(crate) bits: usize,
 }
 
-impl<T, P, const SEED_SIZE: usize> Mastic<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> Mastic<T> {
     /// Creates a new instance of Mastic, with a specific attribute length and weight type.
     pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Result<Self, VdafError> {
         let vidpf = Vidpf::new(bits, typ.input_len() + 1)?;
@@ -154,14 +146,9 @@ impl Decode for MasticAggregationParam {
 /// Contains broadcast information shared between parties to support VIDPF correctness.
 pub type MasticPublicShare<V> = VidpfPublicShare<V>;
 
-impl<T, P, const SEED_SIZE: usize> ParameterizedDecode<Mastic<T, P, SEED_SIZE>>
-    for MasticPublicShare<VidpfWeight<T::Field>>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> ParameterizedDecode<Mastic<T>> for MasticPublicShare<VidpfWeight<T::Field>> {
     fn decode_with_param(
-        mastic: &Mastic<T, P, SEED_SIZE>,
+        mastic: &Mastic<T>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         VidpfPublicShare::decode_with_param(&(mastic.bits, mastic.vidpf.weight_len), bytes)
@@ -172,15 +159,15 @@ where
 ///
 /// Message sent by the [`Client`] to each Aggregator during the Sharding phase.
 #[derive(Clone, Debug)]
-pub struct MasticInputShare<F: FieldElement, const SEED_SIZE: usize> {
+pub struct MasticInputShare<F: FieldElement> {
     /// VIDPF key share.
     vidpf_key: VidpfKey,
 
     /// The proof share.
-    proof_share: SzkProofShare<F, SEED_SIZE>,
+    proof_share: SzkProofShare<F>,
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticInputShare<F, SEED_SIZE> {
+impl<F: FieldElement> Encode for MasticInputShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         bytes.extend_from_slice(&self.vidpf_key.0[..]);
         self.proof_share.encode(bytes)?;
@@ -192,14 +179,9 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticInputShare<F, SEE
     }
 }
 
-impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Mastic<T, P, SEED_SIZE>, usize)>
-    for MasticInputShare<T::Field, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, usize)> for MasticInputShare<T::Field> {
     fn decode_with_param(
-        (mastic, agg_id): &(&'a Mastic<T, P, SEED_SIZE>, usize),
+        (mastic, agg_id): &(&'a Mastic<T>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         if *agg_id > 1 {
@@ -208,7 +190,7 @@ where
         let mut value = [0; 16];
         bytes.read_exact(&mut value)?;
         let vidpf_key = VidpfKey::from_bytes(value);
-        let proof_share = SzkProofShare::<T::Field, SEED_SIZE>::decode_with_param(
+        let proof_share = SzkProofShare::decode_with_param(
             &(
                 *agg_id == 0,
                 mastic.szk.typ.proof_len(),
@@ -223,14 +205,14 @@ where
     }
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> PartialEq for MasticInputShare<F, SEED_SIZE> {
-    fn eq(&self, other: &MasticInputShare<F, SEED_SIZE>) -> bool {
+impl<F: FieldElement> PartialEq for MasticInputShare<F> {
+    fn eq(&self, other: &MasticInputShare<F>) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for MasticInputShare<F, SEED_SIZE> {
-    fn ct_eq(&self, other: &MasticInputShare<F, SEED_SIZE>) -> Choice {
+impl<F: FieldElement> ConstantTimeEq for MasticInputShare<F> {
+    fn ct_eq(&self, other: &MasticInputShare<F>) -> Choice {
         self.vidpf_key
             .ct_eq(&other.vidpf_key)
             .bitand(self.proof_share.ct_eq(&other.proof_share))
@@ -247,46 +229,34 @@ pub type MasticOutputShare<V> = OutputShare<V>;
 /// Contains a flattened vector of VIDPF outputs to be aggregated by Mastic aggregators
 pub type MasticAggregateShare<V> = AggregateShare<V>;
 
-impl<'a, T, P, const SEED_SIZE: usize>
-    ParameterizedDecode<(&'a Mastic<T, P, SEED_SIZE>, &'a MasticAggregationParam)>
+impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, &'a MasticAggregationParam)>
     for MasticAggregateShare<T::Field>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        (mastic, agg_param): &(&Mastic<T>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(mastic.agg_share_len(agg_param), bytes).map(AggregateShare)
     }
 }
 
-impl<'a, T, P, const SEED_SIZE: usize>
-    ParameterizedDecode<(&'a Mastic<T, P, SEED_SIZE>, &'a MasticAggregationParam)>
+impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, &'a MasticAggregationParam)>
     for MasticOutputShare<T::Field>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
 {
     fn decode_with_param(
-        (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        (mastic, agg_param): &(&Mastic<T>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(mastic.agg_share_len(agg_param), bytes).map(OutputShare)
     }
 }
 
-impl<T, P, const SEED_SIZE: usize> Vdaf for Mastic<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> Vdaf for Mastic<T> {
     type Measurement = (VidpfInput, T::Measurement);
     type AggregateResult = Vec<T::AggregateResult>;
     type AggregationParam = MasticAggregationParam;
     type PublicShare = MasticPublicShare<VidpfWeight<T::Field>>;
-    type InputShare = MasticInputShare<T::Field, SEED_SIZE>;
+    type InputShare = MasticInputShare<T::Field>;
     type OutputShare = MasticOutputShare<T::Field>;
     type AggregateShare = MasticAggregateShare<T::Field>;
 
@@ -298,19 +268,15 @@ where
         2
     }
 }
-impl<T, P, const SEED_SIZE: usize> Mastic<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> Mastic<T> {
     fn shard_with_random(
         &self,
         ctx: &[u8],
         (alpha, weight): &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
         vidpf_keys: [VidpfKey; 2],
-        szk_random: [Seed<SEED_SIZE>; 2],
-        joint_random_opt: Option<Seed<SEED_SIZE>>,
+        szk_random: [Seed<32>; 2],
+        joint_random_opt: Option<Seed<32>>,
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
         if alpha.len() != self.bits {
             return Err(VdafError::Vidpf(VidpfError::InvalidInputLength));
@@ -351,11 +317,11 @@ where
             nonce,
         )?;
         let [leader_vidpf_key, helper_vidpf_key] = vidpf_keys;
-        let leader_share = MasticInputShare::<T::Field, SEED_SIZE> {
+        let leader_share = MasticInputShare {
             vidpf_key: leader_vidpf_key,
             proof_share: leader_szk_proof_share,
         };
-        let helper_share = MasticInputShare::<T::Field, SEED_SIZE> {
+        let helper_share = MasticInputShare {
             vidpf_key: helper_vidpf_key,
             proof_share: helper_szk_proof_share,
         };
@@ -373,11 +339,7 @@ where
     }
 }
 
-impl<T, P, const SEED_SIZE: usize> Client<16> for Mastic<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> Client<16> for Mastic<T> {
     fn shard(
         &self,
         ctx: &[u8],
@@ -386,7 +348,7 @@ where
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
         let vidpf_keys = [VidpfKey::generate()?, VidpfKey::generate()?];
         let joint_random_opt = if self.szk.requires_joint_rand() {
-            Some(Seed::<SEED_SIZE>::generate()?)
+            Some(Seed::generate()?)
         } else {
             None
         };
@@ -409,15 +371,15 @@ where
 /// state for [`Szk`] verification, the output shares currently being validated, and
 /// parameters of Mastic used for encoding.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct MasticPrepareState<F: FieldElement, const SEED_SIZE: usize> {
+pub struct MasticPrepareState<F: FieldElement> {
     /// The counter and truncated weight for each candidate prefix.
     output_shares: MasticOutputShare<F>,
     /// If [`Szk`]` verification is being performed, we also store the relevant state for that operation.
-    szk_query_state: SzkQueryState<SEED_SIZE>,
+    szk_query_state: SzkQueryState,
     verifier_len: Option<usize>,
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareState<F, SEED_SIZE> {
+impl<F: FieldElement> Encode for MasticPrepareState<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.output_shares.encode(bytes)?;
         if let Some(joint_rand_seed) = &self.szk_query_state {
@@ -429,17 +391,16 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareState<F, S
     fn encoded_len(&self) -> Option<usize> {
         Some(
             self.output_shares.as_ref().len() * F::ENCODED_SIZE
-                + self.szk_query_state.as_ref().map_or(0, |_| SEED_SIZE),
+                + self.szk_query_state.as_ref().map_or(0, |_| 32),
         )
     }
 }
 
-impl<'a, T: Type, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
-    ParameterizedDecode<(&'a Mastic<T, P, SEED_SIZE>, &'a MasticAggregationParam)>
-    for MasticPrepareState<T::Field, SEED_SIZE>
+impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, &'a MasticAggregationParam)>
+    for MasticPrepareState<T::Field>
 {
     fn decode_with_param(
-        decoder @ (mastic, agg_param): &(&Mastic<T, P, SEED_SIZE>, &MasticAggregationParam),
+        decoder @ (mastic, agg_param): &(&Mastic<T>, &MasticAggregationParam),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let output_shares = MasticOutputShare::decode_with_param(decoder, bytes)?;
@@ -465,17 +426,17 @@ impl<'a, T: Type, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
 /// [`Vidpf`] evaluation proof covering every prefix in the aggregation parameter, and optionally
 /// the verification message for Szk.
 #[derive(Clone, Debug, PartialEq)]
-pub struct MasticPrepareShare<F: FieldElement, const SEED_SIZE: usize> {
+pub struct MasticPrepareShare<F: FieldElement> {
     ///  [`Vidpf`] evaluation proof, which guarantees one-hotness and payload consistency.
-    eval_proof: Seed<SEED_SIZE>,
+    eval_proof: [u8; VIDPF_PROOF_SIZE],
 
     /// If [`Szk`]` verification of the root weight is needed, a verification message.
-    szk_query_share_opt: Option<SzkQueryShare<F, SEED_SIZE>>,
+    szk_query_share_opt: Option<SzkQueryShare<F>>,
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, SEED_SIZE> {
+impl<F: FieldElement> Encode for MasticPrepareShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.eval_proof.encode(bytes)?;
+        bytes.extend_from_slice(&self.eval_proof);
         match &self.szk_query_share_opt {
             Some(query_share) => query_share.encode(bytes),
             None => Ok(()),
@@ -484,7 +445,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, S
 
     fn encoded_len(&self) -> Option<usize> {
         Some(
-            self.eval_proof.encoded_len()?
+            VIDPF_PROOF_SIZE
                 + match &self.szk_query_share_opt {
                     Some(query_share) => query_share.encoded_len()?,
                     None => 0,
@@ -493,22 +454,18 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for MasticPrepareShare<F, S
     }
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareState<F, SEED_SIZE>>
-    for MasticPrepareShare<F, SEED_SIZE>
-{
+impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepareShare<F> {
     fn decode_with_param(
-        prep_state: &MasticPrepareState<F, SEED_SIZE>,
+        prep_state: &MasticPrepareState<F>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let eval_proof = Seed::decode(bytes)?;
+        let mut eval_proof = [0; VIDPF_PROOF_SIZE];
+        bytes.read_exact(&mut eval_proof[..])?;
         let requires_joint_rand = prep_state.szk_query_state.is_some();
         let szk_query_share_opt = prep_state
             .verifier_len
             .map(|verifier_len| {
-                SzkQueryShare::<F, SEED_SIZE>::decode_with_param(
-                    &(requires_joint_rand, verifier_len),
-                    bytes,
-                )
+                SzkQueryShare::decode_with_param(&(requires_joint_rand, verifier_len), bytes)
             })
             .transpose()?;
         Ok(Self {
@@ -522,30 +479,24 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareS
 ///
 /// Result of preprocessing the broadcast messages of both aggregators during the
 /// preparation phase.
-pub type MasticPrepareMessage<const SEED_SIZE: usize> = SzkJointShare<SEED_SIZE>;
+pub type MasticPrepareMessage = SzkJointShare;
 
-impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<MasticPrepareState<F, SEED_SIZE>>
-    for MasticPrepareMessage<SEED_SIZE>
-{
+impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepareMessage {
     fn decode_with_param(
-        prep_state: &MasticPrepareState<F, SEED_SIZE>,
+        prep_state: &MasticPrepareState<F>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match prep_state.szk_query_state {
-            Some(_) => SzkJointShare::<SEED_SIZE>::decode_with_param(&true, bytes),
-            None => SzkJointShare::<SEED_SIZE>::decode_with_param(&false, bytes),
+            Some(_) => SzkJointShare::decode_with_param(&true, bytes),
+            None => SzkJointShare::decode_with_param(&false, bytes),
         }
     }
 }
 
-impl<T, P, const SEED_SIZE: usize> Aggregator<SEED_SIZE, NONCE_SIZE> for Mastic<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
-    type PrepareState = MasticPrepareState<T::Field, SEED_SIZE>;
-    type PrepareShare = MasticPrepareShare<T::Field, SEED_SIZE>;
-    type PrepareMessage = MasticPrepareMessage<SEED_SIZE>;
+impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
+    type PrepareState = MasticPrepareState<T::Field>;
+    type PrepareShare = MasticPrepareShare<T::Field>;
+    type PrepareMessage = MasticPrepareMessage;
 
     fn is_agg_param_valid(cur: &MasticAggregationParam, prev: &[MasticAggregationParam]) -> bool {
         // First agg param should be the only one that requires weight check.
@@ -559,25 +510,22 @@ where
         // Unpack this agg param and the last one in the list
         let cur_poplar_agg_param = &cur.level_and_prefixes;
         let prev_poplar_agg_param = from_ref(&prev.last().as_ref().unwrap().level_and_prefixes);
-        Poplar1::<P, SEED_SIZE>::is_agg_param_valid(cur_poplar_agg_param, prev_poplar_agg_param)
+        Poplar1::<XofTurboShake128, 32>::is_agg_param_valid(
+            cur_poplar_agg_param,
+            prev_poplar_agg_param,
+        )
     }
 
     fn prepare_init(
         &self,
-        verify_key: &[u8; SEED_SIZE],
+        verify_key: &[u8; 32],
         ctx: &[u8],
         agg_id: usize,
         agg_param: &MasticAggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &MasticPublicShare<VidpfWeight<T::Field>>,
-        input_share: &MasticInputShare<T::Field, SEED_SIZE>,
-    ) -> Result<
-        (
-            MasticPrepareState<T::Field, SEED_SIZE>,
-            MasticPrepareShare<T::Field, SEED_SIZE>,
-        ),
-        VdafError,
-    > {
+        input_share: &MasticInputShare<T::Field>,
+    ) -> Result<(MasticPrepareState<T::Field>, MasticPrepareShare<T::Field>), VdafError> {
         let id = match agg_id {
             0 => Ok(VidpfServerId::S0),
             1 => Ok(VidpfServerId::S1),
@@ -602,10 +550,8 @@ where
 
         // Onehot and payload checks
         let (payload_check, onehot_proof) = {
-            let mut payload_check_xof = P::init(
-                &[0; SEED_SIZE],
-                &[&dst_usage(USAGE_PAYLOAD_CHECK), &self.id, ctx],
-            );
+            let mut payload_check_xof =
+                XofTurboShake128::init(&[0; 32], &[&dst_usage(USAGE_PAYLOAD_CHECK), &self.id, ctx]);
             let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
             let mut onehot_proof = ONEHOT_PROOF_INIT;
 
@@ -658,14 +604,12 @@ where
         };
 
         let eval_proof = {
-            let mut eval_proof_xof = P::init(
-                &[0; SEED_SIZE],
-                &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx],
-            );
+            let mut eval_proof_xof =
+                XofTurboShake128::init(&[0; 32], &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx]);
             eval_proof_xof.update(&onehot_proof);
             eval_proof_xof.update(&counter_check);
             eval_proof_xof.update(&payload_check);
-            eval_proof_xof.into_seed()
+            eval_proof_xof.into_seed().0
         };
 
         let mut truncated_out_shares =
@@ -721,14 +665,12 @@ where
         })
     }
 
-    fn prepare_shares_to_prepare_message<
-        M: IntoIterator<Item = MasticPrepareShare<T::Field, SEED_SIZE>>,
-    >(
+    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = MasticPrepareShare<T::Field>>>(
         &self,
         ctx: &[u8],
         _agg_param: &MasticAggregationParam,
         inputs: M,
-    ) -> Result<MasticPrepareMessage<SEED_SIZE>, VdafError> {
+    ) -> Result<MasticPrepareMessage, VdafError> {
         let mut inputs_iter = inputs.into_iter();
         let leader_share = inputs_iter.next().ok_or(VdafError::Uncategorized(
             "No leader share received".to_string(),
@@ -754,7 +696,7 @@ where
             (Some(leader_query_share), Some(helper_query_share)) => Ok(self
                 .szk
                 .merge_query_shares(ctx, leader_query_share, helper_query_share)?),
-            (None, None) => Ok(SzkJointShare::none()),
+            (None, None) => Ok(SzkJointShare::default()),
             (_, _) => Err(VdafError::Uncategorized(
                 "Only one of leader and helper query shares is present".to_string(),
             )),
@@ -764,9 +706,9 @@ where
     fn prepare_next(
         &self,
         _ctx: &[u8],
-        state: MasticPrepareState<T::Field, SEED_SIZE>,
-        input: MasticPrepareMessage<SEED_SIZE>,
-    ) -> Result<PrepareTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
+        state: MasticPrepareState<T::Field>,
+        input: MasticPrepareMessage,
+    ) -> Result<PrepareTransition<Self, 32, NONCE_SIZE>, VdafError> {
         let MasticPrepareState {
             output_shares,
             szk_query_state,
@@ -801,11 +743,7 @@ where
     }
 }
 
-impl<T, P, const SEED_SIZE: usize> Collector for Mastic<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> Collector for Mastic<T> {
     fn unshard<M: IntoIterator<Item = Self::AggregateShare>>(
         &self,
         agg_param: &MasticAggregationParam,
@@ -854,7 +792,6 @@ mod tests {
     use crate::flp::gadgets::{Mul, ParallelSum};
     use crate::flp::types::{Count, Histogram, Sum, SumVec};
     use crate::vdaf::test_utils::run_vdaf;
-    use crate::vdaf::xof::XofTurboShake128;
     use rand::{thread_rng, Rng};
 
     const CTX_STR: &[u8] = b"mastic ctx";
@@ -864,7 +801,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -943,7 +880,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -994,7 +931,7 @@ mod tests {
         let algorithm_id = 6;
         let max_measurement = 29;
         let sum_typ = Sum::<Field128>::new(max_measurement).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sum_typ, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1015,7 +952,7 @@ mod tests {
     fn test_mastic_count() {
         let algorithm_id = 6;
         let count = Count::<Field128>::new();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1092,7 +1029,7 @@ mod tests {
     fn test_public_share_encoded_len() {
         let algorithm_id = 6;
         let count = Count::<Field64>::new();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1110,7 +1047,7 @@ mod tests {
     fn test_public_share_roundtrip_count() {
         let algorithm_id = 6;
         let count = Count::<Field64>::new();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, count, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1130,7 +1067,7 @@ mod tests {
         let algorithm_id = 6;
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1218,7 +1155,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1247,7 +1184,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1278,7 +1215,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1301,7 +1238,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let measurement = vec![1, 16, 0];
-        let mastic = Mastic::<_, XofTurboShake128, 32>::new(algorithm_id, sumvec, 32).unwrap();
+        let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
         thread_rng().fill(&mut nonce[..]);
@@ -1326,7 +1263,7 @@ mod tests {
             weight: T::Measurement,
             require_weight_check: bool,
         ) {
-            let mastic: Mastic<T, XofTurboShake128, 32> = Mastic::new(0, typ, 256).unwrap();
+            let mastic = Mastic::new(0, typ, 256).unwrap();
             let ctx = b"some application";
             let verify_key = [0u8; 32];
             let nonce = [0u8; 16];
@@ -1443,7 +1380,7 @@ mod tests {
 
             let test_vec: TestVector<T> = serde_json::from_str(test_vec_str).unwrap();
 
-            let mastic = Mastic::<_, XofTurboShake128, 32>::new(
+            let mastic = Mastic::new(
                 algorithm_id,
                 new_typ(&test_vec.type_params),
                 test_vec.vidpf_bits,

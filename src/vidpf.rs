@@ -624,7 +624,7 @@ pub(crate) struct VidpfEvalResult<W: VidpfValue> {
     pub(crate) share: W,
 }
 
-const VIDPF_PROOF_SIZE: usize = 32;
+pub(crate) const VIDPF_PROOF_SIZE: usize = 32;
 const VIDPF_SEED_SIZE: usize = 16;
 
 /// Allows to validate user input and shares after evaluation.
