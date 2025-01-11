@@ -37,12 +37,11 @@ const NONCE_SIZE: usize = 16;
 
 // draft-jimouris-cfrg-mastic:
 //
-// ONEHOT_PROOF_INIT = XofTurboShake128(zeros(XofTurboShake128.SEED_SIZE),
-//                                      dst(b'', USAGE_ONEHOT_PROOF_INIT),
-//                                      b'').next(PROOF_SIZE)
+// ONEHOT_PROOF_INIT = XofTurboShake128(
+//     b'', dst(b'', USAGE_ONEHOT_PROOF_INIT), b'').next(PROOF_SIZE)
 pub(crate) const ONEHOT_PROOF_INIT: [u8; 32] = [
-    253, 211, 45, 179, 139, 135, 183, 67, 202, 144, 13, 205, 241, 39, 165, 73, 232, 54, 57, 193,
-    106, 154, 133, 22, 15, 194, 223, 162, 79, 108, 60, 133,
+    97, 188, 153, 213, 116, 162, 25, 70, 98, 231, 255, 255, 1, 207, 231, 225, 13, 187, 182, 1, 16,
+    90, 161, 104, 201, 152, 149, 153, 35, 92, 254, 149,
 ];
 
 pub(crate) const USAGE_PROVE_RAND: u8 = 0;
@@ -187,9 +186,7 @@ impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, usize)> for MasticInputSha
         if *agg_id > 1 {
             return Err(CodecError::UnexpectedValue);
         }
-        let mut value = [0; 16];
-        bytes.read_exact(&mut value)?;
-        let vidpf_key = VidpfKey::from_bytes(value);
+        let vidpf_key = VidpfKey::decode(bytes)?;
         let proof_share = SzkProofShare::decode_with_param(
             &(
                 *agg_id == 0,
@@ -550,8 +547,10 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
 
         // Onehot and payload checks
         let (payload_check, onehot_proof) = {
-            let mut payload_check_xof =
-                XofTurboShake128::init(&[0; 32], &[&dst_usage(USAGE_PAYLOAD_CHECK), &self.id, ctx]);
+            let mut payload_check_xof = XofTurboShake128::from_seed_slice(
+                &[],
+                &[&dst_usage(USAGE_PAYLOAD_CHECK), &self.id, ctx],
+            );
             let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
             let mut onehot_proof = ONEHOT_PROOF_INIT;
 
@@ -604,8 +603,10 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
         };
 
         let eval_proof = {
-            let mut eval_proof_xof =
-                XofTurboShake128::init(&[0; 32], &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx]);
+            let mut eval_proof_xof = XofTurboShake128::from_seed_slice(
+                &[],
+                &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx],
+            );
             eval_proof_xof.update(&onehot_proof);
             eval_proof_xof.update(&counter_check);
             eval_proof_xof.update(&payload_check);

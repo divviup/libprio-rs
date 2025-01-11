@@ -343,8 +343,8 @@ impl<T: Type> Szk<T> {
         helper_joint_rand_part: &Seed<32>,
         ctx: &[u8],
     ) -> Seed<32> {
-        let mut xof = XofTurboShake128::init(
-            &[0; 32],
+        let mut xof = XofTurboShake128::from_seed_slice(
+            &[],
             &[
                 &mastic::dst_usage(mastic::USAGE_JOINT_RAND_SEED),
                 &self.id,
