@@ -62,8 +62,6 @@ pub struct Mastic<T: Type> {
     id: [u8; 4],
     pub(crate) szk: Szk<T>,
     pub(crate) vidpf: Vidpf<VidpfWeight<T::Field>>,
-    /// The length of the private attribute associated with any input.
-    pub(crate) bits: usize,
 }
 
 impl<T: Type> Mastic<T> {
@@ -75,7 +73,6 @@ impl<T: Type> Mastic<T> {
             id: algorithm_id.to_le_bytes(),
             szk,
             vidpf,
-            bits,
         })
     }
 
@@ -142,7 +139,7 @@ impl<T: Type> ParameterizedDecode<Mastic<T>> for MasticPublicShare<VidpfWeight<T
         mastic: &Mastic<T>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        VidpfPublicShare::decode_with_param(&(mastic.bits, mastic.vidpf.weight_len), bytes)
+        VidpfPublicShare::decode_with_param(&mastic.vidpf, bytes)
     }
 }
 
@@ -267,7 +264,7 @@ impl<T: Type> Mastic<T> {
         szk_random: [Seed<SEED_SIZE>; 2],
         joint_random_opt: Option<Seed<SEED_SIZE>>,
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
-        if alpha.len() != self.bits {
+        if alpha.len() != usize::from(self.vidpf.bits) {
             return Err(VdafError::Vidpf(VidpfError::InvalidInputLength));
         }
 
