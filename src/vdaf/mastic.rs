@@ -19,12 +19,11 @@ use crate::{
         PrepareTransition, Vdaf, VdafError,
     },
     vidpf::{
-        xor_proof, Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfProof, VidpfPublicShare,
-        VidpfServerId, VidpfWeight, VIDPF_PROOF_SIZE,
+        Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
+        VIDPF_PROOF_SIZE,
     },
 };
 
-use rand::prelude::*;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
@@ -35,27 +34,18 @@ use super::xof::XofTurboShake128;
 
 const NONCE_SIZE: usize = 16;
 
-// draft-jimouris-cfrg-mastic:
-//
-// ONEHOT_PROOF_INIT = XofTurboShake128(
-//     b'', dst(b'', USAGE_ONEHOT_PROOF_INIT), b'').next(PROOF_SIZE)
-pub(crate) const ONEHOT_PROOF_INIT: [u8; 32] = [
-    97, 188, 153, 213, 116, 162, 25, 70, 98, 231, 255, 255, 1, 207, 231, 225, 13, 187, 182, 1, 16,
-    90, 161, 104, 201, 152, 149, 153, 35, 92, 254, 149,
-];
-
 pub(crate) const USAGE_PROVE_RAND: u8 = 0;
 pub(crate) const USAGE_PROOF_SHARE: u8 = 1;
 pub(crate) const USAGE_QUERY_RAND: u8 = 2;
 pub(crate) const USAGE_JOINT_RAND_SEED: u8 = 3;
 pub(crate) const USAGE_JOINT_RAND_PART: u8 = 4;
 pub(crate) const USAGE_JOINT_RAND: u8 = 5;
-pub(crate) const USAGE_ONEHOT_PROOF_HASH: u8 = 7;
-pub(crate) const USAGE_NODE_PROOF: u8 = 8;
-pub(crate) const USAGE_EVAL_PROOF: u8 = 9;
+pub(crate) const USAGE_ONEHOT_CHECK: u8 = 6;
+pub(crate) const USAGE_PAYLOAD_CHECK: u8 = 7;
+pub(crate) const USAGE_EVAL_PROOF: u8 = 8;
+pub(crate) const USAGE_NODE_PROOF: u8 = 9;
 pub(crate) const USAGE_EXTEND: u8 = 10;
 pub(crate) const USAGE_CONVERT: u8 = 11;
-pub(crate) const USAGE_PAYLOAD_CHECK: u8 = 12;
 
 pub(crate) fn dst_usage(usage: u8) -> [u8; 8] {
     const VERSION: u8 = 0;
@@ -324,16 +314,6 @@ impl<T: Type> Mastic<T> {
         };
         Ok((public_share, vec![leader_share, helper_share]))
     }
-
-    fn hash_proof(&self, mut proof: VidpfProof, ctx: &[u8]) -> VidpfProof {
-        let mut xof = XofTurboShake128::from_seed_slice(
-            &[],
-            &[&dst_usage(USAGE_ONEHOT_PROOF_HASH), &self.id, ctx],
-        );
-        xof.update(&proof);
-        xof.into_seed_stream().fill_bytes(&mut proof);
-        proof
-    }
 }
 
 impl<T: Type> Client<16> for Mastic<T> {
@@ -546,13 +526,16 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
         let root = prefix_tree.root.as_ref().unwrap();
 
         // Onehot and payload checks
-        let (payload_check, onehot_proof) = {
+        let (onehot_check, payload_check) = {
+            let mut onehot_check_xof = XofTurboShake128::from_seed_slice(
+                &[],
+                &[&dst_usage(USAGE_ONEHOT_CHECK), &self.id, ctx],
+            );
             let mut payload_check_xof = XofTurboShake128::from_seed_slice(
                 &[],
                 &[&dst_usage(USAGE_PAYLOAD_CHECK), &self.id, ctx],
             );
             let mut payload_check_buf = Vec::with_capacity(T::Field::ENCODED_SIZE);
-            let mut onehot_proof = ONEHOT_PROOF_INIT;
 
             // Traverse the prefix tree breadth-first.
             let mut q = VecDeque::with_capacity(100);
@@ -560,10 +543,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
             q.push_back(root.right.as_ref().unwrap());
             while let Some(node) = q.pop_front() {
                 // Update onehot proof.
-                onehot_proof = xor_proof(
-                    onehot_proof,
-                    &self.hash_proof(xor_proof(onehot_proof, &node.value.state.node_proof), ctx),
-                );
+                onehot_check_xof.update(&node.value.state.node_proof);
 
                 // Update payload check.
                 if let (Some(left), Some(right)) = (node.left.as_ref(), node.right.as_ref()) {
@@ -586,9 +566,10 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                 }
             }
 
+            let onehot_check = onehot_check_xof.into_seed().0;
             let payload_check = payload_check_xof.into_seed().0;
 
-            (payload_check, onehot_proof)
+            (onehot_check, payload_check)
         };
 
         // Counter check.
@@ -607,7 +588,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                 &[],
                 &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx],
             );
-            eval_proof_xof.update(&onehot_proof);
+            eval_proof_xof.update(&onehot_check);
             eval_proof_xof.update(&counter_check);
             eval_proof_xof.update(&payload_check);
             eval_proof_xof.into_seed().0
