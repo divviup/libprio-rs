@@ -584,10 +584,8 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
         };
 
         let eval_proof = {
-            let mut eval_proof_xof = XofTurboShake128::from_seed_slice(
-                &[],
-                &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx],
-            );
+            let mut eval_proof_xof =
+                XofTurboShake128::init(verify_key, &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx]);
             eval_proof_xof.update(&onehot_check);
             eval_proof_xof.update(&counter_check);
             eval_proof_xof.update(&payload_check);
