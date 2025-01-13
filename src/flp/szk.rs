@@ -15,15 +15,15 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, encode_fieldvec, FieldElement},
     flp::{FlpError, Type},
-    prng::{Prng, PrngError},
+    prng::PrngError,
     vdaf::{
         mastic::{self, USAGE_PROOF_SHARE},
         xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
     },
 };
 use std::borrow::Cow;
+use std::io::Cursor;
 use std::ops::BitAnd;
-use std::{io::Cursor, marker::PhantomData};
 use subtle::{Choice, ConstantTimeEq};
 
 // Domain separation tags
@@ -56,33 +56,33 @@ pub enum SzkError {
 /// Contains an FLP proof share, and if joint randomness is needed, the blind
 /// used to derive it and the other party's joint randomness part.
 #[derive(Debug, Clone)]
-pub enum SzkProofShare<F, const SEED_SIZE: usize> {
+pub enum SzkProofShare<F> {
     /// Leader's proof share is uncompressed.
     Leader {
         /// Share of an FLP proof, as a vector of Field elements.
         uncompressed_proof_share: Vec<F>,
         /// Set only if joint randomness is needed. The first Seed is a blind, second
         /// is the helper's joint randomness part.
-        leader_blind_and_helper_joint_rand_part_opt: Option<(Seed<SEED_SIZE>, Seed<SEED_SIZE>)>,
+        leader_blind_and_helper_joint_rand_part_opt: Option<(Seed<32>, Seed<32>)>,
     },
     /// The Helper uses one seed for both its compressed proof share and as the blind for its joint
     /// randomness.
     Helper {
         /// The Seed that acts both as the compressed proof share and, optionally, as the blind.
-        proof_share_seed_and_blind: Seed<SEED_SIZE>,
+        proof_share_seed_and_blind: Seed<32>,
         /// The leader's joint randomness part, if needed.
-        leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
+        leader_joint_rand_part_opt: Option<Seed<32>>,
     },
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> PartialEq for SzkProofShare<F, SEED_SIZE> {
-    fn eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> bool {
+impl<F: FieldElement> PartialEq for SzkProofShare<F> {
+    fn eq(&self, other: &SzkProofShare<F>) -> bool {
         bool::from(self.ct_eq(other))
     }
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F, SEED_SIZE> {
-    fn ct_eq(&self, other: &SzkProofShare<F, SEED_SIZE>) -> Choice {
+impl<F: FieldElement> ConstantTimeEq for SzkProofShare<F> {
+    fn ct_eq(&self, other: &SzkProofShare<F>) -> Choice {
         match (self, other) {
             (
                 SzkProofShare::Leader {
@@ -111,7 +111,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> ConstantTimeEq for SzkProofShare<F
     }
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_SIZE> {
+impl<F: FieldElement> Encode for SzkProofShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
             SzkProofShare::Leader {
@@ -169,9 +169,7 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkProofShare<F, SEED_S
     }
 }
 
-impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize, bool)>
-    for SzkProofShare<F, SEED_SIZE>
-{
+impl<F: FieldElement + Decode> ParameterizedDecode<(bool, usize, bool)> for SzkProofShare<F> {
     fn decode_with_param(
         (is_leader, proof_len, requires_joint_rand): &(bool, usize, bool),
         bytes: &mut Cursor<&[u8]>,
@@ -180,19 +178,16 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
             Ok(SzkProofShare::Leader {
                 uncompressed_proof_share: decode_fieldvec::<F>(*proof_len, bytes)?,
                 leader_blind_and_helper_joint_rand_part_opt: if *requires_joint_rand {
-                    Some((
-                        Seed::<SEED_SIZE>::decode(bytes)?,
-                        Seed::<SEED_SIZE>::decode(bytes)?,
-                    ))
+                    Some((Seed::decode(bytes)?, Seed::decode(bytes)?))
                 } else {
                     None
                 },
             })
         } else {
             Ok(SzkProofShare::Helper {
-                proof_share_seed_and_blind: Seed::<SEED_SIZE>::decode(bytes)?,
+                proof_share_seed_and_blind: Seed::decode(bytes)?,
                 leader_joint_rand_part_opt: if *requires_joint_rand {
-                    Some(Seed::<SEED_SIZE>::decode(bytes)?)
+                    Some(Seed::decode(bytes)?)
                 } else {
                     None
                 },
@@ -203,12 +198,12 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 
 /// A tuple containing the state and messages produced by an SZK query.
 #[derive(Clone, Debug, PartialEq)]
-pub struct SzkQueryShare<F: FieldElement, const SEED_SIZE: usize> {
-    joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
+pub struct SzkQueryShare<F: FieldElement> {
+    joint_rand_part_opt: Option<Seed<32>>,
     pub(crate) flp_verifier: Vec<F>,
 }
 
-impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkQueryShare<F, SEED_SIZE> {
+impl<F: FieldElement> Encode for SzkQueryShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if let Some(ref part) = self.joint_rand_part_opt {
             part.encode(bytes)?;
@@ -229,16 +224,14 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for SzkQueryShare<F, SEED_S
     }
 }
 
-impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool, usize)>
-    for SzkQueryShare<F, SEED_SIZE>
-{
+impl<F: FieldElement + Decode> ParameterizedDecode<(bool, usize)> for SzkQueryShare<F> {
     fn decode_with_param(
         (requires_joint_rand, verifier_len): &(bool, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         Ok(SzkQueryShare {
             joint_rand_part_opt: (*requires_joint_rand)
-                .then(|| Seed::<SEED_SIZE>::decode(bytes))
+                .then(|| Seed::decode(bytes))
                 .transpose()?,
             flp_verifier: decode_fieldvec(*verifier_len, bytes)?,
         })
@@ -248,22 +241,16 @@ impl<F: FieldElement + Decode, const SEED_SIZE: usize> ParameterizedDecode<(bool
 /// Szk query state.
 ///
 /// The state that needs to be stored by an Szk verifier between query() and decide().
-pub(crate) type SzkQueryState<const SEED_SIZE: usize> = Option<Seed<SEED_SIZE>>;
+pub(crate) type SzkQueryState = Option<Seed<32>>;
 
 /// Joint share type for the SZK proof.
 ///
 /// This is produced as the result of combining two query shares.
 /// It contains the re-computed joint randomness seed, if applicable. It is consumed by [`Szk::decide`].
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct SzkJointShare<const SEED_SIZE: usize>(Option<Seed<SEED_SIZE>>);
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct SzkJointShare(Option<Seed<32>>);
 
-impl<const SEED_SIZE: usize> SzkJointShare<SEED_SIZE> {
-    pub(crate) fn none() -> SzkJointShare<SEED_SIZE> {
-        SzkJointShare(None)
-    }
-}
-
-impl<const SEED_SIZE: usize> Encode for SzkJointShare<SEED_SIZE> {
+impl Encode for SzkJointShare {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if let Some(ref expected_seed) = self.0 {
             expected_seed.encode(bytes)?;
@@ -279,13 +266,13 @@ impl<const SEED_SIZE: usize> Encode for SzkJointShare<SEED_SIZE> {
     }
 }
 
-impl<const SEED_SIZE: usize> ParameterizedDecode<bool> for SzkJointShare<SEED_SIZE> {
+impl ParameterizedDecode<bool> for SzkJointShare {
     fn decode_with_param(
         requires_joint_rand: &bool,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         if *requires_joint_rand {
-            Ok(SzkJointShare(Some(Seed::<SEED_SIZE>::decode(bytes)?)))
+            Ok(SzkJointShare(Some(Seed::decode(bytes)?)))
         } else {
             Ok(SzkJointShare(None))
         }
@@ -296,43 +283,26 @@ impl<const SEED_SIZE: usize> ParameterizedDecode<bool> for SzkJointShare<SEED_SI
 /// T is the underlying FLP proof system. P is the XOF used to derive all random
 /// coins (it should be indifferentiable from a random oracle for security.)
 #[derive(Clone, Debug)]
-pub struct Szk<T, P, const SEED_SIZE: usize>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+pub struct Szk<T: Type> {
     /// The Type representing the specific FLP system used to prove validity of an input.
     pub(crate) typ: T,
     id: [u8; 4],
-    phantom: PhantomData<P>,
 }
 
-impl<T: Type> Szk<T, XofTurboShake128, 32> {
-    /// Create an instance of [`Szk`] using [`XofTurboShake128`].
-    pub fn new_turboshake128(typ: T, algorithm_id: u32) -> Self {
-        Self::new(typ, algorithm_id)
-    }
-}
-
-impl<T, P, const SEED_SIZE: usize> Szk<T, P, SEED_SIZE>
-where
-    T: Type,
-    P: Xof<SEED_SIZE>,
-{
+impl<T: Type> Szk<T> {
     /// Construct an instance of this sharedZK proof system with the underlying
     /// FLP.
     pub fn new(typ: T, algorithm_id: u32) -> Self {
         Self {
             typ,
             id: algorithm_id.to_le_bytes(),
-            phantom: PhantomData,
         }
     }
 
     /// Derive a vector of random field elements for consumption by the FLP
     /// prover.
-    fn derive_prove_rand(&self, prove_rand_seed: &Seed<SEED_SIZE>, ctx: &[u8]) -> Vec<T::Field> {
-        P::seed_stream(
+    fn derive_prove_rand(&self, prove_rand_seed: &Seed<32>, ctx: &[u8]) -> Vec<T::Field> {
+        XofTurboShake128::seed_stream(
             prove_rand_seed,
             &[&mastic::dst_usage(mastic::USAGE_PROVE_RAND), &self.id, ctx],
             &[],
@@ -342,12 +312,12 @@ where
 
     fn derive_joint_rand_part(
         &self,
-        aggregator_blind: &Seed<SEED_SIZE>,
+        aggregator_blind: &Seed<32>,
         measurement_share: &[T::Field],
         nonce: &[u8; 16],
         ctx: &[u8],
-    ) -> Result<Seed<SEED_SIZE>, SzkError> {
-        let mut xof = P::init(
+    ) -> Result<Seed<32>, SzkError> {
+        let mut xof = XofTurboShake128::init(
             aggregator_blind.as_ref(),
             &[
                 &mastic::dst_usage(mastic::USAGE_JOINT_RAND_PART),
@@ -369,12 +339,12 @@ where
 
     fn derive_joint_rand_seed(
         &self,
-        leader_joint_rand_part: &Seed<SEED_SIZE>,
-        helper_joint_rand_part: &Seed<SEED_SIZE>,
+        leader_joint_rand_part: &Seed<32>,
+        helper_joint_rand_part: &Seed<32>,
         ctx: &[u8],
-    ) -> Seed<SEED_SIZE> {
-        let mut xof = P::init(
-            &[0; SEED_SIZE],
+    ) -> Seed<32> {
+        let mut xof = XofTurboShake128::from_seed_slice(
+            &[],
             &[
                 &mastic::dst_usage(mastic::USAGE_JOINT_RAND_SEED),
                 &self.id,
@@ -388,13 +358,13 @@ where
 
     fn derive_joint_rand_and_seed(
         &self,
-        leader_joint_rand_part: &Seed<SEED_SIZE>,
-        helper_joint_rand_part: &Seed<SEED_SIZE>,
+        leader_joint_rand_part: &Seed<32>,
+        helper_joint_rand_part: &Seed<32>,
         ctx: &[u8],
-    ) -> (Seed<SEED_SIZE>, Vec<T::Field>) {
+    ) -> (Seed<32>, Vec<T::Field>) {
         let joint_rand_seed =
             self.derive_joint_rand_seed(leader_joint_rand_part, helper_joint_rand_part, ctx);
-        let joint_rand = P::seed_stream(
+        let joint_rand = XofTurboShake128::seed_stream(
             &joint_rand_seed,
             &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND), &self.id, ctx],
             &[],
@@ -404,28 +374,23 @@ where
         (joint_rand_seed, joint_rand)
     }
 
-    fn derive_helper_proof_share(
-        &self,
-        proof_share_seed: &Seed<SEED_SIZE>,
-        ctx: &[u8],
-    ) -> Vec<T::Field> {
-        Prng::from_seed_stream(P::seed_stream(
+    fn derive_helper_proof_share(&self, proof_share_seed: &Seed<32>, ctx: &[u8]) -> Vec<T::Field> {
+        XofTurboShake128::seed_stream(
             proof_share_seed,
             &[&mastic::dst_usage(USAGE_PROOF_SHARE), &self.id, ctx],
             &[],
-        ))
-        .take(self.typ.proof_len())
-        .collect()
+        )
+        .into_field_vec(self.typ.proof_len())
     }
 
     fn derive_query_rand(
         &self,
-        verify_key: &[u8; SEED_SIZE],
+        verify_key: &[u8; 32],
         nonce: &[u8; 16],
         level: u16,
         ctx: &[u8],
     ) -> Vec<T::Field> {
-        let mut xof = P::init(
+        let mut xof = XofTurboShake128::init(
             verify_key,
             &[&mastic::dst_usage(mastic::USAGE_QUERY_RAND), &self.id, ctx],
         );
@@ -454,10 +419,10 @@ where
         leader_input_share: &[T::Field],
         helper_input_share: &[T::Field],
         encoded_measurement: &[T::Field],
-        rand_seeds: [Seed<SEED_SIZE>; 2],
-        leader_seed_opt: Option<Seed<SEED_SIZE>>,
+        rand_seeds: [Seed<32>; 2],
+        leader_seed_opt: Option<Seed<32>>,
         nonce: &[u8; 16],
-    ) -> Result<[SzkProofShare<T::Field, SEED_SIZE>; 2], SzkError> {
+    ) -> Result<[SzkProofShare<T::Field>; 2], SzkError> {
         let [prove_rand_seed, helper_seed] = rand_seeds;
         // If joint randomness is used, derive it from the two input shares,
         // the seeds used to blind the derivation, and the nonce. Pass the
@@ -514,10 +479,10 @@ where
         ctx: &[u8],
         level: u16, // level of the prefix tree
         input_share: &[T::Field],
-        proof_share: &SzkProofShare<T::Field, SEED_SIZE>,
-        verify_key: &[u8; SEED_SIZE],
+        proof_share: &SzkProofShare<T::Field>,
+        verify_key: &[u8; 32],
         nonce: &[u8; 16],
-    ) -> Result<(SzkQueryShare<T::Field, SEED_SIZE>, SzkQueryState<SEED_SIZE>), SzkError> {
+    ) -> Result<(SzkQueryShare<T::Field>, SzkQueryState), SzkError> {
         let query_rand = self.derive_query_rand(verify_key, nonce, level, ctx);
         let flp_proof_share = match proof_share {
             SzkProofShare::Leader {
@@ -609,9 +574,9 @@ where
     pub(crate) fn merge_query_shares(
         &self,
         ctx: &[u8],
-        mut leader_share: SzkQueryShare<T::Field, SEED_SIZE>,
-        helper_share: SzkQueryShare<T::Field, SEED_SIZE>,
-    ) -> Result<SzkJointShare<SEED_SIZE>, SzkError> {
+        mut leader_share: SzkQueryShare<T::Field>,
+        helper_share: SzkQueryShare<T::Field>,
+    ) -> Result<SzkJointShare, SzkError> {
         for (x, y) in leader_share
             .flp_verifier
             .iter_mut()
@@ -641,8 +606,8 @@ where
     /// was correctly computed from both aggregators' parts.
     pub fn decide(
         &self,
-        query_state: SzkQueryState<SEED_SIZE>,
-        joint_share: SzkJointShare<SEED_SIZE>,
+        query_state: SzkQueryState,
+        joint_share: SzkJointShare,
     ) -> Result<(), SzkError> {
         // Check that joint randomness was properly derived from both
         // aggregators' parts
@@ -711,7 +676,7 @@ mod tests {
         let ctx = b"some application context";
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 32];
-        let szk_typ = Szk::new_turboshake128(typ.clone(), 0);
+        let szk_typ = Szk::new(typ.clone(), 0);
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
         let prove_rand_seed = Seed::generate().unwrap();
@@ -880,7 +845,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
-        let szk_typ = Szk::new_turboshake128(sum, 0);
+        let szk_typ = Szk::new(sum, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -915,7 +880,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
-        let szk_typ = Szk::new_turboshake128(sumvec, 0);
+        let szk_typ = Szk::new(sumvec, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -949,7 +914,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
-        let szk_typ = Szk::new_turboshake128(count, 0);
+        let szk_typ = Szk::new(count, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -984,7 +949,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
-        let szk_typ = Szk::new_turboshake128(sum, 0);
+        let szk_typ = Szk::new(sum, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1025,7 +990,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
-        let szk_typ = Szk::new_turboshake128(sum, 0);
+        let szk_typ = Szk::new(sum, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1065,7 +1030,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
-        let szk_typ = Szk::new_turboshake128(count, 0);
+        let szk_typ = Szk::new(count, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1105,7 +1070,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
-        let szk_typ = Szk::new_turboshake128(count, 0);
+        let szk_typ = Szk::new(count, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1146,7 +1111,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
-        let szk_typ = Szk::new_turboshake128(sumvec, 0);
+        let szk_typ = Szk::new(sumvec, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -1187,7 +1152,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
-        let szk_typ = Szk::new_turboshake128(sumvec, 0);
+        let szk_typ = Szk::new(sumvec, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
