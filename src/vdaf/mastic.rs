@@ -8,10 +8,7 @@ use crate::{
     bt::BinaryTree,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{decode_fieldvec, FieldElement, FieldElementWithInteger},
-    flp::{
-        szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState},
-        Type,
-    },
+    flp::Type,
     vdaf::{
         poplar1::{Poplar1, Poplar1AggregationParam},
         xof::{Seed, Xof},
@@ -24,6 +21,8 @@ use crate::{
     },
 };
 
+use szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState};
+
 use rand::prelude::*;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
@@ -32,6 +31,8 @@ use std::{collections::VecDeque, fmt::Debug};
 use subtle::{Choice, ConstantTimeEq};
 
 use super::xof::XofTurboShake128;
+
+pub(crate) mod szk;
 
 pub(crate) const SEED_SIZE: usize = 32;
 pub(crate) const NONCE_SIZE: usize = 16;
@@ -343,9 +344,9 @@ impl<T: Type> Client<16> for Mastic<T> {
 
 /// Mastic preparation state.
 ///
-/// State held by an aggregator waiting for a message during Mastic preparation. Includes intermediate
-/// state for [`Szk`] verification, the output shares currently being validated, and
-/// parameters of Mastic used for encoding.
+/// State held by an aggregator waiting for a message during Mastic preparation. Includes
+/// intermediate state for the evaluation check, the range check (if applicable) verification, and
+/// the output shares currently being validated.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MasticPrepareState<F: FieldElement> {
     /// The counter and truncated weight for each candidate prefix.
