@@ -364,7 +364,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
     fn extend(seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> ExtendedSeed {
         let mut rng = XofFixedKeyAes128::seed_stream(
-            &Seed(seed),
+            &seed,
             &[&mastic::dst_usage(mastic::USAGE_EXTEND), ctx],
             &[nonce],
         );
@@ -391,7 +391,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
     fn convert(&self, seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> (VidpfSeed, W) {
         let mut seed_stream = XofFixedKeyAes128::seed_stream(
-            &Seed(seed),
+            &seed,
             &[&mastic::dst_usage(mastic::USAGE_CONVERT), ctx],
             &[nonce],
         );
@@ -1018,7 +1018,7 @@ mod tests {
         use crate::{
             codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
-            vdaf::xof::{Seed, Xof, XofTurboShake128},
+            vdaf::xof::{Xof, XofTurboShake128},
         };
 
         use super::{TestWeight, TEST_WEIGHT_LEN};
@@ -1102,7 +1102,7 @@ mod tests {
         }
 
         fn compatible_weights() -> [TestWeight; 2] {
-            let mut xof = XofTurboShake128::seed_stream(&Seed(Default::default()), &[], &[]);
+            let mut xof = XofTurboShake128::seed_stream(&[0; 32], &[], &[]);
             [
                 TestWeight::generate(&mut xof, &TEST_WEIGHT_LEN),
                 TestWeight::generate(&mut xof, &TEST_WEIGHT_LEN),
@@ -1110,7 +1110,7 @@ mod tests {
         }
 
         fn incompatible_weights() -> [TestWeight; 2] {
-            let mut xof = XofTurboShake128::seed_stream(&Seed(Default::default()), &[], &[]);
+            let mut xof = XofTurboShake128::seed_stream(&[0; 32], &[], &[]);
             [
                 TestWeight::generate(&mut xof, &TEST_WEIGHT_LEN),
                 TestWeight::generate(&mut xof, &(2 * TEST_WEIGHT_LEN)),

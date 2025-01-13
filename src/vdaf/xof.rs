@@ -143,11 +143,11 @@ pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
 
     /// Construct a seed stream from the given seed and info string.
     fn seed_stream(
-        seed: &Seed<SEED_SIZE>,
+        seed: &[u8; SEED_SIZE],
         dst_parts: &[&[u8]],
         binder_parts: &[&[u8]],
     ) -> Self::SeedStream {
-        let mut xof = Self::init(seed.as_ref(), dst_parts);
+        let mut xof = Self::init(seed, dst_parts);
         for binder_part in binder_parts {
             xof.update(binder_part);
         }
@@ -586,7 +586,7 @@ mod tests {
         let mut want = [0; 45];
         xof.clone().into_seed_stream().fill_bytes(&mut want);
         let mut got = [0; 45];
-        P::seed_stream(&seed, &[dst], &[binder]).fill_bytes(&mut got);
+        P::seed_stream(seed.as_ref(), &[dst], &[binder]).fill_bytes(&mut got);
         assert_eq!(got, want);
     }
 
@@ -666,11 +666,11 @@ mod tests {
     fn xof_fixed_key_aes128_incomplete_block() {
         let seed = Seed::generate().unwrap();
         let mut expected = [0; 32];
-        XofFixedKeyAes128::seed_stream(&seed, &[b"dst"], &[b"binder"]).fill(&mut expected);
+        XofFixedKeyAes128::seed_stream(seed.as_ref(), &[b"dst"], &[b"binder"]).fill(&mut expected);
 
         for len in 0..=32 {
             let mut buf = vec![0; len];
-            XofFixedKeyAes128::seed_stream(&seed, &[b"dst"], &[b"binder"]).fill(&mut buf);
+            XofFixedKeyAes128::seed_stream(seed.as_ref(), &[b"dst"], &[b"binder"]).fill(&mut buf);
             assert_eq!(buf, &expected[..len]);
         }
     }
@@ -685,11 +685,11 @@ mod tests {
         let seed_2 = Seed::generate().unwrap();
 
         let mut stream_1_trait_api =
-            XofFixedKeyAes128::seed_stream(&seed_1, &[fixed_dst, ctx], &[binder]);
+            XofFixedKeyAes128::seed_stream(seed_1.as_ref(), &[fixed_dst, ctx], &[binder]);
         let mut output_1_trait_api = [0u8; 32];
         stream_1_trait_api.fill(&mut output_1_trait_api);
         let mut stream_2_trait_api =
-            XofFixedKeyAes128::seed_stream(&seed_2, &[fixed_dst, ctx], &[binder]);
+            XofFixedKeyAes128::seed_stream(seed_2.as_ref(), &[fixed_dst, ctx], &[binder]);
         let mut output_2_trait_api = [0u8; 32];
         stream_2_trait_api.fill(&mut output_2_trait_api);
 
