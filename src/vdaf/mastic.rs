@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of Mastic as specified in [[draft-mouris-cfrg-mastic-01]].
+//! Implementation of Mastic as specified in [[draft-mouris-cfrg-mastic-04]].
 //!
-//! [draft-mouris-cfrg-mastic-01]: https://www.ietf.org/archive/id/draft-mouris-cfrg-mastic-01.html
+//! [draft-mouris-cfrg-mastic-04]: https://www.ietf.org/archive/id/draft-mouris-cfrg-mastic-04.html
 
 use crate::{
     bt::BinaryTree,
