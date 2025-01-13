@@ -303,13 +303,14 @@ where
 {
     /// The Type representing the specific FLP system used to prove validity of an input.
     pub(crate) typ: T,
+    id: [u8; 4],
     phantom: PhantomData<P>,
 }
 
 impl<T: Type> Szk<T, XofTurboShake128, 32> {
     /// Create an instance of [`Szk`] using [`XofTurboShake128`].
-    pub fn new_turboshake128(typ: T) -> Self {
-        Szk::new(typ)
+    pub fn new_turboshake128(typ: T, algorithm_id: u32) -> Self {
+        Self::new(typ, algorithm_id)
     }
 }
 
@@ -320,9 +321,10 @@ where
 {
     /// Construct an instance of this sharedZK proof system with the underlying
     /// FLP.
-    pub fn new(typ: T) -> Self {
+    pub fn new(typ: T, algorithm_id: u32) -> Self {
         Self {
             typ,
+            id: algorithm_id.to_le_bytes(),
             phantom: PhantomData,
         }
     }
@@ -332,7 +334,7 @@ where
     fn derive_prove_rand(&self, prove_rand_seed: &Seed<SEED_SIZE>, ctx: &[u8]) -> Vec<T::Field> {
         P::seed_stream(
             prove_rand_seed,
-            &[&mastic::dst_usage(mastic::USAGE_PROVE_RAND), ctx],
+            &[&mastic::dst_usage(mastic::USAGE_PROVE_RAND), &self.id, ctx],
             &[],
         )
         .into_field_vec(self.typ.prove_rand_len())
@@ -347,7 +349,11 @@ where
     ) -> Result<Seed<SEED_SIZE>, SzkError> {
         let mut xof = P::init(
             aggregator_blind.as_ref(),
-            &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND_PART), ctx],
+            &[
+                &mastic::dst_usage(mastic::USAGE_JOINT_RAND_PART),
+                &self.id,
+                ctx,
+            ],
         );
         xof.update(nonce);
         // Encode measurement_share (currently an array of field elements) into
@@ -369,7 +375,11 @@ where
     ) -> Seed<SEED_SIZE> {
         let mut xof = P::init(
             &[0; SEED_SIZE],
-            &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND_SEED), ctx],
+            &[
+                &mastic::dst_usage(mastic::USAGE_JOINT_RAND_SEED),
+                &self.id,
+                ctx,
+            ],
         );
         xof.update(&leader_joint_rand_part.0);
         xof.update(&helper_joint_rand_part.0);
@@ -386,7 +396,7 @@ where
             self.derive_joint_rand_seed(leader_joint_rand_part, helper_joint_rand_part, ctx);
         let joint_rand = P::seed_stream(
             &joint_rand_seed,
-            &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND), ctx],
+            &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND), &self.id, ctx],
             &[],
         )
         .into_field_vec(self.typ.joint_rand_len());
@@ -401,7 +411,7 @@ where
     ) -> Vec<T::Field> {
         Prng::from_seed_stream(P::seed_stream(
             proof_share_seed,
-            &[&mastic::dst_usage(USAGE_PROOF_SHARE), ctx],
+            &[&mastic::dst_usage(USAGE_PROOF_SHARE), &self.id, ctx],
             &[],
         ))
         .take(self.typ.proof_len())
@@ -417,7 +427,7 @@ where
     ) -> Vec<T::Field> {
         let mut xof = P::init(
             verify_key,
-            &[&mastic::dst_usage(mastic::USAGE_QUERY_RAND), ctx],
+            &[&mastic::dst_usage(mastic::USAGE_QUERY_RAND), &self.id, ctx],
         );
         xof.update(nonce);
         xof.update(&level.to_le_bytes());
@@ -701,7 +711,7 @@ mod tests {
         let ctx = b"some application context";
         let mut nonce = [0u8; 16];
         let mut verify_key = [0u8; 32];
-        let szk_typ = Szk::new_turboshake128(typ.clone());
+        let szk_typ = Szk::new_turboshake128(typ.clone(), 0);
         thread_rng().fill(&mut verify_key[..]);
         thread_rng().fill(&mut nonce[..]);
         let prove_rand_seed = Seed::generate().unwrap();
@@ -870,7 +880,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
-        let szk_typ = Szk::new_turboshake128(sum);
+        let szk_typ = Szk::new_turboshake128(sum, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -905,7 +915,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
-        let szk_typ = Szk::new_turboshake128(sumvec);
+        let szk_typ = Szk::new_turboshake128(sumvec, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -939,7 +949,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
-        let szk_typ = Szk::new_turboshake128(count);
+        let szk_typ = Szk::new_turboshake128(count, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -974,7 +984,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
-        let szk_typ = Szk::new_turboshake128(sum);
+        let szk_typ = Szk::new_turboshake128(sum, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1015,7 +1025,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let sum = Sum::<Field128>::new(max_measurement).unwrap();
         let encoded_measurement = sum.encode_measurement(&9).unwrap();
-        let szk_typ = Szk::new_turboshake128(sum);
+        let szk_typ = Szk::new_turboshake128(sum, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1055,7 +1065,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
-        let szk_typ = Szk::new_turboshake128(count);
+        let szk_typ = Szk::new_turboshake128(count, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1095,7 +1105,7 @@ mod tests {
         thread_rng().fill(&mut nonce[..]);
         let count = Count::<Field128>::new();
         let encoded_measurement = count.encode_measurement(&true).unwrap();
-        let szk_typ = Szk::new_turboshake128(count);
+        let szk_typ = Szk::new_turboshake128(count, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = None;
@@ -1136,7 +1146,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
-        let szk_typ = Szk::new_turboshake128(sumvec);
+        let szk_typ = Szk::new_turboshake128(sumvec, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
@@ -1177,7 +1187,7 @@ mod tests {
         let sumvec =
             SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(5, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
-        let szk_typ = Szk::new_turboshake128(sumvec);
+        let szk_typ = Szk::new_turboshake128(sumvec, 0);
         let prove_rand_seed = Seed::generate().unwrap();
         let helper_seed = Seed::generate().unwrap();
         let leader_seed_opt = Some(Seed::generate().unwrap());
