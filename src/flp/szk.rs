@@ -303,7 +303,7 @@ impl<T: Type> Szk<T> {
     /// prover.
     fn derive_prove_rand(&self, prove_rand_seed: &Seed<32>, ctx: &[u8]) -> Vec<T::Field> {
         XofTurboShake128::seed_stream(
-            prove_rand_seed,
+            prove_rand_seed.as_ref(),
             &[&mastic::dst_usage(mastic::USAGE_PROVE_RAND), &self.id, ctx],
             &[],
         )
@@ -365,7 +365,7 @@ impl<T: Type> Szk<T> {
         let joint_rand_seed =
             self.derive_joint_rand_seed(leader_joint_rand_part, helper_joint_rand_part, ctx);
         let joint_rand = XofTurboShake128::seed_stream(
-            &joint_rand_seed,
+            joint_rand_seed.as_ref(),
             &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND), &self.id, ctx],
             &[],
         )
@@ -376,7 +376,7 @@ impl<T: Type> Szk<T> {
 
     fn derive_helper_proof_share(&self, proof_share_seed: &Seed<32>, ctx: &[u8]) -> Vec<T::Field> {
         XofTurboShake128::seed_stream(
-            proof_share_seed,
+            proof_share_seed.as_ref(),
             &[&mastic::dst_usage(USAGE_PROOF_SHARE), &self.id, ctx],
             &[],
         )
@@ -390,14 +390,12 @@ impl<T: Type> Szk<T> {
         level: u16,
         ctx: &[u8],
     ) -> Vec<T::Field> {
-        let mut xof = XofTurboShake128::init(
+        XofTurboShake128::seed_stream(
             verify_key,
             &[&mastic::dst_usage(mastic::USAGE_QUERY_RAND), &self.id, ctx],
-        );
-        xof.update(nonce);
-        xof.update(&level.to_le_bytes());
-        xof.into_seed_stream()
-            .into_field_vec(self.typ.query_rand_len())
+            &[nonce, &level.to_le_bytes()],
+        )
+        .into_field_vec(self.typ.query_rand_len())
     }
 
     pub(crate) fn requires_joint_rand(&self) -> bool {

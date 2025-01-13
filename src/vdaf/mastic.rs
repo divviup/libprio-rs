@@ -24,6 +24,7 @@ use crate::{
     },
 };
 
+use rand::prelude::*;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
@@ -405,7 +406,7 @@ impl<'a, T: Type> ParameterizedDecode<(&'a Mastic<T>, &'a MasticAggregationParam
 #[derive(Clone, Debug, PartialEq)]
 pub struct MasticPrepareShare<F: FieldElement> {
     ///  [`Vidpf`] evaluation proof, which guarantees one-hotness and payload consistency.
-    eval_proof: [u8; VIDPF_PROOF_SIZE],
+    vidpf_eval_proof: [u8; VIDPF_PROOF_SIZE],
 
     /// If [`Szk`]` verification of the root weight is needed, a verification message.
     szk_query_share_opt: Option<SzkQueryShare<F>>,
@@ -413,7 +414,7 @@ pub struct MasticPrepareShare<F: FieldElement> {
 
 impl<F: FieldElement> Encode for MasticPrepareShare<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        bytes.extend_from_slice(&self.eval_proof);
+        bytes.extend_from_slice(&self.vidpf_eval_proof);
         match &self.szk_query_share_opt {
             Some(query_share) => query_share.encode(bytes),
             None => Ok(()),
@@ -436,8 +437,8 @@ impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepa
         prep_state: &MasticPrepareState<F>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let mut eval_proof = [0; VIDPF_PROOF_SIZE];
-        bytes.read_exact(&mut eval_proof[..])?;
+        let mut vidpf_eval_proof = [0; VIDPF_PROOF_SIZE];
+        bytes.read_exact(&mut vidpf_eval_proof[..])?;
         let requires_joint_rand = prep_state.szk_query_state.is_some();
         let szk_query_share_opt = prep_state
             .verifier_len
@@ -446,7 +447,7 @@ impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepa
             })
             .transpose()?;
         Ok(Self {
-            eval_proof,
+            vidpf_eval_proof,
             szk_query_share_opt,
         })
     }
@@ -583,13 +584,15 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
             c.get_encoded().unwrap()
         };
 
-        let eval_proof = {
-            let mut eval_proof_xof =
-                XofTurboShake128::init(verify_key, &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx]);
-            eval_proof_xof.update(&onehot_check);
-            eval_proof_xof.update(&counter_check);
-            eval_proof_xof.update(&payload_check);
-            eval_proof_xof.into_seed().0
+        let vidpf_eval_proof = {
+            let mut vidpf_eval_proof = [0; VIDPF_PROOF_SIZE];
+            XofTurboShake128::seed_stream(
+                verify_key,
+                &[&dst_usage(USAGE_EVAL_PROOF), &self.id, ctx],
+                &[&onehot_check, &counter_check, &payload_check],
+            )
+            .fill(&mut vidpf_eval_proof);
+            vidpf_eval_proof
         };
 
         let mut truncated_out_shares =
@@ -626,7 +629,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                     verifier_len: Some(verifier_len),
                 },
                 MasticPrepareShare {
-                    eval_proof,
+                    vidpf_eval_proof,
                     szk_query_share_opt: Some(szk_query_share),
                 },
             )
@@ -638,7 +641,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                     verifier_len: None,
                 },
                 MasticPrepareShare {
-                    eval_proof,
+                    vidpf_eval_proof,
                     szk_query_share_opt: None,
                 },
             )
@@ -663,7 +666,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
                 "Received more than two prepare shares".to_string(),
             ));
         };
-        if leader_share.eval_proof != helper_share.eval_proof {
+        if leader_share.vidpf_eval_proof != helper_share.vidpf_eval_proof {
             return Err(VdafError::Uncategorized(
                 "Vidpf proof verification failed".to_string(),
             ));

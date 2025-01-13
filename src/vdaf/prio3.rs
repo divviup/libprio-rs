@@ -481,7 +481,7 @@ where
 
     fn derive_prove_rands(&self, ctx: &[u8], prove_rand_seed: &Seed<SEED_SIZE>) -> Vec<T::Field> {
         P::seed_stream(
-            prove_rand_seed,
+            prove_rand_seed.as_ref(),
             &[&self.domain_separation_tag(DST_PROVE_RANDOMNESS), ctx],
             &[&[self.num_proofs]],
         )
@@ -510,7 +510,7 @@ where
     ) -> (Seed<SEED_SIZE>, Vec<T::Field>) {
         let joint_rand_seed = self.derive_joint_rand_seed(ctx, joint_rand_parts);
         let joint_rands = P::seed_stream(
-            &joint_rand_seed,
+            joint_rand_seed.as_ref(),
             &[&self.domain_separation_tag(DST_JOINT_RANDOMNESS), ctx],
             &[&[self.num_proofs]],
         )
@@ -526,7 +526,7 @@ where
         agg_id: u8,
     ) -> Prng<T::Field, P::SeedStream> {
         Prng::from_seed_stream(P::seed_stream(
-            proofs_share_seed,
+            proofs_share_seed.as_ref(),
             &[&self.domain_separation_tag(DST_PROOF_SHARE), ctx],
             &[&[self.num_proofs, agg_id]],
         ))
@@ -617,7 +617,7 @@ where
             // This seed is used for both the helper measurement share and the helper proof share
             let meas_and_proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
-                &Seed(meas_and_proof_share_seed),
+                &meas_and_proof_share_seed,
                 &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
                 &[&[agg_id]],
             ));
@@ -1378,7 +1378,7 @@ where
             } => {
                 let measurement_share = Cow::Owned(
                     P::seed_stream(
-                        meas_and_proofs_share,
+                        meas_and_proofs_share.as_ref(),
                         &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
                         &[&[agg_id]],
                     )
@@ -1560,7 +1560,7 @@ where
         let measurement_share = match step.measurement_share {
             Share::Leader(data) => data,
             Share::Helper(seed) => P::seed_stream(
-                &seed,
+                seed.as_ref(),
                 &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
                 &[&[step.agg_id]],
             )
