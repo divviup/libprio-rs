@@ -33,7 +33,8 @@ use subtle::{Choice, ConstantTimeEq};
 
 use super::xof::XofTurboShake128;
 
-const NONCE_SIZE: usize = 16;
+pub(crate) const SEED_SIZE: usize = 32;
+pub(crate) const NONCE_SIZE: usize = 16;
 
 pub(crate) const USAGE_PROVE_RAND: u8 = 0;
 pub(crate) const USAGE_PROOF_SHARE: u8 = 1;
@@ -261,10 +262,10 @@ impl<T: Type> Mastic<T> {
         &self,
         ctx: &[u8],
         (alpha, weight): &(VidpfInput, T::Measurement),
-        nonce: &[u8; 16],
+        nonce: &[u8; NONCE_SIZE],
         vidpf_keys: [VidpfKey; 2],
-        szk_random: [Seed<32>; 2],
-        joint_random_opt: Option<Seed<32>>,
+        szk_random: [Seed<SEED_SIZE>; 2],
+        joint_random_opt: Option<Seed<SEED_SIZE>>,
     ) -> Result<(<Self as Vdaf>::PublicShare, Vec<<Self as Vdaf>::InputShare>), VdafError> {
         if alpha.len() != self.bits {
             return Err(VdafError::Vidpf(VidpfError::InvalidInputLength));
@@ -369,7 +370,7 @@ impl<F: FieldElement> Encode for MasticPrepareState<F> {
     fn encoded_len(&self) -> Option<usize> {
         Some(
             self.output_shares.as_ref().len() * F::ENCODED_SIZE
-                + self.szk_query_state.as_ref().map_or(0, |_| 32),
+                + self.szk_query_state.as_ref().map_or(0, |_| SEED_SIZE),
         )
     }
 }
@@ -471,7 +472,7 @@ impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepa
     }
 }
 
-impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
+impl<T: Type> Aggregator<SEED_SIZE, NONCE_SIZE> for Mastic<T> {
     type PrepareState = MasticPrepareState<T::Field>;
     type PrepareShare = MasticPrepareShare<T::Field>;
     type PrepareMessage = MasticPrepareMessage;
@@ -488,7 +489,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
         // Unpack this agg param and the last one in the list
         let cur_poplar_agg_param = &cur.level_and_prefixes;
         let prev_poplar_agg_param = from_ref(&prev.last().as_ref().unwrap().level_and_prefixes);
-        Poplar1::<XofTurboShake128, 32>::is_agg_param_valid(
+        Poplar1::<XofTurboShake128, SEED_SIZE>::is_agg_param_valid(
             cur_poplar_agg_param,
             prev_poplar_agg_param,
         )
@@ -496,7 +497,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
 
     fn prepare_init(
         &self,
-        verify_key: &[u8; 32],
+        verify_key: &[u8; SEED_SIZE],
         ctx: &[u8],
         agg_id: usize,
         agg_param: &MasticAggregationParam,
@@ -691,7 +692,7 @@ impl<T: Type> Aggregator<32, NONCE_SIZE> for Mastic<T> {
         _ctx: &[u8],
         state: MasticPrepareState<T::Field>,
         input: MasticPrepareMessage,
-    ) -> Result<PrepareTransition<Self, 32, NONCE_SIZE>, VdafError> {
+    ) -> Result<PrepareTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
         let MasticPrepareState {
             output_shares,
             szk_query_state,
