@@ -364,7 +364,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
     fn extend(seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> ExtendedSeed {
         let mut rng = XofFixedKeyAes128::seed_stream(
-            &Seed(seed),
+            &seed,
             &[&mastic::dst_usage(mastic::USAGE_EXTEND), ctx],
             &[nonce],
         );
@@ -391,7 +391,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
     fn convert(&self, seed: VidpfSeed, ctx: &[u8], nonce: &[u8]) -> (VidpfSeed, W) {
         let mut seed_stream = XofFixedKeyAes128::seed_stream(
-            &Seed(seed),
+            &seed,
             &[&mastic::dst_usage(mastic::USAGE_CONVERT), ctx],
             &[nonce],
         );
@@ -541,18 +541,16 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
     }
 }
 
-impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
-    fn decode_with_param(
-        (bits, weight_parameter): &(usize, W::ValueParameter),
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+impl<W: VidpfValue> ParameterizedDecode<Vidpf<W>> for VidpfPublicShare<W> {
+    fn decode_with_param(vidpf: &Vidpf<W>, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        let bits = usize::from(vidpf.bits);
         let packed_control_len = (bits + 3) / 4;
         let mut packed_control_bits = vec![0u8; packed_control_len];
         bytes.read_exact(&mut packed_control_bits)?;
         let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed_control_bits);
 
         // Control bits
-        let mut control_bits = Vec::with_capacity(*bits);
+        let mut control_bits = Vec::with_capacity(bits);
         for chunk in unpacked_control_bits[0..bits * 2].chunks(2) {
             control_bits.push([(chunk[0] as u8).into(), (chunk[1] as u8).into()]);
         }
@@ -564,20 +562,21 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
 
         // Seeds
         let seeds = std::iter::repeat_with(|| Seed::decode(bytes).map(|seed| seed.0))
-            .take(*bits)
+            .take(bits)
             .collect::<Result<Vec<_>, _>>()?;
 
         // Weights
-        let weights = std::iter::repeat_with(|| W::decode_with_param(weight_parameter, bytes))
-            .take(*bits)
-            .collect::<Result<Vec<_>, _>>()?;
+        let weights =
+            std::iter::repeat_with(|| W::decode_with_param(&vidpf.weight_parameter, bytes))
+                .take(bits)
+                .collect::<Result<Vec<_>, _>>()?;
 
         let proofs = std::iter::repeat_with(|| {
             let mut proof = [0; VIDPF_PROOF_SIZE];
             bytes.read_exact(&mut proof)?;
             Ok::<_, CodecError>(proof)
         })
-        .take(*bits)
+        .take(bits)
         .collect::<Result<Vec<_>, _>>()?;
 
         let cw = seeds
@@ -881,16 +880,12 @@ mod tests {
             let ctx = b"appliction context";
             let input = VidpfInput::from_bytes(&[0xFF]);
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
-            let (_, public, _, _) = vidpf_gen_setup(ctx, &input, &weight);
+            let (vidpf, public, _, _) = vidpf_gen_setup(ctx, &input, &weight);
 
             let bytes = public.get_encoded().unwrap();
             assert_eq!(public.encoded_len().unwrap(), bytes.len());
 
-            let decoded = VidpfPublicShare::<TestWeight>::get_decoded_with_param(
-                &(8, TEST_WEIGHT_LEN),
-                &bytes,
-            )
-            .unwrap();
+            let decoded = VidpfPublicShare::get_decoded_with_param(&vidpf, &bytes).unwrap();
             assert_eq!(public, decoded);
         }
 
@@ -1018,7 +1013,7 @@ mod tests {
         use crate::{
             codec::{Encode, ParameterizedDecode},
             idpf::IdpfValue,
-            vdaf::xof::{Seed, Xof, XofTurboShake128},
+            vdaf::xof::{Xof, XofTurboShake128},
         };
 
         use super::{TestWeight, TEST_WEIGHT_LEN};
@@ -1102,7 +1097,7 @@ mod tests {
         }
 
         fn compatible_weights() -> [TestWeight; 2] {
-            let mut xof = XofTurboShake128::seed_stream(&Seed(Default::default()), &[], &[]);
+            let mut xof = XofTurboShake128::seed_stream(&[0; 32], &[], &[]);
             [
                 TestWeight::generate(&mut xof, &TEST_WEIGHT_LEN),
                 TestWeight::generate(&mut xof, &TEST_WEIGHT_LEN),
@@ -1110,7 +1105,7 @@ mod tests {
         }
 
         fn incompatible_weights() -> [TestWeight; 2] {
-            let mut xof = XofTurboShake128::seed_stream(&Seed(Default::default()), &[], &[]);
+            let mut xof = XofTurboShake128::seed_stream(&[0; 32], &[], &[]);
             [
                 TestWeight::generate(&mut xof, &TEST_WEIGHT_LEN),
                 TestWeight::generate(&mut xof, &(2 * TEST_WEIGHT_LEN)),

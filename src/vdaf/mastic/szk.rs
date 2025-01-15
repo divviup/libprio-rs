@@ -17,7 +17,7 @@ use crate::{
     flp::{FlpError, Type},
     prng::PrngError,
     vdaf::{
-        mastic::{self, USAGE_PROOF_SHARE},
+        mastic::{self, NONCE_SIZE, SEED_SIZE, USAGE_PROOF_SHARE},
         xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
     },
 };
@@ -68,10 +68,11 @@ pub enum SzkProofShare<F> {
     /// The Helper uses one seed for both its compressed proof share and as the blind for its joint
     /// randomness.
     Helper {
-        /// The Seed that acts both as the compressed proof share and, optionally, as the blind.
-        proof_share_seed_and_blind: Seed<32>,
-        /// The leader's joint randomness part, if needed.
-        leader_joint_rand_part_opt: Option<Seed<32>>,
+        /// Used to derive the helper's input and proof shares and its blind for FLP joint
+        /// randomness computation.
+        proof_share_seed_and_blind: Seed<SEED_SIZE>,
+        /// Set only if joint randomness is needed for the FLP.
+        leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     },
 }
 
@@ -199,7 +200,7 @@ impl<F: FieldElement + Decode> ParameterizedDecode<(bool, usize, bool)> for SzkP
 /// A tuple containing the state and messages produced by an SZK query.
 #[derive(Clone, Debug, PartialEq)]
 pub struct SzkQueryShare<F: FieldElement> {
-    joint_rand_part_opt: Option<Seed<32>>,
+    joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     pub(crate) flp_verifier: Vec<F>,
 }
 
@@ -241,14 +242,14 @@ impl<F: FieldElement + Decode> ParameterizedDecode<(bool, usize)> for SzkQuerySh
 /// Szk query state.
 ///
 /// The state that needs to be stored by an Szk verifier between query() and decide().
-pub(crate) type SzkQueryState = Option<Seed<32>>;
+pub(crate) type SzkQueryState = Option<Seed<SEED_SIZE>>;
 
 /// Joint share type for the SZK proof.
 ///
 /// This is produced as the result of combining two query shares.
 /// It contains the re-computed joint randomness seed, if applicable. It is consumed by [`Szk::decide`].
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
-pub struct SzkJointShare(Option<Seed<32>>);
+pub struct SzkJointShare(Option<Seed<SEED_SIZE>>);
 
 impl Encode for SzkJointShare {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
@@ -301,9 +302,9 @@ impl<T: Type> Szk<T> {
 
     /// Derive a vector of random field elements for consumption by the FLP
     /// prover.
-    fn derive_prove_rand(&self, prove_rand_seed: &Seed<32>, ctx: &[u8]) -> Vec<T::Field> {
+    fn derive_prove_rand(&self, prove_rand_seed: &Seed<SEED_SIZE>, ctx: &[u8]) -> Vec<T::Field> {
         XofTurboShake128::seed_stream(
-            prove_rand_seed,
+            prove_rand_seed.as_ref(),
             &[&mastic::dst_usage(mastic::USAGE_PROVE_RAND), &self.id, ctx],
             &[],
         )
@@ -312,11 +313,11 @@ impl<T: Type> Szk<T> {
 
     fn derive_joint_rand_part(
         &self,
-        aggregator_blind: &Seed<32>,
+        aggregator_blind: &Seed<SEED_SIZE>,
         measurement_share: &[T::Field],
-        nonce: &[u8; 16],
+        nonce: &[u8; NONCE_SIZE],
         ctx: &[u8],
-    ) -> Result<Seed<32>, SzkError> {
+    ) -> Result<Seed<SEED_SIZE>, SzkError> {
         let mut xof = XofTurboShake128::init(
             aggregator_blind.as_ref(),
             &[
@@ -339,10 +340,10 @@ impl<T: Type> Szk<T> {
 
     fn derive_joint_rand_seed(
         &self,
-        leader_joint_rand_part: &Seed<32>,
-        helper_joint_rand_part: &Seed<32>,
+        leader_joint_rand_part: &Seed<SEED_SIZE>,
+        helper_joint_rand_part: &Seed<SEED_SIZE>,
         ctx: &[u8],
-    ) -> Seed<32> {
+    ) -> Seed<SEED_SIZE> {
         let mut xof = XofTurboShake128::from_seed_slice(
             &[],
             &[
@@ -358,14 +359,14 @@ impl<T: Type> Szk<T> {
 
     fn derive_joint_rand_and_seed(
         &self,
-        leader_joint_rand_part: &Seed<32>,
-        helper_joint_rand_part: &Seed<32>,
+        leader_joint_rand_part: &Seed<SEED_SIZE>,
+        helper_joint_rand_part: &Seed<SEED_SIZE>,
         ctx: &[u8],
-    ) -> (Seed<32>, Vec<T::Field>) {
+    ) -> (Seed<SEED_SIZE>, Vec<T::Field>) {
         let joint_rand_seed =
             self.derive_joint_rand_seed(leader_joint_rand_part, helper_joint_rand_part, ctx);
         let joint_rand = XofTurboShake128::seed_stream(
-            &joint_rand_seed,
+            joint_rand_seed.as_ref(),
             &[&mastic::dst_usage(mastic::USAGE_JOINT_RAND), &self.id, ctx],
             &[],
         )
@@ -374,9 +375,13 @@ impl<T: Type> Szk<T> {
         (joint_rand_seed, joint_rand)
     }
 
-    fn derive_helper_proof_share(&self, proof_share_seed: &Seed<32>, ctx: &[u8]) -> Vec<T::Field> {
+    fn derive_helper_proof_share(
+        &self,
+        proof_share_seed: &Seed<SEED_SIZE>,
+        ctx: &[u8],
+    ) -> Vec<T::Field> {
         XofTurboShake128::seed_stream(
-            proof_share_seed,
+            proof_share_seed.as_ref(),
             &[&mastic::dst_usage(USAGE_PROOF_SHARE), &self.id, ctx],
             &[],
         )
@@ -385,19 +390,17 @@ impl<T: Type> Szk<T> {
 
     fn derive_query_rand(
         &self,
-        verify_key: &[u8; 32],
-        nonce: &[u8; 16],
+        verify_key: &[u8; SEED_SIZE],
+        nonce: &[u8; NONCE_SIZE],
         level: u16,
         ctx: &[u8],
     ) -> Vec<T::Field> {
-        let mut xof = XofTurboShake128::init(
+        XofTurboShake128::seed_stream(
             verify_key,
             &[&mastic::dst_usage(mastic::USAGE_QUERY_RAND), &self.id, ctx],
-        );
-        xof.update(nonce);
-        xof.update(&level.to_le_bytes());
-        xof.into_seed_stream()
-            .into_field_vec(self.typ.query_rand_len())
+            &[nonce, &level.to_le_bytes()],
+        )
+        .into_field_vec(self.typ.query_rand_len())
     }
 
     pub(crate) fn requires_joint_rand(&self) -> bool {
@@ -419,9 +422,9 @@ impl<T: Type> Szk<T> {
         leader_input_share: &[T::Field],
         helper_input_share: &[T::Field],
         encoded_measurement: &[T::Field],
-        rand_seeds: [Seed<32>; 2],
-        leader_seed_opt: Option<Seed<32>>,
-        nonce: &[u8; 16],
+        rand_seeds: [Seed<SEED_SIZE>; 2],
+        leader_seed_opt: Option<Seed<SEED_SIZE>>,
+        nonce: &[u8; NONCE_SIZE],
     ) -> Result<[SzkProofShare<T::Field>; 2], SzkError> {
         let [prove_rand_seed, helper_seed] = rand_seeds;
         // If joint randomness is used, derive it from the two input shares,
@@ -480,8 +483,8 @@ impl<T: Type> Szk<T> {
         level: u16, // level of the prefix tree
         input_share: &[T::Field],
         proof_share: &SzkProofShare<T::Field>,
-        verify_key: &[u8; 32],
-        nonce: &[u8; 16],
+        verify_key: &[u8; SEED_SIZE],
+        nonce: &[u8; NONCE_SIZE],
     ) -> Result<(SzkQueryShare<T::Field>, SzkQueryState), SzkError> {
         let query_rand = self.derive_query_rand(verify_key, nonce, level, ctx);
         let flp_proof_share = match proof_share {
