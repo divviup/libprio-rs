@@ -7,28 +7,12 @@ use crate::{
     codec::CodecError,
     field::FftFriendlyFieldElement,
     polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory},
-    prng::{Prng, PrngError},
-    vdaf::{
-        xof::{Seed, SeedStreamAes128},
-        VdafError,
-    },
+    prng::Prng,
+    vdaf::{xof::SeedStreamAes128, VdafError},
 };
 
+use rand::prelude::*;
 use std::convert::TryFrom;
-
-/// Errors that might be emitted by the client.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ClientError {
-    /// PRNG error
-    #[error("prng error: {0}")]
-    Prng(#[from] PrngError),
-    /// VDAF error
-    #[error("vdaf error: {0}")]
-    Vdaf(#[from] VdafError),
-    /// failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
-}
 
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]
@@ -56,6 +40,7 @@ pub(crate) struct ClientMemory<F> {
 
 impl<F: FftFriendlyFieldElement> ClientMemory<F> {
     pub(crate) fn new(dimension: usize) -> Result<Self, VdafError> {
+        let mut rng = thread_rng();
         let n = (dimension + 1).next_power_of_two();
         if let Ok(size) = F::Integer::try_from(2 * n) {
             if size > F::generator_order() {
@@ -70,7 +55,7 @@ impl<F: FftFriendlyFieldElement> ClientMemory<F> {
         }
 
         Ok(Self {
-            prng: Prng::from_prio2_seed(Seed::<32>::generate()?.as_ref()),
+            prng: Prng::from_prio2_seed(&rng.gen()),
             points_f: vec![F::zero(); n],
             points_g: vec![F::zero(); n],
             evals_f: vec![F::zero(); 2 * n],

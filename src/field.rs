@@ -10,7 +10,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode},
     fp::{FieldOps, FieldParameters, FP128, FP32, FP64},
-    prng::{Prng, PrngError},
+    prng::Prng,
 };
 use rand::{
     distributions::{Distribution, Standard},
@@ -876,31 +876,28 @@ pub(crate) fn merge_vector<F: FieldElement>(
 
 /// Outputs an additive secret sharing of the input.
 #[cfg(test)]
-pub(crate) fn split_vector<F: FieldElement>(
-    inp: &[F],
-    num_shares: usize,
-) -> Result<Vec<Vec<F>>, PrngError> {
+pub(crate) fn split_vector<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec<Vec<F>> {
     if num_shares == 0 {
-        return Ok(vec![]);
+        return vec![];
     }
 
     let mut outp = Vec::with_capacity(num_shares);
     outp.push(inp.to_vec());
 
     for _ in 1..num_shares {
-        let share: Vec<F> = random_vector(inp.len())?;
+        let share: Vec<F> = random_vector(inp.len());
         for (x, y) in outp[0].iter_mut().zip(&share) {
             *x -= *y;
         }
         outp.push(share);
     }
 
-    Ok(outp)
+    outp
 }
 
 /// Generate a vector of uniformly distributed random field elements.
-pub fn random_vector<F: FieldElement>(len: usize) -> Result<Vec<F>, PrngError> {
-    Ok(Prng::new()?.take(len).collect())
+pub fn random_vector<F: FieldElement>(len: usize) -> Vec<F> {
+    Prng::new().take(len).collect()
 }
 
 /// `encode_fieldvec` serializes a type that is equivalent to a vector of field elements.
@@ -979,7 +976,7 @@ pub(crate) mod test_utils {
     }
 
     pub(crate) fn field_element_test_common<F: TestFieldElementWithInteger>() {
-        let mut prng: Prng<F, _> = Prng::new().unwrap();
+        let mut prng: Prng<F, _> = Prng::new();
         let int_modulus = F::modulus();
         let int_one = F::TestInteger::try_from(1).unwrap();
         let zero = F::zero();
@@ -1174,7 +1171,7 @@ mod tests {
     fn field_element_test<F: FftFriendlyFieldElement + Hash>() {
         field_element_test_common::<F>();
 
-        let mut prng: Prng<F, _> = Prng::new().unwrap();
+        let mut prng: Prng<F, _> = Prng::new();
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();

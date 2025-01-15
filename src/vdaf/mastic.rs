@@ -24,7 +24,7 @@ use crate::{
     },
 };
 
-use rand::RngCore;
+use rand::prelude::*;
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
@@ -370,13 +370,14 @@ where
         measurement: &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
-        let vidpf_keys = [VidpfKey::generate()?, VidpfKey::generate()?];
+        let mut rng = thread_rng();
+        let vidpf_keys = rng.gen();
         let joint_random_opt = if self.szk.requires_joint_rand() {
-            Some(Seed::<SEED_SIZE>::generate()?)
+            Some(rng.gen())
         } else {
             None
         };
-        let szk_random = [Seed::generate()?, Seed::generate()?];
+        let szk_random = rng.gen();
 
         self.shard_with_random(
             ctx,

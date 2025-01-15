@@ -8,22 +8,13 @@
 use crate::field::{FieldElement, FieldElementExt};
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vdaf::xof::SeedStreamAes128;
-use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
-use rand_core::RngCore;
+use crate::vdaf::xof::{SeedStreamTurboShake128, Xof, XofTurboShake128};
+use rand::prelude::*;
 
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
 
 const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
-
-/// Errors propagated by methods in this module.
-#[derive(Debug, thiserror::Error)]
-#[non_exhaustive]
-pub enum PrngError {
-    /// Failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
-}
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
 /// sequence is derived from a XOF's key stream.
@@ -48,13 +39,9 @@ impl<F: FieldElement> Prng<F, SeedStreamAes128> {
 
 impl<F: FieldElement> Prng<F, SeedStreamTurboShake128> {
     /// Create a [`Prng`] from a randomly generated seed.
-    pub(crate) fn new() -> Result<Self, PrngError> {
-        let seed = Seed::generate()?;
-        Ok(Prng::from_seed_stream(XofTurboShake128::seed_stream(
-            &seed,
-            &[],
-            &[],
-        )))
+    pub(crate) fn new() -> Self {
+        let seed = thread_rng().gen();
+        Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]))
     }
 }
 
@@ -254,7 +241,7 @@ mod tests {
     // once it reaches the end.
     #[test]
     fn left_over_buffer_back_fill() {
-        let seed = Seed::generate().unwrap();
+        let seed = thread_rng().gen();
 
         let mut prng: Prng<Field64, SeedStreamTurboShake128> =
             Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
@@ -276,7 +263,7 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn into_different_field() {
-        let seed = Seed::generate().unwrap();
+        let seed = thread_rng().gen();
         let want: Prng<Field64, SeedStreamTurboShake128> =
             Prng::from_seed_stream(XofTurboShake128::seed_stream(&seed, &[], &[]));
         let want_buffer = want.buffer.clone();

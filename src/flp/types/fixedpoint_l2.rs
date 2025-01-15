@@ -822,7 +822,7 @@ mod tests {
 
         // invalid submission length, should be 3n + (2*n - 2) for a
         // 3-element n-bit vector. 3*n bits for 3 entries, (2*n-2) for norm.
-        let joint_rand = random_vector(vsum.joint_rand_len()).unwrap();
+        let joint_rand = random_vector(vsum.joint_rand_len());
         vsum.valid(
             &mut vsum.gadget(),
             &vec![one; 3 * n + 2 * n - 1],

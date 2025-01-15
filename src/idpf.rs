@@ -19,7 +19,7 @@ use bitvec::{
     vec::BitVec,
     view::BitView,
 };
-use rand_core::RngCore;
+use rand::prelude::*;
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -493,6 +493,7 @@ where
     where
         M: IntoIterator<Item = VI>,
     {
+        let mut rng = thread_rng();
         if input.is_empty() {
             return Err(
                 IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into(),
@@ -500,7 +501,7 @@ where
         }
         let mut random = [[0u8; 16]; 2];
         for random_seed in random.iter_mut() {
-            getrandom::getrandom(random_seed)?;
+            rng.fill(random_seed);
         }
         self.gen_with_random(input, inner_values, leaf_value, ctx, nonce, &random)
     }
@@ -1035,7 +1036,6 @@ enum XofMode<'a> {
 pub mod test_utils {
     use super::*;
 
-    use rand::prelude::*;
     use zipf::ZipfDistribution;
 
     /// Generate a set of IDPF inputs with the given bit length `bits`. They are sampled according
@@ -1373,15 +1373,14 @@ mod tests {
         let input = bits.clone().into();
 
         let mut inner_values = Vec::with_capacity(INPUT_LEN - 1);
-        let mut prng = Prng::new().unwrap();
+        let mut prng = Prng::new();
         for _ in 0..INPUT_LEN - 1 {
             inner_values.push(Poplar1IdpfValue::new([
                 Field64::one(),
                 prng.next().unwrap(),
             ]));
         }
-        let leaf_values =
-            Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
+        let leaf_values = Poplar1IdpfValue::new([Field255::one(), Prng::new().next().unwrap()]);
 
         let nonce: [u8; 16] = random();
         let idpf = Idpf::new((), ());
@@ -1442,15 +1441,14 @@ mod tests {
         let input = bits.into();
 
         let mut inner_values = Vec::with_capacity(7);
-        let mut prng = Prng::new().unwrap();
+        let mut prng = Prng::new();
         for _ in 0..7 {
             inner_values.push(Poplar1IdpfValue::new([
                 Field64::one(),
                 prng.next().unwrap(),
             ]));
         }
-        let leaf_values =
-            Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
+        let leaf_values = Poplar1IdpfValue::new([Field255::one(), Prng::new().next().unwrap()]);
 
         let nonce: [u8; 16] = random();
         let idpf = Idpf::new((), ());
@@ -1621,15 +1619,14 @@ mod tests {
         let input = bits.into();
 
         let mut inner_values = Vec::with_capacity(7);
-        let mut prng = Prng::new().unwrap();
+        let mut prng = Prng::new();
         for _ in 0..7 {
             inner_values.push(Poplar1IdpfValue::new([
                 Field64::one(),
                 prng.next().unwrap(),
             ]));
         }
-        let leaf_values =
-            Poplar1IdpfValue::new([Field255::one(), Prng::new().unwrap().next().unwrap()]);
+        let leaf_values = Poplar1IdpfValue::new([Field255::one(), Prng::new().next().unwrap()]);
 
         let nonce: [u8; 16] = random();
         let idpf = Idpf::new((), ());
