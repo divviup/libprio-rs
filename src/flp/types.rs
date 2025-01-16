@@ -1420,9 +1420,9 @@ mod tests {
         let typ: SumVec<TestField, ParallelSum<TestField, _>> = SumVec::new(1, 1000, 31).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
-        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
-        let query_rand = random_vector(typ.query_rand_len()).unwrap();
+        let joint_rand = random_vector(typ.joint_rand_len());
+        let prove_rand = random_vector(typ.prove_rand_len());
+        let query_rand = random_vector(typ.query_rand_len());
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         let verifier = typ
             .query(&input, &proof, &query_rand, &joint_rand, 1)
@@ -1438,9 +1438,9 @@ mod tests {
             SumVec::new(1, 1000, 31).unwrap();
         let input = typ.encode_measurement(&vec![0; 1000]).unwrap();
         assert_eq!(input.len(), typ.input_len());
-        let joint_rand = random_vector(typ.joint_rand_len()).unwrap();
-        let prove_rand = random_vector(typ.prove_rand_len()).unwrap();
-        let query_rand = random_vector(typ.query_rand_len()).unwrap();
+        let joint_rand = random_vector(typ.joint_rand_len());
+        let prove_rand = random_vector(typ.prove_rand_len());
+        let query_rand = random_vector(typ.query_rand_len());
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         let verifier = typ
             .query(&input, &proof, &query_rand, &joint_rand, 1)

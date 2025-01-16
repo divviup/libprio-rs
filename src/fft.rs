@@ -136,7 +136,7 @@ mod tests {
         for size in test_sizes.iter() {
             let mut tmp = vec![F::zero(); *size];
             let mut got = vec![F::zero(); *size];
-            let want = random_vector(*size).unwrap();
+            let want = random_vector(*size);
 
             discrete_fourier_transform(&mut tmp, &want, want.len())?;
             discrete_fourier_transform_inv(&mut got, &tmp, tmp.len())?;
@@ -166,7 +166,7 @@ mod tests {
         let size = 128;
         let mut mem = TestPolyAuxMemory::new(size / 2);
 
-        let inp = random_vector(size).unwrap();
+        let inp = random_vector(size);
         let mut want = vec![FieldPrio2::zero(); size];
         let mut got = vec![FieldPrio2::zero(); size];
 
@@ -191,8 +191,8 @@ mod tests {
     fn test_fft_linearity() {
         let len = 16;
         let num_shares = 3;
-        let x: Vec<Field64> = random_vector(len).unwrap();
-        let mut x_shares = split_vector(&x, num_shares).unwrap();
+        let x: Vec<Field64> = random_vector(len);
+        let mut x_shares = split_vector(&x, num_shares);
 
         // Just for fun, let's do something different with a subset of the inputs. For the first
         // share, every odd element is set to the plaintext value. For all shares but the first,

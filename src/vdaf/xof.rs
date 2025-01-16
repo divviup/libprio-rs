@@ -33,6 +33,8 @@ use rand_core::{
     impls::{next_u32_via_fill, next_u64_via_fill},
     RngCore, SeedableRng,
 };
+
+use rand::distributions::{Distribution, Standard};
 #[cfg(feature = "crypto-dependencies")]
 use sha2::Sha256;
 use sha3::{
@@ -51,14 +53,15 @@ use subtle::{Choice, ConstantTimeEq};
 #[derive(Clone, Debug)]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
-impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
-    /// Generate a uniform random seed.
-    pub fn generate() -> Result<Self, getrandom::Error> {
-        let mut seed = [0; SEED_SIZE];
-        getrandom::getrandom(&mut seed)?;
-        Ok(Self::from_bytes(seed))
+impl<const SEED_SIZE: usize> Distribution<Seed<SEED_SIZE>> for Standard {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Seed<SEED_SIZE> {
+        let mut seed_bytes = [0; SEED_SIZE];
+        rng.fill(&mut seed_bytes[..]);
+        Seed(seed_bytes)
     }
+}
 
+impl<const SEED_SIZE: usize> Seed<SEED_SIZE> {
     /// Construct seed from a byte slice.
     pub(crate) fn from_bytes(seed: [u8; SEED_SIZE]) -> Self {
         Self(seed)
@@ -548,6 +551,7 @@ impl Xof<32> for XofHmacSha256Aes128 {
 mod tests {
     use super::*;
     use crate::{field::Field128, vdaf::equality_comparison_test};
+    use rand::prelude::*;
     use serde::{Deserialize, Serialize};
     use std::{convert::TryInto, io::Cursor};
 
@@ -571,7 +575,8 @@ mod tests {
     where
         P: Xof<SEED_SIZE>,
     {
-        let seed = Seed::generate().unwrap();
+        let mut rng = thread_rng();
+        let seed = rng.gen::<Seed<SEED_SIZE>>();
         let dst = b"algorithm and usage";
         let binder = b"bind to artifact";
 
@@ -664,7 +669,8 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128_incomplete_block() {
-        let seed = Seed::generate().unwrap();
+        let mut rng = thread_rng();
+        let seed = rng.gen::<Seed<16>>();
         let mut expected = [0; 32];
         XofFixedKeyAes128::seed_stream(seed.as_ref(), &[b"dst"], &[b"binder"]).fill(&mut expected);
 
@@ -678,11 +684,12 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128_alternate_apis() {
+        let mut rng = thread_rng();
         let fixed_dst = b"domain separation tag";
         let ctx = b"context string";
         let binder = b"AAAAAAAAAAAAAAAAAAAAAAAA";
-        let seed_1 = Seed::generate().unwrap();
-        let seed_2 = Seed::generate().unwrap();
+        let seed_1 = rng.gen::<Seed<16>>();
+        let seed_2 = rng.gen::<Seed<16>>();
 
         let mut stream_1_trait_api =
             XofFixedKeyAes128::seed_stream(seed_1.as_ref(), &[fixed_dst, ctx], &[binder]);

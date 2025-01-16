@@ -222,7 +222,6 @@ mod tests {
             let mut rng = XofTurboShake128::init(&[0; 32], &[]).into_seed_stream();
             let [mut share1, mut share2]: [Vec<Field128>; 2] =
                 split_vector(&[Field128::zero(); SIZE], 2)
-                    .unwrap()
                     .try_into()
                     .unwrap();
 
@@ -258,7 +257,6 @@ mod tests {
             let mut rng = XofTurboShake128::init(&[1; 32], &[]).into_seed_stream();
             let [mut share1, mut share2]: [Vec<Field128>; 2] =
                 split_vector(&[Field128::zero(); SIZE], 2)
-                    .unwrap()
                     .try_into()
                     .unwrap();
 
@@ -301,7 +299,6 @@ mod tests {
         let mut rng = XofTurboShake128::init(&[2; 32], &[]).into_seed_stream();
         let [mut share1, mut share2]: [Vec<Field128>; 2] =
             split_vector(&[Field128::zero(); SIZE], 2)
-                .unwrap()
                 .try_into()
                 .unwrap();
 

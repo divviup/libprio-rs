@@ -23,7 +23,7 @@ use prio::{
 };
 
 fn prng(size: usize) -> Vec<Field128> {
-    random_vector(size).unwrap()
+    random_vector(size)
 }
 
 fn prng_16() -> Vec<Field128> {

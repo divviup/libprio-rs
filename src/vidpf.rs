@@ -15,7 +15,7 @@ use core::{
 };
 
 use bitvec::prelude::{BitVec, Lsb0};
-use rand_core::RngCore;
+use rand::prelude::*;
 use std::fmt::Debug;
 use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -46,10 +46,6 @@ pub enum VidpfError {
     /// Error when a weight has an unexpected length.
     #[error("invalid weight length")]
     InvalidWeightLength,
-
-    /// Failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
 }
 
 /// Represents the domain of an incremental point function.
@@ -102,7 +98,8 @@ impl<W: VidpfValue> Vidpf<W> {
         weight: &W,
         nonce: &[u8],
     ) -> Result<(VidpfPublicShare<W>, [VidpfKey; 2]), VidpfError> {
-        let keys = [VidpfKey::generate()?, VidpfKey::generate()?];
+        let mut rng = thread_rng();
+        let keys = rng.gen();
         let public = self.gen_with_keys(ctx, &keys, input, weight, nonce)?;
         Ok((public, keys))
     }

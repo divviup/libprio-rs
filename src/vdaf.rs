@@ -17,7 +17,6 @@ use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
     flp::FlpError,
-    prng::PrngError,
     vdaf::xof::Seed,
 };
 use serde::{Deserialize, Serialize};
@@ -52,14 +51,6 @@ pub enum VdafError {
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("Szk error: {0}")]
     Szk(#[from] SzkError),
-
-    /// PRNG error.
-    #[error("prng error: {0}")]
-    Prng(#[from] PrngError),
-
-    /// Failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
 
     /// IDPF error.
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -685,7 +676,7 @@ where
     for<'a> T: ParameterizedDecode<(&'a V, &'a V::AggregationParam)>,
 {
     // Generate an arbitrary vector of field elements.
-    let vec: Vec<F> = crate::field::random_vector(length).unwrap();
+    let vec: Vec<F> = crate::field::random_vector(length);
 
     // Serialize the field element vector into a vector of bytes.
     let mut bytes = Vec::with_capacity(vec.len() * F::ENCODED_SIZE);
