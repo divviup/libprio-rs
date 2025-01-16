@@ -163,7 +163,7 @@ where
         mastic: &Mastic<T, P, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        VidpfPublicShare::decode_with_param(&(mastic.bits, mastic.vidpf.weight_parameter), bytes)
+        VidpfPublicShare::decode_with_param(&(mastic.bits, mastic.vidpf.weight_len), bytes)
     }
 }
 

@@ -62,7 +62,7 @@ pub trait VidpfValue: IdpfValue + Clone + Debug + PartialEq + ConstantTimeEq {}
 /// An instance of the VIDPF.
 pub struct Vidpf<W: VidpfValue> {
     pub(crate) bits: u16,
-    pub(crate) weight_parameter: W::ValueParameter,
+    pub(crate) weight_len: W::ValueParameter,
 }
 
 impl<W: VidpfValue> Vidpf<W> {
@@ -71,13 +71,10 @@ impl<W: VidpfValue> Vidpf<W> {
     /// # Arguments
     ///
     /// * `bits`, the length of the input in bits.
-    /// * `weight_parameter`, the length of the weight in number of field elements.
-    pub fn new(bits: usize, weight_parameter: W::ValueParameter) -> Result<Self, VidpfError> {
+    /// * `weight_len`, the length of the weight in number of field elements.
+    pub fn new(bits: usize, weight_len: W::ValueParameter) -> Result<Self, VidpfError> {
         let bits = u16::try_from(bits).map_err(|_| VidpfError::BitLengthTooLong)?;
-        Ok(Self {
-            bits,
-            weight_parameter,
-        })
+        Ok(Self { bits, weight_len })
     }
 
     /// Splits an incremental point function `F` into two private keys
@@ -201,7 +198,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
         let mut r = VidpfEvalResult {
             state: VidpfEvalState::init_from_key(id, key),
-            share: W::zero(&self.weight_parameter), // not used
+            share: W::zero(&self.weight_len), // not used
         };
 
         if input.len() > public.cw.len() {
@@ -247,7 +244,7 @@ impl<W: VidpfValue> Vidpf<W> {
         // Convert and correct the payload.
         let (next_seed, w) = self.convert(seed_keep, ctx, nonce);
         let mut weight = <W as IdpfValue>::conditional_select(
-            &<W as IdpfValue>::zero(&self.weight_parameter),
+            &<W as IdpfValue>::zero(&self.weight_len),
             &cw.weight,
             next_ctrl,
         );
@@ -322,7 +319,7 @@ impl<W: VidpfValue> Vidpf<W> {
             let mut sub_tree = prefix_tree.root.get_or_insert_with(|| {
                 Box::new(Node::new(VidpfEvalResult {
                     state: VidpfEvalState::init_from_key(id, key),
-                    share: W::zero(&self.weight_parameter), // not used
+                    share: W::zero(&self.weight_len), // not used
                 }))
             });
 
@@ -398,7 +395,7 @@ impl<W: VidpfValue> Vidpf<W> {
 
         let mut next_seed = VidpfSeed::default();
         seed_stream.fill_bytes(&mut next_seed);
-        let weight = W::generate(&mut seed_stream, &self.weight_parameter);
+        let weight = W::generate(&mut seed_stream, &self.weight_len);
         (next_seed, weight)
     }
 
@@ -527,7 +524,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
 
     fn encoded_len(&self) -> Option<usize> {
         // We assume the weight has the same length at each level of the tree.
-        let weight_parameter = self
+        let weight_len = self
             .cw
             .first()
             .map_or(Some(0), |cw| cw.weight.encoded_len())?;
@@ -535,7 +532,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
         let mut len = 0;
         len += (2 * self.cw.len() + 7) / 8; // packed control bits
         len += self.cw.len() * VIDPF_SEED_SIZE; // seeds
-        len += self.cw.len() * weight_parameter; // weights
+        len += self.cw.len() * weight_len; // weights
         len += self.cw.len() * VIDPF_PROOF_SIZE; // nod proofs
         Some(len)
     }
@@ -543,7 +540,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
 
 impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPublicShare<W> {
     fn decode_with_param(
-        (bits, weight_parameter): &(usize, W::ValueParameter),
+        (bits, weight_len): &(usize, W::ValueParameter),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let packed_control_len = (bits + 3) / 4;
@@ -568,7 +565,7 @@ impl<W: VidpfValue> ParameterizedDecode<(usize, W::ValueParameter)> for VidpfPub
             .collect::<Result<Vec<_>, _>>()?;
 
         // Weights
-        let weights = std::iter::repeat_with(|| W::decode_with_param(weight_parameter, bytes))
+        let weights = std::iter::repeat_with(|| W::decode_with_param(weight_len, bytes))
             .take(*bits)
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -1006,7 +1003,7 @@ mod tests {
             let weight = TestWeight::from(vec![21.into(), 22.into(), 23.into()]);
             let (vidpf, public, _, _) = vidpf_gen_setup(b"some application", &input, &weight);
             for VidpfCorrectionWord { weight, .. } in public.cw {
-                assert_eq!(weight.0.len(), vidpf.weight_parameter);
+                assert_eq!(weight.0.len(), vidpf.weight_len);
             }
         }
     }
