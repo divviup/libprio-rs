@@ -48,9 +48,9 @@
 
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
-use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish, FftError};
-use crate::field::{FftFriendlyFieldElement, FieldElement, FieldElementWithInteger, FieldError};
+use crate::field::{FieldElement, FieldElementWithInteger, FieldError, NttFriendlyFieldElement};
 use crate::fp::log2;
+use crate::ntt::{ntt, ntt_inv_finish, NttError};
 use crate::polynomial::poly_eval;
 use std::any::Any;
 use std::convert::TryFrom;
@@ -99,9 +99,9 @@ pub enum FlpError {
     #[error("invalid paramter: {0}")]
     InvalidParameter(String),
 
-    /// Returned if an FFT operation propagates an error.
-    #[error("FFT error: {0}")]
-    Fft(#[from] FftError),
+    /// Returned if an NTT operation propagates an error.
+    #[error("NTT error: {0}")]
+    Ntt(#[from] NttError),
 
     /// Returned if a field operation encountered an error.
     #[error("Field error: {0}")]
@@ -124,7 +124,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
     type AggregateResult: Clone + Debug;
 
     /// The finite field used for this type.
-    type Field: FftFriendlyFieldElement;
+    type Field: NttFriendlyFieldElement;
 
     /// Encodes a measurement as a vector of [`Self::input_len`] field elements.
     fn encode_measurement(
@@ -299,7 +299,7 @@ pub trait Type: Sized + Eq + Clone + Debug {
             .map(|shim| {
                 let gadget_poly_len = gadget_poly_len(shim.degree(), wire_poly_len(shim.calls()));
 
-                // Computing the gadget polynomial using FFT requires an amount of memory that is a
+                // Computing the gadget polynomial using NTT requires an amount of memory that is a
                 // power of 2. Thus we choose the smallest power of 2 that is at least as large as
                 // the gadget polynomial. The wire seeds are encoded in the proof, too, so we
                 // include the arity of the gadget to ensure there is always enough room at the end
@@ -336,8 +336,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
                 .zip(gadget.f_vals[..gadget.arity()].iter())
                 .zip(proof[proof_len..proof_len + gadget.arity()].iter_mut())
             {
-                discrete_fourier_transform(coefficients, values, m)?;
-                discrete_fourier_transform_inv_finish(coefficients, m, m_inv);
+                ntt(coefficients, values, m)?;
+                ntt_inv_finish(coefficients, m, m_inv);
 
                 // The first point on each wire polynomial is a random value chosen by the prover. This
                 // point is stored in the proof so that the verifier can reconstruct the wire
@@ -503,8 +503,8 @@ pub trait Type: Sized + Eq + Clone + Debug {
             .inv();
             let mut f = vec![Self::Field::zero(); m];
             for wire in 0..gadget.arity() {
-                discrete_fourier_transform(&mut f, &gadget.f_vals[wire], m)?;
-                discrete_fourier_transform_inv_finish(&mut f, m, m_inv);
+                ntt(&mut f, &gadget.f_vals[wire], m)?;
+                ntt_inv_finish(&mut f, m, m_inv);
                 verifier.push(poly_eval(&f, *query_rand_val));
             }
 
@@ -607,7 +607,7 @@ where
 }
 
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
-pub trait Gadget<F: FftFriendlyFieldElement>: Debug {
+pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
     /// Evaluates the gadget on input `inp` and returns the output.
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError>;
 
@@ -632,7 +632,7 @@ pub trait Gadget<F: FftFriendlyFieldElement>: Debug {
 /// A "shim" gadget used during proof generation to record the input wires each time a gadget is
 /// evaluated.
 #[derive(Debug)]
-struct ProveShimGadget<F: FftFriendlyFieldElement> {
+struct ProveShimGadget<F: NttFriendlyFieldElement> {
     inner: Box<dyn Gadget<F>>,
 
     /// Points at which the wire polynomials are interpolated.
@@ -642,7 +642,7 @@ struct ProveShimGadget<F: FftFriendlyFieldElement> {
     ct: usize,
 }
 
-impl<F: FftFriendlyFieldElement> ProveShimGadget<F> {
+impl<F: NttFriendlyFieldElement> ProveShimGadget<F> {
     fn new(inner: Box<dyn Gadget<F>>, prove_rand: &[F]) -> Result<Self, FlpError> {
         let mut f_vals = vec![vec![F::zero(); 1 + inner.calls()]; inner.arity()];
 
@@ -661,7 +661,7 @@ impl<F: FftFriendlyFieldElement> ProveShimGadget<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
+impl<F: NttFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         for (wire_poly_vals, inp_val) in self.f_vals[..inp.len()].iter_mut().zip(inp.iter()) {
             wire_poly_vals[self.ct] = *inp_val;
@@ -694,7 +694,7 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
 /// A "shim" gadget used during proof verification to record the points at which the intermediate
 /// proof polynomials are evaluated.
 #[derive(Debug)]
-struct QueryShimGadget<F: FftFriendlyFieldElement> {
+struct QueryShimGadget<F: NttFriendlyFieldElement> {
     inner: Box<dyn Gadget<F>>,
 
     /// Points at which intermediate proof polynomials are interpolated.
@@ -713,7 +713,7 @@ struct QueryShimGadget<F: FftFriendlyFieldElement> {
     ct: usize,
 }
 
-impl<F: FftFriendlyFieldElement> QueryShimGadget<F> {
+impl<F: NttFriendlyFieldElement> QueryShimGadget<F> {
     fn new(inner: Box<dyn Gadget<F>>, r: F, proof_data: &[F]) -> Result<Self, FlpError> {
         let gadget_degree = inner.degree();
         let gadget_arity = inner.arity();
@@ -731,7 +731,7 @@ impl<F: FftFriendlyFieldElement> QueryShimGadget<F> {
         // Evaluate the gadget polynomial at roots of unity.
         let size = p.next_power_of_two();
         let mut p_vals = vec![F::zero(); size];
-        discrete_fourier_transform(&mut p_vals, &proof_data[gadget_arity..], size)?;
+        ntt(&mut p_vals, &proof_data[gadget_arity..], size)?;
 
         // The step is used to compute the element of `p_val` that will be returned by a call to
         // the gadget.
@@ -751,7 +751,7 @@ impl<F: FftFriendlyFieldElement> QueryShimGadget<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Gadget<F> for QueryShimGadget<F> {
+impl<F: NttFriendlyFieldElement> Gadget<F> for QueryShimGadget<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         for (wire_poly_vals, inp_val) in self.f_vals[..inp.len()].iter_mut().zip(inp.iter()) {
             wire_poly_vals[self.ct] = *inp_val;
@@ -1077,7 +1077,7 @@ mod tests {
         }
     }
 
-    impl<F: FftFriendlyFieldElement> Type for TestType<F> {
+    impl<F: NttFriendlyFieldElement> Type for TestType<F> {
         type Measurement = F::Integer;
         type AggregateResult = F::Integer;
         type Field = F;
@@ -1215,7 +1215,7 @@ mod tests {
         }
     }
 
-    impl<F: FftFriendlyFieldElement> Type for Issue254Type<F> {
+    impl<F: NttFriendlyFieldElement> Type for Issue254Type<F> {
         type Measurement = F::Integer;
         type AggregateResult = F::Integer;
         type Field = F;

@@ -2,7 +2,7 @@
 
 use crate::dp::{distributions::PureDpDiscreteLaplace, DifferentialPrivacyStrategy};
 use crate::dp::{DifferentialPrivacyDistribution, DpError};
-use crate::field::{FftFriendlyFieldElement, Field128, Field64};
+use crate::field::{Field128, Field64, NttFriendlyFieldElement};
 use crate::flp::gadgets::{Mul, ParallelSumGadget};
 use crate::flp::types::{Histogram, SumVec};
 use crate::flp::{FlpError, TypeWithNoise};
@@ -53,7 +53,7 @@ where
 
 impl<F, S> SumVec<F, S>
 where
-    F: FftFriendlyFieldElement,
+    F: NttFriendlyFieldElement,
     BigInt: From<F::Integer>,
     F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
 {
@@ -127,7 +127,7 @@ where
 
 impl<F, S> Histogram<F, S>
 where
-    F: FftFriendlyFieldElement,
+    F: NttFriendlyFieldElement,
     BigInt: From<F::Integer>,
     F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
 {
@@ -162,7 +162,7 @@ pub(super) fn add_iid_noise_to_field_vec<F, R, D>(
     distribution: &D,
 ) -> Result<(), FlpError>
 where
-    F: FftFriendlyFieldElement,
+    F: NttFriendlyFieldElement,
     BigInt: From<F::Integer>,
     F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
     R: Rng,

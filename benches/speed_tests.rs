@@ -81,16 +81,16 @@ pub fn dp_noise(c: &mut Criterion) {
     group.finish();
 }
 
-/// The asymptotic cost of polynomial multiplication is `O(n log n)` using FFT and `O(n^2)` using
+/// The asymptotic cost of polynomial multiplication is `O(n log n)` using NTT and `O(n^2)` using
 /// the naive method. This benchmark demonstrates that the latter has better concrete performance
-/// for small polynomials. The result is used to pick the `FFT_THRESHOLD` constant in
+/// for small polynomials. The result is used to pick the `NTT_THRESHOLD` constant in
 /// `src/flp/gadgets.rs`.
 fn poly_mul(c: &mut Criterion) {
     let test_sizes = [1_usize, 30, 60, 90, 120, 150, 255];
 
     let mut group = c.benchmark_group("poly_mul");
     for size in test_sizes {
-        group.bench_with_input(BenchmarkId::new("fft", size), &size, |b, size| {
+        group.bench_with_input(BenchmarkId::new("ntt", size), &size, |b, size| {
             let m = (size + 1).next_power_of_two();
             let mut g: Mul<F> = Mul::new(*size);
             let mut outp = vec![F::zero(); 2 * m];
@@ -99,7 +99,7 @@ fn poly_mul(c: &mut Criterion) {
             inp.push(random_vector(m));
 
             b.iter(|| {
-                benchmarked_gadget_mul_call_poly_fft(&mut g, &mut outp, &inp).unwrap();
+                benchmarked_gadget_mul_call_poly_ntt(&mut g, &mut outp, &inp).unwrap();
             })
         });
 

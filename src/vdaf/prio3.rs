@@ -34,7 +34,7 @@ use crate::codec::{encode_fixlen_items, CodecError, Decode, Encode, Parameterize
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{
-    decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldElementWithInteger,
+    decode_fieldvec, FieldElement, FieldElementWithInteger, NttFriendlyFieldElement,
 };
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
@@ -968,7 +968,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3InputSha
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputShare<F, SEED_SIZE> {
+impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3InputShare<F, SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
             Prio3InputShare::Leader {
@@ -1102,7 +1102,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
+impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
     for Prio3PrepareShare<F, SEED_SIZE>
 {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
@@ -1125,7 +1125,7 @@ impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
+impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
     ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareShare<F, SEED_SIZE>
 {
     fn decode_with_param(
@@ -1192,7 +1192,7 @@ impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize>
+impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
     ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareMessage<SEED_SIZE>
 {
     fn decode_with_param(
@@ -1276,7 +1276,7 @@ impl<F, const SEED_SIZE: usize> Debug for Prio3PrepareState<F, SEED_SIZE> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, const SEED_SIZE: usize> Encode
+impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
     for Prio3PrepareState<F, SEED_SIZE>
 {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.

@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`] implementations.
 
-use crate::field::{FftFriendlyFieldElement, FieldElementWithIntegerExt, Integer};
+use crate::field::{FieldElementWithIntegerExt, Integer, NttFriendlyFieldElement};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -27,7 +27,7 @@ impl<F> Debug for Count<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Count<F> {
+impl<F: NttFriendlyFieldElement> Count<F> {
     /// Return a new [`Count`] type instance.
     pub fn new() -> Self {
         Self {
@@ -36,13 +36,13 @@ impl<F: FftFriendlyFieldElement> Count<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Default for Count<F> {
+impl<F: NttFriendlyFieldElement> Default for Count<F> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<F: FftFriendlyFieldElement> Type for Count<F> {
+impl<F: NttFriendlyFieldElement> Type for Count<F> {
     type Measurement = bool;
     type AggregateResult = F::Integer;
     type Field = F;
@@ -120,7 +120,7 @@ impl<F: FftFriendlyFieldElement> Type for Count<F> {
 ///
 /// [BBCG+19]: https://ia.cr/2019/188
 #[derive(Clone, PartialEq, Eq)]
-pub struct Sum<F: FftFriendlyFieldElement> {
+pub struct Sum<F: NttFriendlyFieldElement> {
     max_measurement: F::Integer,
 
     // Computed from max_measurement
@@ -130,7 +130,7 @@ pub struct Sum<F: FftFriendlyFieldElement> {
     bit_range_checker: Vec<F>,
 }
 
-impl<F: FftFriendlyFieldElement> Debug for Sum<F> {
+impl<F: NttFriendlyFieldElement> Debug for Sum<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Sum")
             .field("max_measurement", &self.max_measurement)
@@ -139,7 +139,7 @@ impl<F: FftFriendlyFieldElement> Debug for Sum<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Sum<F> {
+impl<F: NttFriendlyFieldElement> Sum<F> {
     /// Return a new [`Sum`] type parameter. Each value of this type is an integer in range `[0,
     /// max_measurement]` where `max_measurement > 0`. Errors if `max_measurement == 0`.
     pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
@@ -168,7 +168,7 @@ impl<F: FftFriendlyFieldElement> Sum<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Type for Sum<F> {
+impl<F: NttFriendlyFieldElement> Type for Sum<F> {
     type Measurement = F::Integer;
     type AggregateResult = F::Integer;
     type Field = F;
@@ -267,11 +267,11 @@ impl<F: FftFriendlyFieldElement> Type for Sum<F> {
 // This is just a `Sum` object under the hood. The only difference is that the aggregate result is
 // an f64, which we get by dividing by `num_measurements`
 #[derive(Clone, PartialEq, Eq)]
-pub struct Average<F: FftFriendlyFieldElement> {
+pub struct Average<F: NttFriendlyFieldElement> {
     summer: Sum<F>,
 }
 
-impl<F: FftFriendlyFieldElement> Debug for Average<F> {
+impl<F: NttFriendlyFieldElement> Debug for Average<F> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Average")
             .field("max_measurement", &self.summer.max_measurement)
@@ -280,7 +280,7 @@ impl<F: FftFriendlyFieldElement> Debug for Average<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Average<F> {
+impl<F: NttFriendlyFieldElement> Average<F> {
     /// Return a new [`Average`] type parameter. Each value of this type is an integer in range `[0,
     /// max_measurement]` where `max_measurement > 0`. Errors if `max_measurement == 0`.
     pub fn new(max_measurement: F::Integer) -> Result<Self, FlpError> {
@@ -289,7 +289,7 @@ impl<F: FftFriendlyFieldElement> Average<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> Type for Average<F> {
+impl<F: NttFriendlyFieldElement> Type for Average<F> {
     type Measurement = F::Integer;
     type AggregateResult = f64;
     type Field = F;
@@ -369,7 +369,7 @@ pub struct Histogram<F, S> {
     phantom: PhantomData<(F, S)>,
 }
 
-impl<F: FftFriendlyFieldElement, S> Debug for Histogram<F, S> {
+impl<F: NttFriendlyFieldElement, S> Debug for Histogram<F, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Histogram")
             .field("length", &self.length)
@@ -378,7 +378,7 @@ impl<F: FftFriendlyFieldElement, S> Debug for Histogram<F, S> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> Histogram<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> Histogram<F, S> {
     /// Return a new [`Histogram`] type with the given number of buckets.
     pub fn new(length: usize, chunk_length: usize) -> Result<Self, FlpError> {
         if length >= u32::MAX as usize {
@@ -424,7 +424,7 @@ impl<F, S> Clone for Histogram<F, S> {
 
 impl<F, S> Type for Histogram<F, S>
 where
-    F: FftFriendlyFieldElement,
+    F: NttFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
     type Measurement = usize;
@@ -533,7 +533,7 @@ pub struct MultihotCountVec<F, S> {
     phantom: PhantomData<(F, S)>,
 }
 
-impl<F: FftFriendlyFieldElement, S> Debug for MultihotCountVec<F, S> {
+impl<F: NttFriendlyFieldElement, S> Debug for MultihotCountVec<F, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("MultihotCountVec")
             .field("length", &self.length)
@@ -543,7 +543,7 @@ impl<F: FftFriendlyFieldElement, S> Debug for MultihotCountVec<F, S> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountVec<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountVec<F, S> {
     /// Return a new [`MultihotCountVec`] type with the given number of buckets.
     pub fn new(
         num_buckets: usize,
@@ -610,7 +610,7 @@ impl<F, S> Clone for MultihotCountVec<F, S> {
 
 impl<F, S> Type for MultihotCountVec<F, S>
 where
-    F: FftFriendlyFieldElement,
+    F: NttFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
     type Measurement = Vec<bool>;
@@ -743,7 +743,7 @@ where
 ///
 /// [BBCG+19]: https://eprint.iacr.org/2019/188
 #[derive(PartialEq, Eq)]
-pub struct SumVec<F: FftFriendlyFieldElement, S> {
+pub struct SumVec<F: NttFriendlyFieldElement, S> {
     len: usize,
     bits: usize,
     flattened_len: usize,
@@ -753,7 +753,7 @@ pub struct SumVec<F: FftFriendlyFieldElement, S> {
     phantom: PhantomData<S>,
 }
 
-impl<F: FftFriendlyFieldElement, S> Debug for SumVec<F, S> {
+impl<F: NttFriendlyFieldElement, S> Debug for SumVec<F, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SumVec")
             .field("len", &self.len)
@@ -763,7 +763,7 @@ impl<F: FftFriendlyFieldElement, S> Debug for SumVec<F, S> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
     /// Returns a new [`SumVec`] with the desired bit width and vector length.
     ///
     /// # Errors
@@ -823,7 +823,7 @@ impl<F: FftFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
     }
 }
 
-impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
+impl<F: NttFriendlyFieldElement, S> Clone for SumVec<F, S> {
     fn clone(&self) -> Self {
         Self {
             len: self.len,
@@ -839,7 +839,7 @@ impl<F: FftFriendlyFieldElement, S> Clone for SumVec<F, S> {
 
 impl<F, S> Type for SumVec<F, S>
 where
-    F: FftFriendlyFieldElement,
+    F: NttFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
     type Measurement = Vec<F::Integer>;
@@ -941,7 +941,7 @@ where
 
 /// Given a vector `data` of field elements which should contain exactly one entry, return the
 /// integer representation of that entry.
-pub(crate) fn decode_result<F: FftFriendlyFieldElement>(
+pub(crate) fn decode_result<F: NttFriendlyFieldElement>(
     data: &[F],
 ) -> Result<F::Integer, FlpError> {
     if data.len() != 1 {
@@ -952,7 +952,7 @@ pub(crate) fn decode_result<F: FftFriendlyFieldElement>(
 
 /// Given a vector `data` of field elements, return a vector containing the corresponding integer
 /// representations, if the number of entries matches `expected_len`.
-pub(crate) fn decode_result_vec<F: FftFriendlyFieldElement>(
+pub(crate) fn decode_result_vec<F: NttFriendlyFieldElement>(
     data: &[F],
     expected_len: usize,
 ) -> Result<Vec<F::Integer>, FlpError> {
@@ -981,7 +981,7 @@ pub(crate) fn decode_result_vec<F: FftFriendlyFieldElement>(
 ///
 /// This returns (additive shares of) zero if all inputs were zero or one, and otherwise returns a
 /// non-zero value with high probability.
-pub(crate) fn parallel_sum_range_checks<F: FftFriendlyFieldElement>(
+pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
     gadget: &mut Box<dyn Gadget<F>>,
     input: &[F],
     joint_randomness: &[F],

@@ -3,7 +3,7 @@
 
 //! Primitives for the Prio2 server.
 use crate::{
-    field::{FftFriendlyFieldElement, FieldError},
+    field::{FieldError, NttFriendlyFieldElement},
     polynomial::poly_interpret_eval,
     vdaf::prio2::client::{unpack_proof, SerializeError},
 };
@@ -37,7 +37,7 @@ pub struct VerificationMessage<F> {
 
 /// Given a proof and evaluation point, this constructs the verification
 /// message.
-pub(crate) fn generate_verification_message<F: FftFriendlyFieldElement>(
+pub(crate) fn generate_verification_message<F: NttFriendlyFieldElement>(
     dimension: usize,
     eval_at: F,
     proof: &[F],
@@ -46,40 +46,40 @@ pub(crate) fn generate_verification_message<F: FftFriendlyFieldElement>(
     let unpacked = unpack_proof(proof, dimension)?;
     let n: usize = (dimension + 1).next_power_of_two();
     let proof_length = 2 * n;
-    let mut fft_in = vec![F::zero(); proof_length];
-    let mut fft_mem = vec![F::zero(); proof_length];
+    let mut ntt_in = vec![F::zero(); proof_length];
+    let mut ntt_mem = vec![F::zero(); proof_length];
 
     // construct and evaluate polynomial f at the random point
-    fft_in[0] = *unpacked.f0;
-    fft_in[1..unpacked.data.len() + 1].copy_from_slice(unpacked.data);
-    let f_r = poly_interpret_eval(&fft_in[..n], eval_at, &mut fft_mem);
+    ntt_in[0] = *unpacked.f0;
+    ntt_in[1..unpacked.data.len() + 1].copy_from_slice(unpacked.data);
+    let f_r = poly_interpret_eval(&ntt_in[..n], eval_at, &mut ntt_mem);
 
     // construct and evaluate polynomial g at the random point
-    fft_in[0] = *unpacked.g0;
+    ntt_in[0] = *unpacked.g0;
     if is_first_server {
-        for x in fft_in[1..unpacked.data.len() + 1].iter_mut() {
+        for x in ntt_in[1..unpacked.data.len() + 1].iter_mut() {
             *x -= F::one();
         }
     }
-    let g_r = poly_interpret_eval(&fft_in[..n], eval_at, &mut fft_mem);
+    let g_r = poly_interpret_eval(&ntt_in[..n], eval_at, &mut ntt_mem);
 
     // construct and evaluate polynomial h at the random point
-    fft_in[0] = *unpacked.h0;
-    fft_in[1] = unpacked.points_h_packed[0];
+    ntt_in[0] = *unpacked.h0;
+    ntt_in[1] = unpacked.points_h_packed[0];
     for (x, chunk) in unpacked.points_h_packed[1..]
         .iter()
-        .zip(fft_in[2..proof_length].chunks_exact_mut(2))
+        .zip(ntt_in[2..proof_length].chunks_exact_mut(2))
     {
         chunk[0] = F::zero();
         chunk[1] = *x;
     }
-    let h_r = poly_interpret_eval(&fft_in, eval_at, &mut fft_mem);
+    let h_r = poly_interpret_eval(&ntt_in, eval_at, &mut ntt_mem);
 
     Ok(VerificationMessage { f_r, g_r, h_r })
 }
 
 /// Decides if the distributed proof is valid
-pub(crate) fn is_valid_share<F: FftFriendlyFieldElement>(
+pub(crate) fn is_valid_share<F: NttFriendlyFieldElement>(
     v1: &VerificationMessage<F>,
     v2: &VerificationMessage<F>,
 ) -> bool {
@@ -95,7 +95,7 @@ pub(crate) fn is_valid_share<F: FftFriendlyFieldElement>(
 mod test_util {
     use crate::{
         codec::ParameterizedDecode,
-        field::{merge_vector, FftFriendlyFieldElement},
+        field::{merge_vector, NttFriendlyFieldElement},
         prng::Prng,
         vdaf::{
             prio2::client::{proof_length, SerializeError},
@@ -113,7 +113,7 @@ mod test_util {
         accumulator: Vec<F>,
     }
 
-    impl<F: FftFriendlyFieldElement> Server<F> {
+    impl<F: NttFriendlyFieldElement> Server<F> {
         /// Construct a new server instance
         ///
         /// Params:

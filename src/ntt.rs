@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! This module implements an iterative FFT algorithm for computing the (inverse) Discrete Fourier
-//! Transform (DFT) over a slice of field elements.
+//! This module implements an iterative NTT (Number Theoretic Transform) algorithm.
 
-use crate::field::FftFriendlyFieldElement;
+use crate::field::NttFriendlyFieldElement;
 use crate::fp::{log2, MAX_ROOTS};
 
 use std::convert::TryFrom;
 
-/// An error returned by an FFT operation.
+/// An error returned by an NTT operation.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
-pub enum FftError {
+pub enum NttError {
     /// The output is too small.
     #[error("output slice is smaller than specified size")]
     OutputTooSmall,
@@ -23,29 +22,29 @@ pub enum FftError {
     SizeInvalid,
 }
 
-/// Sets `outp` to the DFT of `inp`.
+/// Sets `outp` to the NTT of `inp`.
 ///
 /// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
 /// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `2^size`-th principal root of
 /// unity.
 #[allow(clippy::many_single_char_names)]
-pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
+pub fn ntt<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[F],
     size: usize,
-) -> Result<(), FftError> {
-    let d = usize::try_from(log2(size as u128)).map_err(|_| FftError::SizeTooLarge)?;
+) -> Result<(), NttError> {
+    let d = usize::try_from(log2(size as u128)).map_err(|_| NttError::SizeTooLarge)?;
 
     if size > outp.len() {
-        return Err(FftError::OutputTooSmall);
+        return Err(NttError::OutputTooSmall);
     }
 
     if size > 1 << MAX_ROOTS {
-        return Err(FftError::SizeTooLarge);
+        return Err(NttError::SizeTooLarge);
     }
 
     if size != 1 << d {
-        return Err(FftError::SizeInvalid);
+        return Err(NttError::SizeInvalid);
     }
 
     if d > 0 {
@@ -90,24 +89,20 @@ pub fn discrete_fourier_transform<F: FftFriendlyFieldElement>(
 
 /// Sets `outp` to the inverse of the DFT of `inp`.
 #[cfg(test)]
-pub(crate) fn discrete_fourier_transform_inv<F: FftFriendlyFieldElement>(
+pub(crate) fn ntt_inv<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[F],
     size: usize,
-) -> Result<(), FftError> {
+) -> Result<(), NttError> {
     let size_inv = F::from(F::Integer::try_from(size).unwrap()).inv();
-    discrete_fourier_transform(outp, inp, size)?;
-    discrete_fourier_transform_inv_finish(outp, size, size_inv);
+    ntt(outp, inp, size)?;
+    ntt_inv_finish(outp, size, size_inv);
     Ok(())
 }
 
 /// An intermediate step in the computation of the inverse DFT. Exposing this function allows us to
 /// amortize the cost the modular inverse across multiple inverse DFT operations.
-pub(crate) fn discrete_fourier_transform_inv_finish<F: FftFriendlyFieldElement>(
-    outp: &mut [F],
-    size: usize,
-    size_inv: F,
-) {
+pub(crate) fn ntt_inv_finish<F: NttFriendlyFieldElement>(outp: &mut [F], size: usize, size_inv: F) {
     let mut tmp: F;
     outp[0] *= size_inv;
     outp[size >> 1] *= size_inv;
@@ -127,10 +122,9 @@ fn bitrev(d: usize, x: usize) -> usize {
 mod tests {
     use super::*;
     use crate::field::{random_vector, split_vector, Field128, Field64, FieldElement, FieldPrio2};
-    use crate::polynomial::{poly_fft, TestPolyAuxMemory};
+    use crate::polynomial::{poly_ntt, TestPolyAuxMemory};
 
-    fn discrete_fourier_transform_then_inv_test<F: FftFriendlyFieldElement>() -> Result<(), FftError>
-    {
+    fn ntt_then_inv_test<F: NttFriendlyFieldElement>() -> Result<(), NttError> {
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];
 
         for size in test_sizes.iter() {
@@ -138,8 +132,8 @@ mod tests {
             let mut got = vec![F::zero(); *size];
             let want = random_vector(*size);
 
-            discrete_fourier_transform(&mut tmp, &want, want.len())?;
-            discrete_fourier_transform_inv(&mut got, &tmp, tmp.len())?;
+            ntt(&mut tmp, &want, want.len())?;
+            ntt_inv(&mut got, &tmp, tmp.len())?;
             assert_eq!(got, want);
         }
 
@@ -148,21 +142,21 @@ mod tests {
 
     #[test]
     fn test_priov2_field32() {
-        discrete_fourier_transform_then_inv_test::<FieldPrio2>().expect("unexpected error");
+        ntt_then_inv_test::<FieldPrio2>().expect("unexpected error");
     }
 
     #[test]
     fn test_field64() {
-        discrete_fourier_transform_then_inv_test::<Field64>().expect("unexpected error");
+        ntt_then_inv_test::<Field64>().expect("unexpected error");
     }
 
     #[test]
     fn test_field128() {
-        discrete_fourier_transform_then_inv_test::<Field128>().expect("unexpected error");
+        ntt_then_inv_test::<Field128>().expect("unexpected error");
     }
 
     #[test]
-    fn test_recursive_fft() {
+    fn test_recursive_ntt() {
         let size = 128;
         let mut mem = TestPolyAuxMemory::new(size / 2);
 
@@ -170,15 +164,15 @@ mod tests {
         let mut want = vec![FieldPrio2::zero(); size];
         let mut got = vec![FieldPrio2::zero(); size];
 
-        discrete_fourier_transform::<FieldPrio2>(&mut want, &inp, inp.len()).unwrap();
+        ntt::<FieldPrio2>(&mut want, &inp, inp.len()).unwrap();
 
-        poly_fft(
+        poly_ntt(
             &mut got,
             &inp,
             &mem.roots_2n,
             size,
             false,
-            &mut mem.fft_memory,
+            &mut mem.ntt_memory,
         );
 
         assert_eq!(got, want);
@@ -188,7 +182,7 @@ mod tests {
     // over secret shares and summing up the coefficients is equivalent to interpolating a
     // polynomial over the plaintext data.
     #[test]
-    fn test_fft_linearity() {
+    fn test_ntt_linearity() {
         let len = 16;
         let num_shares = 3;
         let x: Vec<Field64> = random_vector(len);
@@ -209,14 +203,14 @@ mod tests {
         let mut got = vec![Field64::zero(); len];
         let mut buf = vec![Field64::zero(); len];
         for share in x_shares {
-            discrete_fourier_transform_inv(&mut buf, &share, len).unwrap();
+            ntt_inv(&mut buf, &share, len).unwrap();
             for i in 0..len {
                 got[i] += buf[i];
             }
         }
 
         let mut want = vec![Field64::zero(); len];
-        discrete_fourier_transform_inv(&mut want, &x, len).unwrap();
+        ntt_inv(&mut want, &x, len).unwrap();
 
         assert_eq!(got, want);
     }
