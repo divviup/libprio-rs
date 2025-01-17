@@ -291,7 +291,7 @@ impl<T: Type> Szk<T> {
     pub fn new(typ: T, algorithm_id: u32) -> Self {
         Self {
             typ,
-            id: algorithm_id.to_le_bytes(),
+            id: algorithm_id.to_be_bytes(),
         }
     }
 

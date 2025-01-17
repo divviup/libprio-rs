@@ -71,7 +71,7 @@ impl<T: Type> Mastic<T> {
         let vidpf = Vidpf::new(bits, typ.input_len() + 1)?;
         let szk = Szk::new(typ, algorithm_id);
         Ok(Self {
-            id: algorithm_id.to_le_bytes(),
+            id: algorithm_id.to_be_bytes(),
             szk,
             vidpf,
         })
