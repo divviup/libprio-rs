@@ -666,7 +666,7 @@ mod tests {
         field::{random_vector, FieldElementWithInteger},
         flp::gadgets::{Mul, ParallelSum},
         flp::types::{Count, Sum, SumVec},
-        flp::Type,
+        flp::{Flp, Type},
     };
     use rand::{thread_rng, Rng};
 

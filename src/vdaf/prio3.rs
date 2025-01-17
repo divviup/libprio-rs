@@ -46,10 +46,12 @@ use crate::flp::gadgets::{Mul, ParallelSum};
 use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
 };
-use crate::flp::types::{Average, Count, Histogram, MultihotCountVec, Sum, SumVec};
-use crate::flp::Type;
 #[cfg(feature = "experimental")]
 use crate::flp::TypeWithNoise;
+use crate::flp::{
+    types::{Average, Count, Histogram, MultihotCountVec, Sum, SumVec},
+    Type,
+};
 use crate::prng::Prng;
 use crate::vdaf::xof::{IntoFieldVec, Seed, Xof};
 use crate::vdaf::{
@@ -1731,9 +1733,12 @@ mod tests {
     use super::*;
     #[cfg(feature = "experimental")]
     use crate::flp::gadgets::ParallelSumGadget;
-    use crate::vdaf::{
-        equality_comparison_test, fieldvec_roundtrip_test,
-        test_utils::{run_vdaf, run_vdaf_prepare},
+    use crate::{
+        flp::Flp,
+        vdaf::{
+            equality_comparison_test, fieldvec_roundtrip_test,
+            test_utils::{run_vdaf, run_vdaf_prepare},
+        },
     };
     use assert_matches::assert_matches;
     #[cfg(feature = "experimental")]

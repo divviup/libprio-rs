@@ -188,7 +188,7 @@ use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::types::dp::add_iid_noise_to_field_vec;
 use crate::flp::types::fixedpoint_l2::compatible_float::CompatibleFloat;
 use crate::flp::types::parallel_sum_range_checks;
-use crate::flp::{FlpError, Gadget, Type, TypeWithNoise};
+use crate::flp::{Flp, FlpError, Gadget, Type, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
 use fixed::traits::Fixed;
 use num_bigint::BigUint;
@@ -380,70 +380,13 @@ where
     }
 }
 
-impl<T, SPoly, SMul> Type for FixedPointBoundedL2VecSum<T, SPoly, SMul>
+impl<T, SPoly, SMul> Flp for FixedPointBoundedL2VecSum<T, SPoly, SMul>
 where
     T: Fixed + CompatibleFloat,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
     SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
 {
-    type Measurement = Vec<T>;
-    type AggregateResult = Vec<f64>;
     type Field = Field128;
-
-    fn encode_measurement(&self, fp_entries: &Vec<T>) -> Result<Vec<Field128>, FlpError> {
-        if fp_entries.len() != self.entries {
-            return Err(FlpError::Encode("unexpected input length".into()));
-        }
-
-        // Convert the fixed-point encoded input values to field integers. We do
-        // this once here because we need them for encoding but also for
-        // computing the norm.
-        let integer_entries = fp_entries.iter().map(|x| x.to_field_integer());
-
-        // (I) Vector entries.
-        // Encode the integer entries bitwise, and write them into the `encoded`
-        // vector.
-        let mut encoded: Vec<Field128> =
-            Vec::with_capacity(self.bits_per_entry * self.entries + self.bits_for_norm);
-        for entry in integer_entries.clone() {
-            encoded.extend(Field128::encode_as_bitvector(entry, self.bits_per_entry)?);
-        }
-
-        // (II) Vector norm.
-        // Compute the norm of the input vector.
-        let field_entries = integer_entries.map(Field128::from);
-        let norm = compute_norm_of_entries(field_entries, self.bits_per_entry)?;
-        let norm_int = u128::from(norm);
-
-        // Write the norm into the `entries` vector.
-        encoded.extend(Field128::encode_as_bitvector(norm_int, self.bits_for_norm)?);
-
-        Ok(encoded)
-    }
-
-    fn decode_result(
-        &self,
-        data: &[Field128],
-        num_measurements: usize,
-    ) -> Result<Vec<f64>, FlpError> {
-        if data.len() != self.entries {
-            return Err(FlpError::Decode("unexpected input length".into()));
-        }
-        let num_measurements = match u128::try_from(num_measurements) {
-            Ok(m) => m,
-            Err(_) => {
-                return Err(FlpError::Decode(
-                    "number of clients is too large to fit into u128".into(),
-                ))
-            }
-        };
-        let mut res = Vec::with_capacity(data.len());
-        for d in data {
-            let decoded = <T as CompatibleFloat>::to_float(*d, num_measurements);
-            res.push(decoded);
-        }
-        Ok(res)
-    }
 
     fn gadget(&self) -> Vec<Box<dyn Gadget<Field128>>> {
         // This gadget checks that a field element is zero or one.
@@ -557,21 +500,6 @@ where
         Ok(vec![range_check, norm_check])
     }
 
-    fn truncate(&self, input: Vec<Field128>) -> Result<Vec<Self::Field>, FlpError> {
-        self.truncate_call_check(&input)?;
-
-        let mut decoded_vector = vec![];
-
-        for i_entry in 0..self.entries {
-            let start = i_entry * self.bits_per_entry;
-            let end = (i_entry + 1) * self.bits_per_entry;
-
-            let decoded = Field128::decode_bitvector(&input[start..end])?;
-            decoded_vector.push(decoded);
-        }
-        Ok(decoded_vector)
-    }
-
     fn input_len(&self) -> usize {
         self.bits_per_entry * self.entries + self.bits_for_norm
     }
@@ -594,10 +522,6 @@ where
         self.gadget0_chunk_length * 2 + self.gadget1_chunk_length + 3
     }
 
-    fn output_len(&self) -> usize {
-        self.entries
-    }
-
     fn joint_rand_len(&self) -> usize {
         self.gadget0_calls
     }
@@ -608,6 +532,90 @@ where
 
     fn prove_rand_len(&self) -> usize {
         self.gadget0_chunk_length * 2 + self.gadget1_chunk_length
+    }
+}
+
+impl<T, SPoly, SMul> Type for FixedPointBoundedL2VecSum<T, SPoly, SMul>
+where
+    T: Fixed + CompatibleFloat,
+    SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
+    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
+{
+    type Measurement = Vec<T>;
+    type AggregateResult = Vec<f64>;
+
+    fn encode_measurement(&self, fp_entries: &Vec<T>) -> Result<Vec<Field128>, FlpError> {
+        if fp_entries.len() != self.entries {
+            return Err(FlpError::Encode("unexpected input length".into()));
+        }
+
+        // Convert the fixed-point encoded input values to field integers. We do
+        // this once here because we need them for encoding but also for
+        // computing the norm.
+        let integer_entries = fp_entries.iter().map(|x| x.to_field_integer());
+
+        // (I) Vector entries.
+        // Encode the integer entries bitwise, and write them into the `encoded`
+        // vector.
+        let mut encoded: Vec<Field128> =
+            Vec::with_capacity(self.bits_per_entry * self.entries + self.bits_for_norm);
+        for entry in integer_entries.clone() {
+            encoded.extend(Field128::encode_as_bitvector(entry, self.bits_per_entry)?);
+        }
+
+        // (II) Vector norm.
+        // Compute the norm of the input vector.
+        let field_entries = integer_entries.map(Field128::from);
+        let norm = compute_norm_of_entries(field_entries, self.bits_per_entry)?;
+        let norm_int = u128::from(norm);
+
+        // Write the norm into the `entries` vector.
+        encoded.extend(Field128::encode_as_bitvector(norm_int, self.bits_for_norm)?);
+
+        Ok(encoded)
+    }
+
+    fn truncate(&self, input: Vec<Field128>) -> Result<Vec<Self::Field>, FlpError> {
+        self.truncate_call_check(&input)?;
+
+        let mut decoded_vector = vec![];
+
+        for i_entry in 0..self.entries {
+            let start = i_entry * self.bits_per_entry;
+            let end = (i_entry + 1) * self.bits_per_entry;
+
+            let decoded = Field128::decode_bitvector(&input[start..end])?;
+            decoded_vector.push(decoded);
+        }
+        Ok(decoded_vector)
+    }
+
+    fn decode_result(
+        &self,
+        data: &[Field128],
+        num_measurements: usize,
+    ) -> Result<Vec<f64>, FlpError> {
+        if data.len() != self.entries {
+            return Err(FlpError::Decode("unexpected input length".into()));
+        }
+        let num_measurements = match u128::try_from(num_measurements) {
+            Ok(m) => m,
+            Err(_) => {
+                return Err(FlpError::Decode(
+                    "number of clients is too large to fit into u128".into(),
+                ))
+            }
+        };
+        let mut res = Vec::with_capacity(data.len());
+        for d in data {
+            let decoded = <T as CompatibleFloat>::to_float(*d, num_measurements);
+            res.push(decoded);
+        }
+        Ok(res)
+    }
+
+    fn output_len(&self) -> usize {
+        self.entries
     }
 }
 
@@ -670,7 +678,7 @@ mod tests {
     use crate::dp::{Rational, ZCdpBudget};
     use crate::field::{random_vector, Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
-    use crate::flp::test_utils::FlpTest;
+    use crate::flp::test_utils::TypeTest;
     use crate::vdaf::xof::SeedStreamTurboShake128;
     use fixed::types::extra::{U127, U14, U63};
     use fixed::types::{I1F15, I1F31, I1F63};
@@ -779,7 +787,7 @@ mod tests {
         let mut input: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
         assert_eq!(input[0], Field128::zero());
         input[0] = one; // it was zero
-        FlpTest {
+        TypeTest {
             name: None,
             flp: &vsum,
             input: &input,
@@ -795,7 +803,7 @@ mod tests {
         // encoding contains entries that are not zero or one
         let mut input2: Vec<Field128> = vsum.encode_measurement(&fp_vec).unwrap();
         input2[0] = one + one;
-        FlpTest {
+        TypeTest {
             name: None,
             flp: &vsum,
             input: &input2,
@@ -811,7 +819,7 @@ mod tests {
         // norm is too big
         // 2^n - 1, the field element encoded by the all-1 vector
         let one_enc = Field128::from(((2_u128) << (n - 1)) - 1);
-        FlpTest {
+        TypeTest {
             name: None,
             flp: &vsum,
             input: &vec![one; 3 * n + 2 * n - 2], // all vector entries and the norm are all-1-vectors
