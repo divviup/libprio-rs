@@ -116,7 +116,7 @@ impl IdpfInput {
         vec.into_vec()
     }
 
-    /// Return the `level`-bit prefix of this IDPF input.
+    /// Return the prefix of this IDPF input consisting of bits zero through `level`, inclusive.
     pub fn prefix(&self, level: usize) -> Self {
         Self {
             index: self.index[..=level].to_owned().into(),
