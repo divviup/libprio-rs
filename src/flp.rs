@@ -803,7 +803,9 @@ pub(crate) fn gadget_poly_len(gadget_degree: usize, wire_poly_len: usize) -> usi
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod test_utils {
     use super::*;
-    use crate::field::{random_vector, FieldElement, FieldElementWithInteger};
+    use crate::field::{
+        add_vector, random_vector, sub_assign_vector, FieldElement, FieldElementWithInteger,
+    };
 
     /// Various tests for an FLP.
     #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
@@ -948,12 +950,7 @@ pub mod test_utils {
                         )
                         .unwrap()
                 })
-                .reduce(|mut left, right| {
-                    for (x, y) in left.iter_mut().zip(right.iter()) {
-                        *x += *y;
-                    }
-                    left
-                })
+                .reduce(add_vector)
                 .unwrap();
 
             let res = self.flp.decide(&verifier).unwrap();
@@ -1003,9 +1000,7 @@ pub mod test_utils {
 
         for _ in 1..SHARES {
             let share: Vec<F> = random_vector(inp.len());
-            for (x, y) in outp[0].iter_mut().zip(&share) {
-                *x -= *y;
-            }
+            sub_assign_vector(&mut outp[0], share.iter().copied());
             outp.push(share);
         }
 
@@ -1016,7 +1011,7 @@ pub mod test_utils {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split_vector, Field128};
+    use crate::field::{add_vector, random_vector, split_vector, Field128};
     use crate::flp::gadgets::{Mul, PolyEval};
     use crate::polynomial::poly_range_check;
 
@@ -1057,12 +1052,7 @@ mod tests {
                 )
                 .unwrap()
             })
-            .reduce(|mut left, right| {
-                for (x, y) in left.iter_mut().zip(right.iter()) {
-                    *x += *y;
-                }
-                left
-            })
+            .reduce(add_vector)
             .unwrap();
         assert_eq!(verifier.len(), typ.verifier_len());
 

@@ -2,6 +2,8 @@
 
 //! A collection of gadgets.
 
+#[cfg(feature = "multithreaded")]
+use crate::field::add_vector;
 use crate::field::NttFriendlyFieldElement;
 use crate::flp::{gadget_poly_len, wire_poly_len, FlpError, Gadget};
 use crate::ntt::{ntt, ntt_inv_finish};
@@ -380,15 +382,7 @@ where
                 },
             )
             .map(|state| state.partial_sum)
-            .reduce(
-                || vec![F::zero(); outp.len()],
-                |mut x, y| {
-                    for (xi, yi) in x.iter_mut().zip(y.iter()) {
-                        *xi += *yi;
-                    }
-                    x
-                },
-            );
+            .reduce(|| vec![F::zero(); outp.len()], add_vector);
 
         outp.copy_from_slice(&res[..]);
         Ok(())
