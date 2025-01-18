@@ -3,26 +3,26 @@
 
 //! Functions for polynomial interpolation and evaluation
 
+use crate::field::NttFriendlyFieldElement;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
-use crate::field::FftFriendlyFieldElement;
+use crate::ntt::{ntt, ntt_inv_finish};
 
 use std::convert::TryFrom;
 
-/// Temporary memory used for FFT
+/// Temporary memory used for NTT
 #[derive(Clone, Debug)]
-pub struct PolyFFTTempMemory<F> {
-    fft_tmp: Vec<F>,
-    fft_y_sub: Vec<F>,
-    fft_roots_sub: Vec<F>,
+pub struct PolyNttTempMemory<F> {
+    ntt_tmp: Vec<F>,
+    ntt_y_sub: Vec<F>,
+    ntt_roots_sub: Vec<F>,
 }
 
-impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
+impl<F: NttFriendlyFieldElement> PolyNttTempMemory<F> {
     pub(crate) fn new(length: usize) -> Self {
-        PolyFFTTempMemory {
-            fft_tmp: vec![F::zero(); length],
-            fft_y_sub: vec![F::zero(); length],
-            fft_roots_sub: vec![F::zero(); length],
+        PolyNttTempMemory {
+            ntt_tmp: vec![F::zero(); length],
+            ntt_y_sub: vec![F::zero(); length],
+            ntt_roots_sub: vec![F::zero(); length],
         }
     }
 }
@@ -32,21 +32,21 @@ impl<F: FftFriendlyFieldElement> PolyFFTTempMemory<F> {
 pub(crate) struct TestPolyAuxMemory<F> {
     pub roots_2n: Vec<F>,
     pub roots_2n_inverted: Vec<F>,
-    pub fft_memory: PolyFFTTempMemory<F>,
+    pub ntt_memory: PolyNttTempMemory<F>,
 }
 
 #[cfg(test)]
-impl<F: FftFriendlyFieldElement> TestPolyAuxMemory<F> {
+impl<F: NttFriendlyFieldElement> TestPolyAuxMemory<F> {
     pub(crate) fn new(n: usize) -> Self {
         Self {
-            roots_2n: fft_get_roots(2 * n, false),
-            roots_2n_inverted: fft_get_roots(2 * n, true),
-            fft_memory: PolyFFTTempMemory::new(2 * n),
+            roots_2n: ntt_get_roots(2 * n, false),
+            roots_2n_inverted: ntt_get_roots(2 * n, true),
+            ntt_memory: PolyNttTempMemory::new(2 * n),
         }
     }
 }
 
-fn fft_recurse<F: FftFriendlyFieldElement>(
+fn ntt_recurse<F: NttFriendlyFieldElement>(
     out: &mut [F],
     n: usize,
     roots: &[F],
@@ -71,7 +71,7 @@ fn fft_recurse<F: FftFriendlyFieldElement>(
         y_sub_first[i] = ys[i] + ys[i + half_n];
         roots_sub_first[i] = roots[2 * i];
     }
-    fft_recurse(
+    ntt_recurse(
         tmp_first,
         half_n,
         roots_sub_first,
@@ -89,7 +89,7 @@ fn fft_recurse<F: FftFriendlyFieldElement>(
         y_sub_first[i] = ys[i] - ys[i + half_n];
         y_sub_first[i] *= roots[i];
     }
-    fft_recurse(
+    ntt_recurse(
         tmp_first,
         half_n,
         roots_sub_first,
@@ -104,7 +104,7 @@ fn fft_recurse<F: FftFriendlyFieldElement>(
 }
 
 /// Calculate `count` number of roots of unity of order `count`
-pub(crate) fn fft_get_roots<F: FftFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
+pub(crate) fn ntt_get_roots<F: NttFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
     let mut roots = vec![F::zero(); count];
     let mut gen = F::generator();
     if invert {
@@ -125,22 +125,22 @@ pub(crate) fn fft_get_roots<F: FftFriendlyFieldElement>(count: usize, invert: bo
     roots
 }
 
-fn fft_interpolate_raw<F: FftFriendlyFieldElement>(
+fn ntt_interpolate_raw<F: NttFriendlyFieldElement>(
     out: &mut [F],
     ys: &[F],
     n_points: usize,
     roots: &[F],
     invert: bool,
-    mem: &mut PolyFFTTempMemory<F>,
+    mem: &mut PolyNttTempMemory<F>,
 ) {
-    fft_recurse(
+    ntt_recurse(
         out,
         n_points,
         roots,
         ys,
-        &mut mem.fft_tmp,
-        &mut mem.fft_y_sub,
-        &mut mem.fft_roots_sub,
+        &mut mem.ntt_tmp,
+        &mut mem.ntt_y_sub,
+        &mut mem.ntt_roots_sub,
     );
     if invert {
         let n_inverse = F::from(F::Integer::try_from(n_points).unwrap()).inv();
@@ -150,19 +150,19 @@ fn fft_interpolate_raw<F: FftFriendlyFieldElement>(
     }
 }
 
-pub fn poly_fft<F: FftFriendlyFieldElement>(
+pub fn poly_ntt<F: NttFriendlyFieldElement>(
     points_out: &mut [F],
     points_in: &[F],
     scaled_roots: &[F],
     n_points: usize,
     invert: bool,
-    mem: &mut PolyFFTTempMemory<F>,
+    mem: &mut PolyNttTempMemory<F>,
 ) {
-    fft_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
+    ntt_interpolate_raw(points_out, points_in, n_points, scaled_roots, invert, mem)
 }
 
 /// Evaluate a polynomial using Horner's method.
-pub fn poly_eval<F: FftFriendlyFieldElement>(poly: &[F], eval_at: F) -> F {
+pub fn poly_eval<F: NttFriendlyFieldElement>(poly: &[F], eval_at: F) -> F {
     if poly.is_empty() {
         return F::zero();
     }
@@ -177,7 +177,7 @@ pub fn poly_eval<F: FftFriendlyFieldElement>(poly: &[F], eval_at: F) -> F {
 }
 
 /// Returns the degree of polynomial `p`.
-pub fn poly_deg<F: FftFriendlyFieldElement>(p: &[F]) -> usize {
+pub fn poly_deg<F: NttFriendlyFieldElement>(p: &[F]) -> usize {
     let mut d = p.len();
     while d > 0 && p[d - 1] == F::zero() {
         d -= 1;
@@ -186,7 +186,7 @@ pub fn poly_deg<F: FftFriendlyFieldElement>(p: &[F]) -> usize {
 }
 
 /// Multiplies polynomials `p` and `q` and returns the result.
-pub fn poly_mul<F: FftFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F> {
+pub fn poly_mul<F: NttFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F> {
     let p_size = poly_deg(p) + 1;
     let q_size = poly_deg(q) + 1;
     let mut out = vec![F::zero(); p_size + q_size];
@@ -201,20 +201,20 @@ pub fn poly_mul<F: FftFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F> {
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[inline]
-pub fn poly_interpret_eval<F: FftFriendlyFieldElement>(
+pub fn poly_interpret_eval<F: NttFriendlyFieldElement>(
     points: &[F],
     eval_at: F,
     tmp_coeffs: &mut [F],
 ) -> F {
     let size_inv = F::from(F::Integer::try_from(points.len()).unwrap()).inv();
-    discrete_fourier_transform(tmp_coeffs, points, points.len()).unwrap();
-    discrete_fourier_transform_inv_finish(tmp_coeffs, points.len(), size_inv);
+    ntt(tmp_coeffs, points, points.len()).unwrap();
+    ntt_inv_finish(tmp_coeffs, points.len(), size_inv);
     poly_eval(&tmp_coeffs[..points.len()], eval_at)
 }
 
 /// Returns a polynomial that evaluates to `0` if the input is in range `[start, end)`. Otherwise,
 /// the output is not `0`.
-pub(crate) fn poly_range_check<F: FftFriendlyFieldElement>(start: usize, end: usize) -> Vec<F> {
+pub(crate) fn poly_range_check<F: NttFriendlyFieldElement>(start: usize, end: usize) -> Vec<F> {
     let mut p = vec![F::one()];
     let mut q = [F::zero(), F::one()];
     for i in start..end {
@@ -228,10 +228,10 @@ pub(crate) fn poly_range_check<F: FftFriendlyFieldElement>(start: usize, end: us
 mod tests {
     use crate::{
         field::{
-            FftFriendlyFieldElement, Field64, FieldElement, FieldElementWithInteger, FieldPrio2,
+            Field64, FieldElement, FieldElementWithInteger, FieldPrio2, NttFriendlyFieldElement,
         },
         polynomial::{
-            fft_get_roots, poly_deg, poly_eval, poly_fft, poly_mul, poly_range_check,
+            ntt_get_roots, poly_deg, poly_eval, poly_mul, poly_ntt, poly_range_check,
             TestPolyAuxMemory,
         },
     };
@@ -241,8 +241,8 @@ mod tests {
     #[test]
     fn test_roots() {
         let count = 128;
-        let roots = fft_get_roots::<FieldPrio2>(count, false);
-        let roots_inv = fft_get_roots::<FieldPrio2>(count, true);
+        let roots = ntt_get_roots::<FieldPrio2>(count, false);
+        let roots_inv = ntt_get_roots::<FieldPrio2>(count, true);
 
         for i in 0..count {
             assert_eq!(roots[i] * roots_inv[i], 1);
@@ -327,7 +327,7 @@ mod tests {
     }
 
     #[test]
-    fn test_fft() {
+    fn test_ntt() {
         let count = 128;
         let mut mem = TestPolyAuxMemory::new(count / 2);
 
@@ -339,33 +339,33 @@ mod tests {
             .collect::<Vec<FieldPrio2>>();
 
         // From points to coeffs and back
-        poly_fft(
+        poly_ntt(
             &mut poly,
             &points,
             &mem.roots_2n,
             count,
             false,
-            &mut mem.fft_memory,
+            &mut mem.ntt_memory,
         );
-        poly_fft(
+        poly_ntt(
             &mut points2,
             &poly,
             &mem.roots_2n_inverted,
             count,
             true,
-            &mut mem.fft_memory,
+            &mut mem.ntt_memory,
         );
 
         assert_eq!(points, points2);
 
         // interpolation
-        poly_fft(
+        poly_ntt(
             &mut poly,
             &points,
             &mem.roots_2n,
             count,
             false,
-            &mut mem.fft_memory,
+            &mut mem.ntt_memory,
         );
 
         for (poly_coeff, root) in poly[..count].iter().zip(mem.roots_2n[..count].iter()) {

@@ -5,37 +5,37 @@
 //! This module provides wrappers around internal components of this crate that we want to
 //! benchmark, but which we don't want to expose in the public API.
 
-use crate::fft::discrete_fourier_transform;
-use crate::field::FftFriendlyFieldElement;
+use crate::field::NttFriendlyFieldElement;
 use crate::flp::gadgets::Mul;
 use crate::flp::FlpError;
-use crate::polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory};
+use crate::ntt::ntt;
+use crate::polynomial::{ntt_get_roots, poly_ntt, PolyNttTempMemory};
 
-/// Sets `outp` to the Discrete Fourier Transform (DFT) using an iterative FFT algorithm.
-pub fn benchmarked_iterative_fft<F: FftFriendlyFieldElement>(outp: &mut [F], inp: &[F]) {
-    discrete_fourier_transform(outp, inp, inp.len()).unwrap();
+/// Runs NTT on `outp` using the iterative algorithm.
+pub fn benchmarked_iterative_ntt<F: NttFriendlyFieldElement>(outp: &mut [F], inp: &[F]) {
+    ntt(outp, inp, inp.len()).unwrap();
 }
 
-/// Sets `outp` to the Discrete Fourier Transform (DFT) using a recursive FFT algorithm.
-pub fn benchmarked_recursive_fft<F: FftFriendlyFieldElement>(outp: &mut [F], inp: &[F]) {
-    let roots_2n = fft_get_roots(inp.len(), false);
-    let mut fft_memory = PolyFFTTempMemory::new(inp.len());
-    poly_fft(outp, inp, &roots_2n, inp.len(), false, &mut fft_memory)
+/// Runs NTT on `outp` using the recursive algorithm.
+pub fn benchmarked_recursive_ntt<F: NttFriendlyFieldElement>(outp: &mut [F], inp: &[F]) {
+    let roots_2n = ntt_get_roots(inp.len(), false);
+    let mut ntt_memory = PolyNttTempMemory::new(inp.len());
+    poly_ntt(outp, inp, &roots_2n, inp.len(), false, &mut ntt_memory)
 }
 
 /// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
-/// uses FFT for multiplication.
-pub fn benchmarked_gadget_mul_call_poly_fft<F: FftFriendlyFieldElement>(
+/// uses NTT for multiplication.
+pub fn benchmarked_gadget_mul_call_poly_ntt<F: NttFriendlyFieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
     inp: &[Vec<F>],
 ) -> Result<(), FlpError> {
-    g.call_poly_fft(outp, inp)
+    g.call_poly_ntt(outp, inp)
 }
 
 /// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
 /// does the multiplication directly.
-pub fn benchmarked_gadget_mul_call_poly_direct<F: FftFriendlyFieldElement>(
+pub fn benchmarked_gadget_mul_call_poly_direct<F: NttFriendlyFieldElement>(
     g: &mut Mul<F>,
     outp: &mut [F],
     inp: &[Vec<F>],

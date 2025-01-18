@@ -5,7 +5,7 @@
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{
-        decode_fieldvec, FftFriendlyFieldElement, FieldElement, FieldElementWithInteger, FieldPrio2,
+        decode_fieldvec, FieldElement, FieldElementWithInteger, FieldPrio2, NttFriendlyFieldElement,
     },
     prng::Prng,
     vdaf::{

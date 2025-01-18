@@ -2,9 +2,9 @@
 
 //! A collection of gadgets.
 
-use crate::fft::{discrete_fourier_transform, discrete_fourier_transform_inv_finish};
-use crate::field::FftFriendlyFieldElement;
+use crate::field::NttFriendlyFieldElement;
 use crate::flp::{gadget_poly_len, wire_poly_len, FlpError, Gadget};
+use crate::ntt::{ntt, ntt_inv_finish};
 use crate::polynomial::{poly_deg, poly_eval, poly_mul};
 
 #[cfg(feature = "multithreaded")]
@@ -15,14 +15,14 @@ use std::convert::TryFrom;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 
-/// For input polynomials larger than or equal to this threshold, gadgets will use FFT for
+/// For input polynomials larger than or equal to this threshold, gadgets will use NTT for
 /// polynomial multiplication. Otherwise, the gadget uses direct multiplication.
-const FFT_THRESHOLD: usize = 30;
+const NTT_THRESHOLD: usize = 30;
 
 /// An arity-2 gadget that multiples its inputs.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Mul<F: FftFriendlyFieldElement> {
-    /// Size of buffer for FFT operations.
+pub struct Mul<F: NttFriendlyFieldElement> {
+    /// Size of buffer for NTT operations.
     n: usize,
     /// Inverse of `n` in `F`.
     n_inv: F,
@@ -30,11 +30,11 @@ pub struct Mul<F: FftFriendlyFieldElement> {
     num_calls: usize,
 }
 
-impl<F: FftFriendlyFieldElement> Mul<F> {
+impl<F: NttFriendlyFieldElement> Mul<F> {
     /// Return a new multiplier gadget. `num_calls` is the number of times this gadget will be
     /// called by the validity circuit.
     pub fn new(num_calls: usize) -> Self {
-        let n = gadget_poly_fft_mem_len(2, num_calls);
+        let n = gadget_poly_ntt_mem_len(2, num_calls);
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self {
             n,
@@ -54,25 +54,25 @@ impl<F: FftFriendlyFieldElement> Mul<F> {
         Ok(())
     }
 
-    /// Multiply input polynomials using FFT.
-    pub(crate) fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    /// Multiply input polynomials using NTT.
+    pub(crate) fn call_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
-        discrete_fourier_transform(&mut buf, &inp[0], n)?;
-        discrete_fourier_transform(outp, &inp[1], n)?;
+        ntt(&mut buf, &inp[0], n)?;
+        ntt(outp, &inp[1], n)?;
 
         for i in 0..n {
             buf[i] *= outp[i];
         }
 
-        discrete_fourier_transform(outp, &buf, n)?;
-        discrete_fourier_transform_inv_finish(outp, n, self.n_inv);
+        ntt(outp, &buf, n)?;
+        ntt_inv_finish(outp, n, self.n_inv);
         Ok(())
     }
 }
 
-impl<F: FftFriendlyFieldElement> Gadget<F> for Mul<F> {
+impl<F: NttFriendlyFieldElement> Gadget<F> for Mul<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(inp[0] * inp[1])
@@ -80,8 +80,8 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for Mul<F> {
 
     fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
-        if inp[0].len() >= FFT_THRESHOLD {
-            self.call_poly_fft(outp, inp)
+        if inp[0].len() >= NTT_THRESHOLD {
+            self.call_poly_ntt(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
@@ -108,9 +108,9 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for Mul<F> {
 //
 // TODO Make `poly` an array of length determined by a const generic.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct PolyEval<F: FftFriendlyFieldElement> {
+pub struct PolyEval<F: NttFriendlyFieldElement> {
     poly: Vec<F>,
-    /// Size of buffer for FFT operations.
+    /// Size of buffer for NTT operations.
     n: usize,
     /// Inverse of `n` in `F`.
     n_inv: F,
@@ -118,11 +118,11 @@ pub struct PolyEval<F: FftFriendlyFieldElement> {
     num_calls: usize,
 }
 
-impl<F: FftFriendlyFieldElement> PolyEval<F> {
+impl<F: NttFriendlyFieldElement> PolyEval<F> {
     /// Returns a gadget that evaluates its input on `poly`. `num_calls` is the number of times
     /// this gadget is called by the validity circuit.
     pub fn new(poly: Vec<F>, num_calls: usize) -> Self {
-        let n = gadget_poly_fft_mem_len(poly_deg(&poly), num_calls);
+        let n = gadget_poly_ntt_mem_len(poly_deg(&poly), num_calls);
         let n_inv = F::from(F::Integer::try_from(n).unwrap()).inv();
         Self {
             poly,
@@ -133,7 +133,7 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
     }
 }
 
-impl<F: FftFriendlyFieldElement> PolyEval<F> {
+impl<F: NttFriendlyFieldElement> PolyEval<F> {
     /// Multiply input polynomials directly.
     fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         outp[0] = self.poly[0];
@@ -150,13 +150,13 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
         Ok(())
     }
 
-    /// Multiply input polynomials using FFT.
-    fn call_poly_fft(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    /// Multiply input polynomials using NTT.
+    fn call_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let inp = &inp[0];
 
         let mut inp_vals = vec![F::zero(); n];
-        discrete_fourier_transform(&mut inp_vals, inp, n)?;
+        ntt(&mut inp_vals, inp, n)?;
 
         let mut x_vals = inp_vals.clone();
         let mut x = vec![F::zero(); n];
@@ -173,15 +173,15 @@ impl<F: FftFriendlyFieldElement> PolyEval<F> {
                     x_vals[j] *= inp_vals[j];
                 }
 
-                discrete_fourier_transform(&mut x, &x_vals, n)?;
-                discrete_fourier_transform_inv_finish(&mut x, n, self.n_inv);
+                ntt(&mut x, &x_vals, n)?;
+                ntt_inv_finish(&mut x, n, self.n_inv);
             }
         }
         Ok(())
     }
 }
 
-impl<F: FftFriendlyFieldElement> Gadget<F> for PolyEval<F> {
+impl<F: NttFriendlyFieldElement> Gadget<F> for PolyEval<F> {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(poly_eval(&self.poly, inp[0]))
@@ -194,8 +194,8 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for PolyEval<F> {
             *item = F::zero();
         }
 
-        if inp[0].len() >= FFT_THRESHOLD {
-            self.call_poly_fft(outp, inp)
+        if inp[0].len() >= NTT_THRESHOLD {
+            self.call_poly_ntt(outp, inp)
         } else {
             self.call_poly_direct(outp, inp)
         }
@@ -219,7 +219,7 @@ impl<F: FftFriendlyFieldElement> Gadget<F> for PolyEval<F> {
 }
 
 /// Trait for abstracting over [`ParallelSum`].
-pub trait ParallelSumGadget<F: FftFriendlyFieldElement, G>: Gadget<F> + Debug {
+pub trait ParallelSumGadget<F: NttFriendlyFieldElement, G>: Gadget<F> + Debug {
     /// Wraps `inner` into a sum gadget that calls it `chunks` many times, and adds the reuslts.
     fn new(inner: G, chunks: usize) -> Self;
 }
@@ -228,13 +228,13 @@ pub trait ParallelSumGadget<F: FftFriendlyFieldElement, G>: Gadget<F> + Debug {
 /// outputs. The arity is equal to the arity of the inner gadget times the number of times it is
 /// called.
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ParallelSum<F: FftFriendlyFieldElement, G: Gadget<F>> {
+pub struct ParallelSum<F: NttFriendlyFieldElement, G: Gadget<F>> {
     inner: G,
     chunks: usize,
     phantom: PhantomData<F>,
 }
 
-impl<F: FftFriendlyFieldElement, G: 'static + Gadget<F>> ParallelSumGadget<F, G>
+impl<F: NttFriendlyFieldElement, G: 'static + Gadget<F>> ParallelSumGadget<F, G>
     for ParallelSum<F, G>
 {
     fn new(inner: G, chunks: usize) -> Self {
@@ -246,7 +246,7 @@ impl<F: FftFriendlyFieldElement, G: 'static + Gadget<F>> ParallelSumGadget<F, G>
     }
 }
 
-impl<F: FftFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelSum<F, G> {
+impl<F: NttFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelSum<F, G> {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         let mut outp = F::zero();
@@ -298,14 +298,14 @@ impl<F: FftFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelS
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct ParallelSumMultithreaded<F: FftFriendlyFieldElement, G: Gadget<F>> {
+pub struct ParallelSumMultithreaded<F: NttFriendlyFieldElement, G: Gadget<F>> {
     serial_sum: ParallelSum<F, G>,
 }
 
 #[cfg(feature = "multithreaded")]
 impl<F, G> ParallelSumGadget<F, G> for ParallelSumMultithreaded<F, G>
 where
-    F: FftFriendlyFieldElement + Sync + Send,
+    F: NttFriendlyFieldElement + Sync + Send,
     G: 'static + Gadget<F> + Clone + Sync + Send,
 {
     fn new(inner: G, chunks: usize) -> Self {
@@ -331,7 +331,7 @@ impl<F, G> ParallelSumFoldState<F, G> {
     fn new(gadget: &G, length: usize) -> ParallelSumFoldState<F, G>
     where
         G: Clone,
-        F: FftFriendlyFieldElement,
+        F: NttFriendlyFieldElement,
     {
         ParallelSumFoldState {
             inner: gadget.clone(),
@@ -344,7 +344,7 @@ impl<F, G> ParallelSumFoldState<F, G> {
 #[cfg(feature = "multithreaded")]
 impl<F, G> Gadget<F> for ParallelSumMultithreaded<F, G>
 where
-    F: FftFriendlyFieldElement + Sync + Send,
+    F: NttFriendlyFieldElement + Sync + Send,
     G: 'static + Gadget<F> + Clone + Sync + Send,
 {
     fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
@@ -412,7 +412,7 @@ where
 }
 
 /// Check that the input parameters of g.call() are well-formed.
-fn gadget_call_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
+fn gadget_call_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     in_len: usize,
 ) -> Result<(), FlpError> {
@@ -432,7 +432,7 @@ fn gadget_call_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
 }
 
 /// Check that the input parameters of g.call_poly() are well-formed.
-fn gadget_call_poly_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
+fn gadget_call_poly_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     outp: &[F],
     inp: &[Vec<F>],
@@ -460,7 +460,7 @@ fn gadget_call_poly_check<F: FftFriendlyFieldElement, G: Gadget<F>>(
 }
 
 #[inline]
-fn gadget_poly_fft_mem_len(degree: usize, num_calls: usize) -> usize {
+fn gadget_poly_ntt_mem_len(degree: usize, num_calls: usize) -> usize {
     gadget_poly_len(degree, wire_poly_len(num_calls)).next_power_of_two()
 }
 
@@ -475,15 +475,15 @@ mod tests {
 
     #[test]
     fn test_mul() {
-        // Test the gadget with input polynomials shorter than `FFT_THRESHOLD`. This exercises the
+        // Test the gadget with input polynomials shorter than `NTT_THRESHOLD`. This exercises the
         // naive multiplication code path.
-        let num_calls = FFT_THRESHOLD / 2;
+        let num_calls = NTT_THRESHOLD / 2;
         let mut g: Mul<TestField> = Mul::new(num_calls);
         gadget_test(&mut g, num_calls);
 
-        // Test the gadget with input polynomials longer than `FFT_THRESHOLD`. This exercises
-        // FFT-based polynomial multiplication.
-        let num_calls = FFT_THRESHOLD;
+        // Test the gadget with input polynomials longer than `NTT_THRESHOLD`. This exercises
+        // NTT-based polynomial multiplication.
+        let num_calls = NTT_THRESHOLD;
         let mut g: Mul<TestField> = Mul::new(num_calls);
         gadget_test(&mut g, num_calls);
     }
@@ -492,11 +492,11 @@ mod tests {
     fn test_poly_eval() {
         let poly: Vec<TestField> = random_vector(10);
 
-        let num_calls = FFT_THRESHOLD / 2;
+        let num_calls = NTT_THRESHOLD / 2;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
         gadget_test(&mut g, num_calls);
 
-        let num_calls = FFT_THRESHOLD;
+        let num_calls = NTT_THRESHOLD;
         let mut g: PolyEval<TestField> = PolyEval::new(poly, num_calls);
         gadget_test(&mut g, num_calls);
     }
@@ -560,11 +560,11 @@ mod tests {
 
     /// Test that calling g.call_poly() and evaluating the output at a given point is equivalent
     /// to evaluating each of the inputs at the same point and applying g.call() on the results.
-    fn gadget_test<F: FftFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
+    fn gadget_test<F: NttFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
         let wire_poly_len = (1 + num_calls).next_power_of_two();
         let mut prng = Prng::new();
         let mut inp = vec![F::zero(); g.arity()];
-        let mut gadget_poly = vec![F::zero(); gadget_poly_fft_mem_len(g.degree(), num_calls)];
+        let mut gadget_poly = vec![F::zero(); gadget_poly_ntt_mem_len(g.degree(), num_calls)];
         let mut wire_polys = vec![vec![F::zero(); wire_poly_len]; g.arity()];
 
         let r = prng.get();

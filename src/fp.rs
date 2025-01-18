@@ -8,7 +8,7 @@ mod ops;
 pub use ops::{FieldOps, FieldParameters};
 
 /// For each set of field parameters we pre-compute the 1st, 2nd, 4th, ..., 2^20-th principal roots
-/// of unity. The largest of these is used to run the FFT algorithm on an input of size 2^20. This
+/// of unity. The largest of these is used to run the NTT algorithm on an input of size 2^20. This
 /// is the largest input size we would ever need for the cryptographic applications in this crate.
 pub(crate) const MAX_ROOTS: usize = 20;
 

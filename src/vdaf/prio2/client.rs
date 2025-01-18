@@ -5,8 +5,8 @@
 
 use crate::{
     codec::CodecError,
-    field::FftFriendlyFieldElement,
-    polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory},
+    field::NttFriendlyFieldElement,
+    polynomial::{ntt_get_roots, poly_ntt, PolyNttTempMemory},
     prng::Prng,
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
@@ -34,11 +34,11 @@ pub(crate) struct ClientMemory<F> {
     evals_g: Vec<F>,
     roots_2n: Vec<F>,
     roots_n_inverted: Vec<F>,
-    fft_memory: PolyFFTTempMemory<F>,
+    ntt_memory: PolyNttTempMemory<F>,
     coeffs: Vec<F>,
 }
 
-impl<F: FftFriendlyFieldElement> ClientMemory<F> {
+impl<F: NttFriendlyFieldElement> ClientMemory<F> {
     pub(crate) fn new(dimension: usize) -> Result<Self, VdafError> {
         let mut rng = thread_rng();
         let n = (dimension + 1).next_power_of_two();
@@ -60,15 +60,15 @@ impl<F: FftFriendlyFieldElement> ClientMemory<F> {
             points_g: vec![F::zero(); n],
             evals_f: vec![F::zero(); 2 * n],
             evals_g: vec![F::zero(); 2 * n],
-            roots_2n: fft_get_roots(2 * n, false),
-            roots_n_inverted: fft_get_roots(n, true),
-            fft_memory: PolyFFTTempMemory::new(2 * n),
+            roots_2n: ntt_get_roots(2 * n, false),
+            roots_n_inverted: ntt_get_roots(n, true),
+            ntt_memory: PolyNttTempMemory::new(2 * n),
             coeffs: vec![F::zero(); 2 * n],
         })
     }
 }
 
-impl<F: FftFriendlyFieldElement> ClientMemory<F> {
+impl<F: NttFriendlyFieldElement> ClientMemory<F> {
     pub(crate) fn prove_with<G>(&mut self, dimension: usize, init_function: G) -> Vec<F>
     where
         G: FnOnce(&mut [F]),
@@ -106,7 +106,7 @@ pub(crate) fn proof_length(dimension: usize) -> usize {
 
 /// Unpacked proof with subcomponents
 #[derive(Debug)]
-pub(crate) struct UnpackedProof<'a, F: FftFriendlyFieldElement> {
+pub(crate) struct UnpackedProof<'a, F: NttFriendlyFieldElement> {
     /// Data
     pub data: &'a [F],
     /// Zeroth coefficient of polynomial f
@@ -121,7 +121,7 @@ pub(crate) struct UnpackedProof<'a, F: FftFriendlyFieldElement> {
 
 /// Unpacked proof with mutable subcomponents
 #[derive(Debug)]
-pub(crate) struct UnpackedProofMut<'a, F: FftFriendlyFieldElement> {
+pub(crate) struct UnpackedProofMut<'a, F: NttFriendlyFieldElement> {
     /// Data
     pub data: &'a mut [F],
     /// Zeroth coefficient of polynomial f
@@ -135,7 +135,7 @@ pub(crate) struct UnpackedProofMut<'a, F: FftFriendlyFieldElement> {
 }
 
 /// Unpacks the proof vector into subcomponents
-pub(crate) fn unpack_proof<F: FftFriendlyFieldElement>(
+pub(crate) fn unpack_proof<F: NttFriendlyFieldElement>(
     proof: &[F],
     dimension: usize,
 ) -> Result<UnpackedProof<F>, SerializeError> {
@@ -159,7 +159,7 @@ pub(crate) fn unpack_proof<F: FftFriendlyFieldElement>(
 }
 
 /// Unpacks a mutable proof vector into mutable subcomponents
-pub(crate) fn unpack_proof_mut<F: FftFriendlyFieldElement>(
+pub(crate) fn unpack_proof_mut<F: NttFriendlyFieldElement>(
     proof: &mut [F],
     dimension: usize,
 ) -> Result<UnpackedProofMut<F>, SerializeError> {
@@ -194,28 +194,28 @@ pub(crate) fn unpack_proof_mut<F: FftFriendlyFieldElement>(
 ///   unity. This must have length 2 * n.
 /// * `roots_n_inverted` - Precomputed inverses of the nth roots of unity.
 /// * `roots_2n` - Precomputed 2nth roots of unity.
-/// * `fft_memory` - Scratch space for the FFT algorithm.
+/// * `ntt_memory` - Scratch space for the NTT algorithm.
 /// * `coeffs` - Scratch space. This must have length 2 * n.
-fn interpolate_and_evaluate_at_2n<F: FftFriendlyFieldElement>(
+fn interpolate_and_evaluate_at_2n<F: NttFriendlyFieldElement>(
     n: usize,
     points_in: &[F],
     evals_out: &mut [F],
     roots_n_inverted: &[F],
     roots_2n: &[F],
-    fft_memory: &mut PolyFFTTempMemory<F>,
+    ntt_memory: &mut PolyNttTempMemory<F>,
     coeffs: &mut [F],
 ) {
     // interpolate through roots of unity
-    poly_fft(coeffs, points_in, roots_n_inverted, n, true, fft_memory);
+    poly_ntt(coeffs, points_in, roots_n_inverted, n, true, ntt_memory);
     // evaluate at 2N roots of unity
-    poly_fft(evals_out, coeffs, roots_2n, 2 * n, false, fft_memory);
+    poly_ntt(evals_out, coeffs, roots_2n, 2 * n, false, ntt_memory);
 }
 
 /// Proof construction
 ///
 /// Based on Theorem 2.3.3 from Henry Corrigan-Gibbs' dissertation
 /// This constructs the output \pi by doing the necessesary calculations
-fn construct_proof<F: FftFriendlyFieldElement>(
+fn construct_proof<F: NttFriendlyFieldElement>(
     data: &[F],
     dimension: usize,
     f0: &mut F,
@@ -253,7 +253,7 @@ fn construct_proof<F: FftFriendlyFieldElement>(
         &mut mem.evals_f,
         &mem.roots_n_inverted,
         &mem.roots_2n,
-        &mut mem.fft_memory,
+        &mut mem.ntt_memory,
         &mut mem.coeffs,
     );
     interpolate_and_evaluate_at_2n(
@@ -262,7 +262,7 @@ fn construct_proof<F: FftFriendlyFieldElement>(
         &mut mem.evals_g,
         &mem.roots_n_inverted,
         &mem.roots_2n,
-        &mut mem.fft_memory,
+        &mut mem.ntt_memory,
         &mut mem.coeffs,
     );
 
