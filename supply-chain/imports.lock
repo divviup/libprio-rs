@@ -121,8 +121,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.135"
-when = "2025-01-07"
+version = "1.0.137"
+when = "2025-01-19"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
