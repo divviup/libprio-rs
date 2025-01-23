@@ -32,6 +32,7 @@ use subtle::{Choice, ConstantTimeEq};
 
 use super::xof::XofTurboShake128;
 
+pub mod hh_sketch;
 pub(crate) mod szk;
 
 pub(crate) const SEED_SIZE: usize = 32;
