@@ -32,6 +32,7 @@ use subtle::{Choice, ConstantTimeEq};
 
 use super::xof::XofTurboShake128;
 
+pub mod hh_sketch;
 pub(crate) mod szk;
 
 pub(crate) const SEED_SIZE: usize = 32;
@@ -95,9 +96,11 @@ pub struct MasticAggregationParam {
     require_weight_check: bool,
 }
 
-#[cfg(test)]
 impl MasticAggregationParam {
-    fn new(prefixes: Vec<VidpfInput>, require_weight_check: bool) -> Result<Self, VdafError> {
+    pub(crate) fn new(
+        prefixes: Vec<VidpfInput>,
+        require_weight_check: bool,
+    ) -> Result<Self, VdafError> {
         Ok(Self {
             level_and_prefixes: Poplar1AggregationParam::try_from_prefixes(prefixes)?,
             require_weight_check,
