@@ -13,7 +13,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{decode_fieldvec, encode_fieldvec, FieldElement},
+    field::{add_assign_vector, decode_fieldvec, encode_fieldvec, sub_assign_vector, FieldElement},
     flp::{FlpError, Type},
     vdaf::{
         mastic::{self, NONCE_SIZE, SEED_SIZE, USAGE_PROOF_SHARE},
@@ -453,12 +453,10 @@ impl<T: Type> Szk<T> {
                 .prove(encoded_measurement, &prove_rand, &joint_rand)?;
 
         // Generate the proof shares.
-        for (x, y) in leader_proof_share
-            .iter_mut()
-            .zip(self.derive_helper_proof_share(&helper_seed, ctx))
-        {
-            *x -= y;
-        }
+        sub_assign_vector(
+            &mut leader_proof_share,
+            self.derive_helper_proof_share(&helper_seed, ctx),
+        );
 
         // Construct the output messages.
         let leader_proof_share = SzkProofShare::Leader {
@@ -575,13 +573,10 @@ impl<T: Type> Szk<T> {
         mut leader_share: SzkQueryShare<T::Field>,
         helper_share: SzkQueryShare<T::Field>,
     ) -> Result<SzkJointShare, SzkError> {
-        for (x, y) in leader_share
-            .flp_verifier
-            .iter_mut()
-            .zip(helper_share.flp_verifier)
-        {
-            *x += y;
-        }
+        add_assign_vector(
+            &mut leader_share.flp_verifier,
+            helper_share.flp_verifier.iter().copied(),
+        );
         if self.typ.decide(&leader_share.flp_verifier)? {
             match (
                 leader_share.joint_rand_part_opt,
@@ -662,11 +657,12 @@ where
 mod tests {
     use super::*;
     use crate::{
-        field::Field128,
-        field::{random_vector, FieldElementWithInteger},
-        flp::gadgets::{Mul, ParallelSum},
-        flp::types::{Count, Sum, SumVec},
-        flp::{Flp, Type},
+        field::{random_vector, sub_assign_vector, Field128, FieldElementWithInteger},
+        flp::{
+            gadgets::{Mul, ParallelSum},
+            types::{Count, Sum, SumVec},
+            Flp, Type,
+        },
     };
     use rand::{thread_rng, Rng};
 
@@ -683,9 +679,7 @@ mod tests {
         let leader_seed_opt = szk_typ.requires_joint_rand().then(|| rng.gen());
         let helper_input_share: Vec<T::Field> = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let proof_shares = szk_typ.prove(
             ctx,
@@ -849,9 +843,7 @@ mod tests {
         let leader_seed_opt = Some(rng.gen());
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [leader_proof_share, _] = szk_typ
             .prove(
@@ -885,9 +877,7 @@ mod tests {
         let leader_seed_opt = Some(rng.gen());
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [l_proof_share, _] = szk_typ
             .prove(
@@ -920,9 +910,7 @@ mod tests {
         let leader_seed_opt = Some(rng.gen());
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [l_proof_share, _] = szk_typ
             .prove(
@@ -956,9 +944,7 @@ mod tests {
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [l_proof_share, _] = szk_typ
             .prove(
@@ -998,9 +984,7 @@ mod tests {
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [_, h_proof_share] = szk_typ
             .prove(
@@ -1039,9 +1023,7 @@ mod tests {
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [l_proof_share, _] = szk_typ
             .prove(
@@ -1080,9 +1062,7 @@ mod tests {
         let leader_seed_opt = None;
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [_, h_proof_share] = szk_typ
             .prove(
@@ -1122,9 +1102,7 @@ mod tests {
         let leader_seed_opt = Some(rng.gen());
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [l_proof_share, _] = szk_typ
             .prove(
@@ -1164,9 +1142,7 @@ mod tests {
         let leader_seed_opt = Some(rng.gen());
         let helper_input_share = random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
-        for (x, y) in leader_input_share.iter_mut().zip(&helper_input_share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
         let [_, h_proof_share] = szk_typ
             .prove(

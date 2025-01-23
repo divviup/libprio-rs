@@ -34,7 +34,8 @@ use crate::codec::{encode_fixlen_items, CodecError, Decode, Encode, Parameterize
 #[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{
-    decode_fieldvec, FieldElement, FieldElementWithInteger, NttFriendlyFieldElement,
+    add_assign_vector, decode_fieldvec, sub_assign_vector, FieldElement, FieldElementWithInteger,
+    NttFriendlyFieldElement,
 };
 use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
@@ -652,12 +653,7 @@ where
 
                 Some(joint_rand_blind)
             } else {
-                for (x, y) in leader_measurement_share
-                    .iter_mut()
-                    .zip(measurement_share_prng)
-                {
-                    *x -= y;
-                }
+                sub_assign_vector(&mut leader_measurement_share, measurement_share_prng);
                 None
             };
             shares_out.push(Prio3InputShare::Helper {
@@ -739,13 +735,10 @@ where
                 u8::try_from(j).unwrap() + 1,
             );
 
-            for (x, y) in leader_proofs_share
-                .iter_mut()
-                .zip(prng)
-                .take(self.typ.proof_len() * self.num_proofs())
-            {
-                *x -= y;
-            }
+            sub_assign_vector(
+                &mut leader_proofs_share,
+                prng.take(self.typ.proof_len() * self.num_proofs()),
+            );
         }
 
         // Overwrite the placeholder first element with the leader share
@@ -1508,9 +1501,7 @@ where
                 joint_rand_parts.push(joint_rand_seed_part);
             }
 
-            for (x, y) in verifiers.iter_mut().zip(share.verifiers) {
-                *x += y;
-            }
+            add_assign_vector(&mut verifiers, share.verifiers.iter().copied());
         }
 
         if count != self.num_aggregators {

@@ -867,9 +867,7 @@ pub(crate) fn merge_vector<F: FieldElement>(
     if accumulator.len() != other_vector.len() {
         return Err(FieldError::InputSizeMismatch);
     }
-    for (a, o) in accumulator.iter_mut().zip(other_vector.iter()) {
-        *a += *o;
-    }
+    add_assign_vector(accumulator, other_vector.iter().copied());
 
     Ok(())
 }
@@ -886,13 +884,35 @@ pub(crate) fn split_vector<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec
 
     for _ in 1..num_shares {
         let share: Vec<F> = random_vector(inp.len());
-        for (x, y) in outp[0].iter_mut().zip(&share) {
-            *x -= *y;
-        }
+        sub_assign_vector(&mut outp[0], share.iter().copied());
         outp.push(share);
     }
 
     outp
+}
+
+pub(crate) fn sub_assign_vector<F: FieldElement>(a: &mut [F], b: impl IntoIterator<Item = F>) {
+    let mut count = 0;
+    for (x, y) in a.iter_mut().zip(b) {
+        *x -= y;
+        count += 1;
+    }
+    assert_eq!(a.len(), count);
+}
+
+pub(crate) fn add_assign_vector<F: FieldElement>(a: &mut [F], b: impl IntoIterator<Item = F>) {
+    let mut count = 0;
+    for (x, y) in a.iter_mut().zip(b) {
+        *x += y;
+        count += 1;
+    }
+    assert_eq!(a.len(), count);
+}
+
+#[cfg(any(test, feature = "multithreaded", feature = "test-util"))]
+pub(crate) fn add_vector<F: FieldElement>(mut a: Vec<F>, b: Vec<F>) -> Vec<F> {
+    add_assign_vector(&mut a, b.iter().copied());
+    a
 }
 
 /// Generate a vector of uniformly distributed random field elements.
