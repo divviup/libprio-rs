@@ -7,8 +7,8 @@
 use crate::{
     bt::BinaryTree,
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
-    field::{decode_fieldvec, FieldElement, FieldElementWithInteger},
-    flp::Type,
+    field::{decode_fieldvec, Field64, FieldElement, FieldElementWithInteger},
+    flp::{types::Count, Type},
     vdaf::{
         poplar1::{Poplar1, Poplar1AggregationParam},
         xof::{Seed, Xof},
@@ -83,6 +83,14 @@ impl<T: Type> Mastic<T> {
     }
 }
 
+impl Mastic<Count<Field64>> {
+    /// Return an instance of Mastic using a counter as the weight. This provides the same
+    /// functionality as [`Poplar1`].
+    pub fn new_count(bits: usize) -> Result<Self, VdafError> {
+        Self::new(0xFFFF0001, Count::new(), bits)
+    }
+}
+
 /// Mastic aggregation parameter.
 ///
 /// This includes the VIDPF tree level under evaluation and a set of prefixes to evaluate at that level.
@@ -95,9 +103,10 @@ pub struct MasticAggregationParam {
     require_weight_check: bool,
 }
 
-#[cfg(test)]
 impl MasticAggregationParam {
-    fn new(prefixes: Vec<VidpfInput>, require_weight_check: bool) -> Result<Self, VdafError> {
+    /// Construct an aggregation parameter from a sequence of candidate prefixes. The caller also
+    /// specifies whether to perform the weight check.
+    pub fn new(prefixes: Vec<VidpfInput>, require_weight_check: bool) -> Result<Self, VdafError> {
         Ok(Self {
             level_and_prefixes: Poplar1AggregationParam::try_from_prefixes(prefixes)?,
             require_weight_check,
