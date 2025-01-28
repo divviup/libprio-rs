@@ -821,6 +821,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 delta = "0.6.0 -> 0.8.1"
 
+[[audits.simba]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-run"
+delta = "0.8.1 -> 0.9.0"
+
 [[audits.statest]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
