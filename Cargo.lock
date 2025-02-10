@@ -1228,9 +1228,9 @@ dependencies = [
 
 [[package]]
 name = "zipf"
-version = "7.0.1"
+version = "7.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "390e51da0ed8cc3ade001d15fa5ba6f966b99c858fb466ec6b06d1682f1f94dd"
+checksum = "0d4e079d30939088cfc89b5318a5d3557d4a92890c917aa40475ea763bd473d5"
 dependencies = [
  "rand",
 ]
