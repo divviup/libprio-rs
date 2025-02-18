@@ -1036,7 +1036,7 @@ enum XofMode<'a> {
 pub mod test_utils {
     use super::*;
 
-    use zipf::ZipfDistribution;
+    use rand_distr::Zipf;
 
     /// Generate a set of IDPF inputs with the given bit length `bits`. They are sampled according
     /// to the Zipf distribution with parameters `zipf_support` and `zipf_exponent`. Return the
@@ -1064,9 +1064,9 @@ pub mod test_utils {
 
         // Sample a number of inputs according to the Zipf distribution.
         let mut samples = Vec::with_capacity(measurement_count);
-        let zipf = ZipfDistribution::new(zipf_support, zipf_exponent).unwrap();
+        let zipf = Zipf::new(zipf_support as u64, zipf_exponent).unwrap();
         for _ in 0..measurement_count {
-            samples.push(inputs[zipf.sample(rng) - 1].clone());
+            samples.push(inputs[zipf.sample(rng) as usize - 1].clone());
         }
 
         // Compute the prefix tree for the desired threshold.
