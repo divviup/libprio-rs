@@ -1066,7 +1066,7 @@ pub mod test_utils {
         let mut samples = Vec::with_capacity(measurement_count);
         let zipf = Zipf::new(zipf_support as u64, zipf_exponent).unwrap();
         for _ in 0..measurement_count {
-            samples.push(inputs[zipf.sample(rng) as usize - 1].clone());
+            samples.push(inputs[zipf.sample(rng).round() as usize - 1].clone());
         }
 
         // Compute the prefix tree for the desired threshold.
