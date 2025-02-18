@@ -868,6 +868,11 @@ who = "Tim Geoghegan <timg@divviup.org>"
 criteria = "safe-to-run"
 delta = "7.0.0 -> 7.0.1"
 
+[[audits.zipf]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-deploy"
+delta = "7.0.1 -> 7.0.2"
+
 [[audits.zlib-rs]]
 who = "Ameer Ghani <inahga@divviup.org>"
 criteria = "safe-to-deploy"
