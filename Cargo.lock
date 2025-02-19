@@ -702,6 +702,7 @@ dependencies = [
  "prio",
  "rand",
  "rand_core",
+ "rand_distr",
  "rayon",
  "serde",
  "serde_json",
@@ -710,7 +711,6 @@ dependencies = [
  "statrs",
  "subtle",
  "thiserror",
- "zipf",
 ]
 
 [[package]]
@@ -1221,13 +1221,4 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
-]
-
-[[package]]
-name = "zipf"
-version = "7.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "390e51da0ed8cc3ade001d15fa5ba6f966b99c858fb466ec6b06d1682f1f94dd"
-dependencies = [
- "rand",
 ]
