@@ -21,7 +21,7 @@ use prio::vdaf::prio2::Prio2;
 use prio::vidpf::VidpfServerId;
 use prio::{
     benchmarked::*,
-    field::{random_vector, Field128 as F, FieldElement},
+    field::{Field128 as F, FieldElement},
     flp::gadgets::Mul,
     vdaf::{prio3::Prio3, Aggregator, Client},
 };
@@ -51,7 +51,7 @@ fn prng(c: &mut Criterion) {
     let test_sizes = [16, 256, 1024, 4096];
     for size in test_sizes {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, size| {
-            b.iter(|| random_vector::<F>(*size))
+            b.iter(|| F::random_vector(*size))
         });
     }
     group.finish();
@@ -95,8 +95,8 @@ fn poly_mul(c: &mut Criterion) {
             let mut g: Mul<F> = Mul::new(*size);
             let mut outp = vec![F::zero(); 2 * m];
             let mut inp = vec![];
-            inp.push(random_vector(m));
-            inp.push(random_vector(m));
+            inp.push(F::random_vector(m));
+            inp.push(F::random_vector(m));
 
             b.iter(|| {
                 benchmarked_gadget_mul_call_poly_ntt(&mut g, &mut outp, &inp).unwrap();
@@ -108,8 +108,8 @@ fn poly_mul(c: &mut Criterion) {
             let mut g: Mul<F> = Mul::new(*size);
             let mut outp = vec![F::zero(); 2 * m];
             let mut inp = vec![];
-            inp.push(random_vector(m));
-            inp.push(random_vector(m));
+            inp.push(F::random_vector(m));
+            inp.push(F::random_vector(m));
 
             b.iter(|| {
                 benchmarked_gadget_mul_call_poly_direct(&mut g, &mut outp, &inp).unwrap();
@@ -712,11 +712,12 @@ fn idpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = IdpfInput::from_bools(&bits);
 
-            let inner_values = random_vector::<Field64>(size - 1)
+            let inner_values = Field64::random_vector(size - 1)
                 .into_iter()
                 .map(|random_element| Poplar1IdpfValue::new([Field64::one(), random_element]))
                 .collect::<Vec<_>>();
-            let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1)[0]]);
+            let leaf_value =
+                Poplar1IdpfValue::new([Field255::one(), Field255::random_vector(1)[0]]);
 
             let idpf = Idpf::new((), ());
             b.iter(|| {
@@ -734,11 +735,12 @@ fn idpf(c: &mut Criterion) {
             let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
             let input = IdpfInput::from_bools(&bits);
 
-            let inner_values = random_vector::<Field64>(size - 1)
+            let inner_values = Field64::random_vector(size - 1)
                 .into_iter()
                 .map(|random_element| Poplar1IdpfValue::new([Field64::one(), random_element]))
                 .collect::<Vec<_>>();
-            let leaf_value = Poplar1IdpfValue::new([Field255::one(), random_vector(1)[0]]);
+            let leaf_value =
+                Poplar1IdpfValue::new([Field255::one(), Field255::random_vector(1)[0]]);
 
             let idpf = Idpf::new((), ());
             let (public_share, keys) = idpf

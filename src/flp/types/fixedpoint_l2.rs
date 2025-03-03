@@ -676,7 +676,7 @@ where
 mod tests {
     use super::*;
     use crate::dp::{Rational, ZCdpBudget};
-    use crate::field::{random_vector, Field128, FieldElement};
+    use crate::field::{Field128, FieldElement};
     use crate::flp::gadgets::ParallelSum;
     use crate::flp::test_utils::TypeTest;
     use crate::vdaf::xof::SeedStreamTurboShake128;
@@ -830,7 +830,7 @@ mod tests {
 
         // invalid submission length, should be 3n + (2*n - 2) for a
         // 3-element n-bit vector. 3*n bits for 3 entries, (2*n-2) for norm.
-        let joint_rand = random_vector(vsum.joint_rand_len());
+        let joint_rand = Field128::random_vector(vsum.joint_rand_len());
         vsum.valid(
             &mut vsum.gadget(),
             &vec![one; 3 * n + 2 * n - 1],

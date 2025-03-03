@@ -5,7 +5,7 @@ use iai::black_box;
 #[cfg(feature = "experimental")]
 use prio::{
     codec::{Decode, Encode, ParameterizedDecode},
-    field::{Field255, FieldElement, FieldPrio2},
+    field::{Field255, FieldPrio2},
     idpf::{Idpf, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::{
         poplar1::Poplar1IdpfValue,
@@ -15,7 +15,7 @@ use prio::{
     },
 };
 use prio::{
-    field::{random_vector, Field128, Field64},
+    field::{Field128, Field64, FieldElement},
     vdaf::{
         prio3::{Prio3, Prio3InputShare},
         Client,
@@ -23,7 +23,7 @@ use prio::{
 };
 
 fn prng(size: usize) -> Vec<Field128> {
-    random_vector(size)
+    Field128::random_vector(size)
 }
 
 fn prng_16() -> Vec<Field128> {

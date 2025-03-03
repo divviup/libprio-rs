@@ -676,7 +676,7 @@ where
     for<'a> T: ParameterizedDecode<(&'a V, &'a V::AggregationParam)>,
 {
     // Generate an arbitrary vector of field elements.
-    let vec: Vec<F> = crate::field::random_vector(length);
+    let vec = F::random_vector(length);
 
     // Serialize the field element vector into a vector of bytes.
     let mut bytes = Vec::with_capacity(vec.len() * F::ENCODED_SIZE);
