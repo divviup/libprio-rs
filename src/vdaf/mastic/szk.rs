@@ -657,7 +657,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        field::{random_vector, sub_assign_vector, Field128, FieldElementWithInteger},
+        field::{sub_assign_vector, Field128, FieldElementWithInteger},
         flp::{
             gadgets::{Mul, ParallelSum},
             types::{Count, Sum, SumVec},
@@ -677,7 +677,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = szk_typ.requires_joint_rand().then(|| rng.gen());
-        let helper_input_share: Vec<T::Field> = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = T::Field::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -841,7 +841,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = Some(rng.gen());
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -875,7 +875,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = Some(rng.gen());
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -908,7 +908,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = Some(rng.gen());
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -942,7 +942,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -982,7 +982,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -1021,7 +1021,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -1060,7 +1060,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = None;
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -1100,7 +1100,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = Some(rng.gen());
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 
@@ -1140,7 +1140,7 @@ mod tests {
         let prove_rand_seed = rng.gen();
         let helper_seed = rng.gen();
         let leader_seed_opt = Some(rng.gen());
-        let helper_input_share = random_vector(szk_typ.typ.input_len());
+        let helper_input_share = Field128::random_vector(szk_typ.typ.input_len());
         let mut leader_input_share = encoded_measurement.clone().to_owned();
         sub_assign_vector(&mut leader_input_share, helper_input_share.iter().copied());
 

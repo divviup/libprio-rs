@@ -121,7 +121,7 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{random_vector, split_vector, Field128, Field64, FieldElement, FieldPrio2};
+    use crate::field::{split_vector, Field128, Field64, FieldElement, FieldPrio2};
     use crate::polynomial::{poly_ntt, TestPolyAuxMemory};
 
     fn ntt_then_inv_test<F: NttFriendlyFieldElement>() -> Result<(), NttError> {
@@ -130,7 +130,7 @@ mod tests {
         for size in test_sizes.iter() {
             let mut tmp = vec![F::zero(); *size];
             let mut got = vec![F::zero(); *size];
-            let want = random_vector(*size);
+            let want = F::random_vector(*size);
 
             ntt(&mut tmp, &want, want.len())?;
             ntt_inv(&mut got, &tmp, tmp.len())?;
@@ -160,7 +160,7 @@ mod tests {
         let size = 128;
         let mut mem = TestPolyAuxMemory::new(size / 2);
 
-        let inp = random_vector(size);
+        let inp = FieldPrio2::random_vector(size);
         let mut want = vec![FieldPrio2::zero(); size];
         let mut got = vec![FieldPrio2::zero(); size];
 
@@ -185,7 +185,7 @@ mod tests {
     fn test_ntt_linearity() {
         let len = 16;
         let num_shares = 3;
-        let x: Vec<Field64> = random_vector(len);
+        let x = Field64::random_vector(len);
         let mut x_shares = split_vector(&x, num_shares);
 
         // Just for fun, let's do something different with a subset of the inputs. For the first

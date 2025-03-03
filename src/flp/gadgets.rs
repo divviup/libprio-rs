@@ -462,9 +462,7 @@ fn gadget_poly_ntt_mem_len(degree: usize, num_calls: usize) -> usize {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "multithreaded")]
-    use crate::field::FieldElement;
-    use crate::field::{random_vector, Field64 as TestField};
+    use crate::field::{Field64 as TestField, FieldElement};
     use crate::prng::Prng;
 
     #[test]
@@ -484,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_poly_eval() {
-        let poly: Vec<TestField> = random_vector(10);
+        let poly = TestField::random_vector(10);
 
         let num_calls = NTT_THRESHOLD / 2;
         let mut g: PolyEval<TestField> = PolyEval::new(poly.clone(), num_calls);
@@ -525,7 +523,7 @@ mod tests {
             let degree = g.degree();
 
             // Test that both gadgets evaluate to the same value when run on scalar inputs.
-            let inp: Vec<TestField> = random_vector(arity);
+            let inp = TestField::random_vector(arity);
             let result = g.call(&inp).unwrap();
             let result_serial = g_serial.call(&inp).unwrap();
             assert_eq!(result, result_serial);
