@@ -4,6 +4,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    open-pull-requests-limit: 20
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -15,6 +16,7 @@ updates:
     schedule:
       interval: "weekly"
     target-branch: release/0.16
+    open-pull-requests-limit: 20
 
   - package-ecosystem: "github-actions"
     directory: "/"
