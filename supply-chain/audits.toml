@@ -469,6 +469,21 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 delta = "0.29.0 -> 0.32.6"
 
+[[audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.32.6 -> 0.33.0"
+
+[[audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.33.0 -> 0.33.1"
+
+[[audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.33.1 -> 0.33.2"
+
 [[audits.nalgebra-macros]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
