@@ -55,7 +55,10 @@ use num_integer::Integer;
 use num_iter::range_inclusive;
 use num_rational::Ratio;
 use num_traits::{One, Zero};
-use rand::{distributions::uniform::UniformSampler, distributions::Distribution, Rng};
+use rand::{
+    distr::{uniform::UniformSampler, Distribution},
+    Rng,
+};
 use serde::{Deserialize, Serialize};
 
 use super::{
@@ -75,9 +78,11 @@ fn sample_bernoulli<R: Rng + ?Sized>(gamma: &Ratio<BigUint>, rng: &mut R) -> boo
     assert!(!d.is_zero());
     assert!(gamma <= &Ratio::<BigUint>::one());
 
-    // sample uniform biguint in {1,...,d}
-    // uses the implementation of rand::Uniform for num_bigint::BigUint
-    let s = UniformBigUint::sample_single_inclusive(BigUint::one(), d, rng);
+    // Sample uniform biguint in {1,...,d}.
+    // Uses the implementation of rand::Uniform for num_bigint::BigUint.
+    // Unwrap safety: this cannot fail because the denominator cannot be zero, and therefore the
+    // range [1, d] is well-formed.
+    let s = UniformBigUint::sample_single_inclusive(BigUint::one(), d, rng).unwrap();
 
     s <= *gamma.numer()
 }
@@ -134,9 +139,10 @@ fn sample_geometric_exp<R: Rng + ?Sized>(gamma: &Ratio<BigUint>, rng: &mut R) ->
         return BigUint::zero();
     }
 
-    // sampler for uniform biguint in {0...t-1}
-    // uses the implementation of rand::Uniform for num_bigint::BigUint
-    let usampler = UniformBigUint::new(BigUint::zero(), t);
+    // Sampler for uniform biguint in {0...t-1}.
+    // Uses the implementation of rand::Uniform for num_bigint::BigUint.
+    // Unwrap safety: this range is always valid because the denominator of `gamma` must be nonzero.
+    let usampler = UniformBigUint::new(BigUint::zero(), t).unwrap();
     let mut u = usampler.sample(rng);
 
     while !sample_bernoulli_exp1(&Ratio::<BigUint>::new(u.clone(), t.clone()), rng) {
@@ -381,7 +387,7 @@ mod tests {
 
     use num_bigint::{BigUint, Sign, ToBigInt, ToBigUint};
     use num_traits::{One, Signed, ToPrimitive};
-    use rand::{distributions::Distribution, SeedableRng};
+    use rand::{distr::Distribution, SeedableRng};
     use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
     use std::collections::HashMap;
 
