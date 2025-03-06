@@ -14,7 +14,7 @@ use crate::{
         Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError, VERSION,
     },
 };
-use rand::prelude::*;
+use rand::{rng, Rng, RngCore};
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
@@ -1044,7 +1044,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
         input: &IdpfInput,
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<SEED_SIZE>>), VdafError> {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let mut idpf_random = [[0u8; 16]; 2];
         let mut poplar_random = [[0u8; SEED_SIZE]; 3];
         for random_seed in idpf_random.iter_mut() {
@@ -1605,7 +1605,7 @@ mod tests {
         measurements: impl IntoIterator<Item = B>,
         expected_result: impl IntoIterator<Item = B>,
     ) {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         // Sharding step
         let reports: Vec<(
@@ -1615,7 +1615,7 @@ mod tests {
         )> = measurements
             .into_iter()
             .map(|measurement| {
-                let nonce = rng.gen();
+                let nonce = rng.random();
                 let (public_share, input_shares) = vdaf
                     .shard(
                         CTX_STR,
@@ -1701,11 +1701,11 @@ mod tests {
 
     #[test]
     fn shard_prepare() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let vdaf = Poplar1::new_turboshake128(64);
-        let verify_key = rng.gen();
+        let verify_key = rng.random();
         let input = IdpfInput::from_bytes(b"12341324");
-        let nonce = rng.gen();
+        let nonce = rng.random();
         let (public_share, input_shares) = vdaf.shard(CTX_STR, &input, &nonce).unwrap();
 
         test_prepare(
@@ -1744,8 +1744,8 @@ mod tests {
 
     #[test]
     fn heavy_hitters() {
-        let mut rng = thread_rng();
-        let verify_key = rng.gen();
+        let mut rng = rng();
+        let verify_key = rng.random();
         let vdaf = Poplar1::new_turboshake128(8);
 
         run_heavy_hitters(
@@ -1761,12 +1761,12 @@ mod tests {
 
     #[test]
     fn encoded_len() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
 
         // Input share
         let input_share = Poplar1InputShare {
-            idpf_key: rng.gen::<Seed<16>>(),
-            corr_seed: rng.gen::<Seed<16>>(),
+            idpf_key: rng.random::<Seed<16>>(),
+            corr_seed: rng.random::<Seed<16>>(),
             corr_inner: vec![
                 [Field64::one(), <Field64 as FieldElement>::zero()],
                 [Field64::one(), <Field64 as FieldElement>::zero()],

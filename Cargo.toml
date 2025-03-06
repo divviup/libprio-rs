@@ -19,14 +19,14 @@ fiat-crypto = { version = "0.2.9", optional = true }
 fixed = { version = "1.27", optional = true }
 hex = { version = "0.4.3", features = ["serde"], optional = true }
 hmac = { version = "0.12.1", optional = true }
-num-bigint = { version = "0.4.6", optional = true, features = ["rand", "serde"] }
+num-bigint = { version = "0.5.0-pre", optional = true, features = ["rand", "serde"] }
 num-integer = { version = "0.1.46", optional = true }
 num-iter = { version = "0.1.45", optional = true }
 num-rational = { version = "0.4.2", optional = true, features = ["serde"] }
 num-traits = "0.2.19"
-rand = "0.8"
-rand_core = "0.6.4"
-rand_distr = { version = "0.4.3", optional = true }
+rand = "0.9"
+rand_core = { version = "0.9", features = ["os_rng"] }
+rand_distr = { version = "0.5.1", optional = true }
 rayon = { version = "1.10.0", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = { version = "1.0", optional = true }
@@ -43,9 +43,10 @@ criterion = "0.5"
 hex-literal = "0.4.1"
 iai = "0.1"
 modinverse = "0.1.0"
-num-bigint = "0.4.6"
+num-bigint = "0.5.0-pre"
 once_cell = "1.20.3"
 prio = { path = ".", features = ["crypto-dependencies", "test-util"] }
+rand = { version = "0.9", features = ["std_rng"] }
 statrs = "0.17.1"
 
 [features]
@@ -80,3 +81,7 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-all-features]
 skip_optional_dependencies = true
+
+[patch.crates-io]
+num-bigint = { version = "0.5.0-pre", git = "https://github.com/divergentdave/num-bigint.git", rev = "9e323272ace0d7f22af0e0a440aaa008f29a4cda" }
+num-rational = { git = "https://github.com/divergentdave/num-rational.git", rev = "130acde3cb2453d83c6a0432623c3c9116ed3806" }

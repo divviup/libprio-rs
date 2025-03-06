@@ -11,7 +11,7 @@ use crate::{
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
 
-use rand::prelude::*;
+use rand::{rng, Rng};
 use std::convert::TryFrom;
 
 /// Serialization errors
@@ -40,7 +40,7 @@ pub(crate) struct ClientMemory<F> {
 
 impl<F: NttFriendlyFieldElement> ClientMemory<F> {
     pub(crate) fn new(dimension: usize) -> Result<Self, VdafError> {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let n = (dimension + 1).next_power_of_two();
         if let Ok(size) = F::Integer::try_from(2 * n) {
             if size > F::generator_order() {
@@ -55,7 +55,7 @@ impl<F: NttFriendlyFieldElement> ClientMemory<F> {
         }
 
         Ok(Self {
-            prng: Prng::from_prio2_seed(&rng.gen()),
+            prng: Prng::from_prio2_seed(&rng.random()),
             points_f: vec![F::zero(); n],
             points_g: vec![F::zero(); n],
             evals_f: vec![F::zero(); 2 * n],
