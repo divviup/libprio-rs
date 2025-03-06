@@ -579,13 +579,12 @@ dependencies = [
 
 [[package]]
 name = "num-bigint"
-version = "0.4.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a5e44f723f1133c9deac646763579fdb3ac745e418f2a7af9cd0c431da1f20b9"
+version = "0.5.0-pre"
+source = "git+https://github.com/divergentdave/num-bigint.git?rev=9e323272ace0d7f22af0e0a440aaa008f29a4cda#9e323272ace0d7f22af0e0a440aaa008f29a4cda"
 dependencies = [
  "num-integer",
  "num-traits",
- "rand 0.8.5",
+ "rand 0.9.0",
  "serde",
 ]
 
@@ -621,8 +620,7 @@ dependencies = [
 [[package]]
 name = "num-rational"
 version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f83d14da390562dca69fc84082e73e548e1ad308d24accdedd2720017cb37824"
+source = "git+https://github.com/divergentdave/num-rational.git?rev=130acde3cb2453d83c6a0432623c3c9116ed3806#130acde3cb2453d83c6a0432623c3c9116ed3806"
 dependencies = [
  "num-bigint",
  "num-integer",
