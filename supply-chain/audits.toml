@@ -532,6 +532,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.19.0 -> 1.20.1"
 
+[[audits.once_cell]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-deploy"
+delta = "1.20.3 -> 1.21.0"
+
 [[audits.opaque-debug]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
