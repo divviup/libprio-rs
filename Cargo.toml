@@ -45,7 +45,7 @@ hex-literal = "0.4.1"
 iai = "0.1"
 modinverse = "0.1.0"
 num-bigint = "0.4.6"
-once_cell = "1.20.3"
+once_cell = "1.21.0"
 prio = { path = ".", features = ["crypto-dependencies", "test-util"] }
 statrs = "0.17.1"
 
