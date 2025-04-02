@@ -514,6 +514,12 @@ who = "Tim Geoghegan <timg@divviup.org>"
 criteria = "safe-to-run"
 delta = "1.21.0 -> 1.21.1"
 
+[[audits.once_cell]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-deploy"
+delta = "1.21.1 -> 1.21.3"
+notes = "The unsafe code has moved from `compare_exchange` to a new `init` function, which makes it easier to reason about."
+
 [[audits.opaque-debug]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
