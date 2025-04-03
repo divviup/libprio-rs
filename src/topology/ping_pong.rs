@@ -416,7 +416,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///   share may be accumulated.
     ///
     /// - `PingPongContinuedValue::FinishedNoMessage`: preparation is finished and the output share
-    ///    may be accumulated. No message needs to be sent to the helper.
+    ///   may be accumulated. No message needs to be sent to the helper.
     ///
     /// # Errors
     ///
