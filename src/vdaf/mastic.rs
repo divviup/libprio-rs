@@ -55,6 +55,9 @@ pub(crate) fn dst_usage(usage: u8) -> [u8; 8] {
     [b'm', b'a', b's', b't', b'i', b'c', VERSION, usage]
 }
 
+/// A Mastic variant with the same functionality as [`Poplar1`].
+pub type MasticCount = Mastic<Count<Field64>>;
+
 /// The main struct implementing the Mastic VDAF.
 /// Composed of a shared zero knowledge proof system and a verifiable incremental
 /// distributed point function.
@@ -67,9 +70,9 @@ pub struct Mastic<T: Type> {
 
 impl<T: Type> Mastic<T> {
     /// Creates a new instance of Mastic, with a specific attribute length and weight type.
-    pub fn new(algorithm_id: u32, typ: T, bits: usize) -> Result<Self, VdafError> {
-        let vidpf = Vidpf::new(bits, typ.input_len() + 1)?;
-        let szk = Szk::new(typ, algorithm_id);
+    pub fn new(algorithm_id: u32, weight_type: T, bits: usize) -> Result<Self, VdafError> {
+        let vidpf = Vidpf::new(bits, weight_type.input_len() + 1)?;
+        let szk = Szk::new(weight_type, algorithm_id);
         Ok(Self {
             id: algorithm_id.to_be_bytes(),
             szk,
@@ -80,6 +83,16 @@ impl<T: Type> Mastic<T> {
     fn agg_share_len(&self, agg_param: &MasticAggregationParam) -> usize {
         // The aggregate share consists of the counter and truncated weight for each candidate prefix.
         (1 + self.szk.typ.output_len()) * agg_param.level_and_prefixes.prefixes().len()
+    }
+
+    /// Returns the type of the weight.
+    pub fn weight_type(&self) -> &T {
+        &self.szk.typ
+    }
+
+    /// Returns the attribute length.
+    pub fn bits(&self) -> usize {
+        self.vidpf.bits.into()
     }
 }
 
