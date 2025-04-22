@@ -427,6 +427,16 @@ who = "Ameer Ghani <inahga@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.4.0 -> 0.4.1"
 
+[[audits.libz-rs-sys]]
+who = "Ameer Ghani <inahga@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.1 -> 0.4.2"
+
+[[audits.libz-rs-sys]]
+who = "Ameer Ghani <inahga@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.2 -> 0.5.0"
+
 [[audits.linux-raw-sys]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -903,6 +913,11 @@ delta = "0.4.0 -> 0.4.1"
 who = "Ameer Ghani <inahga@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.4.1 -> 0.4.2"
+
+[[audits.zlib-rs]]
+who = "Ameer Ghani <inahga@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.2 -> 0.5.0"
 
 [[trusted.byteorder]]
 criteria = "safe-to-deploy"
