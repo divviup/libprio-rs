@@ -145,6 +145,11 @@ criteria = "safe-to-run"
 version = "0.2.16"
 criteria = "safe-to-deploy"
 
+[[exemptions.r-efi]]
+version = "5.2.0"
+criteria = "safe-to-deploy"
+notes = "This is only used on UEFI targets"
+
 [[exemptions.radium]]
 version = "0.7.0"
 criteria = "safe-to-deploy"
@@ -164,6 +169,11 @@ criteria = "safe-to-run"
 [[exemptions.typenum]]
 version = "1.15.0"
 criteria = "safe-to-deploy"
+
+[[exemptions.wasi]]
+version = "0.14.2+wasi-0.2.4"
+criteria = "safe-to-deploy"
+notes = "This is only used on WASI targets"
 
 [[exemptions.wide]]
 version = "0.7.11"
