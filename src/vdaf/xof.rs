@@ -34,7 +34,7 @@ use rand_core::{
     RngCore, SeedableRng,
 };
 
-use rand::distributions::{Distribution, Standard};
+use rand::distr::{Distribution, StandardUniform};
 #[cfg(feature = "crypto-dependencies")]
 use sha2::Sha256;
 use sha3::{
@@ -53,7 +53,7 @@ use subtle::{Choice, ConstantTimeEq};
 #[derive(Clone, Debug)]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
-impl<const SEED_SIZE: usize> Distribution<Seed<SEED_SIZE>> for Standard {
+impl<const SEED_SIZE: usize> Distribution<Seed<SEED_SIZE>> for StandardUniform {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Seed<SEED_SIZE> {
         let mut seed_bytes = [0; SEED_SIZE];
         rng.fill(&mut seed_bytes[..]);
@@ -183,11 +183,6 @@ impl RngCore for SeedStreamAes128 {
         self.fill(dest);
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        self.fill(dest);
-        Ok(())
-    }
-
     fn next_u32(&mut self) -> u32 {
         next_u32_via_fill(self)
     }
@@ -271,11 +266,6 @@ impl SeedStreamTurboShake128 {
 impl RngCore for SeedStreamTurboShake128 {
     fn fill_bytes(&mut self, dest: &mut [u8]) {
         XofReader::read(&mut self.0, dest);
-    }
-
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        XofReader::read(&mut self.0, dest);
-        Ok(())
     }
 
     fn next_u32(&mut self) -> u32 {
@@ -496,11 +486,6 @@ impl RngCore for SeedStreamFixedKeyAes128 {
         self.fill(dest);
     }
 
-    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), rand_core::Error> {
-        self.fill(dest);
-        Ok(())
-    }
-
     fn next_u32(&mut self) -> u32 {
         next_u32_via_fill(self)
     }
@@ -551,7 +536,7 @@ impl Xof<32> for XofHmacSha256Aes128 {
 mod tests {
     use super::*;
     use crate::{field::Field128, vdaf::equality_comparison_test};
-    use rand::prelude::*;
+    use rand::{rng, Rng, RngCore};
     use serde::{Deserialize, Serialize};
     use std::{convert::TryInto, io::Cursor};
 
@@ -575,8 +560,8 @@ mod tests {
     where
         P: Xof<SEED_SIZE>,
     {
-        let mut rng = thread_rng();
-        let seed = rng.gen::<Seed<SEED_SIZE>>();
+        let mut rng = rng();
+        let seed = rng.random::<Seed<SEED_SIZE>>();
         let dst = b"algorithm and usage";
         let binder = b"bind to artifact";
 
@@ -669,8 +654,8 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128_incomplete_block() {
-        let mut rng = thread_rng();
-        let seed = rng.gen::<Seed<16>>();
+        let mut rng = rng();
+        let seed = rng.random::<Seed<16>>();
         let mut expected = [0; 32];
         XofFixedKeyAes128::seed_stream(seed.as_ref(), &[b"dst"], &[b"binder"]).fill(&mut expected);
 
@@ -684,12 +669,12 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn xof_fixed_key_aes128_alternate_apis() {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let fixed_dst = b"domain separation tag";
         let ctx = b"context string";
         let binder = b"AAAAAAAAAAAAAAAAAAAAAAAA";
-        let seed_1 = rng.gen::<Seed<16>>();
-        let seed_2 = rng.gen::<Seed<16>>();
+        let seed_1 = rng.random::<Seed<16>>();
+        let seed_2 = rng.random::<Seed<16>>();
 
         let mut stream_1_trait_api =
             XofFixedKeyAes128::seed_stream(seed_1.as_ref(), &[fixed_dst, ctx], &[binder]);

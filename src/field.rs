@@ -13,7 +13,7 @@ use crate::{
     prng::Prng,
 };
 use rand::{
-    distributions::{Distribution, Standard},
+    distr::{Distribution, StandardUniform},
     Rng,
 };
 use rand_core::RngCore;
@@ -774,7 +774,7 @@ macro_rules! make_field {
             }
         }
 
-        impl Distribution<$elem> for Standard {
+        impl Distribution<$elem> for StandardUniform {
             fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> $elem {
                 $elem::generate_random(rng)
             }
