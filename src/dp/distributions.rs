@@ -50,18 +50,19 @@
 //!     Clément Canonne, Gautam Kamath, Thomas Steinke. The Discrete Gaussian for Differential Privacy. 2020.
 //!     <https://arxiv.org/pdf/2004.00010.pdf>
 
-use num_bigint::{BigInt, BigUint, UniformBigUint};
+use num_bigint::{BigInt, BigUint};
 use num_integer::Integer;
 use num_iter::range_inclusive;
 use num_rational::Ratio;
 use num_traits::{One, Zero};
-use rand::{distributions::uniform::UniformSampler, distributions::Distribution, Rng};
+use rand::{distributions::Distribution, Rng};
 use serde::{Deserialize, Serialize};
 
 use super::{
     DifferentialPrivacyBudget, DifferentialPrivacyDistribution, DifferentialPrivacyStrategy,
     DpError, PureDpBudget, ZCdpBudget,
 };
+use crate::dp::rand_bigint::UniformBigUint;
 
 /// Sample from the Bernoulli(gamma) distribution, where $gamma /leq 1$.
 ///
@@ -77,7 +78,7 @@ fn sample_bernoulli<R: Rng + ?Sized>(gamma: &Ratio<BigUint>, rng: &mut R) -> boo
 
     // sample uniform biguint in {1,...,d}
     // uses the implementation of rand::Uniform for num_bigint::BigUint
-    let s = UniformBigUint::sample_single_inclusive(BigUint::one(), d, rng);
+    let s = UniformBigUint::new_inclusive(&BigUint::one(), d).sample(rng);
 
     s <= *gamma.numer()
 }
@@ -136,7 +137,7 @@ fn sample_geometric_exp<R: Rng + ?Sized>(gamma: &Ratio<BigUint>, rng: &mut R) ->
 
     // sampler for uniform biguint in {0...t-1}
     // uses the implementation of rand::Uniform for num_bigint::BigUint
-    let usampler = UniformBigUint::new(BigUint::zero(), t);
+    let usampler = UniformBigUint::new(&BigUint::zero(), t);
     let mut u = usampler.sample(rng);
 
     while !sample_bernoulli_exp1(&Ratio::<BigUint>::new(u.clone(), t.clone()), rng) {
