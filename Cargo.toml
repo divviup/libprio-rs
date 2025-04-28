@@ -5,7 +5,7 @@ authors = ["Josh Aas <jaas@kflag.net>", "Tim Geoghegan <timg@letsencrypt.org>", 
 edition = "2021"
 exclude = ["/supply-chain"]
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
-license = "MPL-2.0"
+license = "MPL-2.0 AND Apache-2.0"
 repository = "https://github.com/divviup/libprio-rs"
 rust-version = "1.80"
 resolver = "2"
@@ -19,7 +19,7 @@ fiat-crypto = { version = "0.2.9", optional = true }
 fixed = { version = "1.27", optional = true }
 hex = { version = "0.4.3", features = ["serde"], optional = true }
 hmac = { version = "0.12.1", optional = true }
-num-bigint = { version = "0.4.6", optional = true, features = ["rand", "serde"] }
+num-bigint = { version = "0.4.6", optional = true, features = ["serde"] }
 num-integer = { version = "0.1.46", optional = true }
 num-iter = { version = "0.1.45", optional = true }
 num-rational = { version = "0.4.2", optional = true, features = ["serde"] }
