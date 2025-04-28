@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use hmac::{Hmac, Mac};
-use rand::prelude::*;
+use rand::{rng, Rng, RngCore};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
@@ -147,7 +147,7 @@ impl Client<16> for Prio2 {
         measurement: &Vec<u32>,
         _nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Share<FieldPrio2, 32>>), VdafError> {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         if measurement.len() != self.input_len {
             return Err(VdafError::Uncategorized("incorrect input length".into()));
         }
@@ -162,7 +162,7 @@ impl Client<16> for Prio2 {
         };
         let mut leader_data = mem.prove_with(self.input_len, copy_data);
 
-        let helper_seed = rng.gen();
+        let helper_seed = rng.random();
         let helper_prng = Prng::from_prio2_seed(&helper_seed);
         for (s1, d) in leader_data.iter_mut().zip(helper_prng.into_iter()) {
             *s1 -= d;
@@ -429,9 +429,9 @@ mod tests {
 
     #[test]
     fn prepare_state_serialization() {
-        let mut rng = thread_rng();
-        let verify_key = rng.gen::<[u8; 32]>();
-        let nonce = rng.gen::<[u8; 16]>();
+        let mut rng = rng();
+        let verify_key = rng.random::<[u8; 32]>();
+        let nonce = rng.random::<[u8; 16]>();
         let data = vec![0, 0, 1, 1, 0];
         let prio2 = Prio2::new(data.len()).unwrap();
         let (public_share, input_shares) = prio2.shard(CTX_STR, &data, &nonce).unwrap();

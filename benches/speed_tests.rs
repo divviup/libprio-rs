@@ -33,7 +33,7 @@ use prio::{
     vdaf::poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
 };
 #[cfg(feature = "experimental")]
-use rand::prelude::*;
+use rand::{distr::Distribution, random, rngs::StdRng, Rng, SeedableRng};
 #[cfg(feature = "experimental")]
 use std::iter;
 use std::{hint::black_box, time::Duration};
@@ -784,8 +784,8 @@ fn poplar1(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
-            let nonce = rng.gen::<[u8; 16]>();
-            let bits = iter::repeat_with(|| rng.gen())
+            let nonce = rng.random::<[u8; 16]>();
+            let bits = iter::repeat_with(|| rng.random())
                 .take(size)
                 .collect::<Vec<bool>>();
             let measurement = IdpfInput::from_bools(&bits);
@@ -803,8 +803,8 @@ fn poplar1(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
             let vdaf = Poplar1::new_turboshake128(size);
             let mut rng = StdRng::seed_from_u64(RNG_SEED);
-            let verify_key: [u8; 32] = rng.gen();
-            let nonce: [u8; 16] = rng.gen();
+            let verify_key: [u8; 32] = rng.random();
+            let nonce: [u8; 16] = rng.random();
 
             // Parameters are chosen to match Chris Wood's experimental setup:
             // https://github.com/chris-wood/heavy-hitter-comparison

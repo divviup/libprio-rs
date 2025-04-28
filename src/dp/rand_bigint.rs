@@ -23,23 +23,25 @@
 //!
 //! These were vendored from num-bigint. Unused functionality has been deleted, trait
 //! implementations have been transformed into free functions, use of the private
-//! `biguint_from_vec()` function has been replaced, use of the `SampleBorrow`
-//! trait has been removed, and documentation has been updated.
+//! `biguint_from_vec()` function has been replaced, use of the `SampleBorrow` trait has been
+//! removed, method names and signatures have been updated to align with rand 0.9, and documentation
+//! has been updated.
 
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::{ToPrimitive, Zero};
+use rand::distr::uniform::Error;
 use rand::Rng;
 
 /// Use [`Rng::fill`] to generate random bits.
 ///
 /// If `rem` is greater than zero, than only the lowest `rem` bits of the last u32 are filled with
 /// random data.
-fn gen_bits<R>(rng: &mut R, data: &mut [u32], rem: u64)
+fn random_bits<R>(rng: &mut R, data: &mut [u32], rem: u64)
 where
     R: Rng + ?Sized,
 {
-    // `fill` is faster than many `gen::<u32>` calls
+    // `fill` is faster than many `random::<u32>` calls
     rng.fill(data);
     if rem > 0 {
         let last = data.len() - 1;
@@ -48,7 +50,7 @@ where
 }
 
 /// Uniformly generate a random [`BigUint`] in the range \[0, 2^`bits`).
-fn gen_biguint<R>(rng: &mut R, bit_size: u64) -> BigUint
+fn random_biguint<R>(rng: &mut R, bit_size: u64) -> BigUint
 where
     R: Rng + ?Sized,
 {
@@ -57,19 +59,19 @@ where
         .to_usize()
         .expect("capacity overflow");
     let mut data = vec![0u32; len];
-    gen_bits(rng, &mut data, rem);
+    random_bits(rng, &mut data, rem);
     BigUint::new(data)
 }
 
 /// Uniformly generate a random [`BigUint`] in the range \[0, `bound`).
-fn gen_biguint_below<R>(rng: &mut R, bound: &BigUint) -> BigUint
+fn random_biguint_below<R>(rng: &mut R, bound: &BigUint) -> BigUint
 where
     R: Rng + ?Sized,
 {
     assert!(!bound.is_zero());
     let bits = bound.bits();
     loop {
-        let n = gen_biguint(rng, bits);
+        let n = random_biguint(rng, bits);
         if n < *bound {
             return n;
         }
@@ -83,16 +85,20 @@ pub(super) struct UniformBigUint {
 }
 
 impl UniformBigUint {
-    pub(super) fn new(low: &BigUint, high: &BigUint) -> Self {
-        assert!(low < high);
-        UniformBigUint {
+    pub(super) fn new(low: &BigUint, high: &BigUint) -> Result<Self, Error> {
+        if low >= high {
+            return Err(Error::EmptyRange);
+        }
+        Ok(UniformBigUint {
             len: high - low,
             base: low.clone(),
-        }
+        })
     }
 
-    pub(super) fn new_inclusive(low: &BigUint, high: &BigUint) -> Self {
-        assert!(low <= high);
+    pub(super) fn new_inclusive(low: &BigUint, high: &BigUint) -> Result<Self, Error> {
+        if low > high {
+            return Err(Error::EmptyRange);
+        }
         Self::new(low, &(high + 1u32))
     }
 
@@ -100,6 +106,6 @@ impl UniformBigUint {
     where
         R: Rng + ?Sized,
     {
-        &self.base + gen_biguint_below(rng, &self.len)
+        &self.base + random_biguint_below(rng, &self.len)
     }
 }

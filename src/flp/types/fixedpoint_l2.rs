@@ -635,7 +635,7 @@ where
         self.add_noise(
             dp_strategy,
             agg_result,
-            &mut SeedStreamTurboShake128::from_entropy(),
+            &mut SeedStreamTurboShake128::from_os_rng(),
         )
     }
 }

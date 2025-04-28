@@ -61,7 +61,7 @@ use crate::vdaf::{
 };
 #[cfg(feature = "experimental")]
 use fixed::traits::Fixed;
-use rand::prelude::*;
+use rand::{rng, Rng};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -376,19 +376,19 @@ impl Prio3Average {
 ///     Aggregator, Client, Collector, PrepareTransition,
 ///     prio3::Prio3,
 /// };
-/// use rand::prelude::*;
+/// use rand::{rng, Rng, RngCore};
 ///
 /// let num_shares = 2;
 /// let ctx = b"my context str";
 /// let vdaf = Prio3::new_count(num_shares).unwrap();
 ///
 /// let mut out_shares = vec![vec![]; num_shares.into()];
-/// let mut rng = thread_rng();
-/// let verify_key = rng.gen();
+/// let mut rng = rng();
+/// let verify_key = rng.random();
 /// let measurements = [false, true, true, true, false];
 /// for measurement in measurements {
 ///     // Shard
-///     let nonce = rng.gen::<[u8; 16]>();
+///     let nonce = rng.random::<[u8; 16]>();
 ///     let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce).unwrap();
 ///
 ///     // Prepare
@@ -1217,7 +1217,7 @@ where
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, SEED_SIZE>>), VdafError> {
         let mut random = vec![0u8; self.random_size()];
-        thread_rng().fill(&mut random[..]);
+        rng().fill(&mut random[..]);
         self.shard_with_random(ctx, measurement, nonce, &random)
     }
 }
@@ -1783,8 +1783,8 @@ mod tests {
 
         let mut nonce = [0; 16];
         let mut verify_key = [0; 32];
-        thread_rng().fill(&mut verify_key[..]);
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut verify_key[..]);
+        rng().fill(&mut nonce[..]);
 
         let (public_share, input_shares) = prio3.shard(CTX_STR, &false, &nonce).unwrap();
         run_vdaf_prepare(
@@ -1837,7 +1837,7 @@ mod tests {
         );
 
         let mut verify_key = [0; 32];
-        thread_rng().fill(&mut verify_key[..]);
+        rng().fill(&mut verify_key[..]);
         let nonce = [0; 16];
 
         let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce).unwrap();
@@ -2104,8 +2104,8 @@ mod tests {
 
             let mut verify_key = [0; 32];
             let mut nonce = [0; 16];
-            thread_rng().fill(&mut verify_key);
-            thread_rng().fill(&mut nonce);
+            rng().fill(&mut verify_key);
+            rng().fill(&mut nonce);
 
             let (public_share, mut input_shares) = prio3
                 .shard(CTX_STR, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
@@ -2274,7 +2274,7 @@ mod tests {
         P: Xof<SEED_SIZE>,
     {
         let mut verify_key = [0; SEED_SIZE];
-        thread_rng().fill(&mut verify_key[..]);
+        rng().fill(&mut verify_key[..]);
         let (public_share, input_shares) = prio3.shard(CTX_STR, measurement, nonce)?;
 
         let encoded_public_share = public_share.get_encoded().unwrap();

@@ -5,7 +5,7 @@ use num_rational::Ratio;
 use num_traits::FromPrimitive;
 use prio::dp::distributions::DiscreteGaussian;
 use prio::vdaf::xof::SeedStreamTurboShake128;
-use rand::distributions::Distribution;
+use rand::distr::Distribution;
 use rand::SeedableRng;
 use serde::Deserialize;
 

@@ -4,7 +4,7 @@ use prio::{
     codec::Encode, idpf::test_utils::generate_zipf_distributed_batch,
     vdaf::poplar1::Poplar1AggregationParam,
 };
-use rand::prelude::*;
+use rand::rng;
 
 fn main() {
     let bits = 256;
@@ -16,7 +16,7 @@ fn main() {
     println!("Generating inputs and computing the prefix tree. This may take some time...");
     let start = Instant::now();
     let (_measurements, prefix_tree) = generate_zipf_distributed_batch(
-        &mut thread_rng(),
+        &mut rng(),
         bits,
         threshold,
         measurement_count,
