@@ -759,6 +759,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.10.2"
 
+[[audits.sha2]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.10.8 -> 0.10.9"
+
 [[audits.sha3]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
