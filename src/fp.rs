@@ -132,7 +132,7 @@ pub(crate) mod tests {
     use modinverse::modinverse;
     use num_bigint::{BigInt, ToBigInt};
     use num_traits::AsPrimitive;
-    use rand::{distributions::Distribution, thread_rng, Rng};
+    use rand::{distr::Distribution, rng, Rng};
 
     use super::ops::Word;
     use crate::fp::{log2, FieldOps, FP128, FP32, FP64, MAX_ROOTS};
@@ -241,8 +241,8 @@ pub(crate) mod tests {
             let u128_p = T::PRIME.as_();
             let big_p = &u128_p.to_bigint().unwrap();
             let big_zero = &BigInt::from(0);
-            let uniform = rand::distributions::Uniform::from(0..u128_p);
-            let mut rng = thread_rng();
+            let uniform = rand::distr::Uniform::try_from(0..u128_p).unwrap();
+            let mut rng = rng();
 
             let mut weird_ints = Vec::from([
                 0,
@@ -263,8 +263,8 @@ pub(crate) mod tests {
 
             let mut generate_random = || -> (W, BigInt) {
                 // Add bias to random element generation, to explore "interesting" inputs.
-                let intu128 = if rng.gen_ratio(1, 4) {
-                    weird_ints[rng.gen_range(0..weird_ints.len())]
+                let intu128 = if rng.random_ratio(1, 4) {
+                    weird_ints[rng.random_range(0..weird_ints.len())]
                 } else {
                     uniform.sample(&mut rng)
                 };

@@ -479,7 +479,7 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
 pub mod test_utils {
     use super::{Aggregatable, Aggregator, Client, Collector, PrepareTransition, VdafError};
     use crate::codec::{Encode, ParameterizedDecode};
-    use rand::prelude::*;
+    use rand::{random, rng, Rng};
 
     /// Execute the VDAF end-to-end and return the aggregate result.
     pub fn run_vdaf<V, M, const SEED_SIZE: usize>(
@@ -515,7 +515,7 @@ pub mod test_utils {
         M: IntoIterator<Item = (V::PublicShare, [u8; 16], I)>,
         I: IntoIterator<Item = V::InputShare>,
     {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         let mut verify_key = [0; SEED_SIZE];
         rng.fill(&mut verify_key[..]);
 

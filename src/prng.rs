@@ -9,7 +9,7 @@ use crate::field::{FieldElement, FieldElementExt};
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vdaf::xof::SeedStreamAes128;
 use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
-use rand::prelude::*;
+use rand::{rng, Rng, RngCore};
 
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
@@ -40,7 +40,7 @@ impl<F: FieldElement> Prng<F, SeedStreamAes128> {
 impl<F: FieldElement> Prng<F, SeedStreamTurboShake128> {
     /// Create a [`Prng`] from a randomly generated seed.
     pub(crate) fn new() -> Self {
-        let seed = thread_rng().gen::<Seed<32>>();
+        let seed = rng().random::<Seed<32>>();
         Prng::from_seed_stream(XofTurboShake128::seed_stream(seed.as_ref(), &[], &[]))
     }
 }
@@ -241,7 +241,7 @@ mod tests {
     // once it reaches the end.
     #[test]
     fn left_over_buffer_back_fill() {
-        let seed = thread_rng().gen::<Seed<32>>();
+        let seed = rng().random::<Seed<32>>();
 
         let mut prng: Prng<Field64, SeedStreamTurboShake128> =
             Prng::from_seed_stream(XofTurboShake128::seed_stream(seed.as_ref(), &[], &[]));
@@ -263,7 +263,7 @@ mod tests {
     #[cfg(feature = "experimental")]
     #[test]
     fn into_different_field() {
-        let seed = thread_rng().gen::<Seed<32>>();
+        let seed = rng().random::<Seed<32>>();
         let want: Prng<Field64, SeedStreamTurboShake128> =
             Prng::from_seed_stream(XofTurboShake128::seed_stream(seed.as_ref(), &[], &[]));
         let want_buffer = want.buffer.clone();
