@@ -620,6 +620,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.6.1 -> 0.5.1"
 
+[[audits.rand_core]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.6.4 -> 0.9.3"
+
 [[audits.rand_hc]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
