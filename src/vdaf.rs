@@ -175,7 +175,9 @@ pub trait Vdaf: Clone + Debug {
     type OutputShare: Clone
         + Debug
         + for<'a> ParameterizedDecode<(&'a Self, &'a Self::AggregationParam)>
-        + Encode;
+        + Encode
+        + PartialEq
+        + Eq;
 
     /// An Aggregator's share of the aggregate result.
     type AggregateShare: Aggregatable<OutputShare = Self::OutputShare>
