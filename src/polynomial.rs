@@ -235,7 +235,7 @@ mod tests {
             TestPolyAuxMemory,
         },
     };
-    use rand::prelude::*;
+    use rand::random;
     use std::convert::TryFrom;
 
     #[test]

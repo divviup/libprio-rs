@@ -174,6 +174,7 @@ pub trait DifferentialPrivacyStrategy {
 }
 
 pub mod distributions;
+mod rand_bigint;
 
 #[cfg(test)]
 mod tests {

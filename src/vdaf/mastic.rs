@@ -23,7 +23,7 @@ use crate::{
 
 use szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState};
 
-use rand::prelude::*;
+use rand::{rng, Rng};
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
@@ -345,14 +345,14 @@ impl<T: Type> Client<16> for Mastic<T> {
         measurement: &(VidpfInput, T::Measurement),
         nonce: &[u8; 16],
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
-        let mut rng = thread_rng();
-        let vidpf_keys = rng.gen();
+        let mut rng = rng();
+        let vidpf_keys = rng.random();
         let joint_random_opt = if self.szk.requires_joint_rand() {
-            Some(rng.gen())
+            Some(rng.random())
         } else {
             None
         };
-        let szk_random = rng.gen();
+        let szk_random = rng.random();
 
         self.shard_with_random(
             ctx,
@@ -797,7 +797,7 @@ mod tests {
     use crate::flp::gadgets::{Mul, ParallelSum};
     use crate::flp::types::{Count, Histogram, Sum, SumVec};
     use crate::vdaf::test_utils::run_vdaf;
-    use rand::{thread_rng, Rng};
+    use rand::{rng, Rng};
 
     const CTX_STR: &[u8] = b"mastic ctx";
 
@@ -809,7 +809,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let inputs = [
             VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]),
@@ -888,7 +888,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -939,7 +939,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sum_typ, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -960,7 +960,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let inputs = [
             VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]),
@@ -1037,7 +1037,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
         let (public, _) = mastic.shard(CTX_STR, &(first_input, true), &nonce).unwrap();
@@ -1055,7 +1055,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, count, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -1075,7 +1075,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let inputs = [
             VidpfInput::from_bytes(&[240u8, 0u8, 1u8, 4u8][..]),
@@ -1163,7 +1163,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -1192,7 +1192,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -1223,7 +1223,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
@@ -1246,7 +1246,7 @@ mod tests {
         let mastic = Mastic::new(algorithm_id, sumvec, 32).unwrap();
 
         let mut nonce = [0u8; 16];
-        thread_rng().fill(&mut nonce[..]);
+        rng().fill(&mut nonce[..]);
 
         let first_input = VidpfInput::from_bytes(&[15u8, 0u8, 1u8, 4u8][..]);
 
