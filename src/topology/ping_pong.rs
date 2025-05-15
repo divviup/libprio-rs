@@ -54,8 +54,13 @@ pub enum PingPongError {
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
 #[derive(Clone, PartialEq, Eq)]
 pub enum PingPongMessage {
-    /// Corresponds to MessageType.continue.
-    Continue {
+    /// Corresponds to MessageType.initialize
+    Initialize {
+        /// The leader's initial preparation share.
+        prepare_share: Vec<u8>,
+    },
+    /// Corresponds to MessageType.continued.
+    Continued {
         /// The current round's preparation message.
         prepare_message: Vec<u8>,
         /// The next round's preparation share.
@@ -71,7 +76,8 @@ pub enum PingPongMessage {
 impl PingPongMessage {
     fn variant(&self) -> &'static str {
         match self {
-            Self::Continue { .. } => "Continue",
+            Self::Initialize { .. } => "Initialize",
+            Self::Continued { .. } => "Continued",
             Self::Finish { .. } => "Finish",
         }
     }
@@ -94,16 +100,20 @@ impl Encode for PingPongMessage {
         // The encoding includes an implicit discriminator byte, called MessageType in the VDAF
         // spec.
         match self {
-            Self::Continue {
+            Self::Initialize { prepare_share } => {
+                0u8.encode(bytes)?;
+                encode_u32_items(bytes, &(), prepare_share)?;
+            }
+            Self::Continued {
                 prepare_message,
                 prepare_share,
             } => {
-                0u8.encode(bytes)?;
+                1u8.encode(bytes)?;
                 encode_u32_items(bytes, &(), prepare_message)?;
                 encode_u32_items(bytes, &(), prepare_share)?;
             }
             Self::Finish { prepare_message } => {
-                1u8.encode(bytes)?;
+                2u8.encode(bytes)?;
                 encode_u32_items(bytes, &(), prepare_message)?;
             }
         }
@@ -112,7 +122,8 @@ impl Encode for PingPongMessage {
 
     fn encoded_len(&self) -> Option<usize> {
         match self {
-            Self::Continue {
+            Self::Initialize { prepare_share } => Some(1 + 4 + prepare_share.len()),
+            Self::Continued {
                 prepare_message,
                 prepare_share,
             } => Some(1 + 4 + prepare_message.len() + 4 + prepare_share.len()),
@@ -126,14 +137,18 @@ impl Decode for PingPongMessage {
         let message_type = u8::decode(bytes)?;
         Ok(match message_type {
             0 => {
+                let prepare_share = decode_u32_items(&(), bytes)?;
+                Self::Initialize { prepare_share }
+            }
+            1 => {
                 let prepare_message = decode_u32_items(&(), bytes)?;
                 let prepare_share = decode_u32_items(&(), bytes)?;
-                Self::Continue {
+                Self::Continued {
                     prepare_message,
                     prepare_share,
                 }
             }
-            1 => {
+            2 => {
                 let prepare_message = decode_u32_items(&(), bytes)?;
                 Self::Finish { prepare_message }
             }
@@ -205,7 +220,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, Self::PrepareShare), PingPongError>;
+    ) -> Result<(Self::PrepareState, PingPongMessage), PingPongError>;
 
     /// Initialize helper state using the helper's input share and the leader's first prepare share.
     /// Corresponds to `ping_pong_helper_init` in [VDAF].
@@ -228,7 +243,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-        leader_prepare_share: Self::PrepareShare,
+        leader_message: &PingPongMessage,
     ) -> Result<
         (
             PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>,
@@ -315,7 +330,7 @@ where
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, Self::PrepareShare), PingPongError> {
+    ) -> Result<(Self::PrepareState, PingPongMessage), PingPongError> {
         self.prepare_init(
             verify_key,
             ctx,
@@ -326,6 +341,16 @@ where
             input_share,
         )
         .map_err(PingPongError::VdafPrepareInit)
+        .and_then(|(prepare_state, prepare_share)| {
+            Ok((
+                prepare_state,
+                PingPongMessage::Initialize {
+                    prepare_share: prepare_share
+                        .get_encoded()
+                        .map_err(PingPongError::CodecPrepShare)?,
+                },
+            ))
+        })
     }
 
     fn helper_initialized(
@@ -336,7 +361,7 @@ where
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-        leader_prepare_share: Self::PrepareShare,
+        leader_message: &PingPongMessage,
     ) -> Result<
         (
             PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>,
@@ -356,6 +381,17 @@ where
             )
             .map_err(PingPongError::VdafPrepareInit)?;
 
+        let leader_prepare_share =
+            if let PingPongMessage::Initialize { prepare_share } = leader_message {
+                Self::PrepareShare::get_decoded_with_param(&prepare_state, prepare_share)
+                    .map_err(PingPongError::CodecPrepShare)?
+            } else {
+                return Err(PingPongError::PeerMessageMismatch {
+                    found: leader_message.variant(),
+                    expected: "initialize",
+                });
+            };
+
         let current_prepare_message = self
             .prepare_shares_to_prepare_message(
                 ctx,
@@ -373,7 +409,7 @@ where
             .and_then(|transition| match transition {
                 PrepareTransition::Continue(_, ref prepare_share) => Ok((
                     transition.clone(),
-                    PingPongMessage::Continue {
+                    PingPongMessage::Continued {
                         prepare_message,
                         prepare_share: prepare_share
                             .get_encoded()
@@ -421,7 +457,13 @@ where
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongState, PingPongError> {
         let (prepare_message, next_peer_prepare_share) = match inbound {
-            PingPongMessage::Continue {
+            PingPongMessage::Initialize { .. } => {
+                return Err(PingPongError::PeerMessageMismatch {
+                    found: inbound.variant(),
+                    expected: "continue",
+                });
+            }
+            PingPongMessage::Continued {
                 prepare_message,
                 prepare_share,
             } => (prepare_message, Some(prepare_share)),
@@ -459,7 +501,7 @@ where
                         PrepareTransition::Continue(prepare_state, prepare_share) => {
                             Ok(PingPongState::Continued {
                                 prepare_state,
-                                message: PingPongMessage::Continue {
+                                message: PingPongMessage::Continued {
                                     prepare_message: current_prepare_message
                                         .get_encoded()
                                         .map_err(PingPongError::CodecPrepMessage)?,
@@ -519,7 +561,7 @@ mod tests {
         let helper = dummy::Vdaf::new(16);
 
         // Leader inits into round 0
-        let (mut current_leader_prepare_state, leader_prepare_share) = leader
+        let (mut current_leader_prepare_state, leader_message) = leader
             .leader_initialized(
                 &verify_key,
                 CTX_STR,
@@ -539,7 +581,7 @@ mod tests {
                 &nonce,
                 &public_share,
                 &input_share,
-                leader_prepare_share,
+                &leader_message,
             )
             .unwrap();
 
@@ -659,7 +701,7 @@ mod tests {
                 &nonce,
                 &public_share,
                 &input_share,
-                leader_message,
+                &leader_message,
             )
             .unwrap();
 
@@ -706,7 +748,7 @@ mod tests {
                 &nonce,
                 &public_share,
                 &input_share,
-                leader_message,
+                &leader_message,
             )
             .unwrap();
 
@@ -761,7 +803,7 @@ mod tests {
                 &nonce,
                 &public_share,
                 &input_share,
-                leader_message,
+                &leader_message,
             )
             .unwrap();
 
@@ -795,12 +837,25 @@ mod tests {
     fn roundtrip_message() {
         let messages = [
             (
-                PingPongMessage::Continue {
-                    prepare_message: Vec::from("prepare message"),
+                PingPongMessage::Initialize {
                     prepare_share: Vec::from("prepare share"),
                 },
                 concat!(
                     "00", // enum discriminant
+                    concat!(
+                        // prepare_share
+                        "0000000d",                   // length
+                        "70726570617265207368617265", // contents
+                    ),
+                ),
+            ),
+            (
+                PingPongMessage::Continued {
+                    prepare_message: Vec::from("prepare message"),
+                    prepare_share: Vec::from("prepare share"),
+                },
+                concat!(
+                    "01", // enum discriminant
                     concat!(
                         // prepare_message
                         "0000000f",                       // length
@@ -818,7 +873,7 @@ mod tests {
                     prepare_message: Vec::from("prepare message"),
                 },
                 concat!(
-                    "01", // enum discriminant
+                    "02", // enum discriminant
                     concat!(
                         // prepare_message
                         "0000000f",                       // length
