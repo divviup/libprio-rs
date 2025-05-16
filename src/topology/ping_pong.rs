@@ -59,8 +59,8 @@ pub enum PingPongMessage {
         /// The leader's initial preparation share.
         prepare_share: Vec<u8>,
     },
-    /// Corresponds to MessageType.continued.
-    Continued {
+    /// Corresponds to MessageType.continue.
+    Continue {
         /// The current round's preparation message.
         prepare_message: Vec<u8>,
         /// The next round's preparation share.
@@ -77,7 +77,7 @@ impl PingPongMessage {
     fn variant(&self) -> &'static str {
         match self {
             Self::Initialize { .. } => "Initialize",
-            Self::Continued { .. } => "Continued",
+            Self::Continue { .. } => "Continue",
             Self::Finish { .. } => "Finish",
         }
     }
@@ -104,7 +104,7 @@ impl Encode for PingPongMessage {
                 0u8.encode(bytes)?;
                 encode_u32_items(bytes, &(), prepare_share)?;
             }
-            Self::Continued {
+            Self::Continue {
                 prepare_message,
                 prepare_share,
             } => {
@@ -123,7 +123,7 @@ impl Encode for PingPongMessage {
     fn encoded_len(&self) -> Option<usize> {
         match self {
             Self::Initialize { prepare_share } => Some(1 + 4 + prepare_share.len()),
-            Self::Continued {
+            Self::Continue {
                 prepare_message,
                 prepare_share,
             } => Some(1 + 4 + prepare_message.len() + 4 + prepare_share.len()),
@@ -143,7 +143,7 @@ impl Decode for PingPongMessage {
             1 => {
                 let prepare_message = decode_u32_items(&(), bytes)?;
                 let prepare_share = decode_u32_items(&(), bytes)?;
-                Self::Continued {
+                Self::Continue {
                     prepare_message,
                     prepare_share,
                 }
@@ -157,6 +157,216 @@ impl Decode for PingPongMessage {
     }
 }
 
+/// A continuation of a state transition in the pong-pong topology. Along with
+/// [`PingPongTopology::continue`], this represents the `ping_pong_continue` and
+/// `ping_pong_transition` functions defined in [VDAF].
+///
+/// # Discussion
+///
+/// The obvious implementation of `ping_pong_transition` would be a method on [`PingPongTopology`]
+/// that returns [`PingPongState`], and then other methods on `PingPongTopology` would use that. But
+/// then DAP implementations would have to store relatively large VDAF prepare shares between rounds
+/// of input preparation.
+///
+/// Instead, this structure stores just the previous round's prepare state and the current round's
+/// preprocessed prepare message. Their encoding is much smaller than the `PingPongState`, which can
+/// always be recomputed with [`Self::evaluate`].
+///
+/// Some motivating analysis of relative sizes of protocol objects is [here][sizes].
+///
+/// `ping_pong_transition` can only return states `Continued` and `FinishedWithOutbound`, but
+/// because we need this to also yield `Finished` in some cases, it also captures parts of
+/// `ping_pong_continued`.
+///
+/// While this is an enum, users should not destructure it or examine the variants, and instead call
+/// [`Self::evaluate`] and then deal with its results.
+///
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+/// [sizes]: https://github.com/divviup/libprio-rs/pull/683/#issuecomment-1687210371
+#[derive(Clone, Debug, Eq)]
+pub enum PingPongContinuation<
+    const VERIFY_KEY_SIZE: usize,
+    const NONCE_SIZE: usize,
+    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+> {
+    /// The continuation will yield `PingPongState::Finished`.
+    OutputShare(A::OutputShare),
+    /// The continuation will yield one of `PingPongState::Continued` or
+    /// `PingPongState::FinishedWithOutbound`.
+    Transition {
+        /// The last round's prepare state.
+        previous_prepare_state: A::PrepareState,
+        /// The current round's prepare message.
+        current_prepare_message: A::PrepareMessage,
+    },
+}
+
+impl<
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+        A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    > PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+{
+    /// Evaluate this transition to obtain a new [`PingPongState`], which should be handled
+    /// according to that item's documentation.
+    pub fn evaluate(
+        self,
+        ctx: &[u8],
+        vdaf: &A,
+    ) -> Result<PingPongState<A::PrepareState, A::OutputShare>, PingPongError> {
+        match self {
+            Self::OutputShare(output_share) => Ok(PingPongState::Finished { output_share }),
+            Self::Transition {
+                previous_prepare_state,
+                current_prepare_message,
+            } => Self::evaluate_transition(
+                ctx,
+                vdaf,
+                previous_prepare_state,
+                current_prepare_message,
+            ),
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn evaluate_transition(
+        ctx: &[u8],
+        vdaf: &A,
+        previous_prepare_state: A::PrepareState,
+        current_prepare_message: A::PrepareMessage,
+    ) -> Result<PingPongState<A::PrepareState, A::OutputShare>, PingPongError> {
+        let prepare_message = current_prepare_message
+            .get_encoded()
+            .map_err(PingPongError::CodecPrepMessage)?;
+
+        vdaf.prepare_next(
+            ctx,
+            previous_prepare_state.clone(),
+            current_prepare_message.clone(),
+        )
+        .map_err(PingPongError::VdafPrepareNext)
+        .and_then(|transition| match transition {
+            PrepareTransition::Continue(prepare_state, prepare_share) => {
+                Ok(PingPongState::Continued(Continued {
+                    prepare_state,
+                    message: PingPongMessage::Continue {
+                        prepare_message,
+                        prepare_share: prepare_share
+                            .get_encoded()
+                            .map_err(PingPongError::CodecPrepShare)?,
+                    },
+                }))
+            }
+            PrepareTransition::Finish(output_share) => Ok(PingPongState::FinishedWithOutbound {
+                output_share,
+                message: PingPongMessage::Finish { prepare_message },
+            }),
+        })
+    }
+}
+
+impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> PartialEq
+    for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+where
+    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    A::OutputShare: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::OutputShare(self_share), Self::OutputShare(other_share)) => {
+                self_share == other_share
+            }
+            (
+                Self::Transition {
+                    previous_prepare_state: lhs_state,
+                    current_prepare_message: lhs_message,
+                },
+                Self::Transition {
+                    previous_prepare_state: rhs_state,
+                    current_prepare_message: rhs_message,
+                },
+            ) => lhs_state == rhs_state && lhs_message == rhs_message,
+            _ => false,
+        }
+    }
+}
+
+impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> Encode
+    for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+where
+    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    A::PrepareState: Encode,
+{
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        match self {
+            Self::Transition {
+                previous_prepare_state,
+                current_prepare_message,
+            } => {
+                previous_prepare_state.encode(bytes)?;
+                current_prepare_message.encode(bytes)
+            }
+            // TODO(timg): pretty sure we never need to encode other variants
+            _ => Err(CodecError::Other(
+                "cannot encode anything but a transition".into(),
+            )),
+        }
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        match self {
+            Self::Transition {
+                previous_prepare_state,
+                current_prepare_message,
+            } => Some(
+                previous_prepare_state.encoded_len()? + current_prepare_message.encoded_len()?,
+            ),
+            // TODO(timg): pretty sure we never need to encode other variants
+            _ => None,
+        }
+    }
+}
+
+impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A, PrepareStateDecode>
+    ParameterizedDecode<PrepareStateDecode> for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+where
+    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    A::PrepareState: ParameterizedDecode<PrepareStateDecode> + PartialEq,
+    A::PrepareMessage: PartialEq,
+{
+    fn decode_with_param(
+        decoding_param: &PrepareStateDecode,
+        bytes: &mut std::io::Cursor<&[u8]>,
+    ) -> Result<Self, CodecError> {
+        let previous_prepare_state = A::PrepareState::decode_with_param(decoding_param, bytes)?;
+        let current_prepare_message =
+            A::PrepareMessage::decode_with_param(&previous_prepare_state, bytes)?;
+
+        // TODO(timg): pretty sure we never need to encode other variants
+        Ok(Self::Transition {
+            previous_prepare_state,
+            current_prepare_message,
+        })
+    }
+}
+
+/// Preparation of the report will continue. Corresponds to the `Continued` state defined in
+/// [VDAF's Ping-Pong Topology][VDAF].
+///
+/// The enclosed `prepare_state` should be used along with the next [`PingPongMessage`] received
+/// from the peer as input to the appropriate `PingPongTopology::{leader,helper}_continued` function
+/// to advance to the next round. The enclosed `message` should be transmitted to the peer
+/// aggregator so it can continue preparing the report.
+///
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Continued<P> {
+    /// The state to which the aggregator has advanced.
+    prepare_state: P,
+    /// A message for the peer aggregator.
+    message: PingPongMessage,
+}
+
 /// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF].
 /// VDAF describes `Start` and `Rejected` states, but the `Start` state is never instantiated in
 /// code, and the `Rejected` state is represented as `std::result::Result::Err`, so this enum does
@@ -164,33 +374,30 @@ impl Decode for PingPongMessage {
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum PingPongState<
-    const VERIFY_KEY_SIZE: usize,
-    const NONCE_SIZE: usize,
-    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-> {
+pub enum PingPongState<P, O> {
     /// Preparation of the report will continue.
-    Continued {
-        /// The state to which the aggregator has advanced.
-        prepare_state: A::PrepareState,
-        /// A message which should be transmitted to the peer aggregator to continue preparing the
-        /// report.
+    Continued(Continued<P>),
+
+    /// Preparation of the report is finished. Corresponds to the `FinishedWithOutbound` state
+    /// defined in [VDAF's Ping-Pong Topology][VDAF].
+    ///
+    /// The enclosed output share may be accumulated by the aggregator. The enclosed message should
+    /// be transmitted to the peer aggregator so it can finish preparing the report.
+    FinishedWithOutbound {
+        /// The output share this aggregator prepared.
+        output_share: O,
+        /// A message for the peer aggregator.
         message: PingPongMessage,
     },
-    /// Preparation of the report is finished and has yielded an output share, but the peer
-    /// aggregator is not finished.
+
+    /// Preparation of the report is finished. Corresponds to the `Finished` state defined in
+    /// [VDAF's Ping-Pong Topology][VDAF].
+    ///
+    /// The enclosed output share may be accumulated by the aggregator. No message need be
+    /// transmitted to the peer, which has already finished preparing the report.
     Finished {
         /// The output share this aggregator prepared.
-        output_share: A::OutputShare,
-        /// A message which should be transmitted to the peer aggregator so it can finish preparing
-        /// the report.
-        message: PingPongMessage,
-    },
-    /// The peer aggregator has finished and this aggregator has now finished preparing the report.
-    /// No message need be transmitted to the peer.
-    FinishedNoMessage {
-        /// The output share this aggregator prepared.
-        output_share: A::OutputShare,
+        output_share: O,
     },
 }
 
@@ -203,13 +410,15 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// Specialization of [`PingPongState`] for this VDAF.
     type PingPongState;
 
+    /// Specialization of [`PingPongContinuation`] for this VDAF.
+    type PingPongContinuation;
+
     /// Initialize leader state using the leader's input share. Corresponds to
     /// `ping_pong_leader_init` in [VDAF].
     ///
-    /// If successful, the returned `Self::PrepareShare` should be transmitted to the helper. The
-    /// returned `Self::PrepareState` should be used by the leader along with the next
-    /// [`PingPongMessage`] received from the Helper as input to [`Self::leader_continued`] to
-    /// advance to the next round.
+    /// On success, the leader has transitioned to the [`Continued`] state, which should be handled
+    /// according to that item's documentation. On failure, the leader has transitioned to the
+    /// `Rejected` state.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
     fn leader_initialized(
@@ -220,18 +429,19 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, PingPongMessage), PingPongError>;
+    ) -> Result<Continued<Self::PrepareState>, PingPongError>;
 
     /// Initialize helper state using the helper's input share and the leader's first prepare share.
     /// Corresponds to `ping_pong_helper_init` in [VDAF].
     ///
-    /// The returned [`PrepareTransition`] will either be `PrepareTransition::Continue`, in which
-    /// case the enclosed prepare state should be used by the helper along with the next
-    /// `PingPongMessage` received from the leader as input to [`Self::helper_continued`] to advance
-    /// to the next round, or it will be `PrepareTransition::Finish`, in which case preparation is
-    /// finished and the output share may be accumulated.
+    /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
+    /// [`PingPongState`], which should be handled according to that item's documentation. On
+    /// failure, the helper has transitioned to the `Rejected` state. The `PingPongContinuation` may
+    /// be stored between rounds of preparation instead of the `PingPongState`.
     ///
-    /// In either case, the returned [`PingPongMessage`] should be transmitted to the leader.
+    /// # Errors
+    ///
+    /// `leader_message` must be `PingPongMessage::Initialize` or the function will fail.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
     #[allow(clippy::too_many_arguments)]
@@ -244,28 +454,19 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
         leader_message: &PingPongMessage,
-    ) -> Result<
-        (
-            PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>,
-            PingPongMessage,
-        ),
-        PingPongError,
-    >;
+    ) -> Result<Self::PingPongContinuation, PingPongError>;
 
     /// Continue preparation based on the leader's current state and an incoming [`PingPongMessage`]
     /// from the helper. Corresponds to `ping_pong_leader_continued` in [VDAF].
     ///
-    /// If successful, the returned [`PingPongState`] will either be:
+    /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
+    /// [`PingPongState`], which should be handled according to that item's documentation. On
+    /// failure, the leader has transitioned to the `Rejected` state. The `PingPongContinuation` may
+    /// be stored between rounds of preparation instead of the `PingPongState`.
     ///
-    /// - `PingPongState::Continued { prepare_state, message }`: `message` should be transmitted to
-    ///   the helper. `prepare_state` should be used along with the next `PingPongMessage` received
-    ///   from the helper as input to [`Self::leader_continued`] to advance to the next round.
+    /// # Errors
     ///
-    /// - `PingPongState::Finished { output_share, message }`: `message` should be transmitted to
-    ///   the helper. `output_share` may be accumulated. Preparation is finished.
-    ///
-    /// - `PingPongState::FinishedNoMessage { output_share }`: `output_share` may be accumulated.
-    ///   Preparation is finished. No message needs to be sent to the helper.
+    /// `helper_message` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
     fn leader_continued(
@@ -274,22 +475,19 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         leader_prepare_state: Self::PrepareState,
         aggregation_param: &Self::AggregationParam,
         helper_message: &PingPongMessage,
-    ) -> Result<Self::PingPongState, PingPongError>;
+    ) -> Result<Self::PingPongContinuation, PingPongError>;
 
     /// Continue preparation based on the helper's current state and an incoming [`PingPongMessage`]
     /// from the leader. Corresponds to `ping_pong_helper_contnued` in [VDAF].
     ///
-    /// If successful, the returned [`PingPongState`] will either be:
+    /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
+    /// [`PingPongState`], which should be handled according to that item's documentation. On
+    /// failure, the helper has transitioned to the `Rejected` state. The `PingPongContinuation` may
+    /// be stored between rounds of preparation instead of the `PingPongState`.
     ///
-    /// - `PingPongState::Continued { prepare_state, message }`: `message` should be transmitted to
-    ///   the leader. `prepare_state` should be used along with the next `PingPongMessage` received
-    ///   from the leader as input to [`Self::helper_continued`] to advance to the next round.
+    /// # Errors
     ///
-    /// - `PingPongState::Finished { output_share, message }`: `message` should be transmitted to
-    ///   the leader. `output_share` may be accumulated. Preparation is finished.
-    ///
-    /// - `PingPongState::FinishedNoMessage { output_share }`: `output_share` may be accumulated.
-    ///   Preparation is finished. No message needs to be sent to the leader.
+    /// `leader_message` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
     fn helper_continued(
@@ -298,7 +496,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         helper_prepare_state: Self::PrepareState,
         aggregation_param: &Self::AggregationParam,
         leader_message: &PingPongMessage,
-    ) -> Result<Self::PingPongState, PingPongError>;
+    ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
 
 /// Private interfaces for implementing ping-pong
@@ -312,7 +510,7 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
         host_prepare_state: Self::PrepareState,
         aggregation_param: &Self::AggregationParam,
         peer_message: &PingPongMessage,
-    ) -> Result<Self::PingPongState, PingPongError>;
+    ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
 
 impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
@@ -320,7 +518,8 @@ impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
 where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
 {
-    type PingPongState = PingPongState<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
+    type PingPongState = PingPongState<A::PrepareState, A::OutputShare>;
+    type PingPongContinuation = PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
 
     fn leader_initialized(
         &self,
@@ -330,7 +529,7 @@ where
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, PingPongMessage), PingPongError> {
+    ) -> Result<Continued<Self::PrepareState>, PingPongError> {
         self.prepare_init(
             verify_key,
             ctx,
@@ -342,14 +541,14 @@ where
         )
         .map_err(PingPongError::VdafPrepareInit)
         .and_then(|(prepare_state, prepare_share)| {
-            Ok((
+            Ok(Continued {
                 prepare_state,
-                PingPongMessage::Initialize {
+                message: PingPongMessage::Initialize {
                     prepare_share: prepare_share
                         .get_encoded()
                         .map_err(PingPongError::CodecPrepShare)?,
                 },
-            ))
+            })
         })
     }
 
@@ -362,13 +561,7 @@ where
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
         leader_message: &PingPongMessage,
-    ) -> Result<
-        (
-            PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>,
-            PingPongMessage,
-        ),
-        PingPongError,
-    > {
+    ) -> Result<Self::PingPongContinuation, PingPongError> {
         let (prepare_state, prepare_share) = self
             .prepare_init(
                 verify_key,
@@ -400,26 +593,10 @@ where
             )
             .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
-        let prepare_message = current_prepare_message
-            .get_encoded()
-            .map_err(PingPongError::CodecPrepMessage)?;
-
-        self.prepare_next(ctx, prepare_state, current_prepare_message)
-            .map_err(PingPongError::VdafPrepareNext)
-            .and_then(|transition| match transition {
-                PrepareTransition::Continue(_, ref prepare_share) => Ok((
-                    transition.clone(),
-                    PingPongMessage::Continued {
-                        prepare_message,
-                        prepare_share: prepare_share
-                            .get_encoded()
-                            .map_err(PingPongError::CodecPrepShare)?,
-                    },
-                )),
-                PrepareTransition::Finish(_) => {
-                    Ok((transition, PingPongMessage::Finish { prepare_message }))
-                }
-            })
+        Ok(PingPongContinuation::Transition {
+            previous_prepare_state: prepare_state,
+            current_prepare_message,
+        })
     }
 
     fn leader_continued(
@@ -428,7 +605,7 @@ where
         leader_state: Self::PrepareState,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
-    ) -> Result<Self::PingPongState, PingPongError> {
+    ) -> Result<Self::PingPongContinuation, PingPongError> {
         self.continued(ctx, true, leader_state, agg_param, inbound)
     }
 
@@ -438,7 +615,7 @@ where
         helper_state: Self::PrepareState,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
-    ) -> Result<Self::PingPongState, PingPongError> {
+    ) -> Result<Self::PingPongContinuation, PingPongError> {
         self.continued(ctx, false, helper_state, agg_param, inbound)
     }
 }
@@ -455,7 +632,7 @@ where
         host_prepare_state: Self::PrepareState,
         agg_param: &Self::AggregationParam,
         inbound: &PingPongMessage,
-    ) -> Result<Self::PingPongState, PingPongError> {
+    ) -> Result<Self::PingPongContinuation, PingPongError> {
         let (prepare_message, next_peer_prepare_share) = match inbound {
             PingPongMessage::Initialize { .. } => {
                 return Err(PingPongError::PeerMessageMismatch {
@@ -463,7 +640,7 @@ where
                     expected: "continue",
                 });
             }
-            PingPongMessage::Continued {
+            PingPongMessage::Continue {
                 prepare_message,
                 prepare_share,
             } => (prepare_message, Some(prepare_share)),
@@ -495,34 +672,13 @@ where
                     .prepare_shares_to_prepare_message(ctx, agg_param, prepare_shares)
                     .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
-                self.prepare_next(ctx, next_prepare_state, current_prepare_message.clone())
-                    .map_err(PingPongError::VdafPrepareNext)
-                    .and_then(|transition| match transition {
-                        PrepareTransition::Continue(prepare_state, prepare_share) => {
-                            Ok(PingPongState::Continued {
-                                prepare_state,
-                                message: PingPongMessage::Continued {
-                                    prepare_message: current_prepare_message
-                                        .get_encoded()
-                                        .map_err(PingPongError::CodecPrepMessage)?,
-                                    prepare_share: prepare_share
-                                        .get_encoded()
-                                        .map_err(PingPongError::CodecPrepShare)?,
-                                },
-                            })
-                        }
-                        PrepareTransition::Finish(output_share) => Ok(PingPongState::Finished {
-                            output_share,
-                            message: PingPongMessage::Finish {
-                                prepare_message: current_prepare_message
-                                    .get_encoded()
-                                    .map_err(PingPongError::CodecPrepMessage)?,
-                            },
-                        }),
-                    })
+                Ok(PingPongContinuation::Transition {
+                    previous_prepare_state: next_prepare_state,
+                    current_prepare_message,
+                })
             }
             (PrepareTransition::Finish(output_share), None) => {
-                Ok(PingPongState::FinishedNoMessage { output_share })
+                Ok(PingPongContinuation::OutputShare(output_share))
             }
             (PrepareTransition::Continue(_, _), None) => Err(PingPongError::PeerMessageMismatch {
                 found: inbound.variant(),
@@ -547,128 +703,6 @@ mod tests {
     const CTX_STR: &[u8] = b"pingpong ctx";
 
     #[test]
-    fn drive_vdaf_to_completion() {
-        // This isn't a real test, but rather is intended just to concisely illustrate usage of the
-        // API.
-        let verify_key = [];
-        let aggregation_param = dummy::AggregationParam(0);
-        let nonce = [0; 16];
-        #[allow(clippy::let_unit_value)]
-        let public_share = ();
-        let input_share = dummy::InputShare(0);
-
-        let leader = dummy::Vdaf::new(16);
-        let helper = dummy::Vdaf::new(16);
-
-        // Leader inits into round 0
-        let (mut current_leader_prepare_state, leader_message) = leader
-            .leader_initialized(
-                &verify_key,
-                CTX_STR,
-                &aggregation_param,
-                &nonce,
-                &public_share,
-                &input_share,
-            )
-            .unwrap();
-
-        // Helper inits into round 1
-        let (helper_prepare_transition, mut current_helper_message) = helper
-            .helper_initialized(
-                &verify_key,
-                CTX_STR,
-                &aggregation_param,
-                &nonce,
-                &public_share,
-                &input_share,
-                &leader_message,
-            )
-            .unwrap();
-
-        let mut current_leader_message = None;
-        let mut leader_output_share = None;
-
-        let mut current_helper_prepare_state = None;
-        let mut helper_output_share = None;
-
-        match helper_prepare_transition {
-            PrepareTransition::Continue(helper_prepare_state, _) => {
-                current_helper_prepare_state = Some(helper_prepare_state)
-            }
-            PrepareTransition::Finish(output_share) => helper_output_share = Some(output_share),
-        }
-
-        // Continue until both aggregators are finished
-        loop {
-            if leader_output_share.is_none() {
-                let new_leader_state = leader
-                    .leader_continued(
-                        CTX_STR,
-                        current_leader_prepare_state,
-                        &aggregation_param,
-                        &current_helper_message,
-                    )
-                    .unwrap();
-
-                match new_leader_state {
-                    PingPongState::Continued {
-                        prepare_state,
-                        message,
-                    } => {
-                        current_leader_prepare_state = prepare_state;
-                        current_leader_message = Some(message);
-                    }
-                    PingPongState::Finished {
-                        output_share,
-                        message,
-                    } => {
-                        leader_output_share = Some(output_share);
-                        current_leader_message = Some(message);
-                    }
-                    PingPongState::FinishedNoMessage { output_share } => {
-                        leader_output_share = Some(output_share);
-                    }
-                }
-            }
-
-            if helper_output_share.is_none() {
-                let new_helper_state = helper
-                    .helper_continued(
-                        CTX_STR,
-                        current_helper_prepare_state.unwrap(),
-                        &aggregation_param,
-                        &current_leader_message.clone().unwrap(),
-                    )
-                    .unwrap();
-
-                match new_helper_state {
-                    PingPongState::Continued {
-                        prepare_state,
-                        message,
-                    } => {
-                        current_helper_prepare_state = Some(prepare_state);
-                        current_helper_message = message;
-                    }
-                    PingPongState::Finished {
-                        output_share,
-                        message,
-                    } => {
-                        helper_output_share = Some(output_share);
-                        current_helper_message = message;
-                    }
-                    PingPongState::FinishedNoMessage { output_share } => {
-                        helper_output_share = Some(output_share);
-                    }
-                }
-            }
-
-            if leader_output_share.is_some() && helper_output_share.is_some() {
-                break;
-            }
-        }
-    }
-
-    #[test]
     fn ping_pong_one_round() {
         let verify_key = [];
         let aggregation_param = dummy::AggregationParam(0);
@@ -681,7 +715,10 @@ mod tests {
         let helper = dummy::Vdaf::new(1);
 
         // Leader inits into round 0
-        let (leader_state, leader_message) = leader
+        let Continued {
+            prepare_state: leader_state,
+            message: leader_message,
+        } = leader
             .leader_initialized(
                 &verify_key,
                 CTX_STR,
@@ -693,7 +730,7 @@ mod tests {
             .unwrap();
 
         // Helper inits into round 1
-        let (helper_transition, helper_message) = helper
+        let helper_state = helper
             .helper_initialized(
                 &verify_key,
                 CTX_STR,
@@ -703,16 +740,22 @@ mod tests {
                 &input_share,
                 &leader_message,
             )
+            .unwrap()
+            .evaluate(CTX_STR, &helper)
             .unwrap();
 
         // 1 round VDAF: helper should finish immediately.
-        assert_matches!(helper_transition, PrepareTransition::Finish(_));
+        let helper_message = assert_matches!(helper_state, PingPongState::FinishedWithOutbound {
+            message, ..
+        } => message);
 
         let leader_state = leader
             .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .unwrap()
+            .evaluate(CTX_STR, &leader)
             .unwrap();
         // 1 round VDAF: leader should finish when it gets helper message and emit no message.
-        assert_matches!(leader_state, PingPongState::FinishedNoMessage { .. });
+        assert_matches!(leader_state, PingPongState::Finished { .. });
     }
 
     #[test]
@@ -728,7 +771,10 @@ mod tests {
         let helper = dummy::Vdaf::new(2);
 
         // Leader inits into round 0
-        let (leader_state, leader_message) = leader
+        let Continued {
+            prepare_state: leader_state,
+            message: leader_message,
+        } = leader
             .leader_initialized(
                 &verify_key,
                 CTX_STR,
@@ -740,7 +786,7 @@ mod tests {
             .unwrap();
 
         // Helper inits into round 1
-        let (helper_state, helper_message) = helper
+        let helper_state = helper
             .helper_initialized(
                 &verify_key,
                 CTX_STR,
@@ -750,24 +796,32 @@ mod tests {
                 &input_share,
                 &leader_message,
             )
+            .unwrap()
+            .evaluate(CTX_STR, &helper)
             .unwrap();
 
         // 2 round VDAF, round 1: helper should continue.
-        let helper_state = assert_matches!(helper_state, PrepareTransition::Continue(s, _) => s);
+        let (helper_state, helper_message) = assert_matches!(helper_state, PingPongState::Continued(
+            Continued { prepare_state, message }
+        ) => (prepare_state, message));
 
         let leader_state = leader
             .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .unwrap()
+            .evaluate(CTX_STR, &leader)
             .unwrap();
         // 2 round VDAF, round 1: leader should finish and emit a finish message.
-        let leader_message = assert_matches!(leader_state, PingPongState::Finished{ message, .. } => {
-            message
-        });
+        let leader_message = assert_matches!(leader_state, PingPongState::FinishedWithOutbound{
+            message, ..
+        } => message);
 
         let helper_state = helper
             .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
+            .unwrap()
+            .evaluate(CTX_STR, &helper)
             .unwrap();
         // 2 round vdaf, round 1: helper should finish and emit no message.
-        assert_matches!(helper_state, PingPongState::FinishedNoMessage { .. });
+        assert_matches!(helper_state, PingPongState::Finished { .. });
     }
 
     #[test]
@@ -783,7 +837,10 @@ mod tests {
         let helper = dummy::Vdaf::new(3);
 
         // Leader inits into round 0
-        let (leader_state, leader_message) = leader
+        let Continued {
+            prepare_state: leader_state,
+            message: leader_message,
+        } = leader
             .leader_initialized(
                 &verify_key,
                 CTX_STR,
@@ -795,7 +852,7 @@ mod tests {
             .unwrap();
 
         // Helper inits into round 1
-        let (helper_state, helper_message) = helper
+        let helper_state = helper
             .helper_initialized(
                 &verify_key,
                 CTX_STR,
@@ -805,32 +862,41 @@ mod tests {
                 &input_share,
                 &leader_message,
             )
+            .unwrap()
+            .evaluate(CTX_STR, &helper)
             .unwrap();
-
         // 3 round VDAF, round 1: helper should continue.
-        let helper_state = assert_matches!(helper_state, PrepareTransition::Continue(s, _) => s);
+        let (helper_state, helper_message) = assert_matches!(helper_state, PingPongState::Continued(
+            Continued { prepare_state, message }
+        ) => (prepare_state, message));
 
         let leader_state = leader
             .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .unwrap()
+            .evaluate(CTX_STR, &leader)
             .unwrap();
         // 3 round VDAF, round 1: leader should continue and emit a continue message.
-        let (leader_state, leader_message) = assert_matches!(
-            leader_state, PingPongState::Continued{prepare_state, message} => (prepare_state, message)
-        );
+        let (leader_state, leader_message) = assert_matches!(leader_state, PingPongState::Continued(
+            Continued { prepare_state, message }
+        ) => (prepare_state, message));
 
         let helper_state = helper
             .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
+            .unwrap()
+            .evaluate(CTX_STR, &helper)
             .unwrap();
         // 3 round vdaf, round 2: helper should finish and emit a finish message.
-        let helper_message = assert_matches!(helper_state, PingPongState::Finished{message, ..} => {
-            message
-        });
+        let helper_message = assert_matches!(helper_state, PingPongState::FinishedWithOutbound{
+            message, ..
+        } => message);
 
         let leader_state = leader
             .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .unwrap()
+            .evaluate(CTX_STR, &leader)
             .unwrap();
         // 3 round VDAF, round 2: leader should finish and emit no message.
-        assert_matches!(leader_state, PingPongState::FinishedNoMessage { .. });
+        assert_matches!(leader_state, PingPongState::Finished { .. });
     }
 
     #[test]
@@ -850,7 +916,7 @@ mod tests {
                 ),
             ),
             (
-                PingPongMessage::Continued {
+                PingPongMessage::Continue {
                     prepare_message: Vec::from("prepare message"),
                     prepare_share: Vec::from("prepare share"),
                 },
