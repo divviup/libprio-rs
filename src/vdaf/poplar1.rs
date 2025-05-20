@@ -800,7 +800,7 @@ impl Encode for Poplar1AggregationParam {
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let encoded_prefixes_len = (((self.level + 1) as usize + 7) / 8) * self.prefixes.len();
+        let encoded_prefixes_len = ((self.level + 1) as usize).div_ceil(8) * self.prefixes.len();
         // 4 bytes for the number of prefixes, 2 bytes for the level, and a variable number of bytes
         // for the encoded prefixes themselves.
         Some(6 + encoded_prefixes_len)
@@ -818,7 +818,7 @@ impl Decode for Poplar1AggregationParam {
 
         // Encoded prefixes
         let mut prefixes = Vec::with_capacity(num_prefixes);
-        let mut buf = vec![0; ((level + 1) as usize + 7) / 8];
+        let mut buf = vec![0; ((level + 1) as usize).div_ceil(8)];
         let last_byte_mask = match (level + 1) % 8 {
             0 => 0,
             num_bits => {

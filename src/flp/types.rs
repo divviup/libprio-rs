@@ -594,7 +594,7 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
         let meas_length = num_buckets + bits_for_weight;
 
         // Gadget calls is ⌈meas_length / chunk_length⌉
-        let gadget_calls = (meas_length + chunk_length - 1) / chunk_length;
+        let gadget_calls = meas_length.div_ceil(chunk_length);
         // Offset is 2^max_weight.bitlen() - 1 - max_weight
         let offset = (1 << bits_for_weight) - 1 - max_weight;
 

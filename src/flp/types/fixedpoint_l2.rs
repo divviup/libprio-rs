@@ -331,11 +331,11 @@ where
         // Compute chunk length and number of calls for parallel sum gadgets.
         let len0 = bits_per_entry * entries + bits_for_norm;
         let gadget0_chunk_length = std::cmp::max(1, (len0 as f64).sqrt() as usize);
-        let gadget0_calls = (len0 + gadget0_chunk_length - 1) / gadget0_chunk_length;
+        let gadget0_calls = len0.div_ceil(gadget0_chunk_length);
 
         let len1 = entries;
         let gadget1_chunk_length = std::cmp::max(1, (len1 as f64).sqrt() as usize);
-        let gadget1_calls = (len1 + gadget1_chunk_length - 1) / gadget1_chunk_length;
+        let gadget1_calls = len1.div_ceil(gadget1_chunk_length);
 
         Ok(Self {
             bits_per_entry,

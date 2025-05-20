@@ -1702,7 +1702,7 @@ pub fn optimal_chunk_length(measurement_length: usize) -> usize {
         .rev()
         .map(|log2| {
             let gadget_calls = (1 << log2) - 1;
-            let chunk_length = (measurement_length + gadget_calls - 1) / gadget_calls;
+            let chunk_length = measurement_length.div_ceil(gadget_calls);
             Candidate {
                 gadget_calls,
                 chunk_length,

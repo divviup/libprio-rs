@@ -727,7 +727,7 @@ where
 
     fn encoded_len(&self) -> Option<usize> {
         let control_bits_count = (self.inner_correction_words.len() + 1) * 2;
-        let mut len = (control_bits_count + 7) / 8 + (self.inner_correction_words.len() + 1) * 16;
+        let mut len = control_bits_count.div_ceil(8) + (self.inner_correction_words.len() + 1) * 16;
         for correction_words in self.inner_correction_words.iter() {
             len += correction_words.value.encoded_len()?;
         }
@@ -742,7 +742,7 @@ where
     VL: Decode,
 {
     fn decode_with_param(bits: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let packed_control_len = (bits + 3) / 4;
+        let packed_control_len = bits.div_ceil(4);
         let mut packed_control_bits = vec![0u8; packed_control_len];
         bytes.read_exact(&mut packed_control_bits)?;
         let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed_control_bits);

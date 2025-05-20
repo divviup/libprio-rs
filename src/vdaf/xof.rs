@@ -474,7 +474,7 @@ impl SeedStreamFixedKeyAes128 {
 
         // NOTE(cjpatton) We might be able to speed this up by unrolling this loop and encrypting
         // multiple blocks at the same time via `self.cipher.encrypt_blocks()`.
-        for block_counter in self.length_consumed / 16..(next_length_consumed + 15) / 16 {
+        for block_counter in self.length_consumed / 16..next_length_consumed.div_ceil(16) {
             block.clone_from(&self.base_block);
             for (b, i) in block.iter_mut().zip(block_counter.to_le_bytes().iter()) {
                 *b ^= i;
