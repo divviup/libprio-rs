@@ -23,12 +23,19 @@ jobs:
         RUSTDOCFLAGS: -Dwarnings
 
   build-binaries:
+    name: build-binaries (${{ matrix.rust-toolchain.label }})
     strategy:
       matrix:
         rust-toolchain: [
-          # MSRV from Cargo.toml
-          "1.71",
-          "stable",
+          {
+            # MSRV from Cargo.toml
+            version: "1.71",
+            label: "MSRV",
+          },
+          {
+            version: "stable",
+            label: "stable"
+          },
         ]
     runs-on: ubuntu-latest
     steps:
@@ -36,7 +43,7 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: ${{ matrix.rust-toolchain }}
+        toolchain: ${{ matrix.rust-toolchain.version }}
         components: clippy
     - name: Build
       run: cargo build --verbose --package prio-binaries
@@ -44,12 +51,19 @@ jobs:
       run: cargo clippy --package prio-binaries
 
   build-crate:
+    name: build-crate (${{ matrix.rust-toolchain.label }})
     strategy:
       matrix:
         rust-toolchain: [
-          # MSRV from Cargo.toml
-          "1.71",
-          "stable",
+          {
+            # MSRV from Cargo.toml
+            version: "1.71",
+            label: "MSRV",
+          },
+          {
+            version: "stable",
+            label: "stable"
+          },
         ]
     runs-on: ubuntu-latest
     env:
@@ -59,12 +73,12 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: ${{ matrix.rust-toolchain }}
+        toolchain: ${{ matrix.rust-toolchain.version }}
         components: clippy, rustfmt
     - name: Cache cargo-all-features
       uses: actions/cache@v4
       with:
-        key: cargo-all-features-bins-${{ env.CARGO_ALL_FEATURES_VERSION }}-rust-${{ matrix.rust-toolchain }}
+        key: cargo-all-features-bins-${{ env.CARGO_ALL_FEATURES_VERSION }}-rust-${{ matrix.rust-toolchain.version }}
         path: |
           ${{ runner.tool_cache }}/cargo-build-all-features
           ${{ runner.tool_cache }}/cargo-check-all-features
