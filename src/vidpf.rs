@@ -527,7 +527,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
             .map_or(Some(0), |cw| cw.weight.encoded_len())?;
 
         let mut len = 0;
-        len += (2 * self.cw.len() + 7) / 8; // packed control bits
+        len += (2 * self.cw.len()).div_ceil(8); // packed control bits
         len += self.cw.len() * VIDPF_SEED_SIZE; // seeds
         len += self.cw.len() * weight_len; // weights
         len += self.cw.len() * VIDPF_PROOF_SIZE; // nod proofs
@@ -538,7 +538,7 @@ impl<W: VidpfValue> Encode for VidpfPublicShare<W> {
 impl<W: VidpfValue> ParameterizedDecode<Vidpf<W>> for VidpfPublicShare<W> {
     fn decode_with_param(vidpf: &Vidpf<W>, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let bits = usize::from(vidpf.bits);
-        let packed_control_len = (bits + 3) / 4;
+        let packed_control_len = bits.div_ceil(4);
         let mut packed_control_bits = vec![0u8; packed_control_len];
         bytes.read_exact(&mut packed_control_bits)?;
         let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed_control_bits);
