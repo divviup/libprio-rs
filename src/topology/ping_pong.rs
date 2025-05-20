@@ -362,9 +362,9 @@ where
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Continued<P> {
     /// The state to which the aggregator has advanced.
-    prepare_state: P,
+    pub prepare_state: P,
     /// A message for the peer aggregator.
-    message: PingPongMessage,
+    pub message: PingPongMessage,
 }
 
 /// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF].
@@ -472,8 +472,8 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     fn leader_continued(
         &self,
         ctx: &[u8],
-        leader_prepare_state: Self::PrepareState,
         aggregation_param: &Self::AggregationParam,
+        leader_prepare_state: Self::PrepareState,
         helper_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 
@@ -493,8 +493,8 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     fn helper_continued(
         &self,
         ctx: &[u8],
-        helper_prepare_state: Self::PrepareState,
         aggregation_param: &Self::AggregationParam,
+        helper_prepare_state: Self::PrepareState,
         leader_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
@@ -507,8 +507,8 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
         &self,
         ctx: &[u8],
         is_leader: bool,
-        host_prepare_state: Self::PrepareState,
         aggregation_param: &Self::AggregationParam,
+        host_prepare_state: Self::PrepareState,
         peer_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
@@ -602,21 +602,21 @@ where
     fn leader_continued(
         &self,
         ctx: &[u8],
-        leader_state: Self::PrepareState,
         agg_param: &Self::AggregationParam,
+        leader_state: Self::PrepareState,
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
-        self.continued(ctx, true, leader_state, agg_param, inbound)
+        self.continued(ctx, true, agg_param, leader_state, inbound)
     }
 
     fn helper_continued(
         &self,
         ctx: &[u8],
-        helper_state: Self::PrepareState,
         agg_param: &Self::AggregationParam,
+        helper_state: Self::PrepareState,
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
-        self.continued(ctx, false, helper_state, agg_param, inbound)
+        self.continued(ctx, false, agg_param, helper_state, inbound)
     }
 }
 
@@ -629,8 +629,8 @@ where
         &self,
         ctx: &[u8],
         is_leader: bool,
-        host_prepare_state: Self::PrepareState,
         agg_param: &Self::AggregationParam,
+        host_prepare_state: Self::PrepareState,
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
         let (prepare_message, next_peer_prepare_share) = match inbound {
@@ -750,7 +750,7 @@ mod tests {
         } => message);
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, &aggregation_param, leader_state, &helper_message)
             .unwrap()
             .evaluate(CTX_STR, &leader)
             .unwrap();
@@ -806,7 +806,7 @@ mod tests {
         ) => (prepare_state, message));
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, &aggregation_param, leader_state, &helper_message)
             .unwrap()
             .evaluate(CTX_STR, &leader)
             .unwrap();
@@ -816,7 +816,7 @@ mod tests {
         } => message);
 
         let helper_state = helper
-            .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
+            .helper_continued(CTX_STR, &aggregation_param, helper_state, &leader_message)
             .unwrap()
             .evaluate(CTX_STR, &helper)
             .unwrap();
@@ -871,7 +871,7 @@ mod tests {
         ) => (prepare_state, message));
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, &aggregation_param, leader_state, &helper_message)
             .unwrap()
             .evaluate(CTX_STR, &leader)
             .unwrap();
@@ -881,7 +881,7 @@ mod tests {
         ) => (prepare_state, message));
 
         let helper_state = helper
-            .helper_continued(CTX_STR, helper_state, &aggregation_param, &leader_message)
+            .helper_continued(CTX_STR, &aggregation_param, helper_state, &leader_message)
             .unwrap()
             .evaluate(CTX_STR, &helper)
             .unwrap();
@@ -891,7 +891,7 @@ mod tests {
         } => message);
 
         let leader_state = leader
-            .leader_continued(CTX_STR, leader_state, &aggregation_param, &helper_message)
+            .leader_continued(CTX_STR, &aggregation_param, leader_state, &helper_message)
             .unwrap()
             .evaluate(CTX_STR, &leader)
             .unwrap();
