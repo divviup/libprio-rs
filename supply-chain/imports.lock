@@ -8,6 +8,20 @@ user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
+[[publisher.clap]]
+version = "4.5.38"
+when = "2025-05-11"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
+[[publisher.clap_builder]]
+version = "4.5.38"
+when = "2025-05-11"
+user-id = 6743
+user-login = "epage"
+user-name = "Ed Page"
+
 [[publisher.itoa]]
 version = "1.0.3"
 when = "2022-08-03"
@@ -91,13 +105,6 @@ when = "2022-07-05"
 user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
-
-[[publisher.rustix]]
-version = "0.37.27"
-when = "2023-10-26"
-user-id = 6825
-user-login = "sunfishcode"
-user-name = "Dan Gohman"
 
 [[publisher.ryu]]
 version = "1.0.11"
@@ -204,69 +211,6 @@ user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
-[[publisher.windows-sys]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows-targets]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_aarch64_gnullvm]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_aarch64_msvc]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_i686_gnu]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_i686_msvc]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_x86_64_gnu]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_x86_64_gnullvm]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
-[[publisher.windows_x86_64_msvc]]
-version = "0.48.0"
-when = "2023-03-31"
-user-id = 64539
-user-login = "kennykerr"
-user-name = "Kenny Kerr"
-
 [[audits.bytecode-alliance.audits.anes]]
 who = "Pat Hickey <phickey@fastly.com>"
 criteria = "safe-to-deploy"
@@ -288,12 +232,6 @@ delta = "0.9.0 -> 0.10.2"
 who = "Nick Fitzgerald <fitzgen@gmail.com>"
 criteria = "safe-to-deploy"
 version = "3.11.1"
-notes = "I am the author of this crate."
-
-[[audits.bytecode-alliance.audits.cc]]
-who = "Alex Crichton <alex@alexcrichton.com>"
-criteria = "safe-to-deploy"
-version = "1.0.73"
 notes = "I am the author of this crate."
 
 [[audits.bytecode-alliance.audits.cfg-if]]
@@ -323,32 +261,23 @@ who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
 version = "0.1.3"
 
-[[audits.bytecode-alliance.audits.errno]]
-who = "Dan Gohman <dev@sunfishcode.online>"
+[[audits.bytecode-alliance.audits.itertools]]
+who = "Nick Fitzgerald <fitzgen@gmail.com>"
 criteria = "safe-to-deploy"
-version = "0.3.0"
-notes = "This crate uses libc and windows-sys APIs to get and set the raw OS error value."
-
-[[audits.bytecode-alliance.audits.errno]]
-who = "Dan Gohman <dev@sunfishcode.online>"
-criteria = "safe-to-deploy"
-delta = "0.3.0 -> 0.3.1"
-notes = "Just a dependency version bump and a bug fix for redox"
-
-[[audits.bytecode-alliance.audits.is-terminal]]
-who = "Dan Gohman <dev@sunfishcode.online>"
-criteria = "safe-to-deploy"
-version = "0.4.7"
+delta = "0.10.5 -> 0.12.1"
 notes = """
-The is-terminal implementation code is now sync'd up with the prototype
-implementation in the Rust standard library.
+Minimal `unsafe` usage. Few blocks that existed looked reasonable. Does what it
+says on the tin: lots of iterators.
 """
 
-[[audits.bytecode-alliance.audits.linux-raw-sys]]
-who = "Dan Gohman <dev@sunfishcode.online>"
+[[audits.bytecode-alliance.audits.itertools]]
+who = "Alex Crichton <alex@alexcrichton.com>"
 criteria = "safe-to-deploy"
-version = "0.3.3"
-notes = "I am the author of this crate."
+delta = "0.12.1 -> 0.14.0"
+notes = """
+Lots of new iterators and shuffling some things around. Some new unsafe code but
+it's well-documented and well-tested. Nothing suspicious.
+"""
 
 [[audits.embark-studios.audits.tap]]
 who = "Johan Andersson <opensource@embark-studios.com>"
@@ -366,20 +295,43 @@ who = "Radu Matei <radu.matei@fermyon.com>"
 criteria = "safe-to-run"
 version = "0.3.3"
 
-[[audits.google.audits.bitflags]]
+[[audits.google.audits.anstyle]]
+who = "Yu-An Wang <wyuang@google.com>"
+criteria = "safe-to-run"
+version = "1.0.4"
+aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+
+[[audits.google.audits.anstyle]]
 who = "Lukasz Anforowicz <lukasza@chromium.org>"
-criteria = "safe-to-deploy"
-version = "1.3.2"
-notes = """
-Security review of earlier versions of the crate can be found at
-(Google-internal, sorry): go/image-crate-chromium-security-review
+criteria = "safe-to-run"
+delta = "1.0.4 -> 1.0.6"
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
-The crate exposes a function marked as `unsafe`, but doesn't use any
-`unsafe` blocks (except for tests of the single `unsafe` function).  I
-think this justifies marking this crate as `ub-risk-1`.
+[[audits.google.audits.anstyle]]
+who = "danakj <danakj@chromium.org>"
+criteria = "safe-to-run"
+delta = "1.0.6 -> 1.0.7"
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
-Additional review comments can be found at https://crrev.com/c/4723145/31
-"""
+[[audits.google.audits.anstyle]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-run"
+delta = "1.0.7 -> 1.0.8"
+notes = "Only Cargo.toml changes in the 1.0.7 => 1.0.8 delta."
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.anstyle]]
+who = "Dustin J. Mitchell <djmitche@chromium.org>"
+criteria = "safe-to-run"
+delta = "1.0.8 -> 1.0.9"
+notes = "No changes"
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
+
+[[audits.google.audits.anstyle]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
+criteria = "safe-to-run"
+delta = "1.0.9 -> 1.0.10"
+notes = "Minor changes related to `write_str`."
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.cast]]
@@ -388,39 +340,24 @@ criteria = "safe-to-run"
 version = "0.3.0"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
-[[audits.google.audits.clap]]
-who = "George Burgess IV <gbiv@google.com>"
+[[audits.google.audits.clap_lex]]
+who = "Ying Hsu <yinghsu@chromium.org>"
 criteria = "safe-to-run"
-version = "4.0.32"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
-[[audits.google.audits.clap]]
-who = "George Burgess IV <gbiv@google.com>"
-criteria = "safe-to-run"
-delta = "4.0.32 -> 4.1.14"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
-
-[[audits.google.audits.clap_builder]]
-who = "George Burgess IV <gbiv@google.com>"
-criteria = "safe-to-run"
-version = "4.1.14"
-notes = """
-This was a diff audit between clap 4.0.32 sources, and sources in clap_builder
-4.1.14. clap_builder is primarily stuff refactored out of `clap`.
-"""
+version = "0.7.0"
 aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
 
 [[audits.google.audits.clap_lex]]
-who = "George Burgess IV <gbiv@google.com>"
+who = "Adrian Taylor <adetaylor@chromium.org>"
 criteria = "safe-to-run"
-version = "0.4.1"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+delta = "0.7.0 -> 0.7.1"
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
-[[audits.google.audits.io-lifetimes]]
-who = "George Burgess IV <gbiv@google.com>"
+[[audits.google.audits.clap_lex]]
+who = "Lukasz Anforowicz <lukasza@chromium.org>"
 criteria = "safe-to-run"
-version = "1.0.10"
-aggregated-from = "https://chromium.googlesource.com/chromiumos/third_party/rust_crates/+/refs/heads/main/cargo-vet/audits.toml?format=TEXT"
+delta = "0.7.1 -> 0.7.2"
+notes = "No `.rs` changes in the delta."
+aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
 [[audits.google.audits.itertools]]
 who = "ChromeOS"
@@ -576,12 +513,6 @@ capabilities.
 """
 aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
 
-[[audits.mozilla.audits.hermit-abi]]
-who = "Mike Hommey <mh+mozilla@glandium.org>"
-criteria = "safe-to-deploy"
-delta = "0.1.19 -> 0.2.6"
-aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
-
 [[audits.mozilla.audits.hex]]
 who = "Simon Friedberger <simon@mozilla.com>"
 criteria = "safe-to-deploy"
@@ -687,6 +618,12 @@ criteria = "safe-to-deploy"
 version = "2.5.0"
 notes = "The goal is to provide some constant-time correctness for cryptographic implementations. The approach is reasonable, it is known to be insufficient but this is pointed out in the documentation."
 aggregated-from = "https://hg.mozilla.org/mozilla-central/raw-file/tip/supply-chain/audits.toml"
+
+[[audits.zcash.audits.clap_lex]]
+who = "Jack Grigg <jack@electriccoin.co>"
+criteria = "safe-to-deploy"
+delta = "0.7.2 -> 0.7.4"
+aggregated-from = "https://raw.githubusercontent.com/zcash/wallet/main/supply-chain/audits.toml"
 
 [[audits.zcash.audits.crossbeam-deque]]
 who = "Jack Grigg <jack@electriccoin.co>"
