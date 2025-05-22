@@ -2,7 +2,7 @@
 
 #[cfg(feature = "experimental")]
 use criterion::Throughput;
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 #[cfg(feature = "experimental")]
 use fixed::types::{I1F15, I1F31};
 #[cfg(feature = "experimental")]
@@ -36,7 +36,7 @@ use prio::{
 use rand::prelude::*;
 #[cfg(feature = "experimental")]
 use std::iter;
-use std::time::Duration;
+use std::{hint::black_box, time::Duration};
 
 /// Seed for generation of random benchmark inputs.
 ///
