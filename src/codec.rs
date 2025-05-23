@@ -432,7 +432,7 @@ pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
     decode_fixlen_items(len, decoding_parameter, bytes)
 }
 
-/// Encode `bytes` as a [fixed-length vector][1] into as many instances of `D` as possible.
+/// Decode `bytes` as a [fixed-length vector][1] into as many instances of `D` as possible.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
 pub fn decode_fixlen_items<P, D: ParameterizedDecode<P>>(
