@@ -37,6 +37,10 @@ use rand::Rng;
 ///
 /// If `rem` is greater than zero, than only the lowest `rem` bits of the last u32 are filled with
 /// random data.
+///
+/// # Panics
+///
+/// Panics if `rem` is greater than 32.
 fn random_bits<R>(rng: &mut R, data: &mut [u32], rem: u64)
 where
     R: Rng + ?Sized,
