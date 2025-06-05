@@ -346,17 +346,17 @@ where
 mod tests {
     use super::*;
     use crate::vdaf::{test_utils::run_vdaf_sharded, Client};
-    use rand::prelude::*;
+    use rand::{rng, Rng};
 
     fn run_test(rounds: u32, aggregation_parameter: u8) {
         let vdaf = Vdaf::new(rounds);
         let mut verify_key = [0; 0];
-        thread_rng().fill(&mut verify_key[..]);
+        rng().fill(&mut verify_key[..]);
         let measurements = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
         let mut sharded_measurements = Vec::new();
         for measurement in measurements {
-            let nonce = thread_rng().gen();
+            let nonce = rng().random();
             let (public_share, input_shares) =
                 vdaf.shard(b"dummy ctx", &measurement, &nonce).unwrap();
 

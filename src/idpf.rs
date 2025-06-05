@@ -19,7 +19,7 @@ use bitvec::{
     vec::BitVec,
     view::BitView,
 };
-use rand::prelude::*;
+use rand::{rng, Rng, RngCore};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -493,7 +493,7 @@ where
     where
         M: IntoIterator<Item = VI>,
     {
-        let mut rng = thread_rng();
+        let mut rng = rng();
         if input.is_empty() {
             return Err(
                 IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into(),
@@ -1036,6 +1036,7 @@ enum XofMode<'a> {
 pub mod test_utils {
     use super::*;
 
+    use rand::distr::Distribution;
     use rand_distr::Zipf;
 
     /// Generate a set of IDPF inputs with the given bit length `bits`. They are sampled according
@@ -1058,13 +1059,13 @@ pub mod test_utils {
         // Generate random inputs.
         let mut inputs = Vec::with_capacity(zipf_support);
         for _ in 0..zipf_support {
-            let bools: Vec<bool> = (0..bits).map(|_| rng.gen()).collect();
+            let bools: Vec<bool> = (0..bits).map(|_| rng.random()).collect();
             inputs.push(IdpfInput::from_bools(&bools));
         }
 
         // Sample a number of inputs according to the Zipf distribution.
         let mut samples = Vec::with_capacity(measurement_count);
-        let zipf = Zipf::new(zipf_support as u64, zipf_exponent).unwrap();
+        let zipf = Zipf::new(zipf_support as f64, zipf_exponent).unwrap();
         for _ in 0..measurement_count {
             samples.push(inputs[zipf.sample(rng).round() as usize - 1].clone());
         }

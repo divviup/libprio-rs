@@ -15,7 +15,7 @@ use core::{
 };
 
 use bitvec::prelude::{BitVec, Lsb0};
-use rand::prelude::*;
+use rand::{rng, Rng, RngCore};
 use std::fmt::Debug;
 use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -98,8 +98,8 @@ impl<W: VidpfValue> Vidpf<W> {
         weight: &W,
         nonce: &[u8],
     ) -> Result<(VidpfPublicShare<W>, [VidpfKey; 2]), VidpfError> {
-        let mut rng = thread_rng();
-        let keys = rng.gen();
+        let mut rng = rng();
+        let keys = rng.random();
         let public = self.gen_with_keys(ctx, &keys, input, weight, nonce)?;
         Ok((public, keys))
     }
