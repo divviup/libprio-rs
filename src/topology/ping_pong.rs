@@ -70,19 +70,19 @@ pub enum PingPongMessage {
     /// Corresponds to MessageType.initialize.
     Initialize {
         /// The leader's initial preparation share.
-        prep_share: Vec<u8>,
+        prepare_share: Vec<u8>,
     },
     /// Corresponds to MessageType.continue.
     Continue {
         /// The current round's preparation message.
-        prep_msg: Vec<u8>,
+        prepare_message: Vec<u8>,
         /// The next round's preparation share.
-        prep_share: Vec<u8>,
+        prepare_share: Vec<u8>,
     },
     /// Corresponds to MessageType.finish.
     Finish {
         /// The current round's preparation message.
-        prep_msg: Vec<u8>,
+        prepare_message: Vec<u8>,
     },
 }
 
@@ -113,21 +113,21 @@ impl Encode for PingPongMessage {
         // The encoding includes an implicit discriminator byte, called MessageType in the VDAF
         // spec.
         match self {
-            Self::Initialize { prep_share } => {
+            Self::Initialize { prepare_share } => {
                 0u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), prep_share)?;
+                encode_u32_items(bytes, &(), prepare_share)?;
             }
             Self::Continue {
-                prep_msg,
-                prep_share,
+                prepare_message,
+                prepare_share,
             } => {
                 1u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), prep_msg)?;
-                encode_u32_items(bytes, &(), prep_share)?;
+                encode_u32_items(bytes, &(), prepare_message)?;
+                encode_u32_items(bytes, &(), prepare_share)?;
             }
-            Self::Finish { prep_msg } => {
+            Self::Finish { prepare_message } => {
                 2u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), prep_msg)?;
+                encode_u32_items(bytes, &(), prepare_message)?;
             }
         }
         Ok(())
@@ -135,12 +135,12 @@ impl Encode for PingPongMessage {
 
     fn encoded_len(&self) -> Option<usize> {
         match self {
-            Self::Initialize { prep_share } => Some(1 + 4 + prep_share.len()),
+            Self::Initialize { prepare_share } => Some(1 + 4 + prepare_share.len()),
             Self::Continue {
-                prep_msg,
-                prep_share,
-            } => Some(1 + 4 + prep_msg.len() + 4 + prep_share.len()),
-            Self::Finish { prep_msg } => Some(1 + 4 + prep_msg.len()),
+                prepare_message,
+                prepare_share,
+            } => Some(1 + 4 + prepare_message.len() + 4 + prepare_share.len()),
+            Self::Finish { prepare_message } => Some(1 + 4 + prepare_message.len()),
         }
     }
 }
@@ -150,20 +150,20 @@ impl Decode for PingPongMessage {
         let message_type = u8::decode(bytes)?;
         Ok(match message_type {
             0 => {
-                let prep_share = decode_u32_items(&(), bytes)?;
-                Self::Initialize { prep_share }
+                let prepare_share = decode_u32_items(&(), bytes)?;
+                Self::Initialize { prepare_share }
             }
             1 => {
-                let prep_msg = decode_u32_items(&(), bytes)?;
-                let prep_share = decode_u32_items(&(), bytes)?;
+                let prepare_message = decode_u32_items(&(), bytes)?;
+                let prepare_share = decode_u32_items(&(), bytes)?;
                 Self::Continue {
-                    prep_msg,
-                    prep_share,
+                    prepare_message,
+                    prepare_share,
                 }
             }
             2 => {
-                let prep_msg = decode_u32_items(&(), bytes)?;
-                Self::Finish { prep_msg }
+                let prepare_message = decode_u32_items(&(), bytes)?;
+                Self::Finish { prepare_message }
             }
             _ => return Err(CodecError::UnexpectedValue),
         })
@@ -215,7 +215,7 @@ impl<
         ),
         PingPongError,
     > {
-        let prep_msg = self
+        let prepare_message = self
             .current_prepare_message
             .get_encoded()
             .map_err(PingPongError::CodecPrepMessage)?;
@@ -227,18 +227,18 @@ impl<
         )
         .map_err(PingPongError::VdafPrepareNext)
         .and_then(|transition| match transition {
-            PrepareTransition::Continue(prep_state, prep_share) => Ok((
-                PingPongState::Continued(prep_state),
+            PrepareTransition::Continue(prepare_state, prepare_share) => Ok((
+                PingPongState::Continued(prepare_state),
                 PingPongMessage::Continue {
-                    prep_msg,
-                    prep_share: prep_share
+                    prepare_message,
+                    prepare_share: prepare_share
                         .get_encoded()
                         .map_err(PingPongError::CodecPrepShare)?,
                 },
             )),
             PrepareTransition::Finish(output_share) => Ok((
                 PingPongState::Finished(output_share),
-                PingPongMessage::Finish { prep_msg },
+                PingPongMessage::Finish { prepare_message },
             )),
         })
     }
@@ -365,7 +365,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
         ctx: &[u8],
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
@@ -395,7 +395,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
         ctx: &[u8],
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
@@ -434,7 +434,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         &self,
         ctx: &[u8],
         leader_state: Self::State,
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 
@@ -470,7 +470,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         &self,
         ctx: &[u8],
         helper_state: Self::State,
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 }
@@ -484,7 +484,7 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
         ctx: &[u8],
         is_leader: bool,
         host_state: Self::State,
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError>;
 }
@@ -502,7 +502,7 @@ where
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
         ctx: &[u8],
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
@@ -511,17 +511,17 @@ where
             verify_key,
             ctx,
             /* Leader */ 0,
-            agg_param,
+            aggregation_parameter,
             nonce,
             public_share,
             input_share,
         )
         .map_err(PingPongError::VdafPrepareInit)
-        .and_then(|(prep_state, prep_share)| {
+        .and_then(|(prepare_state, prepare_share)| {
             Ok((
-                PingPongState::Continued(prep_state),
+                PingPongState::Continued(prepare_state),
                 PingPongMessage::Initialize {
-                    prep_share: prep_share
+                    prepare_share: prepare_share
                         .get_encoded()
                         .map_err(PingPongError::CodecPrepShare)?,
                 },
@@ -533,26 +533,26 @@ where
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
         ctx: &[u8],
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
         inbound: &PingPongMessage,
     ) -> Result<Self::Transition, PingPongError> {
-        let (prep_state, prep_share) = self
+        let (prepare_state, prepare_share) = self
             .prepare_init(
                 verify_key,
                 ctx,
                 /* Helper */ 1,
-                agg_param,
+                aggregation_parameter,
                 nonce,
                 public_share,
                 input_share,
             )
             .map_err(PingPongError::VdafPrepareInit)?;
 
-        let inbound_prep_share = if let PingPongMessage::Initialize { prep_share } = inbound {
-            Self::PrepareShare::get_decoded_with_param(&prep_state, prep_share)
+        let inbound_prepare_share = if let PingPongMessage::Initialize { prepare_share } = inbound {
+            Self::PrepareShare::get_decoded_with_param(&prepare_state, prepare_share)
                 .map_err(PingPongError::CodecPrepShare)?
         } else {
             return Err(PingPongError::PeerMessageMismatch {
@@ -562,11 +562,15 @@ where
         };
 
         let current_prepare_message = self
-            .prepare_shares_to_prepare_message(ctx, agg_param, [inbound_prep_share, prep_share])
+            .prepare_shares_to_prepare_message(
+                ctx,
+                aggregation_parameter,
+                [inbound_prepare_share, prepare_share],
+            )
             .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
         Ok(PingPongTransition {
-            previous_prepare_state: prep_state,
+            previous_prepare_state: prepare_state,
             current_prepare_message,
         })
     }
@@ -575,20 +579,20 @@ where
         &self,
         ctx: &[u8],
         leader_state: Self::State,
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(ctx, true, leader_state, agg_param, inbound)
+        self.continued(ctx, true, leader_state, aggregation_parameter, inbound)
     }
 
     fn helper_continued(
         &self,
         ctx: &[u8],
         helper_state: Self::State,
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        self.continued(ctx, false, helper_state, agg_param, inbound)
+        self.continued(ctx, false, helper_state, aggregation_parameter, inbound)
     }
 }
 
@@ -602,10 +606,10 @@ where
         ctx: &[u8],
         is_leader: bool,
         host_state: Self::State,
-        agg_param: &Self::AggregationParam,
+        aggregation_parameter: &Self::AggregationParam,
         inbound: &PingPongMessage,
     ) -> Result<Self::ContinuedValue, PingPongError> {
-        let host_prep_state = if let PingPongState::Continued(state) = host_state {
+        let host_prepare_state = if let PingPongState::Continued(state) = host_state {
             state
         } else {
             return Err(PingPongError::HostStateMismatch {
@@ -614,7 +618,7 @@ where
             });
         };
 
-        let (prep_msg, next_peer_prep_share) = match inbound {
+        let (prepare_message, next_peer_prepare_share) = match inbound {
             PingPongMessage::Initialize { .. } => {
                 return Err(PingPongError::PeerMessageMismatch {
                     found: inbound.variant(),
@@ -622,39 +626,40 @@ where
                 });
             }
             PingPongMessage::Continue {
-                prep_msg,
-                prep_share,
-            } => (prep_msg, Some(prep_share)),
-            PingPongMessage::Finish { prep_msg } => (prep_msg, None),
+                prepare_message,
+                prepare_share,
+            } => (prepare_message, Some(prepare_share)),
+            PingPongMessage::Finish { prepare_message } => (prepare_message, None),
         };
 
-        let prep_msg = Self::PrepareMessage::get_decoded_with_param(&host_prep_state, prep_msg)
-            .map_err(PingPongError::CodecPrepMessage)?;
-        let host_prep_transition = self
-            .prepare_next(ctx, host_prep_state, prep_msg)
+        let prepare_message =
+            Self::PrepareMessage::get_decoded_with_param(&host_prepare_state, prepare_message)
+                .map_err(PingPongError::CodecPrepMessage)?;
+        let host_prepare_transition = self
+            .prepare_next(ctx, host_prepare_state, prepare_message)
             .map_err(PingPongError::VdafPrepareNext)?;
 
-        match (host_prep_transition, next_peer_prep_share) {
+        match (host_prepare_transition, next_peer_prepare_share) {
             (
-                PrepareTransition::Continue(next_prep_state, next_host_prep_share),
-                Some(next_peer_prep_share),
+                PrepareTransition::Continue(next_prepare_state, next_host_prepare_share),
+                Some(next_peer_prepare_share),
             ) => {
-                let next_peer_prep_share = Self::PrepareShare::get_decoded_with_param(
-                    &next_prep_state,
-                    next_peer_prep_share,
+                let next_peer_prepare_share = Self::PrepareShare::get_decoded_with_param(
+                    &next_prepare_state,
+                    next_peer_prepare_share,
                 )
                 .map_err(PingPongError::CodecPrepShare)?;
-                let mut prep_shares = [next_peer_prep_share, next_host_prep_share];
+                let mut prepare_shares = [next_peer_prepare_share, next_host_prepare_share];
                 if is_leader {
-                    prep_shares.reverse();
+                    prepare_shares.reverse();
                 }
                 let current_prepare_message = self
-                    .prepare_shares_to_prepare_message(ctx, agg_param, prep_shares)
+                    .prepare_shares_to_prepare_message(ctx, aggregation_parameter, prepare_shares)
                     .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
 
                 Ok(PingPongContinuedValue::WithMessage {
                     transition: PingPongTransition {
-                        previous_prepare_state: next_prep_state,
+                        previous_prepare_state: next_prepare_state,
                         current_prepare_message,
                     },
                 })
@@ -881,12 +886,12 @@ mod tests {
         let messages = [
             (
                 PingPongMessage::Initialize {
-                    prep_share: Vec::from("prepare share"),
+                    prepare_share: Vec::from("prepare share"),
                 },
                 concat!(
                     "00", // enum discriminant
                     concat!(
-                        // prep_share
+                        // prepare_share
                         "0000000d",                   // length
                         "70726570617265207368617265", // contents
                     ),
@@ -894,18 +899,18 @@ mod tests {
             ),
             (
                 PingPongMessage::Continue {
-                    prep_msg: Vec::from("prepare message"),
-                    prep_share: Vec::from("prepare share"),
+                    prepare_message: Vec::from("prepare message"),
+                    prepare_share: Vec::from("prepare share"),
                 },
                 concat!(
                     "01", // enum discriminant
                     concat!(
-                        // prep_msg
+                        // prepare_message
                         "0000000f",                       // length
                         "70726570617265206d657373616765", // contents
                     ),
                     concat!(
-                        // prep_share
+                        // prepare_share
                         "0000000d",                   // length
                         "70726570617265207368617265", // contents
                     ),
@@ -913,12 +918,12 @@ mod tests {
             ),
             (
                 PingPongMessage::Finish {
-                    prep_msg: Vec::from("prepare message"),
+                    prepare_message: Vec::from("prepare message"),
                 },
                 concat!(
                     "02", // enum discriminant
                     concat!(
-                        // prep_msg
+                        // prepare_message
                         "0000000f",                       // length
                         "70726570617265206d657373616765", // contents
                     ),
