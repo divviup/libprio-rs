@@ -133,10 +133,6 @@ criteria = "safe-to-run"
 version = "0.29.0"
 criteria = "safe-to-run"
 
-[[exemptions.nalgebra-macros]]
-version = "0.1.0"
-criteria = "safe-to-run"
-
 [[exemptions.once_cell]]
 version = "1.14.0"
 criteria = "safe-to-deploy"
