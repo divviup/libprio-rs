@@ -469,6 +469,21 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 delta = "0.29.0 -> 0.32.6"
 
+[[audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.32.6 -> 0.33.0"
+
+[[audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.33.0 -> 0.33.1"
+
+[[audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.33.1 -> 0.33.2"
+
 [[audits.nalgebra-macros]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -821,6 +836,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 delta = "0.6.0 -> 0.8.1"
 
+[[audits.simba]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-run"
+delta = "0.8.1 -> 0.9.0"
+
 [[audits.statest]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -835,6 +855,12 @@ delta = "0.16.0 -> 0.16.1"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 delta = "0.16.1 -> 0.17.1"
+
+[[audits.statrs]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-run"
+delta = "0.17.1 -> 0.18.0"
+notes = "In particular, network access is limited to setup for the NIST tests (which are optional), and there are no new uses of unsafe."
 
 [[audits.subtle]]
 who = "David Cook <dcook@divviup.org>"
