@@ -489,6 +489,21 @@ Previously reviewed during security review and the audit is grandparented in.
 """
 aggregated-from = "https://chromium.googlesource.com/chromium/src/+/main/third_party/rust/chromium_crates_io/supply-chain/audits.toml?format=TEXT"
 
+[[audits.isrg.audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.32.6 -> 0.33.0"
+
+[[audits.isrg.audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.33.0 -> 0.33.1"
+
+[[audits.isrg.audits.nalgebra]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.33.1 -> 0.33.2"
+
 [[audits.isrg.audits.once_cell]]
 who = "J.C. Jones <jc@insufficient.coffee>"
 criteria = "safe-to-deploy"
@@ -498,6 +513,17 @@ delta = "1.20.3 -> 1.21.0"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.10.8 -> 0.10.9"
+
+[[audits.isrg.audits.simba]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-run"
+delta = "0.8.1 -> 0.9.0"
+
+[[audits.isrg.audits.statrs]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-run"
+delta = "0.17.1 -> 0.18.0"
+notes = "In particular, network access is limited to setup for the NIST tests (which are optional), and there are no new uses of unsafe."
 
 [[audits.mozilla.audits.autocfg]]
 who = "Josh Stone <jistone@redhat.com>"
