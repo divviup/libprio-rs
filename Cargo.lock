@@ -618,7 +618,7 @@ checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
 name = "prio"
-version = "0.18.0"
+version = "0.18.1-alpha.0"
 dependencies = [
  "aes",
  "assert_matches",
