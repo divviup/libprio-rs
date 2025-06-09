@@ -299,6 +299,15 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.26.0 -> 1.27.0"
 
+[[audits.fixed]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.27.0 -> 1.29.0"
+notes = """
+There is some new `unsafe` code but it does reasonable things like
+unchecked arithmetic.
+"""
+
 [[audits.fixed-macro]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
