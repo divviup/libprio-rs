@@ -54,7 +54,7 @@ pub enum PingPongError {
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
 #[derive(Clone, PartialEq, Eq)]
 pub enum PingPongMessage {
-    /// Corresponds to MessageType.initialize
+    /// Corresponds to MessageType.initialize.
     Initialize {
         /// The leader's initial preparation share.
         prepare_share: Vec<u8>,
@@ -174,12 +174,12 @@ impl Decode for PingPongMessage {
 ///
 /// Some motivating analysis of relative sizes of protocol objects is [here][sizes].
 ///
-/// `ping_pong_transition` can only return states `Continued` and `FinishedWithOutbound`, but
-/// because we need this to also yield `Finished` in some cases, it also captures parts of
-/// `ping_pong_continued`.
+/// In VDAF's definition of `ping_pong_transition`, the function can only return states `Continued`
+/// and `FinishedWithOutbound`, but because we need this to also yield `Finished` in some cases, it
+/// also captures parts of `ping_pong_continued`.
 ///
 /// While this is an enum, users should not destructure it or examine the variants, and instead call
-/// [`Self::evaluate`] and then deal with its results.
+/// [`Self::evaluate`] and then deal with its result.
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
 /// [sizes]: https://github.com/divviup/libprio-rs/pull/683/#issuecomment-1687210371
@@ -207,7 +207,7 @@ impl<
         A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     > PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 {
-    /// Evaluate this transition to obtain a new [`PingPongState`], which should be handled
+    /// Evaluate this continuation to obtain a new [`PingPongState`], which should be handled
     /// according to that item's documentation.
     pub fn evaluate(
         self,
@@ -228,7 +228,6 @@ impl<
         }
     }
 
-    #[allow(clippy::type_complexity)]
     fn evaluate_transition(
         ctx: &[u8],
         vdaf: &A,
@@ -306,7 +305,6 @@ where
                 previous_prepare_state.encode(bytes)?;
                 current_prepare_message.encode(bytes)
             }
-            // TODO(timg): pretty sure we never need to encode other variants
             _ => Err(CodecError::Other(
                 "cannot encode anything but a transition".into(),
             )),
@@ -321,7 +319,6 @@ where
             } => Some(
                 previous_prepare_state.encoded_len()? + current_prepare_message.encoded_len()?,
             ),
-            // TODO(timg): pretty sure we never need to encode other variants
             _ => None,
         }
     }
@@ -342,7 +339,6 @@ where
         let current_prepare_message =
             A::PrepareMessage::decode_with_param(&previous_prepare_state, bytes)?;
 
-        // TODO(timg): pretty sure we never need to encode other variants
         Ok(Self::Transition {
             previous_prepare_state,
             current_prepare_message,
@@ -353,18 +349,20 @@ where
 /// Preparation of the report will continue. Corresponds to the `Continued` state defined in
 /// [VDAF's Ping-Pong Topology][VDAF].
 ///
-/// The enclosed `prepare_state` should be used along with the next [`PingPongMessage`] received
-/// from the peer as input to the appropriate `PingPongTopology::{leader,helper}_continued` function
-/// to advance to the next round. The enclosed `message` should be transmitted to the peer
-/// aggregator so it can continue preparing the report.
+/// The `message` should be transmitted to the peer aggregator so it can continue preparing the
+/// report.
+///
+/// The `prepare_state` should be used along with the next [`PingPongMessage`] received from the
+/// peer as input to the appropriate `PingPongTopology::{leader,helper}_continued` function to
+/// advance to the next round.
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Continued<P> {
-    /// The state to which the aggregator has advanced.
-    pub prepare_state: P,
     /// A message for the peer aggregator.
     pub message: PingPongMessage,
+    /// The state to which the aggregator has advanced.
+    pub prepare_state: P,
 }
 
 /// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF].
@@ -381,8 +379,10 @@ pub enum PingPongState<P, O> {
     /// Preparation of the report is finished. Corresponds to the `FinishedWithOutbound` state
     /// defined in [VDAF's Ping-Pong Topology][VDAF].
     ///
-    /// The enclosed output share may be accumulated by the aggregator. The enclosed message should
-    /// be transmitted to the peer aggregator so it can finish preparing the report.
+    /// The `message` should be transmitted to the peer aggregator so it can finish preparing the
+    /// report.
+    ///
+    /// The `output_share` may be accumulated by the aggregator.
     FinishedWithOutbound {
         /// The output share this aggregator prepared.
         output_share: O,
@@ -393,8 +393,8 @@ pub enum PingPongState<P, O> {
     /// Preparation of the report is finished. Corresponds to the `Finished` state defined in
     /// [VDAF's Ping-Pong Topology][VDAF].
     ///
-    /// The enclosed output share may be accumulated by the aggregator. No message need be
-    /// transmitted to the peer, which has already finished preparing the report.
+    /// The `output_share` may be accumulated by the aggregator. No message need be transmitted to
+    /// the peer, which has already finished preparing the report.
     Finished {
         /// The output share this aggregator prepared.
         output_share: O,
@@ -431,13 +431,13 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         input_share: &Self::InputShare,
     ) -> Result<Continued<Self::PrepareState>, PingPongError>;
 
-    /// Initialize helper state using the helper's input share and the leader's first prepare share.
-    /// Corresponds to `ping_pong_helper_init` in [VDAF].
+    /// Initialize helper state using the helper's input share and the leader's first round prepare
+    /// share. Corresponds to `ping_pong_helper_init` in [VDAF].
     ///
     /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
     /// [`PingPongState`], which should be handled according to that item's documentation. On
     /// failure, the helper has transitioned to the `Rejected` state. The `PingPongContinuation` may
-    /// be stored between rounds of preparation instead of the `PingPongState`.
+    /// be stored between rounds of preparation instead of the `PingPongState` it evaluates to.
     ///
     /// # Errors
     ///
@@ -462,7 +462,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
     /// [`PingPongState`], which should be handled according to that item's documentation. On
     /// failure, the leader has transitioned to the `Rejected` state. The `PingPongContinuation` may
-    /// be stored between rounds of preparation instead of the `PingPongState`.
+    /// be stored between rounds of preparation instead of the `PingPongState` it evaluates to.
     ///
     /// # Errors
     ///
@@ -483,7 +483,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
     /// [`PingPongState`], which should be handled according to that item's documentation. On
     /// failure, the helper has transitioned to the `Rejected` state. The `PingPongContinuation` may
-    /// be stored between rounds of preparation instead of the `PingPongState`.
+    /// be stored between rounds of preparation instead of the `PingPongState` it evaluates to.
     ///
     /// # Errors
     ///
