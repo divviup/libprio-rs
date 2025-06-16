@@ -25,6 +25,15 @@ jobs:
           ref: '${{ matrix.target_branch }}'
           token: '${{ secrets.DIVVIUP_GITHUB_AUTOMATION_RELEASE_PAT }}'
 
+      - name: Check current version
+        # Check that the current version is not a pre-release version. Those
+        # must be bumped by hand, since the pre-release component of a version
+        # number is unstructured.
+        run: |
+          cargo metadata --no-deps --format-version 1 | \
+          jq -r '.packages | .[] | select(.name == "prio") | .version' | \
+          grep '^[0-9.]\+$'
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
