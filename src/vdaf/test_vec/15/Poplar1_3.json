@@ -15,6 +15,79 @@
     ],
     "bits": 4,
     "ctx": "736f6d65206170706c69636174696f6e",
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -29,24 +102,8 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "2d33a6c6914134e86b28db019499a40e624d0e35a954566426ef278575a80075",
-                    "bb1c9cdd3183915c65ea2350dda1bfedd8be8831092d581922bb2abf9229aa41",
-                    "5bc6dd4000b6d160bb6f9112ca88562d1891397df208deed0c2060929d893f35",
-                    "d29cdfc356faa320545df78e279875e871d19884b25ec2e3a4bbf96a57250766",
-                    "d7de114e2f2ff7bb1ab428d8470bdd13dd27d7514859584b603340546ec19835",
-                    "b8f6a799f07c3640ff0bc47fea239219e46132c191c8a5954501248b5ab7817b",
-                    "605af7ed5491cfcae08e88a756320cdc99189428952bc9859508293392cc3c7f"
-                ],
-                [
-                    "c0cc59396ebecb1794d724fe6b665bf19db2f1ca56aba99bd910d87a8a57ff0a",
-                    "32e36322ce7c6ea39a15dcaf225e4012274177cef6d2a7e6dd44d5406dd6553e",
-                    "923922bfff492e9f44906eed3577a9d2e76ec6820df72112f3df9f6d6276c04a",
-                    "1b63203ca9055cdfaba20871d8678a178e2e677b4da13d1c5b440695a8daf819",
-                    "1621eeb1d0d00844e54bd727b8f422ec22d828aeb7a6a7b49fccbfab913e674a",
-                    "360958660f83c9bf00f43b8015dc6de61b9ecd3e6e375a6abafedb74a5487e04",
-                    "8da50812ab6e30351f717758a9cdf32366e76bd76ad4367a6af7d6cc6d33c300"
-                ]
+                "2d33a6c6914134e86b28db019499a40e624d0e35a954566426ef278575a80075bb1c9cdd3183915c65ea2350dda1bfedd8be8831092d581922bb2abf9229aa415bc6dd4000b6d160bb6f9112ca88562d1891397df208deed0c2060929d893f35d29cdfc356faa320545df78e279875e871d19884b25ec2e3a4bbf96a57250766d7de114e2f2ff7bb1ab428d8470bdd13dd27d7514859584b603340546ec19835b8f6a799f07c3640ff0bc47fea239219e46132c191c8a5954501248b5ab7817b605af7ed5491cfcae08e88a756320cdc99189428952bc9859508293392cc3c7f",
+                "c0cc59396ebecb1794d724fe6b665bf19db2f1ca56aba99bd910d87a8a57ff0a32e36322ce7c6ea39a15dcaf225e4012274177cef6d2a7e6dd44d5406dd6553e923922bfff492e9f44906eed3577a9d2e76ec6820df72112f3df9f6d6276c04a1b63203ca9055cdfaba20871d8678a178e2e677b4da13d1c5b440695a8daf8191621eeb1d0d00844e54bd727b8f422ec22d828aeb7a6a7b49fccbfab913e674a360958660f83c9bf00f43b8015dc6de61b9ecd3e6e375a6abafedb74a5487e048da50812ab6e30351f717758a9cdf32366e76bd76ad4367a6af7d6cc6d33c300"
             ],
             "prep_messages": [
                 "614ed49602ef5034d6572fa5c3b40890eb8d0623d0c5e25e309ea8fb2f555f4b4f587251492daa3239a212928b2bd33d0b04ad744ee57b44ecb05acd6e916e29c3584921ef1ccbeffd215f93f799c68b1552621bcaa93d35ada1c495bb2a7d0e",

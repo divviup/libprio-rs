@@ -14,6 +14,177 @@
     "chunk_length": 7,
     "ctx": "736f6d65206170706c69636174696f6e",
     "length": 3,
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 1,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 2,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -28,21 +199,9 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "595f5fe818420829",
-                    "c3078170ed40b69b",
-                    "ba001e452dc8bee6"
-                ],
-                [
-                    "6cc790249ea560a9",
-                    "a85a7c32846b4942",
-                    "20ab32036de46d45"
-                ],
-                [
-                    "4c0010f34718972d",
-                    "961a035d8d530022",
-                    "3154afb76353d3d3"
-                ]
+                "595f5fe818420829c3078170ed40b69bba001e452dc8bee6",
+                "6cc790249ea560a9a85a7c32846b494220ab32036de46d45",
+                "4c0010f34718972d961a035d8d5300223154afb76353d3d3"
             ],
             "prep_messages": [
                 "253ab3d3f1da2665b855bd75393f6475786f0420f1c1b79750ba991a845c9fad"
@@ -70,21 +229,9 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "d7835fe818420829",
-                    "62d78070ed40b69b",
-                    "a60c1e452dc8bee6"
-                ],
-                [
-                    "6cc790249ea560a9",
-                    "a85a7c32846b4942",
-                    "20ab32036de46d45"
-                ],
-                [
-                    "4c0010f34718972d",
-                    "961a035d8d530022",
-                    "3154afb76353d3d3"
-                ]
+                "d7835fe81842082962d78070ed40b69ba60c1e452dc8bee6",
+                "6cc790249ea560a9a85a7c32846b494220ab32036de46d45",
+                "4c0010f34718972d961a035d8d5300223154afb76353d3d3"
             ],
             "prep_messages": [
                 "a0b343dfb730d06da5b676fff658ed1e297f811f9b5a30dfb4130cc66300c1ad"
@@ -112,21 +259,9 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "bb765fe818420829",
-                    "22eb8070ed40b69b",
-                    "175e1e452dc8bee6"
-                ],
-                [
-                    "6cc790249ea560a9",
-                    "a85a7c32846b4942",
-                    "20ab32036de46d45"
-                ],
-                [
-                    "4c0010f34718972d",
-                    "961a035d8d530022",
-                    "3154afb76353d3d3"
-                ]
+                "bb765fe81842082922eb8070ed40b69b175e1e452dc8bee6",
+                "6cc790249ea560a9a85a7c32846b494220ab32036de46d45",
+                "4c0010f34718972d961a035d8d5300223154afb76353d3d3"
             ],
             "prep_messages": [
                 "bff96edd78505fa432a623ae285fda3b61642eb09f4e23973a35bbc3a2abf60f"

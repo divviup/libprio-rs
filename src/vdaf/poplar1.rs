@@ -874,7 +874,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         dst
     }
 
-    fn shard_with_random(
+    pub(super) fn shard_with_random(
         &self,
         ctx: &[u8],
         input: &IdpfInput,
@@ -1558,10 +1558,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::vdaf::{equality_comparison_test, test_utils::run_vdaf_prepare};
+    use crate::vdaf::{
+        equality_comparison_test,
+        test_utils::{check_test_vector, run_vdaf_prepare, TestVectorVdaf},
+    };
     use assert_matches::assert_matches;
-    use serde::Deserialize;
-    use std::collections::HashSet;
+    use serde_json::Value;
+    use std::collections::{HashMap, HashSet};
 
     const CTX_STR: &[u8] = b"poplar1 ctx";
 
@@ -2171,339 +2174,80 @@ mod tests {
         assert!(make_agg_param(&[&[0, 0, 0], &[0, 1, 0], &[0, 1, 0]]).is_err());
     }
 
-    #[derive(Debug, Deserialize)]
-    struct HexEncoded(#[serde(with = "hex")] Vec<u8>);
-
-    impl AsRef<[u8]> for HexEncoded {
-        fn as_ref(&self) -> &[u8] {
-            &self.0
-        }
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct PoplarTestVector {
-        agg_param: HexEncoded,
-        agg_result: Vec<u64>,
-        agg_shares: Vec<HexEncoded>,
-        bits: usize,
-        prep: Vec<PreparationTestVector>,
-        verify_key: HexEncoded,
-        ctx: HexEncoded,
-    }
-
-    #[derive(Debug, Deserialize)]
-    struct PreparationTestVector {
-        input_shares: Vec<HexEncoded>,
-        measurement: Vec<bool>,
-        nonce: HexEncoded,
-        out_shares: Vec<Vec<HexEncoded>>,
-        prep_messages: Vec<HexEncoded>,
-        prep_shares: Vec<Vec<HexEncoded>>,
-        public_share: HexEncoded,
-        rand: HexEncoded,
-    }
-
-    fn check_test_vec(input: &str) {
-        let test_vector: PoplarTestVector = serde_json::from_str(input).unwrap();
-        assert_eq!(test_vector.prep.len(), 1);
-        let prep = &test_vector.prep[0];
-        let measurement = IdpfInput::from_bools(&prep.measurement);
-        let agg_param = Poplar1AggregationParam::get_decoded(&test_vector.agg_param.0).unwrap();
-        let verify_key = test_vector.verify_key.as_ref().try_into().unwrap();
-        let nonce = prep.nonce.as_ref().try_into().unwrap();
-
-        let (idpf_random_bytes, poplar_random_bytes) = prep.rand.as_ref().split_at(16 * 2);
-
-        let mut idpf_random = [[0u8; 16]; 2];
-        for (input, output) in idpf_random_bytes
-            .chunks_exact(16)
-            .zip(idpf_random.iter_mut())
-        {
-            output.copy_from_slice(input);
+    impl TestVectorVdaf for Poplar1<XofTurboShake128, 32> {
+        fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
+            assert_eq!(shares, 2);
+            let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
+            Poplar1::new_turboshake128(bits)
         }
 
-        let mut poplar_random = [[0u8; 32]; 3];
-        for (input, output) in poplar_random_bytes
-            .chunks_exact(32)
-            .zip(poplar_random.iter_mut())
-        {
-            output.copy_from_slice(input);
-        }
-
-        // Shard measurement.
-        let poplar = Poplar1::new_turboshake128(test_vector.bits);
-        let (public_share, input_shares) = poplar
-            .shard_with_random(
-                test_vector.ctx.as_ref(),
-                &measurement,
-                &nonce,
-                &idpf_random,
-                &poplar_random,
-            )
-            .unwrap();
-
-        // Run aggregation.
-        let (init_prep_state_0, init_prep_share_0) = poplar
-            .prepare_init(
-                &verify_key,
-                test_vector.ctx.as_ref(),
-                0,
-                &agg_param,
-                &nonce,
-                &public_share,
-                &input_shares[0],
-            )
-            .unwrap();
-        let (init_prep_state_1, init_prep_share_1) = poplar
-            .prepare_init(
-                &verify_key,
-                test_vector.ctx.as_ref(),
-                1,
-                &agg_param,
-                &nonce,
-                &public_share,
-                &input_shares[1],
-            )
-            .unwrap();
-
-        let r1_prep_msg = poplar
-            .prepare_shares_to_prepare_message(
-                test_vector.ctx.as_ref(),
-                &agg_param,
-                [init_prep_share_0.clone(), init_prep_share_1.clone()],
-            )
-            .unwrap();
-
-        let (r1_prep_state_0, r1_prep_share_0) = assert_matches!(
-            poplar
-                .prepare_next(
-                    test_vector.ctx.as_ref(),
-                    init_prep_state_0.clone(),
-                    r1_prep_msg.clone(),
-                )
-                .unwrap(),
-            PrepareTransition::Continue(state, share) => (state, share)
-        );
-        let (r1_prep_state_1, r1_prep_share_1) = assert_matches!(
-            poplar
-                .prepare_next(
-                    test_vector.ctx.as_ref(),
-                    init_prep_state_1.clone(),
-                    r1_prep_msg.clone(),
-                )
-                .unwrap(),
-            PrepareTransition::Continue(state, share) => (state, share)
-        );
-
-        let r2_prep_msg = poplar
-            .prepare_shares_to_prepare_message(
-                test_vector.ctx.as_ref(),
-                &agg_param,
-                [r1_prep_share_0.clone(), r1_prep_share_1.clone()],
-            )
-            .unwrap();
-
-        let out_share_0 = assert_matches!(
-            poplar
-                .prepare_next(
-                    test_vector.ctx.as_ref(),
-                    r1_prep_state_0.clone(),
-                    r2_prep_msg.clone(),
-                )
-                .unwrap(),
-            PrepareTransition::Finish(out) => out
-        );
-        let out_share_1 = assert_matches!(
-            poplar
-                .prepare_next(test_vector.ctx.as_ref(), r1_prep_state_1, r2_prep_msg.clone())
-                .unwrap(),
-            PrepareTransition::Finish(out) => out
-        );
-
-        let agg_share_0 = poplar.aggregate(&agg_param, [out_share_0.clone()]).unwrap();
-        let agg_share_1 = poplar.aggregate(&agg_param, [out_share_1.clone()]).unwrap();
-
-        // Collect result.
-        let agg_result = poplar
-            .unshard(&agg_param, [agg_share_0.clone(), agg_share_1.clone()], 1)
-            .unwrap();
-
-        // Check all intermediate results against the test vector, and exercise both encoding and decoding.
-        assert_eq!(
-            public_share,
-            Poplar1PublicShare::get_decoded_with_param(&poplar, prep.public_share.as_ref())
+        fn deserialize_measurement(measurement: &Value) -> Self::Measurement {
+            let bools = measurement
+                .as_array()
                 .unwrap()
-        );
-        assert_eq!(
-            &public_share.get_encoded().unwrap(),
-            prep.public_share.as_ref()
-        );
-        assert_eq!(
-            input_shares[0],
-            Poplar1InputShare::get_decoded_with_param(&(&poplar, 0), prep.input_shares[0].as_ref())
-                .unwrap()
-        );
-        assert_eq!(
-            &input_shares[0].get_encoded().unwrap(),
-            prep.input_shares[0].as_ref()
-        );
-        assert_eq!(
-            input_shares[1],
-            Poplar1InputShare::get_decoded_with_param(&(&poplar, 1), prep.input_shares[1].as_ref())
-                .unwrap()
-        );
-        assert_eq!(
-            &input_shares[1].get_encoded().unwrap(),
-            prep.input_shares[1].as_ref()
-        );
-        assert_eq!(
-            init_prep_share_0,
-            Poplar1FieldVec::get_decoded_with_param(
-                &init_prep_state_0,
-                prep.prep_shares[0][0].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &init_prep_share_0.get_encoded().unwrap(),
-            prep.prep_shares[0][0].as_ref()
-        );
-        assert_eq!(
-            init_prep_share_1,
-            Poplar1FieldVec::get_decoded_with_param(
-                &init_prep_state_1,
-                prep.prep_shares[0][1].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &init_prep_share_1.get_encoded().unwrap(),
-            prep.prep_shares[0][1].as_ref()
-        );
-        assert_eq!(
-            r1_prep_msg,
-            Poplar1PrepareMessage::get_decoded_with_param(
-                &init_prep_state_0,
-                prep.prep_messages[0].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &r1_prep_msg.get_encoded().unwrap(),
-            prep.prep_messages[0].as_ref()
-        );
-
-        assert_eq!(
-            r1_prep_share_0,
-            Poplar1FieldVec::get_decoded_with_param(
-                &r1_prep_state_0,
-                prep.prep_shares[1][0].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &r1_prep_share_0.get_encoded().unwrap(),
-            prep.prep_shares[1][0].as_ref()
-        );
-        assert_eq!(
-            r1_prep_share_1,
-            Poplar1FieldVec::get_decoded_with_param(
-                &r1_prep_state_0,
-                prep.prep_shares[1][1].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &r1_prep_share_1.get_encoded().unwrap(),
-            prep.prep_shares[1][1].as_ref()
-        );
-        assert_eq!(
-            r2_prep_msg,
-            Poplar1PrepareMessage::get_decoded_with_param(
-                &r1_prep_state_0,
-                prep.prep_messages[1].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &r2_prep_msg.get_encoded().unwrap(),
-            prep.prep_messages[1].as_ref()
-        );
-        for (out_share, expected_out_share) in [
-            (out_share_0, &prep.out_shares[0]),
-            (out_share_1, &prep.out_shares[1]),
-        ] {
-            match out_share {
-                Poplar1FieldVec::Inner(vec) => {
-                    assert_eq!(vec.len(), expected_out_share.len());
-                    for (element, expected) in vec.iter().zip(expected_out_share.iter()) {
-                        assert_eq!(&element.get_encoded().unwrap(), expected.as_ref());
-                    }
-                }
-                Poplar1FieldVec::Leaf(vec) => {
-                    assert_eq!(vec.len(), expected_out_share.len());
-                    for (element, expected) in vec.iter().zip(expected_out_share.iter()) {
-                        assert_eq!(&element.get_encoded().unwrap(), expected.as_ref());
-                    }
-                }
-            };
+                .iter()
+                .map(|value| value.as_bool().unwrap())
+                .collect::<Vec<_>>();
+            IdpfInput::from_bools(&bools)
         }
-        assert_eq!(
-            agg_share_0,
-            Poplar1FieldVec::get_decoded_with_param(
-                &(&poplar, &agg_param),
-                test_vector.agg_shares[0].as_ref()
-            )
-            .unwrap()
-        );
 
-        assert_eq!(
-            &agg_share_0.get_encoded().unwrap(),
-            test_vector.agg_shares[0].as_ref()
-        );
-        assert_eq!(
-            agg_share_1,
-            Poplar1FieldVec::get_decoded_with_param(
-                &(&poplar, &agg_param),
-                test_vector.agg_shares[1].as_ref()
-            )
-            .unwrap()
-        );
-        assert_eq!(
-            &agg_share_1.get_encoded().unwrap(),
-            test_vector.agg_shares[1].as_ref()
-        );
-        assert_eq!(agg_result, test_vector.agg_result);
+        fn deserialize_aggregate_result(aggregate_result: &Value) -> Self::AggregateResult {
+            aggregate_result
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_u64().unwrap())
+                .collect()
+        }
     }
 
     #[test]
     fn test_vec_poplar1_0() {
-        check_test_vec(include_str!("test_vec/13/Poplar1_0.json"));
+        let contents = include_str!("test_vec/15/Poplar1_0.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_1() {
-        check_test_vec(include_str!("test_vec/13/Poplar1_1.json"));
+        let contents = include_str!("test_vec/15/Poplar1_1.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_2() {
-        check_test_vec(include_str!("test_vec/13/Poplar1_2.json"));
+        let contents = include_str!("test_vec/15/Poplar1_2.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_3() {
-        check_test_vec(include_str!("test_vec/13/Poplar1_3.json"));
+        let contents = include_str!("test_vec/15/Poplar1_3.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_4() {
-        check_test_vec(include_str!("test_vec/13/Poplar1_4.json"));
+        let contents = include_str!("test_vec/15/Poplar1_4.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_5() {
-        check_test_vec(include_str!("test_vec/13/Poplar1_5.json"));
+        let contents = include_str!("test_vec/15/Poplar1_5.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
+    }
+
+    #[test]
+    fn test_vec_poplar1_bad_corr_inner() {
+        let contents = include_str!("test_vec/15/Poplar1_bad_corr_inner.json");
+        let test_vector = serde_json::from_str(contents).unwrap();
+        check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]

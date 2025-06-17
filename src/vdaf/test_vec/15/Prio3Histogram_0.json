@@ -13,6 +13,59 @@
     "chunk_length": 2,
     "ctx": "736f6d65206170706c69636174696f6e",
     "length": 4,
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -22,18 +75,8 @@
             "measurement": 2,
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "e720f2d625ee3cabce61d583c8c4054e",
-                    "82e8487025764348020264792b3d100f",
-                    "0d8c76f65caf04ee0e22373be0d61ac5",
-                    "fa6e2f2866078b31b90537e24416fad1"
-                ],
-                [
-                    "1adf0d29da11c354159e2a7c373bfab1",
-                    "7f17b78fda89bcb7e1fd9b86d4c2eff0",
-                    "f5738909a350fb11d5ddc8c41f29e53a",
-                    "0791d0d799f874ce2afac81dbbe9052e"
-                ]
+                "e720f2d625ee3cabce61d583c8c4054e82e8487025764348020264792b3d100f0d8c76f65caf04ee0e22373be0d61ac5fa6e2f2866078b31b90537e24416fad1",
+                "1adf0d29da11c354159e2a7c373bfab17f17b78fda89bcb7e1fd9b86d4c2eff0f5738909a350fb11d5ddc8c41f29e53a0791d0d799f874ce2afac81dbbe9052e"
             ],
             "prep_messages": [
                 "915cca74703d352a8e12e7441aa3896efbd633bf8eacd9a101ab922f6481404b"
