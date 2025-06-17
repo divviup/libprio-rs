@@ -14,6 +14,207 @@
     "ctx": "736f6d65206170706c69636174696f6e",
     "length": 4,
     "max_weight": 4,
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 1,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 2,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 3,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 3,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 3,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 3,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 3,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 3,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 4,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 4,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 4,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 4,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 4,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 4,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -28,18 +229,8 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "e2bb7419a8ac96a1c6def1bed78dcb07",
-                    "4557af87236442363aa49be4fd351b11",
-                    "b64bede210be55b253caa20a0f75703e",
-                    "295aa329cd650b825d3d4492d46d2fb3"
-                ],
-                [
-                    "1f448be65753695e1d210e41287234f8",
-                    "bda85078dc9bbdc9a95b641b02cae4ee",
-                    "4cb4121def41aa4d90355df5f08a8fc1",
-                    "d8a55cd6329af47d86c2bb6d2b92d04c"
-                ]
+                "e2bb7419a8ac96a1c6def1bed78dcb074557af87236442363aa49be4fd351b11b64bede210be55b253caa20a0f75703e295aa329cd650b825d3d4492d46d2fb3",
+                "1f448be65753695e1d210e41287234f8bda85078dc9bbdc9a95b641b02cae4ee4cb4121def41aa4d90355df5f08a8fc1d8a55cd6329af47d86c2bb6d2b92d04c"
             ],
             "prep_messages": [
                 "1cb5c0b55decfe04be8c9c84c9e29614449ed43534727e7f6189a7206287bf59"
@@ -66,18 +257,8 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "e2bb7419a8ac96a1c6def1bed78dcb07",
-                    "4457af87236442363aa49be4fd351b11",
-                    "b64bede210be55b253caa20a0f75703e",
-                    "295aa329cd650b825d3d4492d46d2fb3"
-                ],
-                [
-                    "1f448be65753695e1d210e41287234f8",
-                    "bda85078dc9bbdc9a95b641b02cae4ee",
-                    "4cb4121def41aa4d90355df5f08a8fc1",
-                    "d8a55cd6329af47d86c2bb6d2b92d04c"
-                ]
+                "e2bb7419a8ac96a1c6def1bed78dcb074457af87236442363aa49be4fd351b11b64bede210be55b253caa20a0f75703e295aa329cd650b825d3d4492d46d2fb3",
+                "1f448be65753695e1d210e41287234f8bda85078dc9bbdc9a95b641b02cae4ee4cb4121def41aa4d90355df5f08a8fc1d8a55cd6329af47d86c2bb6d2b92d04c"
             ],
             "prep_messages": [
                 "c24bc83b6d97bf557b590fea3e93b567b122a1cd957bcaa9aec448aca7726899"
@@ -104,18 +285,8 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "e2bb7419a8ac96a1c6def1bed78dcb07",
-                    "4457af87236442363aa49be4fd351b11",
-                    "b54bede210be55b253caa20a0f75703e",
-                    "295aa329cd650b825d3d4492d46d2fb3"
-                ],
-                [
-                    "1f448be65753695e1d210e41287234f8",
-                    "bda85078dc9bbdc9a95b641b02cae4ee",
-                    "4cb4121def41aa4d90355df5f08a8fc1",
-                    "d8a55cd6329af47d86c2bb6d2b92d04c"
-                ]
+                "e2bb7419a8ac96a1c6def1bed78dcb074457af87236442363aa49be4fd351b11b54bede210be55b253caa20a0f75703e295aa329cd650b825d3d4492d46d2fb3",
+                "1f448be65753695e1d210e41287234f8bda85078dc9bbdc9a95b641b02cae4ee4cb4121def41aa4d90355df5f08a8fc1d8a55cd6329af47d86c2bb6d2b92d04c"
             ],
             "prep_messages": [
                 "c3b3331981af8ffa017c3fc4acdf8275c2dd31484200de3098f3e9560d00a943"
@@ -142,18 +313,8 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "e3bb7419a8ac96a1c6def1bed78dcb07",
-                    "4557af87236442363aa49be4fd351b11",
-                    "b64bede210be55b253caa20a0f75703e",
-                    "295aa329cd650b825d3d4492d46d2fb3"
-                ],
-                [
-                    "1f448be65753695e1d210e41287234f8",
-                    "bda85078dc9bbdc9a95b641b02cae4ee",
-                    "4cb4121def41aa4d90355df5f08a8fc1",
-                    "d8a55cd6329af47d86c2bb6d2b92d04c"
-                ]
+                "e3bb7419a8ac96a1c6def1bed78dcb074557af87236442363aa49be4fd351b11b64bede210be55b253caa20a0f75703e295aa329cd650b825d3d4492d46d2fb3",
+                "1f448be65753695e1d210e41287234f8bda85078dc9bbdc9a95b641b02cae4ee4cb4121def41aa4d90355df5f08a8fc1d8a55cd6329af47d86c2bb6d2b92d04c"
             ],
             "prep_messages": [
                 "ffa6aa6631a9caed44243158a9b823cd6d03ccd9c0061e32905f64878a71657b"
@@ -180,18 +341,8 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "e3bb7419a8ac96a1c6def1bed78dcb07",
-                    "4557af87236442363aa49be4fd351b11",
-                    "b64bede210be55b253caa20a0f75703e",
-                    "2a5aa329cd650b825d3d4492d46d2fb3"
-                ],
-                [
-                    "1f448be65753695e1d210e41287234f8",
-                    "bda85078dc9bbdc9a95b641b02cae4ee",
-                    "4cb4121def41aa4d90355df5f08a8fc1",
-                    "d8a55cd6329af47d86c2bb6d2b92d04c"
-                ]
+                "e3bb7419a8ac96a1c6def1bed78dcb074557af87236442363aa49be4fd351b11b64bede210be55b253caa20a0f75703e2a5aa329cd650b825d3d4492d46d2fb3",
+                "1f448be65753695e1d210e41287234f8bda85078dc9bbdc9a95b641b02cae4ee4cb4121def41aa4d90355df5f08a8fc1d8a55cd6329af47d86c2bb6d2b92d04c"
             ],
             "prep_messages": [
                 "8168d1e866a10ff4cc68c5a974e74b30d03faf32df83d833bf44fc7069430654"

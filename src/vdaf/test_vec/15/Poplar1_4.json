@@ -1,17 +1,88 @@
 {
-    "agg_param": "000a000000040000c800c820ffe0",
+    "agg_param": "0000000000020080",
     "agg_result": [
         0,
-        0,
-        1,
-        0
+        1
     ],
     "agg_shares": [
-        "d2cd4b7f24280e5a405b5b5cd4ae2d5190e6a18cd895929de2b7613739347f1f7ec642e913685f1b2be02add94a1000201bed9d86ed118f624d13423ce10ff0128a3d7193a01b7f10727e695de56ddb14df1cb8612697284bef73f0b8ad35b0cbce0dfca542e1e9a6b91f9db47d6bb68efcdafd7c0f58c76ab8f96ec77b03828",
-        "1b32b480dbd7f1a5bfa4a4a32b51d2ae6f195e73276a6d621d489ec8c6cb80606f39bd16ec97a0e4d41fd5226b5efffdfe412627912ee709db2ecbdc31ef007ec65c28e6c5fe480ef8d8196a21a9224eb20e3479ed968d7b4108c0f4752ca473311f2035abd1e165946e0624b8294497103250283f0a738954706913884fc757"
+        "f8145f10fdc8bca62df57afdc4066a8c",
+        "09eba0ef01374359d50a85023af99573"
     ],
     "bits": 11,
     "ctx": "736f6d65206170706c69636174696f6e",
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -33,31 +104,21 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "d2cd4b7f24280e5a405b5b5cd4ae2d5190e6a18cd895929de2b7613739347f1f",
-                    "7ec642e913685f1b2be02add94a1000201bed9d86ed118f624d13423ce10ff01",
-                    "28a3d7193a01b7f10727e695de56ddb14df1cb8612697284bef73f0b8ad35b0c",
-                    "bce0dfca542e1e9a6b91f9db47d6bb68efcdafd7c0f58c76ab8f96ec77b03828"
-                ],
-                [
-                    "1b32b480dbd7f1a5bfa4a4a32b51d2ae6f195e73276a6d621d489ec8c6cb8060",
-                    "6f39bd16ec97a0e4d41fd5226b5efffdfe412627912ee709db2ecbdc31ef007e",
-                    "c65c28e6c5fe480ef8d8196a21a9224eb20e3479ed968d7b4108c0f4752ca473",
-                    "311f2035abd1e165946e0624b8294497103250283f0a738954706913884fc757"
-                ]
+                "f8145f10fdc8bca62df57afdc4066a8c",
+                "09eba0ef01374359d50a85023af99573"
             ],
             "prep_messages": [
-                "d3c3fc12914cd2a31c7a41b62a77273b5275154cdb30a0fec68912f9ccc66b0b6b15ce285c181e4f16a65fbcc188b3f1d4daaa14b6823f69127b41ec7e1f30516ff551aea1448229641258ba9b3fb64b4b8b4b166010c803d107541d5045425e",
+                "1be0415318fa71a0025509fdb4559fced849a418e0819d4c",
                 ""
             ],
             "prep_shares": [
                 [
-                    "d4c8460a5f62404f0ab779db098a078a8643f294f2ead87fef399a85adca9b2447ea034a67ec05dca8afc0a41c9ebc8e445ff7aca391a80e6ba24be308435f65daca191dddf03952c12402cc424509236c429d30c430944e8ad88424e35ddb0c",
-                    "ecfab50832ea915412c3c7da20ed1fb1cb3123b7e845c77ed74f78731ffccf66112bcadef42b18736df69e17a5eaf662907bb36712f1965aa7d8f50876dcd06b952a3891c45348d7a2ed55ee58faac28df48aee59bdf33b5462fcff86ce76651"
+                    "0666e598602128e425ea5ac5440b241198c1253251d0773e",
+                    "167a5cbab6d849bcdd6aae37704a7bbd40887ee68eb1250e"
                 ],
                 [
-                    "1a4aa3de4303c3d7d525a4c391558ea83bd9eec7db79e19415795cbb718eb571",
-                    "d3b55c21bcfc3c282ada5b3c6eaa7157c426113824861e6bea86a3448e714a0e"
+                    "4a5f1a8007a83201",
+                    "b7a0e57ff757cdfe"
                 ]
             ],
             "public_share": "6a1329706203dc060e8f96eea7a90a09011bf9d6ec84927d83a71ac6f1110e0d11e7dbec8d93e59d350995244ae87c17a5ce6cfaff8ce533763568b692904206d7e470ece45c4fda5556d5b5b62c3d7be2dd649830ea94d67042a055fc38b0d4c307aeccd53526cb04f05ac3237e54ab58554582c00c3837f9ea51cf494b9ef71d413dccde24f39378eee9347774958295313fda51d3b1be516df9084ee46cad89fe554246acfd40d4c424c8356132d053344e90979f92f30320c2bbb1743b1d4f3578f54a5a9b0b242bf1841d6b39f5e70e1a75963d080ed76a295e89489ff47eb83541a49c02299250357f3bd66755a20ff515520f0712a459a651881d31f6bc0f2838fa1094e019c0d0625982399d50d9332948f9b83c59a1d039e07f9a1766b56f5818a51ed19930e9db0426c0a047d74e962240b3e06100c502868e30d62d547aca59df848918ef02e02a8683ec541237ae33b2bbfe7de5eb4b01991c8c0866a4949009c100fac98f8956d9bc82ffbf7eba76a7774146d2018dd5b97f331ddf546dde718780bb97364b321f7f9d524d21",

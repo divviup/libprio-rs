@@ -44,7 +44,7 @@ increases (e.g., 0.10 to 0.11).
 | 0.15 | `release/0.15` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-07`][dap-07] | Yes | Unmaintained as of June 24, 2024 |
 | 0.16 | `release/0.16` | [`draft-irtf-cfrg-vdaf-08`][vdaf-08] | [`draft-ietf-ppm-dap-09`][dap-09] | Yes | Supported |
 | 0.17 | `release/0.17` | [`draft-irtf-cfrg-vdaf-13`][vdaf-13] | [`draft-ietf-ppm-dap-13`][dap-13] | Yes | Supported |
-| 0.18 | `main` | `draft-irtf-cfrg-vdaf-15` (forthcoming) | `draft-ietf-ppm-dap-16` (forthcoming) | [No](https://github.com/divviup/libprio-rs/issues/1266) | Supported |
+| 0.18 | `main` | [`draft-irtf-cfrg-vdaf-15`][vdaf-15] | `draft-ietf-ppm-dap-16` (forthcoming) | [No](https://github.com/divviup/libprio-rs/issues/1266) | Supported |
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
@@ -54,6 +54,7 @@ increases (e.g., 0.10 to 0.11).
 [vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 [vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 [vdaf-13]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/13/
+[vdaf-15]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/15/
 [dap-01]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/01/
 [dap-02]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/02/
 [dap-03]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/03/

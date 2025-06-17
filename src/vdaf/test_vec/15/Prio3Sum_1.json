@@ -8,6 +8,77 @@
     ],
     "ctx": "736f6d65206170706c69636174696f6e",
     "max_measurement": 255,
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -18,15 +89,9 @@
             "measurement": 100,
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "0838d7ed77cd6687"
-                ],
-                [
-                    "44296045dc0315d1"
-                ],
-                [
-                    "1a9fc8cca92e84a7"
-                ]
+                "0838d7ed77cd6687",
+                "44296045dc0315d1",
+                "1a9fc8cca92e84a7"
             ],
             "prep_messages": [
                 ""
