@@ -172,12 +172,17 @@ impl Decode for PingPongMessage {
 /// always be recomputed with [`Self::evaluate`]. Some motivating analysis of relative sizes of
 /// protocol objects is [here][sizes].
 ///
-/// Clients should [`std::clone::Clone::clone`] the `PingPongContinuation` and then `evaluate` it.
-/// If it evaluates to [`PingPongState::Finished`], then the output share may be accumulated, no
-/// message need be sent to the peer aggregator and the `PingPongContinuation` can be dropped. If it
-/// evaluates to either [`PingPongState::FinishedWithOutbound`] or [`PingPongState::Continued`],
-/// then the message should be sent to the peer aggregator. Clients can encode the previously cloned
-/// `PingPongContinuation` so that preparation can be gracefully resumed later.
+/// If the `PingPongContinuation` evaluates to [`PingPongState::Finished`], then the output share
+/// may be accumulated, no message need be sent to the peer aggregator and the
+/// `PingPongContinuation` can be dropped.
+///
+/// If it evaluates to either [`PingPongState::FinishedWithOutbound`] or
+/// [`PingPongState::Continued`], then the message should be sent to the peer aggregator. Clients
+/// can encode the previously cloned `PingPongContinuation` so that preparation can be gracefully
+/// resumed later.
+///
+/// See [`PingPongState`]'s documentation for detailed discussion of how to handle each of its
+/// variants.
 ///
 /// It is never necessary to encode or store a `PingPongContinuation` which evaluates to
 /// `PingPongState::Finished`, so [`PingPongContinuation::encode`] fails in this case.
@@ -204,17 +209,19 @@ impl<
     /// Evaluate this continuation to obtain a new [`PingPongState`], which should be handled
     /// according to that item's documentation.
     pub fn evaluate(
-        self,
+        &self,
         ctx: &[u8],
         vdaf: &A,
     ) -> Result<PingPongState<A::PrepareState, A::OutputShare>, PingPongError> {
         match self.0 {
-            PingPongContinuationInner::OutputShare(output_share) => {
-                Ok(PingPongState::Finished { output_share })
+            PingPongContinuationInner::OutputShare(ref output_share) => {
+                Ok(PingPongState::Finished {
+                    output_share: output_share.clone(),
+                })
             }
             PingPongContinuationInner::Transition {
-                previous_prepare_state,
-                current_prepare_message,
+                ref previous_prepare_state,
+                ref current_prepare_message,
             } => Self::evaluate_transition(
                 ctx,
                 vdaf,
@@ -227,34 +234,36 @@ impl<
     fn evaluate_transition(
         ctx: &[u8],
         vdaf: &A,
-        previous_prepare_state: A::PrepareState,
-        current_prepare_message: A::PrepareMessage,
+        previous_prepare_state: &A::PrepareState,
+        current_prepare_message: &A::PrepareMessage,
     ) -> Result<PingPongState<A::PrepareState, A::OutputShare>, PingPongError> {
         let prepare_message = current_prepare_message
             .get_encoded()
             .map_err(PingPongError::CodecPrepMessage)?;
 
-        vdaf.prepare_next(ctx, previous_prepare_state, current_prepare_message)
-            .map_err(PingPongError::VdafPrepareNext)
-            .and_then(|transition| match transition {
-                PrepareTransition::Continue(prepare_state, prepare_share) => {
-                    Ok(PingPongState::Continued(Continued {
-                        prepare_state,
-                        message: PingPongMessage::Continue {
-                            prepare_message,
-                            prepare_share: prepare_share
-                                .get_encoded()
-                                .map_err(PingPongError::CodecPrepShare)?,
-                        },
-                    }))
-                }
-                PrepareTransition::Finish(output_share) => {
-                    Ok(PingPongState::FinishedWithOutbound {
-                        output_share,
-                        message: PingPongMessage::Finish { prepare_message },
-                    })
-                }
-            })
+        vdaf.prepare_next(
+            ctx,
+            previous_prepare_state.clone(),
+            current_prepare_message.clone(),
+        )
+        .map_err(PingPongError::VdafPrepareNext)
+        .and_then(|transition| match transition {
+            PrepareTransition::Continue(prepare_state, prepare_share) => {
+                Ok(PingPongState::Continued(Continued {
+                    prepare_state,
+                    message: PingPongMessage::Continue {
+                        prepare_message,
+                        prepare_share: prepare_share
+                            .get_encoded()
+                            .map_err(PingPongError::CodecPrepShare)?,
+                    },
+                }))
+            }
+            PrepareTransition::Finish(output_share) => Ok(PingPongState::FinishedWithOutbound {
+                output_share,
+                message: PingPongMessage::Finish { prepare_message },
+            }),
+        })
     }
 }
 
