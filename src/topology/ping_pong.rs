@@ -4,7 +4,7 @@
 //! two aggregators, designated "Leader" and "Helper". This topology is required for implementing
 //! the [Distributed Aggregation Protocol][DAP].
 //!
-//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 //! [DAP]: https://datatracker.ietf.org/doc/html/draft-ietf-ppm-dap
 
 use crate::{
@@ -51,7 +51,7 @@ pub enum PingPongError {
 /// variants are opaque byte buffers. This is because the ping-pong routines take responsibility for
 /// decoding preparation shares and messages, which usually requires having the preparation state.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 #[derive(Clone, PartialEq, Eq)]
 pub enum PingPongMessage {
     /// Corresponds to MessageType.initialize.
@@ -169,29 +169,37 @@ impl Decode for PingPongMessage {
 ///
 /// Instead, this structure stores just the previous round's prepare state and the current round's
 /// preprocessed prepare message. Their encoding is much smaller than the `PingPongState`, which can
-/// always be recomputed with [`Self::evaluate`].
+/// always be recomputed with [`Self::evaluate`]. Some motivating analysis of relative sizes of
+/// protocol objects is [here][sizes].
 ///
-/// Some motivating analysis of relative sizes of protocol objects is [here][sizes].
+/// Clients should [`std::clone::Clone::clone`] the `PingPongContinuation` and then `evaluate` it.
+/// If it evaluates to [`PingPongState::Finished`], then the output share may be accumulated, no
+/// message need be sent to the peer aggregator and the `PingPongContinuation` can be dropped. If it
+/// evaluates to either [`PingPongState::FinishedWithOutbound`] or [`PingPongState::Continued`],
+/// then the message should be sent to the peer aggregator. Clients can encode the previously cloned
+/// `PingPongContinuation` so that preparation can be gracefully resumed later.
+///
+/// It is never necessary to encode or store a `PingPongContinuation` which evaluates to
+/// `PingPongState::Finished`, so [`PingPongContinuation::encode`] fails in this case.
 ///
 /// In VDAF's definition of `ping_pong_transition`, the function can only return states `Continued`
 /// and `FinishedWithOutbound`, but because we need this to also yield `Finished` in some cases, it
 /// also captures parts of `ping_pong_continued`.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 /// [sizes]: https://github.com/divviup/libprio-rs/pull/683/#issuecomment-1687210371
 #[derive(Clone, Debug)]
-pub struct PingPongContinuation<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>(
-    PingPongContinuationInner<VERIFY_KEY_SIZE, NONCE_SIZE, A>,
-)
-where
+pub struct PingPongContinuation<
+    const VERIFY_KEY_SIZE: usize,
+    const NONCE_SIZE: usize,
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::OutputShare: PartialEq + Eq;
+>(PingPongContinuationInner<VERIFY_KEY_SIZE, NONCE_SIZE, A>);
 
-impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
-    PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
-where
-    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::OutputShare: PartialEq + Eq,
+impl<
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+        A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    > PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 {
     /// Evaluate this continuation to obtain a new [`PingPongState`], which should be handled
     /// according to that item's documentation.
@@ -226,29 +234,27 @@ where
             .get_encoded()
             .map_err(PingPongError::CodecPrepMessage)?;
 
-        vdaf.prepare_next(
-            ctx,
-            previous_prepare_state.clone(),
-            current_prepare_message.clone(),
-        )
-        .map_err(PingPongError::VdafPrepareNext)
-        .and_then(|transition| match transition {
-            PrepareTransition::Continue(prepare_state, prepare_share) => {
-                Ok(PingPongState::Continued(Continued {
-                    prepare_state,
-                    message: PingPongMessage::Continue {
-                        prepare_message,
-                        prepare_share: prepare_share
-                            .get_encoded()
-                            .map_err(PingPongError::CodecPrepShare)?,
-                    },
-                }))
-            }
-            PrepareTransition::Finish(output_share) => Ok(PingPongState::FinishedWithOutbound {
-                output_share,
-                message: PingPongMessage::Finish { prepare_message },
-            }),
-        })
+        vdaf.prepare_next(ctx, previous_prepare_state, current_prepare_message)
+            .map_err(PingPongError::VdafPrepareNext)
+            .and_then(|transition| match transition {
+                PrepareTransition::Continue(prepare_state, prepare_share) => {
+                    Ok(PingPongState::Continued(Continued {
+                        prepare_state,
+                        message: PingPongMessage::Continue {
+                            prepare_message,
+                            prepare_share: prepare_share
+                                .get_encoded()
+                                .map_err(PingPongError::CodecPrepShare)?,
+                        },
+                    }))
+                }
+                PrepareTransition::Finish(output_share) => {
+                    Ok(PingPongState::FinishedWithOutbound {
+                        output_share,
+                        message: PingPongMessage::Finish { prepare_message },
+                    })
+                }
+            })
     }
 }
 
@@ -257,7 +263,6 @@ impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> Encode
 where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     A::PrepareState: Encode,
-    A::OutputShare: PartialEq + Eq,
 {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match &self.0 {
@@ -291,9 +296,7 @@ impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A, PrepareStateDecod
     ParameterizedDecode<PrepareStateDecode> for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::PrepareState: ParameterizedDecode<PrepareStateDecode> + PartialEq,
-    A::PrepareMessage: PartialEq,
-    A::OutputShare: PartialEq + Eq,
+    A::PrepareState: ParameterizedDecode<PrepareStateDecode>,
 {
     fn decode_with_param(
         decoding_param: &PrepareStateDecode,
@@ -345,13 +348,12 @@ where
 {
 }
 
-impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
-    From<PingPongContinuationInner<VERIFY_KEY_SIZE, NONCE_SIZE, A>>
+impl<
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+        A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    > From<PingPongContinuationInner<VERIFY_KEY_SIZE, NONCE_SIZE, A>>
     for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
-where
-    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::PrepareMessage: PartialEq,
-    A::OutputShare: PartialEq + Eq,
 {
     fn from(value: PingPongContinuationInner<VERIFY_KEY_SIZE, NONCE_SIZE, A>) -> Self {
         Self(value)
@@ -387,7 +389,7 @@ enum PingPongContinuationInner<
 /// peer as input to the appropriate `PingPongTopology::{leader,helper}_continued` function to
 /// advance to the next round.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Continued<P> {
     /// A message for the peer aggregator.
@@ -401,7 +403,7 @@ pub struct Continued<P> {
 /// code, and the `Rejected` state is represented as `std::result::Result::Err`, so this enum does
 /// not include those variants.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PingPongState<P, O> {
     /// Preparation of the report will continue.
@@ -415,7 +417,7 @@ pub enum PingPongState<P, O> {
     ///
     /// The `output_share` may be accumulated by the aggregator.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     FinishedWithOutbound {
         /// The output share this aggregator prepared.
         output_share: O,
@@ -429,7 +431,7 @@ pub enum PingPongState<P, O> {
     /// The `output_share` may be accumulated by the aggregator. No message need be transmitted to
     /// the peer, which has already finished preparing the report.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     Finished {
         /// The output share this aggregator prepared.
         output_share: O,
@@ -438,7 +440,7 @@ pub enum PingPongState<P, O> {
 
 /// Extension trait on [`crate::vdaf::Aggregator`] which adds the [VDAF Ping-Pong Topology][VDAF].
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>:
     Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>
 {
@@ -455,7 +457,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// according to that item's documentation. On failure, the leader has transitioned to the
     /// `Rejected` state.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     fn leader_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
@@ -478,7 +480,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `leader_message` must be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     #[allow(clippy::too_many_arguments)]
     fn helper_initialized(
         &self,
@@ -503,7 +505,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `helper_message` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     fn leader_continued(
         &self,
         ctx: &[u8],
@@ -524,7 +526,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `leader_message` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     fn helper_continued(
         &self,
         ctx: &[u8],
