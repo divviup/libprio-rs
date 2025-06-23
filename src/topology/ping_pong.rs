@@ -559,11 +559,11 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
 
-impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
-    PingPongTopology<VERIFY_KEY_SIZE, NONCE_SIZE> for A
-where
-    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::OutputShare: PartialEq + Eq,
+impl<
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+        A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    > PingPongTopology<VERIFY_KEY_SIZE, NONCE_SIZE> for A
 {
     type PingPongState = PingPongState<A::PrepareState, A::OutputShare>;
     type PingPongContinuation = PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
@@ -668,11 +668,11 @@ where
     }
 }
 
-impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A>
-    PingPongTopologyPrivate<VERIFY_KEY_SIZE, NONCE_SIZE> for A
-where
-    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::OutputShare: PartialEq + Eq,
+impl<
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+        A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    > PingPongTopologyPrivate<VERIFY_KEY_SIZE, NONCE_SIZE> for A
 {
     fn continued(
         &self,
