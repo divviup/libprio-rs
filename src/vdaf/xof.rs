@@ -583,7 +583,7 @@ mod tests {
     #[test]
     fn xof_turboshake128() {
         let t: XofTestVector =
-            serde_json::from_str(include_str!("test_vec/13/XofTurboShake128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/15/XofTurboShake128.json")).unwrap();
         let mut xof = XofTurboShake128::init(&t.seed.try_into().unwrap(), &[&t.dst]);
         xof.update(&t.binder);
 
@@ -631,7 +631,7 @@ mod tests {
     #[test]
     fn xof_fixed_key_aes128() {
         let t: XofTestVector =
-            serde_json::from_str(include_str!("test_vec/13/XofFixedKeyAes128.json")).unwrap();
+            serde_json::from_str(include_str!("test_vec/15/XofFixedKeyAes128.json")).unwrap();
         let mut xof = XofFixedKeyAes128::init(&t.seed.try_into().unwrap(), &[&t.dst]);
         xof.update(&t.binder);
 

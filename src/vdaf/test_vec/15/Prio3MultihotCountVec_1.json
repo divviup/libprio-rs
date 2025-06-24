@@ -22,6 +22,95 @@
     "ctx": "736f6d65206170706c69636174696f6e",
     "length": 10,
     "max_weight": 2,
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 3,
+            "operation": "prep_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "prep_shares_to_prep",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 3,
+            "operation": "prep_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 2,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 3,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
     "prep": [
         {
             "input_shares": [
@@ -44,54 +133,10 @@
             ],
             "nonce": "000102030405060708090a0b0c0d0e0f",
             "out_shares": [
-                [
-                    "781bcdf49ab6cc3905ddc9468ba3770d",
-                    "a93b52b6850a6d98fda820b899e3b66d",
-                    "b99c81ef1b1c865cb5efd83a31c2f04a",
-                    "ece94430b7ca762c1d136c4b324ccb13",
-                    "3c414a50f7c6842f5ace7c4e063a40a1",
-                    "43d8d7d2a451a3a38efe662c928909bb",
-                    "51615b73d0634675c28073fe8bbc903e",
-                    "d3aafb155bc2662a9f3a62e83641da00",
-                    "da4853618f6664e1553c949cc5b83668",
-                    "5f02f3396816e79747e3be5fbc28e193"
-                ],
-                [
-                    "1f448be65753695e1d210e41287234f8",
-                    "bda85078dc9bbdc9a95b641b02cae4ee",
-                    "4cb4121def41aa4d90355df5f08a8fc1",
-                    "d8a55cd6329af47d86c2bb6d2b92d04c",
-                    "a02a3857b34c2388a1f51604ce657c46",
-                    "e8a126b4c011fc2dda1870e4da9efbe5",
-                    "4ecaad63670383735c9147d029a5ce03",
-                    "f744adcd817d8b8193701eb0e5205a85",
-                    "c5dfa58103daa2c7b771ceea8337b221",
-                    "4082f4c93b0bc641415917797dbc38e2"
-                ],
-                [
-                    "ff2f6b009697e49299e90da15ae5290a",
-                    "2942cae56bd275a2d8f03559a786b6f2",
-                    "01695f5dc2ffc6494de65a25135f6dad",
-                    "9a94d87862672aa862450f061067d3ab",
-                    "da47a8cbb895558b4ffc871bb1abe7f6",
-                    "d68d52c7927b3f5462d4c91b100a4acb",
-                    "b29c41730607fea082660c46ca6921ca",
-                    "52dc64d21f01a65da0e10e20647d07d5",
-                    "6487f50aac1a09052234e204a03d3056",
-                    "1d8abcc6d4e4b3d6c801b5b1a584553c"
-                ],
-                [
-                    "6c703c24775ee5d40b181ad7f1042af0",
-                    "75d992eb31875ffb2b0a45d3bccbadb0",
-                    "fc450c9632a2080c35f46eaaca531246",
-                    "a4db8580b3336aadc1e4c84092ba90f3",
-                    "4c4cd58c9c5602bd7c3fe4917ab45b21",
-                    "02f8aeb1072121dae0135fd382cdb093",
-                    "b137b5b5c1913876268738eb7f347ff3",
-                    "e633f24903bf67f6f47270477f20c4a4",
-                    "fe4f1112c1a4ef51b41dbb7316d2e61f",
-                    "47f15b3587f99e4f76c174752096904d"
-                ]
+                "781bcdf49ab6cc3905ddc9468ba3770da93b52b6850a6d98fda820b899e3b66db99c81ef1b1c865cb5efd83a31c2f04aece94430b7ca762c1d136c4b324ccb133c414a50f7c6842f5ace7c4e063a40a143d8d7d2a451a3a38efe662c928909bb51615b73d0634675c28073fe8bbc903ed3aafb155bc2662a9f3a62e83641da00da4853618f6664e1553c949cc5b836685f02f3396816e79747e3be5fbc28e193",
+                "1f448be65753695e1d210e41287234f8bda85078dc9bbdc9a95b641b02cae4ee4cb4121def41aa4d90355df5f08a8fc1d8a55cd6329af47d86c2bb6d2b92d04ca02a3857b34c2388a1f51604ce657c46e8a126b4c011fc2dda1870e4da9efbe54ecaad63670383735c9147d029a5ce03f744adcd817d8b8193701eb0e5205a85c5dfa58103daa2c7b771ceea8337b2214082f4c93b0bc641415917797dbc38e2",
+                "ff2f6b009697e49299e90da15ae5290a2942cae56bd275a2d8f03559a786b6f201695f5dc2ffc6494de65a25135f6dad9a94d87862672aa862450f061067d3abda47a8cbb895558b4ffc871bb1abe7f6d68d52c7927b3f5462d4c91b100a4acbb29c41730607fea082660c46ca6921ca52dc64d21f01a65da0e10e20647d07d56487f50aac1a09052234e204a03d30561d8abcc6d4e4b3d6c801b5b1a584553c",
+                "6c703c24775ee5d40b181ad7f1042af075d992eb31875ffb2b0a45d3bccbadb0fc450c9632a2080c35f46eaaca531246a4db8580b3336aadc1e4c84092ba90f34c4cd58c9c5602bd7c3fe4917ab45b2102f8aeb1072121dae0135fd382cdb093b137b5b5c1913876268738eb7f347ff3e633f24903bf67f6f47270477f20c4a4fe4f1112c1a4ef51b41dbb7316d2e61f47f15b3587f99e4f76c174752096904d"
             ],
             "prep_messages": [
                 "aa3d8e6257c466bc3173d454e46493c662d2e2377c60b1eb53808cdc231e8292"
