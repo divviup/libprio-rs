@@ -1225,7 +1225,11 @@ where
 /// State of each [`Aggregator`] during the Preparation phase.
 #[derive(Clone)]
 pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
-    measurement_share: Share<F, SEED_SIZE>,
+    /// An uncompressed output share, or a compressed measurement share.
+    ///
+    /// Note that helpers will need to pass the measurement share through the FLP's `truncate()`
+    /// procedure after expanding it from their seed.
+    share: Share<F, SEED_SIZE>,
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
     agg_id: u8,
     verifiers_len: usize,
@@ -1250,14 +1254,14 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
         option_ct_eq(
             self.joint_rand_seed.as_ref(),
             other.joint_rand_seed.as_ref(),
-        ) & self.measurement_share.ct_eq(&other.measurement_share)
+        ) & self.share.ct_eq(&other.share)
     }
 }
 
 impl<F, const SEED_SIZE: usize> Debug for Prio3PrepareState<F, SEED_SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Prio3PrepareState")
-            .field("measurement_share", &"[redacted]")
+            .field("share", &"[redacted]")
             .field(
                 "joint_rand_seed",
                 match self.joint_rand_seed {
@@ -1276,7 +1280,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
 {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        self.measurement_share.encode(bytes)?;
+        self.share.encode(bytes)?;
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes)?;
         }
@@ -1284,7 +1288,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
     }
 
     fn encoded_len(&self) -> Option<usize> {
-        let mut len = self.measurement_share.encoded_len()?;
+        let mut len = self.share.encoded_len()?;
         if let Some(ref seed) = self.joint_rand_seed {
             len += seed.encoded_len()?;
         }
@@ -1307,11 +1311,11 @@ where
             .map_err(|e| CodecError::Other(Box::new(e)))?;
 
         let share_decoder = if agg_id == 0 {
-            ShareDecodingParameter::Leader(prio3.typ.input_len())
+            ShareDecodingParameter::Leader(prio3.typ.output_len())
         } else {
             ShareDecodingParameter::Helper
         };
-        let measurement_share = Share::decode_with_param(&share_decoder, bytes)?;
+        let share = Share::decode_with_param(&share_decoder, bytes)?;
 
         let joint_rand_seed = if prio3.typ.joint_rand_len() > 0 {
             Some(Seed::decode(bytes)?)
@@ -1320,7 +1324,7 @@ where
         };
 
         Ok(Self {
-            measurement_share,
+            share,
             joint_rand_seed,
             agg_id,
             verifiers_len: prio3.typ.verifier_len() * prio3.num_proofs(),
@@ -1460,9 +1464,16 @@ where
             )?);
         }
 
+        let state_share = match msg.measurement_share() {
+            Share::Leader(measurement_share) => {
+                Share::Leader(self.typ.truncate(measurement_share)?)
+            }
+            Share::Helper(seed) => Share::Helper(seed),
+        };
+
         Ok((
             Prio3PrepareState {
-                measurement_share: msg.measurement_share(),
+                share: state_share,
                 joint_rand_seed,
                 agg_id,
                 verifiers_len: verifiers_share.len(),
@@ -1551,24 +1562,20 @@ where
         }
 
         // Compute the output share.
-        let measurement_share = match step.measurement_share {
+        let output_share = match step.share {
             Share::Leader(data) => data,
-            Share::Helper(seed) => P::seed_stream(
-                seed.as_ref(),
-                &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
-                &[&[step.agg_id]],
-            )
-            .into_field_vec(self.typ.input_len()),
-        };
-
-        let output_share = match self.typ.truncate(measurement_share) {
-            Ok(data) => OutputShare(data),
-            Err(err) => {
-                return Err(VdafError::from(err));
+            Share::Helper(seed) => {
+                let measurement_share = P::seed_stream(
+                    seed.as_ref(),
+                    &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
+                    &[&[step.agg_id]],
+                )
+                .into_field_vec(self.typ.input_len());
+                self.typ.truncate(measurement_share)?
             }
         };
 
-        Ok(PrepareTransition::Finish(output_share))
+        Ok(PrepareTransition::Finish(OutputShare(output_share)))
     }
 
     fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
@@ -2485,42 +2492,42 @@ mod tests {
         equality_comparison_test(&[
             // Default.
             Prio3PrepareState {
-                measurement_share: Share::Leader(Vec::from([0])),
+                share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Modified measurement share.
             Prio3PrepareState {
-                measurement_share: Share::Leader(Vec::from([100])),
+                share: Share::Leader(Vec::from([100])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Modified joint_rand_seed.
             Prio3PrepareState {
-                measurement_share: Share::Leader(Vec::from([0])),
+                share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([101])),
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Missing joint_rand_seed.
             Prio3PrepareState {
-                measurement_share: Share::Leader(Vec::from([0])),
+                share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: None,
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Modified agg_id.
             Prio3PrepareState {
-                measurement_share: Share::Leader(Vec::from([0])),
+                share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 102,
                 verifiers_len: 3,
             },
             // Modified verifier_len.
             Prio3PrepareState {
-                measurement_share: Share::Leader(Vec::from([0])),
+                share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 2,
                 verifiers_len: 103,
