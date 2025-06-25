@@ -1,5 +1,6 @@
 libprio-rs
 Copyright (c) 2025 ISRG
+Portions Copyright (c) 2020 Apple Inc.
 
 The file src/dp/rand_bigint.rs includes third-party code from the num-bigint
 crate, version 0.6.4, used under the terms of the Apache 2.0 license.
