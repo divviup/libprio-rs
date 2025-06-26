@@ -615,8 +615,7 @@ mod tests {
             let var = (p * p) as f64;
             assert!(
                 test_mean(sampler, mean, var, 0.00001, 1000),
-                "Empirical evaluation of discrete Gaussian({:?}) sampler mean failed.",
-                p
+                "Empirical evaluation of discrete Gaussian({p:?}) sampler mean failed."
             );
         });
         // we only do chi square for std 100 because it's expensive
@@ -641,8 +640,7 @@ mod tests {
             let var = mean * (1. - mean);
             assert!(
                 test_mean(sampler, mean, var, 0.00001, 1000),
-                "Empirical evaluation of the Bernoulli(1/{:?}) distribution mean failed",
-                p
+                "Empirical evaluation of the Bernoulli(1/{p:?}) distribution mean failed"
             );
         })
     }
@@ -664,8 +662,7 @@ mod tests {
             let var = (1. - p_prob) / p_prob.powi(2);
             assert!(
                 test_mean(sampler, mean, var, 0.0001, 1000),
-                "Empirical evaluation of the Geometric(1-exp(-1/{:?})) distribution mean failed",
-                p
+                "Empirical evaluation of the Geometric(1-exp(-1/{p:?})) distribution mean failed"
             );
         })
     }
@@ -684,8 +681,7 @@ mod tests {
             let var = (1. / *p as f64).powi(2);
             assert!(
                 test_mean(sampler, mean, var, 0.0001, 1000),
-                "Empirical evaluation of the Laplace(0,1/{:?}) distribution mean failed",
-                p
+                "Empirical evaluation of the Laplace(0,1/{p:?}) distribution mean failed"
             );
         })
     }

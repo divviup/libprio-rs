@@ -830,14 +830,12 @@ mod tests {
                 assert_eq!(
                     share_0 + share_1,
                     *weight,
-                    "shares must add up to the expected weight at the current level: {:?}",
-                    level
+                    "shares must add up to the expected weight at the current level: {level:?}"
                 );
 
                 assert_eq!(
                     state_0.proof, state_1.proof,
-                    "proofs must be equal at the current level: {:?}",
-                    level
+                    "proofs must be equal at the current level: {level:?}"
                 );
             }
         }
@@ -887,9 +885,7 @@ mod tests {
             assert_eq!(
                 (a.clone() + b.clone()) + (a.clone() - b.clone()),
                 c,
-                "a: {:?} b:{:?}",
-                a,
-                b
+                "a: {a:?} b:{b:?}"
             );
         }
 
@@ -902,7 +898,7 @@ mod tests {
             d.conditional_negate(Choice::from(1));
             let zero = TestWeight::zero(&TEST_WEIGHT_LEN);
 
-            assert_eq!(c + d, zero, "a: {:?}", a);
+            assert_eq!(c + d, zero, "a: {a:?}");
         }
 
         #[test]
