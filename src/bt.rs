@@ -484,7 +484,7 @@ mod tests {
         for prefixes_size_i in prefixes {
             for path in prefixes_size_i {
                 let value = tree.get(path).unwrap();
-                assert_eq!(*value, ctr, "path: {}", path);
+                assert_eq!(*value, ctr, "path: {path}");
                 ctr = ctr + T::one();
             }
         }
