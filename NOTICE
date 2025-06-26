@@ -1,7 +1,17 @@
 libprio-rs
 Copyright (c) 2025 ISRG
+Portions Copyright (c) 2020 Apple Inc.
 
 The file src/dp/rand_bigint.rs includes third-party code from the num-bigint
 crate, version 0.6.4, used under the terms of the Apache 2.0 license.
 (https://github.com/rust-num/num-bigint)
 Copyright 2013-2014 The Rust Project Developers.
+
+The file src/dp/distributions.rs includes third-party code from the OpenDP
+project, used under the terms of the MIT license.
+(https://github.com/opendp/opendp)
+Copyright (c) 2022 President and Fellows of Harvard College.
+
+The file src/dp/distributions.rs also includes third-party code from Thomas
+Steinke, used under the terms of the Apache 2.0 license.
+Copyright (c) 2020 Thomas Steinke.
