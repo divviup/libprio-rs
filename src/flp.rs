@@ -935,8 +935,7 @@ pub mod test_utils {
                     .unwrap();
                 assert!(
                     !self.flp.decide(&verifier).unwrap(),
-                    "{name}: proof mutant {} deemed valid",
-                    i
+                    "{name}: proof mutant {i} deemed valid"
                 );
             }
 
