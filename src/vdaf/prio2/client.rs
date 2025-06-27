@@ -6,7 +6,7 @@
 use crate::{
     codec::CodecError,
     field::NttFriendlyFieldElement,
-    polynomial::{ntt_get_roots, poly_ntt, PolyNttTempMemory},
+    ntt::{ntt, ntt_inv, NttError},
     prng::Prng,
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
@@ -32,9 +32,6 @@ pub(crate) struct ClientMemory<F> {
     points_g: Vec<F>,
     evals_f: Vec<F>,
     evals_g: Vec<F>,
-    roots_2n: Vec<F>,
-    roots_n_inverted: Vec<F>,
-    ntt_memory: PolyNttTempMemory<F>,
     coeffs: Vec<F>,
 }
 
@@ -60,16 +57,17 @@ impl<F: NttFriendlyFieldElement> ClientMemory<F> {
             points_g: vec![F::zero(); n],
             evals_f: vec![F::zero(); 2 * n],
             evals_g: vec![F::zero(); 2 * n],
-            roots_2n: ntt_get_roots(2 * n, false),
-            roots_n_inverted: ntt_get_roots(n, true),
-            ntt_memory: PolyNttTempMemory::new(2 * n),
             coeffs: vec![F::zero(); 2 * n],
         })
     }
 }
 
 impl<F: NttFriendlyFieldElement> ClientMemory<F> {
-    pub(crate) fn prove_with<G>(&mut self, dimension: usize, init_function: G) -> Vec<F>
+    pub(crate) fn prove_with<G>(
+        &mut self,
+        dimension: usize,
+        init_function: G,
+    ) -> Result<Vec<F>, NttError>
     where
         G: FnOnce(&mut [F]),
     {
@@ -87,9 +85,9 @@ impl<F: NttFriendlyFieldElement> ClientMemory<F> {
             unpacked.h0,
             unpacked.points_h_packed,
             self,
-        );
+        )?;
 
-        proof
+        Ok(proof)
     }
 }
 
@@ -192,23 +190,19 @@ pub(crate) fn unpack_proof_mut<F: NttFriendlyFieldElement>(
 ///   unity. This must have length n.
 /// * `evals_out` - The values that the polynomial takes on when evaluated at the 2nth roots of
 ///   unity. This must have length 2 * n.
-/// * `roots_n_inverted` - Precomputed inverses of the nth roots of unity.
-/// * `roots_2n` - Precomputed 2nth roots of unity.
-/// * `ntt_memory` - Scratch space for the NTT algorithm.
 /// * `coeffs` - Scratch space. This must have length 2 * n.
 fn interpolate_and_evaluate_at_2n<F: NttFriendlyFieldElement>(
     n: usize,
     points_in: &[F],
     evals_out: &mut [F],
-    roots_n_inverted: &[F],
-    roots_2n: &[F],
-    ntt_memory: &mut PolyNttTempMemory<F>,
     coeffs: &mut [F],
-) {
+) -> Result<(), NttError> {
     // interpolate through roots of unity
-    poly_ntt(coeffs, points_in, roots_n_inverted, n, true, ntt_memory);
+    ntt_inv(coeffs, points_in, n)?;
     // evaluate at 2N roots of unity
-    poly_ntt(evals_out, coeffs, roots_2n, 2 * n, false, ntt_memory);
+    ntt(evals_out, coeffs, 2 * n)?;
+
+    Ok(())
 }
 
 /// Proof construction
@@ -223,7 +217,7 @@ fn construct_proof<F: NttFriendlyFieldElement>(
     h0: &mut F,
     points_h_packed: &mut [F],
     mem: &mut ClientMemory<F>,
-) {
+) -> Result<(), NttError> {
     let n = (dimension + 1).next_power_of_two();
 
     // set zero terms to random
@@ -247,24 +241,8 @@ fn construct_proof<F: NttFriendlyFieldElement>(
     }
 
     // interpolate and evaluate at roots of unity
-    interpolate_and_evaluate_at_2n(
-        n,
-        &mem.points_f,
-        &mut mem.evals_f,
-        &mem.roots_n_inverted,
-        &mem.roots_2n,
-        &mut mem.ntt_memory,
-        &mut mem.coeffs,
-    );
-    interpolate_and_evaluate_at_2n(
-        n,
-        &mem.points_g,
-        &mut mem.evals_g,
-        &mem.roots_n_inverted,
-        &mem.roots_2n,
-        &mut mem.ntt_memory,
-        &mut mem.coeffs,
-    );
+    interpolate_and_evaluate_at_2n(n, &mem.points_f, &mut mem.evals_f, &mut mem.coeffs)?;
+    interpolate_and_evaluate_at_2n(n, &mem.points_g, &mut mem.evals_g, &mut mem.coeffs)?;
 
     // calculate the proof polynomial as evals_f(r) * evals_g(r)
     // only add non-zero points
@@ -275,6 +253,8 @@ fn construct_proof<F: NttFriendlyFieldElement>(
         j += 1;
         i += 2;
     }
+
+    Ok(())
 }
 
 #[cfg(test)]
