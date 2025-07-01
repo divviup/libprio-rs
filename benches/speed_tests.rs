@@ -483,6 +483,123 @@ fn prio3(c: &mut Criterion) {
     }
     group.finish();
 
+    let mut group = c.benchmark_group("prio3multihotcountvec_shard");
+    for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
+        group.bench_with_input(
+            BenchmarkId::new("serial", input_length),
+            &(input_length, chunk_length),
+            |b, (input_length, chunk_length)| {
+                let vdaf =
+                    Prio3::new_multihot_count_vec(num_shares, *input_length, 2, *chunk_length)
+                        .unwrap();
+                let mut measurement = vec![false; *input_length];
+                measurement[0] = true;
+                measurement[1] = true;
+                let measurement = black_box(measurement);
+                let nonce = black_box([0u8; 16]);
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+            },
+        );
+    }
+
+    #[cfg(feature = "multithreaded")]
+    {
+        for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
+            group.bench_with_input(
+                BenchmarkId::new("parallel", input_length),
+                &(input_length, chunk_length),
+                |b, (input_length, chunk_length)| {
+                    let vdaf = Prio3::new_multihot_count_vec_multithreaded(
+                        num_shares,
+                        *input_length,
+                        2,
+                        *chunk_length,
+                    )
+                    .unwrap();
+                    let mut measurement = vec![false; *input_length];
+                    measurement[0] = true;
+                    measurement[1] = true;
+                    let measurement = black_box(measurement);
+                    let nonce = black_box([0u8; 16]);
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                },
+            );
+        }
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("prio3multihotcountvec_prepare_init");
+    for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
+        group.bench_with_input(
+            BenchmarkId::new("serial", input_length),
+            &(input_length, chunk_length),
+            |b, (input_length, chunk_length)| {
+                let vdaf =
+                    Prio3::new_multihot_count_vec(num_shares, *input_length, 2, *chunk_length)
+                        .unwrap();
+                let mut measurement = vec![false; *input_length];
+                measurement[0] = true;
+                measurement[1] = true;
+                let measurement = black_box(measurement);
+                let nonce = black_box([0u8; 16]);
+                let verify_key = black_box([0u8; 32]);
+                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+                b.iter(|| {
+                    vdaf.prepare_init(
+                        &verify_key,
+                        b"",
+                        0,
+                        &(),
+                        &nonce,
+                        &public_share,
+                        &input_shares[0],
+                    )
+                    .unwrap();
+                })
+            },
+        );
+    }
+
+    #[cfg(feature = "multithreaded")]
+    {
+        for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
+            group.bench_with_input(
+                BenchmarkId::new("parallel", input_length),
+                &(input_length, chunk_length),
+                |b, (input_length, chunk_length)| {
+                    let vdaf = Prio3::new_multihot_count_vec_multithreaded(
+                        num_shares,
+                        *input_length,
+                        2,
+                        *chunk_length,
+                    )
+                    .unwrap();
+                    let mut measurement = vec![false; *input_length];
+                    measurement[0] = true;
+                    measurement[1] = true;
+                    let measurement = black_box(measurement);
+                    let nonce = black_box([0u8; 16]);
+                    let verify_key = black_box([0u8; 32]);
+                    let (public_share, input_shares) =
+                        vdaf.shard(b"", &measurement, &nonce).unwrap();
+                    b.iter(|| {
+                        vdaf.prepare_init(
+                            &verify_key,
+                            b"",
+                            0,
+                            &(),
+                            &nonce,
+                            &public_share,
+                            &input_shares[0],
+                        )
+                        .unwrap();
+                    })
+                },
+            );
+        }
+    }
+    group.finish();
+
     #[cfg(feature = "experimental")]
     {
         const FP16_ZERO: I1F15 = I1F15::lit("0");
