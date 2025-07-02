@@ -9,6 +9,7 @@ use crate::polynomial::poly_range_check;
 use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
+use std::slice;
 use subtle::Choice;
 
 #[cfg(feature = "experimental")]
@@ -195,10 +196,10 @@ impl<F: NttFriendlyFieldElement> Flp for Sum<F> {
     ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
         let gadget = &mut g[0];
-        let bit_checks = input
-            .iter()
-            .map(|&b| gadget.call(&[b]))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut output = vec![F::zero(); input.len() + 1];
+        for (bit, output_elem) in input.iter().zip(output[..input.len()].iter_mut()) {
+            *output_elem = gadget.call(slice::from_ref(bit))?;
+        }
 
         let range_check = {
             let offset = F::from(self.offset);
@@ -207,8 +208,9 @@ impl<F: NttFriendlyFieldElement> Flp for Sum<F> {
             let sum_plus_offset = F::decode_bitvector(&input[self.bits..])?;
             offset * shares_inv + sum - sum_plus_offset
         };
+        output[input.len()] = range_check;
 
-        Ok([bit_checks.as_slice(), &[range_check]].concat())
+        Ok(output)
     }
 
     fn input_len(&self) -> usize {
