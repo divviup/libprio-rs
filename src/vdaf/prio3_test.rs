@@ -9,7 +9,10 @@ use crate::{
         types::SumVec,
     },
     vdaf::{
-        prio3::{Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec, Prio3Sum},
+        prio3::{
+            l1boundsum::Prio3L1BoundSum, Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec,
+            Prio3Sum,
+        },
         test_utils::TestVectorVdaf,
         xof::Xof,
     },
@@ -153,6 +156,48 @@ impl TestVectorVdaf for Prio3MultihotCountVec {
     }
 }
 
+impl TestVectorVdaf for Prio3L1BoundSum {
+    fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
+        let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
+        let length = parameters["length"].as_u64().unwrap().try_into().unwrap();
+        let chunk_length = parameters["chunk_length"]
+            .as_u64()
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        Prio3::new_l1_bound_sum(shares, bits, length, chunk_length).unwrap()
+    }
+
+    fn deserialize_measurement(measurement: &Value) -> Self::Measurement {
+        measurement
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| {
+                usize::try_from(value.as_u64().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    fn deserialize_aggregate_result(aggregate_result: &Value) -> Self::AggregateResult {
+        aggregate_result
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| {
+                usize::try_from(value.as_u64().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
@@ -163,7 +208,8 @@ mod tests {
         },
         vdaf::{
             prio3::{
-                Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec, Prio3Sum, Prio3SumVec,
+                l1boundsum::Prio3L1BoundSum, Prio3, Prio3Count, Prio3Histogram,
+                Prio3MultihotCountVec, Prio3Sum, Prio3SumVec,
             },
             test_utils::{check_test_vector, check_test_vector_custom_constructor},
             xof::XofTurboShake128,
@@ -264,5 +310,13 @@ mod tests {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3MultihotCountVec, 32, 16>(&test_vector);
         }
+    }
+
+    #[test]
+    fn test_vec_prio3_l1bound_sum() {
+        let test_vector =
+            serde_json::from_str(include_str!("test_vec/l1boundsum/Prio3L1BoundSum_0.json"))
+                .unwrap();
+        check_test_vector::<Prio3L1BoundSum, 32, 16>(&test_vector);
     }
 }
