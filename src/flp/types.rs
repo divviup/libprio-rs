@@ -14,6 +14,11 @@ use subtle::Choice;
 
 #[cfg(feature = "experimental")]
 mod dp;
+#[cfg(feature = "experimental")]
+mod l1boundsum;
+
+#[cfg(feature = "experimental")]
+pub use l1boundsum::L1BoundSum;
 
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the
 /// measurements (i.e., the total number of `1s`).
@@ -809,7 +814,7 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
         let limit = std::mem::size_of::<F::Integer>() * 8 - 1;
         if bits > limit {
             return Err(FlpError::InvalidParameter(format!(
-                "bit wdith exceeds limit of {limit}"
+                "bit width exceeds limit of {limit}"
             )));
         }
 
@@ -1021,7 +1026,7 @@ pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
     chunk_length: usize,
     num_shares: usize,
 ) -> Result<F, FlpError> {
-    let f_num_shares = F::from(F::valid_integer_try_from::<usize>(num_shares)?);
+    let f_num_shares = F::from(F::valid_integer_try_from(num_shares)?);
     let num_shares_inverse = f_num_shares.inv();
 
     let mut output = F::zero();

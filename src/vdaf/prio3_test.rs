@@ -2,6 +2,8 @@
 
 //! Tools for evaluating Prio3 test vectors.
 
+#[cfg(feature = "experimental")]
+use crate::vdaf::prio3::Prio3L1BoundSum;
 use crate::{
     field::NttFriendlyFieldElement,
     flp::{
@@ -153,8 +155,53 @@ impl TestVectorVdaf for Prio3MultihotCountVec {
     }
 }
 
+#[cfg(feature = "experimental")]
+impl TestVectorVdaf for Prio3L1BoundSum {
+    fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
+        let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
+        let length = parameters["length"].as_u64().unwrap().try_into().unwrap();
+        let chunk_length = parameters["chunk_length"]
+            .as_u64()
+            .unwrap()
+            .try_into()
+            .unwrap();
+
+        Prio3::new_l1_bound_sum(shares, bits, length, chunk_length).unwrap()
+    }
+
+    fn deserialize_measurement(measurement: &Value) -> Self::Measurement {
+        measurement
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| {
+                usize::try_from(value.as_u64().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    fn deserialize_aggregate_result(aggregate_result: &Value) -> Self::AggregateResult {
+        aggregate_result
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|value| {
+                usize::try_from(value.as_u64().unwrap())
+                    .unwrap()
+                    .try_into()
+                    .unwrap()
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "experimental")]
+    use crate::vdaf::prio3::Prio3L1BoundSum;
     use crate::{
         field::Field64,
         flp::{
@@ -264,5 +311,14 @@ mod tests {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3MultihotCountVec, 32, 16>(&test_vector);
         }
+    }
+
+    #[cfg(feature = "experimental")]
+    #[test]
+    fn test_vec_prio3_l1bound_sum() {
+        let test_vector =
+            serde_json::from_str(include_str!("test_vec/l1boundsum/Prio3L1BoundSum_0.json"))
+                .unwrap();
+        check_test_vector::<Prio3L1BoundSum, 32, 16>(&test_vector);
     }
 }
