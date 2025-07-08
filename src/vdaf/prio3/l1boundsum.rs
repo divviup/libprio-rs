@@ -6,7 +6,7 @@ use crate::{
     field::Field128,
     flp::{
         gadgets::{Mul, ParallelSum},
-        types::l1boundsum::L1BoundSum,
+        types::L1BoundSum,
     },
     vdaf::{prio3::Prio3, xof::XofTurboShake128, VdafError},
 };

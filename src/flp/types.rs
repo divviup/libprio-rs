@@ -14,7 +14,11 @@ use subtle::Choice;
 
 #[cfg(feature = "experimental")]
 mod dp;
-pub mod l1boundsum;
+#[cfg(feature = "experimental")]
+mod l1boundsum;
+
+#[cfg(feature = "experimental")]
+pub use l1boundsum::L1BoundSum;
 
 /// The counter data type. Each measurement is `0` or `1` and the aggregate result is the sum of the
 /// measurements (i.e., the total number of `1s`).

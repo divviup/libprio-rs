@@ -70,7 +70,11 @@ use std::iter::{self, IntoIterator};
 use std::marker::PhantomData;
 use subtle::{Choice, ConstantTimeEq};
 
-pub mod l1boundsum;
+#[cfg(feature = "experimental")]
+mod l1boundsum;
+
+#[cfg(feature = "experimental")]
+pub use l1boundsum::Prio3L1BoundSum;
 
 const DST_MEASUREMENT_SHARE: u16 = 1;
 const DST_PROOF_SHARE: u16 = 2;

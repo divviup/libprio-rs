@@ -36,7 +36,6 @@ pub struct L1BoundSum<F: NttFriendlyFieldElement, S> {
 
 impl<F: NttFriendlyFieldElement, S> Debug for L1BoundSum<F, S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        // TODO(timg): more fields
         f.debug_struct("L1BoundSum")
             .field("measurement_len", &self.measurement_len)
             .field("bits", &self.bits)
@@ -151,9 +150,9 @@ where
             num_shares,
         )?;
 
-        // The encoded input consists of the measurement with a single field element appended,
-        // representing the claimed weight. The observed weight is obtained by summing up all the
-        // input elements but the last one.
+        // The encoded input consists of the measurement with the claimed weight appended, as a
+        // bits-length vector of field elements. The observed weight is obtained by summing up all
+        // the input elements but the last one.
         let mut observed_weight = F::zero();
         let mut claimed_weight = F::zero();
         for (index, element) in input.chunks(self.bits).enumerate() {
@@ -199,10 +198,12 @@ where
     F: NttFriendlyFieldElement,
     S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
 {
-    /// The measurement is the input with the L1 norm appended.
+    /// The measurement is the input represented as a vector of field elements, without any norm
+    /// appended.
     type Measurement = Vec<F::Integer>;
 
-    /// The aggregate result is the sum of the inputs, without any norm appended.
+    /// The aggregate result is the element-wise sum of the inputs represented as a vector of field
+    /// elements, without any norm appended.
     type AggregateResult = Vec<F::Integer>;
 
     fn encode_measurement(

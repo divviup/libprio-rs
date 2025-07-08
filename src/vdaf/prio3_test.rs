@@ -2,6 +2,8 @@
 
 //! Tools for evaluating Prio3 test vectors.
 
+#[cfg(feature = "experimental")]
+use crate::vdaf::prio3::Prio3L1BoundSum;
 use crate::{
     field::NttFriendlyFieldElement,
     flp::{
@@ -9,10 +11,7 @@ use crate::{
         types::SumVec,
     },
     vdaf::{
-        prio3::{
-            l1boundsum::Prio3L1BoundSum, Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec,
-            Prio3Sum,
-        },
+        prio3::{Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec, Prio3Sum},
         test_utils::TestVectorVdaf,
         xof::Xof,
     },
@@ -156,6 +155,7 @@ impl TestVectorVdaf for Prio3MultihotCountVec {
     }
 }
 
+#[cfg(feature = "experimental")]
 impl TestVectorVdaf for Prio3L1BoundSum {
     fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
         let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
@@ -200,6 +200,8 @@ impl TestVectorVdaf for Prio3L1BoundSum {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "experimental")]
+    use crate::vdaf::prio3::Prio3L1BoundSum;
     use crate::{
         field::Field64,
         flp::{
@@ -208,8 +210,7 @@ mod tests {
         },
         vdaf::{
             prio3::{
-                l1boundsum::Prio3L1BoundSum, Prio3, Prio3Count, Prio3Histogram,
-                Prio3MultihotCountVec, Prio3Sum, Prio3SumVec,
+                Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec, Prio3Sum, Prio3SumVec,
             },
             test_utils::{check_test_vector, check_test_vector_custom_constructor},
             xof::XofTurboShake128,
@@ -312,6 +313,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "experimental")]
     #[test]
     fn test_vec_prio3_l1bound_sum() {
         let test_vector =
