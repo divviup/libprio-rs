@@ -10,13 +10,15 @@ use crate::ntt::{ntt, ntt_inv_finish};
 use std::convert::TryFrom;
 
 /// Temporary memory used for NTT
+#[cfg(test)]
 #[derive(Clone, Debug)]
-pub struct PolyNttTempMemory<F> {
+pub(crate) struct PolyNttTempMemory<F> {
     ntt_tmp: Vec<F>,
     ntt_y_sub: Vec<F>,
     ntt_roots_sub: Vec<F>,
 }
 
+#[cfg(test)]
 impl<F: NttFriendlyFieldElement> PolyNttTempMemory<F> {
     pub(crate) fn new(length: usize) -> Self {
         PolyNttTempMemory {
@@ -46,6 +48,7 @@ impl<F: NttFriendlyFieldElement> TestPolyAuxMemory<F> {
     }
 }
 
+#[cfg(test)]
 fn ntt_recurse<F: NttFriendlyFieldElement>(
     out: &mut [F],
     n: usize,
@@ -104,6 +107,7 @@ fn ntt_recurse<F: NttFriendlyFieldElement>(
 }
 
 /// Calculate `count` number of roots of unity of order `count`
+#[cfg(test)]
 pub(crate) fn ntt_get_roots<F: NttFriendlyFieldElement>(count: usize, invert: bool) -> Vec<F> {
     let mut roots = vec![F::zero(); count];
     let mut gen = F::generator();
@@ -125,6 +129,7 @@ pub(crate) fn ntt_get_roots<F: NttFriendlyFieldElement>(count: usize, invert: bo
     roots
 }
 
+#[cfg(test)]
 fn ntt_interpolate_raw<F: NttFriendlyFieldElement>(
     out: &mut [F],
     ys: &[F],
@@ -150,7 +155,8 @@ fn ntt_interpolate_raw<F: NttFriendlyFieldElement>(
     }
 }
 
-pub fn poly_ntt<F: NttFriendlyFieldElement>(
+#[cfg(test)]
+pub(crate) fn poly_ntt<F: NttFriendlyFieldElement>(
     points_out: &mut [F],
     points_in: &[F],
     scaled_roots: &[F],

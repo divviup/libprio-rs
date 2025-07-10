@@ -88,7 +88,7 @@ pub fn ntt<F: NttFriendlyFieldElement>(
 }
 
 /// Sets `outp` to the inverse of the DFT of `inp`.
-#[cfg(test)]
+#[cfg(any(test, all(feature = "crypto-dependencies", feature = "experimental")))]
 pub(crate) fn ntt_inv<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[F],

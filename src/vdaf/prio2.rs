@@ -160,7 +160,9 @@ impl Client<16> for Prio2 {
         let copy_data = |share_data: &mut [FieldPrio2]| {
             share_data[..].clone_from_slice(&input);
         };
-        let mut leader_data = mem.prove_with(self.input_len, copy_data);
+        let mut leader_data = mem
+            .prove_with(self.input_len, copy_data)
+            .map_err(|e| VdafError::Other(Box::new(e)))?;
 
         let helper_seed = rng.random();
         let helper_prng = Prng::from_prio2_seed(&helper_seed);
