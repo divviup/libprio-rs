@@ -524,6 +524,17 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.0 -> 1.0.1"
 
+[[audits.isrg.audits.rand]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.9.1 -> 0.9.2"
+
+[[audits.isrg.audits.serde_json]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.140 -> 1.0.141"
+notes = "There are three new `unsafe` blocks, but they are well-justified and appear safe by code inspection."
+
 [[audits.mozilla.audits.autocfg]]
 who = "Josh Stone <jistone@redhat.com>"
 criteria = "safe-to-deploy"
