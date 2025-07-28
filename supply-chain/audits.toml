@@ -153,6 +153,16 @@ criteria = "safe-to-run"
 delta = "0.5.1 -> 0.6.0"
 notes = "No new unsafe code and nothing suspicious in build scripts."
 
+[[audits.criterion]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.6.0 -> 0.7.0"
+
+[[audits.criterion-plot]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.5.0 -> 0.6.0"
+
 [[audits.crunchy]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
