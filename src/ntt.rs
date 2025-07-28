@@ -121,8 +121,9 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{split_vector, Field128, Field64, FieldElement, FieldPrio2};
-    use crate::polynomial::{poly_ntt, TestPolyAuxMemory};
+    use crate::field::{
+        split_vector, Field128, Field64, FieldElement, FieldElementWithInteger, FieldPrio2,
+    };
 
     fn ntt_then_inv_test<F: NttFriendlyFieldElement>() -> Result<(), NttError> {
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];
@@ -153,29 +154,6 @@ mod tests {
     #[test]
     fn test_field128() {
         ntt_then_inv_test::<Field128>().expect("unexpected error");
-    }
-
-    #[test]
-    fn test_recursive_ntt() {
-        let size = 128;
-        let mut mem = TestPolyAuxMemory::new(size / 2);
-
-        let inp = FieldPrio2::random_vector(size);
-        let mut want = vec![FieldPrio2::zero(); size];
-        let mut got = vec![FieldPrio2::zero(); size];
-
-        ntt::<FieldPrio2>(&mut want, &inp, inp.len()).unwrap();
-
-        poly_ntt(
-            &mut got,
-            &inp,
-            &mem.roots_2n,
-            size,
-            false,
-            &mut mem.ntt_memory,
-        );
-
-        assert_eq!(got, want);
     }
 
     // This test demonstrates a consequence of \[BBG+19, Fact 4.4\]: interpolating a polynomial
@@ -213,5 +191,28 @@ mod tests {
         ntt_inv(&mut want, &x, len).unwrap();
 
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn test_ntt_interpolation() {
+        let count = 128;
+        let points = Field128::random_vector(count);
+        let mut poly = vec![Field128::zero(); count];
+        ntt(&mut poly, &points, count).unwrap();
+        let principal_root = Field128::root(7).unwrap(); // log_2(128);
+        for (power, poly_coeff) in poly.iter().enumerate() {
+            let expected = points
+                .iter()
+                .enumerate()
+                .map(|(j, point_j)| {
+                    principal_root
+                        .pow(power.try_into().unwrap())
+                        .pow(j.try_into().unwrap())
+                        * *point_j
+                })
+                .reduce(|f, g| f + g)
+                .unwrap();
+            assert_eq!(expected, *poly_coeff);
+        }
     }
 }
