@@ -239,7 +239,9 @@ impl DiscreteGaussian {
     /// standard deviation and mean zero. Errors if the input has denominator zero.
     pub fn new(std: Ratio<BigUint>) -> Result<DiscreteGaussian, DpError> {
         if std.denom().is_zero() {
-            return Err(DpError::ZeroDenominator);
+            return Err(DpError::InvalidParameter(
+                "standard deviation denominator was zero".to_owned(),
+            ));
         }
         Ok(DiscreteGaussian { std })
     }
@@ -308,7 +310,9 @@ impl DiscreteLaplace {
     /// Returns an error if the scale parameter is zero or if it has a denominator of zero.
     pub fn new(scale: Ratio<BigUint>) -> Result<Self, DpError> {
         if scale.denom().is_zero() {
-            return Err(DpError::ZeroDenominator);
+            return Err(DpError::InvalidParameter(
+                "scale parameter denominator was zero".to_owned(),
+            ));
         }
         if scale.numer().is_zero() {
             return Err(DpError::InvalidParameter(
