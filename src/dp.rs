@@ -29,10 +29,6 @@ pub enum DpError {
     )]
     InvalidFloat,
 
-    /// Tried to construct a rational number with zero denominator.
-    #[error("DP error: input denominator was zero.")]
-    ZeroDenominator,
-
     /// Tried to convert BigInt into something incompatible.
     #[error("DP error: {0}")]
     BigIntConversion(#[from] TryFromBigIntError<BigInt>),
@@ -56,7 +52,9 @@ impl Rational {
         // we don't want to expose BigUint in the public api, hence the Into<u128> bound
         let d = d.into();
         if d == 0 {
-            Err(DpError::ZeroDenominator)
+            Err(DpError::InvalidParameter(
+                "input denominator was zero".to_owned(),
+            ))
         } else {
             Ok(Rational(Ratio::<BigUint>::new(n.into().into(), d.into())))
         }
