@@ -520,6 +520,11 @@ criteria = "safe-to-deploy"
 delta = "1.0.140 -> 1.0.141"
 notes = "There are three new `unsafe` blocks, but they are well-justified and appear safe by code inspection."
 
+[[audits.isrg.audits.serde_json]]
+who = "J.C. Jones <jc@insufficient.coffee>"
+criteria = "safe-to-deploy"
+delta = "1.0.141 -> 1.0.142"
+
 [[audits.isrg.audits.sha2]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
