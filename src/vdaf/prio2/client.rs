@@ -7,7 +7,7 @@ use crate::{
     codec::CodecError,
     field::FftFriendlyFieldElement,
     polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory},
-    prng::{Prng, PrngError},
+    prng::Prng,
     vdaf::{
         xof::{Seed, SeedStreamAes128},
         VdafError,
@@ -15,20 +15,6 @@ use crate::{
 };
 
 use std::convert::TryFrom;
-
-/// Errors that might be emitted by the client.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ClientError {
-    /// PRNG error
-    #[error("prng error: {0}")]
-    Prng(#[from] PrngError),
-    /// VDAF error
-    #[error("vdaf error: {0}")]
-    Vdaf(#[from] VdafError),
-    /// failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
-}
 
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]
