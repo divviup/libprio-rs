@@ -136,7 +136,7 @@ pub(crate) struct UnpackedProofMut<'a, F: NttFriendlyFieldElement> {
 pub(crate) fn unpack_proof<F: NttFriendlyFieldElement>(
     proof: &[F],
     dimension: usize,
-) -> Result<UnpackedProof<F>, SerializeError> {
+) -> Result<UnpackedProof<'_, F>, SerializeError> {
     // check the proof length
     if proof.len() != proof_length(dimension) {
         return Err(SerializeError::UnpackInputSizeMismatch);
@@ -160,7 +160,7 @@ pub(crate) fn unpack_proof<F: NttFriendlyFieldElement>(
 pub(crate) fn unpack_proof_mut<F: NttFriendlyFieldElement>(
     proof: &mut [F],
     dimension: usize,
-) -> Result<UnpackedProofMut<F>, SerializeError> {
+) -> Result<UnpackedProofMut<'_, F>, SerializeError> {
     // check the share length
     if proof.len() != proof_length(dimension) {
         return Err(SerializeError::UnpackInputSizeMismatch);
