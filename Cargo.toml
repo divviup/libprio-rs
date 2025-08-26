@@ -39,7 +39,7 @@ zipf = { version = "7.0.1", optional = true }
 [dev-dependencies]
 assert_matches = "1.5.0"
 base64 = "0.22.1"
-cfg-if = "1.0.1"
+cfg-if = "1.0.3"
 criterion = "0.5"
 hex-literal = "0.4.1"
 iai = "0.1"

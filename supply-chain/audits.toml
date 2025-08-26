@@ -108,6 +108,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.9.0"
 
+[[audits.cfg-if]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.1 -> 1.0.3"
+
 [[audits.ciborium-io]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -720,6 +725,11 @@ delta = "1.0.93 -> 1.0.94"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.94 -> 1.0.95"
+
+[[audits.serde_json]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.141 -> 1.0.142"
 
 [[audits.sha2]]
 who = "David Cook <dcook@divviup.org>"
