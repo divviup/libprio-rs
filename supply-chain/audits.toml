@@ -112,6 +112,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.0 -> 1.0.1"
 
+[[audits.cfg-if]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.1 -> 1.0.3"
+
 [[audits.ciborium-io]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
