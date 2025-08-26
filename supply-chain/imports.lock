@@ -142,15 +142,15 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror]]
-version = "2.0.15"
-when = "2025-08-16"
+version = "2.0.16"
+when = "2025-08-20"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.thiserror-impl]]
-version = "2.0.15"
-when = "2025-08-16"
+version = "2.0.16"
+when = "2025-08-20"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
