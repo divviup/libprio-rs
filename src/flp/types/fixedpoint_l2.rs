@@ -755,9 +755,9 @@ mod tests {
         let mut v = vsum
             .truncate(vsum.encode_measurement(&fp_vec).unwrap())
             .unwrap();
-        let strategy = ZCdpDiscreteGaussian::from_budget(ZCdpBudget::new(
-            Rational::from_unsigned(100u8, 3u8).unwrap(),
-        ));
+        let strategy = ZCdpDiscreteGaussian::from_budget(
+            ZCdpBudget::new(Rational::from_unsigned(100u8, 3u8).unwrap()).unwrap(),
+        );
         vsum.add_noise(
             &strategy,
             &mut v,

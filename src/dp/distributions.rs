@@ -425,7 +425,7 @@ mod tests {
 
         // sample from the distribution created by the `zcdp` strategy
         let zcdp = ZCdpDiscreteGaussian {
-            budget: ZCdpBudget::new(Rational::try_from(0.25).unwrap()),
+            budget: ZCdpBudget::new(Rational::try_from(0.25).unwrap()).unwrap(),
         };
         let sampler2 = zcdp
             .create_distribution(Ratio::<BigUint>::from_integer(1u8.into()))
