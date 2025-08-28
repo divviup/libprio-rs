@@ -1,6 +1,6 @@
-//! Implementation of the L1BoundSum FLP described in [draft-thomson-ppm-l1-bound-sum][1].
+//! Implementation of the L1BoundSum FLP described in [draft-ietf-ppm-l1-bound-sum][1].
 //!
-//! [1]: https://martinthomson.github.io/prio-l1-bound-sum/draft-thomson-ppm-l1-bound-sum.html
+//! [1]: https://ietf-wg-ppm.github.io/draft-ietf-ppm-l1-bound-sum/draft-ietf-ppm-l1-bound-sum.html
 
 use crate::{
     field::NttFriendlyFieldElement,
@@ -12,11 +12,11 @@ use crate::{
 };
 use std::{fmt::Debug, marker::PhantomData};
 
-/// Implementation of the L1BoundSum FLP described in [draft-thomson-ppm-l1-bound-sum][1].
-/// L1BoundSum is very similar to SumVec, except that it also checks that the L1 norm of the
-/// measurement is within a bound included in the secret shared input.
+/// Implementation of the L1BoundSum FLP described in [draft-ietf-ppm-l1-bound-sum][1]. L1BoundSum
+/// is very similar to SumVec, except that it also checks that the L1 norm of the measurement is
+/// within a bound included in the secret shared input.
 ///
-/// [1]: https://martinthomson.github.io/prio-l1-bound-sum/draft-thomson-ppm-l1-bound-sum.html
+/// [1]: https://ietf-wg-ppm.github.io/draft-ietf-ppm-l1-bound-sum/draft-ietf-ppm-l1-bound-sum.html
 #[derive(Copy, PartialEq, Eq)]
 pub struct L1BoundSum<F: NttFriendlyFieldElement, S> {
     /// Number of field elements in a measurement. Does not include the element representing the
