@@ -156,8 +156,8 @@
 //! `2^n`. Therefore, adding discrete Gaussian noise with standard deviation
 //! `sigma = `(2^n)/epsilon` for some `epsilon` will make the procedure [`(epsilon^2)/2`
 //! zero-concentrated differentially private](https://arxiv.org/abs/2004.00010).
-//! `epsilon` is given as a parameter to the `add_noise_to_result` function, as part of the
-//! `dp_strategy` argument of type [`ZCdpDiscreteGaussian`].
+//! `epsilon` is given as a parameter to the `add_noise_to_agg_share` function,
+//! as part of the `dp_strategy` argument of type [`ZCdpDiscreteGaussian`].
 //!
 //! ### Differences in the computation because of distribution
 //!
@@ -206,7 +206,7 @@ use std::{convert::TryFrom, convert::TryInto, fmt::Debug, marker::PhantomData};
 /// particular, exactly the following types are supported:
 /// `FixedI16<U15>`, `FixedI32<U31>` and `FixedI64<U63>`.
 ///
-/// The type implements the [`TypeWithNoise`] trait. The `add_noise_to_result` function adds
+/// The type implements the [`TypeWithNoise`] trait. The `add_noise_to_agg_share` function adds
 /// discrete Gaussian noise to an aggregate share, calibrated to the passed privacy budget.
 /// This will result in the aggregate satisfying zero-concentrated differential privacy.
 ///
@@ -626,7 +626,7 @@ where
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
     SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
 {
-    fn add_noise_to_result(
+    fn add_noise_to_agg_share(
         &self,
         dp_strategy: &ZCdpDiscreteGaussian,
         agg_result: &mut [Self::Field],

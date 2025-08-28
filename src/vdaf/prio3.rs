@@ -1610,7 +1610,7 @@ where
         num_measurements: usize,
     ) -> Result<(), VdafError> {
         self.typ
-            .add_noise_to_result(dp_strategy, &mut agg_share.0, num_measurements)?;
+            .add_noise_to_agg_share(dp_strategy, &mut agg_share.0, num_measurements)?;
         Ok(())
     }
 }
