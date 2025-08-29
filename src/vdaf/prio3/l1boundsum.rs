@@ -1,6 +1,6 @@
 //! Implementation of the Prio3L1BoundSum VDAF defined in [1].
 //!
-//! [1]: https://martinthomson.github.io/prio-l1-bound-sum/draft-thomson-ppm-l1-bound-sum.html
+//! [1]: https://ietf-wg-ppm.github.io/draft-ietf-ppm-l1-bound-sum/draft-ietf-ppm-l1-bound-sum.html
 
 use crate::{
     field::Field128,
@@ -31,8 +31,8 @@ impl Prio3L1BoundSum {
         Prio3::new(
             num_aggregators,
             1,
-            // TODO: use real codepoint once assigned
-            0xFFFF0000,
+            // https://ietf-wg-ppm.github.io/draft-ietf-ppm-l1-bound-sum/draft-ietf-ppm-l1-bound-sum.html#section-5
+            0x00000007,
             L1BoundSum::new(bits, len, chunk_length)?,
         )
     }
