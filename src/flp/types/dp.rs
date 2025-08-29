@@ -19,7 +19,7 @@ impl<S> TypeWithNoise<PureDpDiscreteLaplace> for SumVec<Field64, S>
 where
     S: ParallelSumGadget<Field64, Mul<Field64>> + Eq + 'static,
 {
-    fn add_noise_to_result(
+    fn add_noise_to_agg_share(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
@@ -37,7 +37,7 @@ impl<S> TypeWithNoise<PureDpDiscreteLaplace> for SumVec<Field128, S>
 where
     S: ParallelSumGadget<Field128, Mul<Field128>> + Eq + 'static,
 {
-    fn add_noise_to_result(
+    fn add_noise_to_agg_share(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
@@ -93,7 +93,7 @@ impl<S> TypeWithNoise<PureDpDiscreteLaplace> for Histogram<Field64, S>
 where
     S: ParallelSumGadget<Field64, Mul<Field64>> + Eq + 'static,
 {
-    fn add_noise_to_result(
+    fn add_noise_to_agg_share(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
@@ -111,7 +111,7 @@ impl<S> TypeWithNoise<PureDpDiscreteLaplace> for Histogram<Field128, S>
 where
     S: ParallelSumGadget<Field128, Mul<Field128>> + Eq + 'static,
 {
-    fn add_noise_to_result(
+    fn add_noise_to_agg_share(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
