@@ -1,6 +1,6 @@
 [package]
 name = "prio"
-version = "0.18.1-alpha.0"
+version = "0.18.1-alpha.2"
 authors = ["Josh Aas <jaas@kflag.net>", "Tim Geoghegan <timg@letsencrypt.org>", "Christopher Patton <cpatton@cloudflare.com", "Karl Tarbe <tarbe@apple.com>"]
 edition = "2021"
 exclude = ["/supply-chain"]
