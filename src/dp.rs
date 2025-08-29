@@ -16,7 +16,7 @@
 //!
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_rational::{BigRational, Ratio};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 /// Errors propagated by methods in this module.
 #[derive(Debug, thiserror::Error)]
@@ -87,7 +87,7 @@ pub trait DifferentialPrivacyDistribution {}
 /// Zero-concentrated differential privacy (ZCDP) budget as defined in [[BS16]].
 ///
 /// [BS16]: https://arxiv.org/pdf/1605.02065.pdf
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Ord, PartialOrd)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Ord, PartialOrd)]
 pub struct ZCdpBudget {
     epsilon: Ratio<BigUint>,
 }
@@ -97,9 +97,11 @@ impl ZCdpBudget {
     /// for a `rho`-ZCDP budget.
     ///
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
-    // TODO(#1095): This should be fallible, and it should return an error if epsilon is zero.
-    pub fn new(epsilon: Rational) -> Self {
-        Self { epsilon: epsilon.0 }
+    pub fn new(epsilon: Rational) -> Result<Self, DpError> {
+        if epsilon.0.numer() == &BigUint::ZERO {
+            return Err(DpError::InvalidParameter("epsilon cannot be zero".into()));
+        }
+        Ok(Self { epsilon: epsilon.0 })
     }
 }
 
@@ -123,13 +125,31 @@ impl PureDpBudget {
 
 impl DifferentialPrivacyBudget for PureDpBudget {}
 
-/// This module encapsulates a deserialization helper struct. It is needed so we can wrap its
-/// derived `Deserialize` implementation in a customized `Deserialize` implementation, which makes
-/// use of the budget's constructor to enforce input validation invariants.
+/// This module encapsulates deserialization helper structs. It is needed so we can wrap derived
+/// `Deserialize` implementations in customized `Deserialize` implementations, which make use of
+/// constructor associated methods for budgets to enforce input validation invariants.
 mod budget_serde {
     use num_bigint::BigUint;
     use num_rational::Ratio;
     use serde::{de, Deserialize};
+
+    use super::Rational;
+
+    #[derive(Deserialize)]
+    pub struct ZCdpBudget {
+        epsilon: Ratio<BigUint>,
+    }
+
+    impl<'de> Deserialize<'de> for super::ZCdpBudget {
+        fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+        where
+            D: serde::Deserializer<'de>,
+        {
+            let helper = ZCdpBudget::deserialize(deserializer)?;
+            super::ZCdpBudget::new(Rational(helper.epsilon))
+                .map_err(|_| de::Error::custom("epsilon cannot be zero"))
+        }
+    }
 
     #[derive(Deserialize)]
     pub struct PureDpBudget {
@@ -142,7 +162,7 @@ mod budget_serde {
             D: serde::Deserializer<'de>,
         {
             let helper = PureDpBudget::deserialize(deserializer)?;
-            super::PureDpBudget::new(super::Rational(helper.epsilon))
+            super::PureDpBudget::new(Rational(helper.epsilon))
                 .map_err(|_| de::Error::custom("epsilon cannot be zero"))
         }
     }
@@ -178,12 +198,22 @@ mod rand_bigint;
 mod tests {
     use serde_json::json;
 
-    use super::PureDpBudget;
+    use super::{PureDpBudget, Rational, ZCdpBudget};
 
     #[test]
     fn budget_deserialization() {
+        serde_json::from_value::<ZCdpBudget>(json!({"epsilon": [[1], [1]]})).unwrap();
+        serde_json::from_value::<ZCdpBudget>(json!({"epsilon": [[0], [1]]})).unwrap_err();
+        serde_json::from_value::<ZCdpBudget>(json!({"epsilon": [[1], [0]]})).unwrap_err();
+
         serde_json::from_value::<PureDpBudget>(json!({"epsilon": [[1], [1]]})).unwrap();
         serde_json::from_value::<PureDpBudget>(json!({"epsilon": [[0], [1]]})).unwrap_err();
         serde_json::from_value::<PureDpBudget>(json!({"epsilon": [[1], [0]]})).unwrap_err();
+    }
+
+    #[test]
+    fn bad_budgets() {
+        ZCdpBudget::new(Rational::from_unsigned(0u128, 1).unwrap()).unwrap_err();
+        PureDpBudget::new(Rational::from_unsigned(0u128, 1).unwrap()).unwrap_err();
     }
 }
