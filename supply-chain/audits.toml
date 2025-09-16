@@ -665,6 +665,12 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.204 -> 1.0.207"
 
+[[audits.serde_core]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+version = "1.0.224"
+notes = "This is mostly a movement of existing serde code, and I have confirmed nothing new was introduced."
+
 [[audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
