@@ -677,11 +677,21 @@ criteria = "safe-to-deploy"
 delta = "1.0.219 -> 1.0.224"
 notes = "This change moves a large quantiy of serde code to serde-core, but I've validated that change."
 
+[[audits.serde]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.224 -> 1.0.225"
+
 [[audits.serde_core]]
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 version = "1.0.224"
 notes = "This is mostly a movement of existing serde code, and I have confirmed nothing new was introduced."
+
+[[audits.serde_core]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.224 -> 1.0.225"
 
 [[audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
@@ -727,6 +737,11 @@ delta = "1.0.204 -> 1.0.207"
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.219 -> 1.0.224"
+
+[[audits.serde_derive]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.224 -> 1.0.225"
 
 [[audits.serde_json]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
