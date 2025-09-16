@@ -665,6 +665,12 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.204 -> 1.0.207"
 
+[[audits.serde]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.219 -> 1.0.224"
+notes = "The vast majority of this change is movement of code to serde-core, and I've confirmed those removals. The added code in this changeset is acceptable."
+
 [[audits.serde_core]]
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
