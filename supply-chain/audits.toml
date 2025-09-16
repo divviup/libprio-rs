@@ -671,6 +671,12 @@ criteria = "safe-to-deploy"
 delta = "1.0.219 -> 1.0.224"
 notes = "The vast majority of this change is movement of code to serde-core, and I've confirmed those removals. The added code in this changeset is acceptable."
 
+[[audits.serde]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.219 -> 1.0.224"
+notes = "This change moves a large quantiy of serde code to serde-core, but I've validated that change."
+
 [[audits.serde_core]]
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
