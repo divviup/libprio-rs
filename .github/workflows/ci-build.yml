@@ -95,9 +95,9 @@ jobs:
     - name: Check
       run: cargo check-all-features --workspace --all-targets
     - name: Clippy
-      run: cargo clippy --workspace --all-targets
+      run: cargo clippy --workspace --all-targets -- -Dwarnings
     - name: Clippy (all features)
-      run: cargo clippy --workspace --all-targets --all-features
+      run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
     - name: Build crate
       run: cargo build-all-features --verbose --package prio
     - name: Run tests
