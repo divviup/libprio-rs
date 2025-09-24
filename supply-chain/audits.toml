@@ -819,6 +819,11 @@ who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.224 -> 1.0.225"
 
+[[audits.serde]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.225 -> 1.0.226"
+
 [[audits.serde_core]]
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
@@ -828,6 +833,11 @@ version = "1.0.224"
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.224 -> 1.0.225"
+
+[[audits.serde_core]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.225 -> 1.0.226"
 
 [[audits.serde_derive]]
 who = "David Cook <dcook@divviup.org>"
@@ -878,6 +888,11 @@ delta = "1.0.219 -> 1.0.224"
 who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.224 -> 1.0.225"
+
+[[audits.serde_derive]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.225 -> 1.0.226"
 
 [[audits.serde_json]]
 who = "Tim Geoghegan <timg@letsencrypt.org>"
