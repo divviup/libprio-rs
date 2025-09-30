@@ -309,6 +309,16 @@ impl FieldElement for Field255 {
     fn one() -> Self {
         Field255(fiat_25519_tight_field_element([1, 0, 0, 0, 0]))
     }
+
+    fn half() -> Self {
+        Field255(fiat_25519_tight_field_element([
+            2251799813685239,
+            2251799813685247,
+            2251799813685247,
+            2251799813685247,
+            1125899906842623,
+        ]))
+    }
 }
 
 impl Default for Field255 {

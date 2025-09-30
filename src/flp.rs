@@ -51,7 +51,7 @@ use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{FieldElement, FieldElementWithInteger, FieldError, NttFriendlyFieldElement};
 use crate::fp::log2;
 use crate::ntt::{ntt, ntt_inv_finish, NttError};
-use crate::polynomial::poly_eval;
+use crate::polynomial::{nth_root_powers, poly_eval, poly_eval_batched};
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -466,16 +466,13 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
             // polynomial at query randomness value.
             let m = (1 + gadget.calls()).next_power_of_two();
-            let m_inv = Self::Field::from(
-                <Self::Field as FieldElementWithInteger>::Integer::try_from(m).unwrap(),
-            )
-            .inv();
-            let mut f = vec![Self::Field::zero(); m];
-            for wire in 0..gadget.arity() {
-                ntt(&mut f, &gadget.f_vals[wire], m)?;
-                ntt_inv_finish(&mut f, m, m_inv);
-                verifier.push(poly_eval(&f, *query_rand_val));
-            }
+
+            // Evaluates a batch of polynomials in the Lagrange basis.
+            // This avoids using NTTs to convert them to the monomial basis.
+            let roots = nth_root_powers(m);
+            let polynomials = &gadget.f_vals[..gadget.arity()];
+            let mut evals = poly_eval_batched(polynomials, &roots, *query_rand_val);
+            verifier.append(&mut evals);
 
             // Add the value of the gadget polynomial evaluated at the query randomness value.
             verifier.push(gadget.p_at_r);
