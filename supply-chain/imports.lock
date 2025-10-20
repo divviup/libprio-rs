@@ -501,6 +501,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.0 -> 1.0.1"
 
+[[audits.isrg.audits.cfg-if]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.3 -> 1.0.4"
+
 [[audits.isrg.audits.nalgebra]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
