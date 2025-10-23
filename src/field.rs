@@ -109,6 +109,9 @@ pub trait FieldElement:
     /// Modular inversion, i.e., `self^-1 (mod p)`. If `self` is 0, then the output is undefined.
     fn inv(&self) -> Self;
 
+    /// Returns 1/2.
+    fn half() -> Self;
+
     /// Interprets the next [`Self::ENCODED_SIZE`] bytes from the input slice as an element of the
     /// field. Any of the most significant bits beyond the bit length of the modulus will be
     /// cleared, in order to minimize the amount of rejection sampling needed.
@@ -740,6 +743,10 @@ macro_rules! make_field {
             fn one() -> Self {
                 Self($fp::ROOTS[0])
             }
+
+            fn half() -> Self {
+                Self($fp::HALF)
+            }
         }
 
         impl FieldElementWithInteger for $elem {
@@ -1001,6 +1008,7 @@ pub(crate) mod test_utils {
         let int_one = F::TestInteger::try_from(1).unwrap();
         let zero = F::zero();
         let one = F::one();
+        let half = F::half();
         let two = F::from(F::TestInteger::try_from(2).unwrap());
         let four = F::from(F::TestInteger::try_from(4).unwrap());
 
@@ -1045,6 +1053,7 @@ pub(crate) mod test_utils {
         // mul
         assert_eq!(two * two, four);
         assert_eq!(two * one, two);
+        assert_eq!(two * half, one);
         assert_eq!(two * zero, zero);
         assert_eq!(one * F::from(int_modulus.clone()), zero);
 

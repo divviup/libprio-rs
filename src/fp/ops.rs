@@ -64,6 +64,8 @@ pub trait FieldParameters<W: Word> {
     /// `ROOTS[l]` has order `2^l` in the multiplicative group.
     /// `ROOTS[0]` is equal to one by definition.
     const ROOTS: [W; MAX_ROOTS + 1];
+    /// The multiplicative inverse of 2.
+    const HALF: W;
     /// The log2(base) for the base used for multiprecision arithmetic.
     /// So, `LOG2_BASE ≤ 64` as processors have at most a 64-bit
     /// integer multiplier.
