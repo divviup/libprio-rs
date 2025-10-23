@@ -1486,6 +1486,8 @@ mod tests {
     }
 
     /// Validity circuit using a degree 3 gadget, for test purposes.
+    ///
+    /// This circuit evaluates x * (x - 1) * (x - 2), and only accepts the measurements 0, 1, and 2.
     #[derive(Debug, Clone, PartialEq, Eq)]
     struct HigherDegree;
 
@@ -1591,7 +1593,9 @@ mod tests {
         TypeTest::expect_valid::<2>(&typ, &[TestField::from(0)], &[TestField::from(0)]);
         TypeTest::expect_valid::<2>(&typ, &[TestField::from(1)], &[TestField::from(1)]);
         TypeTest::expect_valid::<2>(&typ, &[TestField::from(2)], &[TestField::from(2)]);
+        TypeTest::expect_valid::<3>(&typ, &[TestField::from(2)], &[TestField::from(2)]);
         TypeTest::expect_invalid::<2>(&typ, &[TestField::from(3)]);
+        TypeTest::expect_invalid::<3>(&typ, &[TestField::from(3)]);
     }
 }
 
