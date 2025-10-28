@@ -2,7 +2,7 @@
 
 //! A collection of [`Type`] implementations.
 
-use crate::field::{FieldElementWithIntegerExt, Integer, NttFriendlyFieldElement};
+use crate::field::{FieldElementWithIntegerExt, FieldError, Integer, NttFriendlyFieldElement};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{Flp, FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -247,21 +247,16 @@ impl<F: NttFriendlyFieldElement> Type for Sum<F> {
         }
 
         let mut encoded = Vec::with_capacity(self.bits);
-        let threshold = (F::Integer::one() << (self.bits - 1)) - F::Integer::one();
-        let high_bit = summand.ct_gt(&threshold);
-        let to_encode = *summand
-            - F::Integer::conditional_select(&F::Integer::zero(), &self.last_weight, high_bit);
-        encoded.extend(F::encode_as_bitvector(to_encode, self.bits - 1)?);
-        encoded.push(F::conditional_select(&F::zero(), &F::one(), high_bit));
-
+        encode_range_checked_int(*summand, self.bits, self.last_weight, &mut encoded)?;
         Ok(encoded)
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         self.truncate_call_check(&input)?;
-        let mut res = F::decode_bitvector(&input[..self.bits - 1])?;
-        res += input[self.bits - 1] * self.last_weight_field;
-        Ok(vec![res])
+        Ok(vec![decode_range_checked_int(
+            &input,
+            self.last_weight_field,
+        )?])
     }
 
     fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
@@ -1052,6 +1047,48 @@ pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
     }
 
     Ok(output)
+}
+
+/// Encodes an integer into multiple field elements with values of 0 or 1.
+///
+/// This function implements the encoding scheme from the Sum circuit and others. It uses a modified
+/// bit vector encoding method, where the weight of the last field element may be any value, not
+/// necessarily a power of two. This means some numbers may have multiple possible representations,
+/// but all possible bit vectors will decode into the desired range.
+///
+/// # Arguments
+///
+/// * `value`: Integer to be encoded.
+/// * `bits`: Length of field element vector.
+/// * `last_weight`: Weight of the last field element. This can be chosen to determine the range of
+///   encodable values.
+/// * `out`: Output vector. Field elements will be appended to this.
+fn encode_range_checked_int<F: FieldElementWithIntegerExt>(
+    value: F::Integer,
+    bits: usize,
+    last_weight: F::Integer,
+    out: &mut Vec<F>,
+) -> Result<(), FieldError> {
+    let threshold = (F::Integer::one() << (bits - 1)) - F::Integer::one();
+    let high_bit = value.ct_gt(&threshold);
+    let to_encode =
+        value - F::Integer::conditional_select(&F::Integer::zero(), &last_weight, high_bit);
+    out.extend(F::encode_as_bitvector(to_encode, bits - 1)?);
+    out.push(F::conditional_select(&F::zero(), &F::one(), high_bit));
+    Ok(())
+}
+
+/// Decodes an integer from a vector of field elements produced by [encode_range_checked_int].
+///
+/// Note that this is a linear function, and thus it can be applied to secret shared field elements.
+fn decode_range_checked_int<F: FieldElementWithIntegerExt>(
+    input: &[F],
+    last_weight: F,
+) -> Result<F, FieldError> {
+    let Some((last, rest)) = input.split_last() else {
+        return Ok(F::zero());
+    };
+    Ok(F::decode_bitvector(rest)? + *last * last_weight)
 }
 
 #[cfg(test)]
