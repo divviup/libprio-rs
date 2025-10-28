@@ -761,16 +761,19 @@ where
     }
 }
 
-/// A sequence of integers in range `[0, 2^bits)`. This type uses a neat trick from [[BBCG+19],
-/// Corollary 4.9] to reduce the proof size to roughly the square root of the input size.
+/// A sequence of integers in the range `[0, max_measurement]`. This type uses a neat trick from
+/// [[BBCG+19], Corollary 4.9] to reduce the proof size to roughly the square root of the input
+/// size.
 ///
 /// [BBCG+19]: https://eprint.iacr.org/2019/188
 #[derive(PartialEq, Eq)]
 pub struct SumVec<F: NttFriendlyFieldElement, S> {
     len: usize,
     bits: usize,
+    max_measurement: F::Integer,
+    last_weight: F::Integer,
+    last_weight_field: F,
     flattened_len: usize,
-    max: F::Integer,
     chunk_length: usize,
     gadget_calls: usize,
     phantom: PhantomData<S>,
@@ -780,6 +783,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for SumVec<F, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SumVec")
             .field("len", &self.len)
+            .field("max_measurement", &self.max_measurement)
             .field("bits", &self.bits)
             .field("chunk_length", &self.chunk_length)
             .finish()
@@ -791,29 +795,36 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
     ///
     /// # Errors
     ///
-    /// * The length of the encoded measurement, i.e., `bits * len`, overflows addressable memory.
-    /// * The bit width cannot be encoded, i.e., `bits` is larger than or equal to the number of
-    ///   bits required to encode field elements.
-    /// * Any of `bits`, `len`, or `chunk_length` are zero.
-    pub fn new(bits: usize, len: usize, chunk_length: usize) -> Result<Self, FlpError> {
+    /// * The measurements cannot be encoded, i.e., `max_measurement` is larger than or equal to the
+    ///   field's modulus.
+    /// * Any of `max_measurement`, `len`, or `chunk_length` are zero.
+    /// * The length of the encoded measurement, i.e., `len` times the number of bits needed to
+    ///   represent `max_measurement`, overflows addressable memory.
+    pub fn new(
+        max_measurement: F::Integer,
+        len: usize,
+        chunk_length: usize,
+    ) -> Result<Self, FlpError> {
+        // Nubmer of bits needed to represent each element of the measurement.
+        let bits = max_measurement.checked_ilog2().unwrap() as usize + 1;
+
         let flattened_len = bits.checked_mul(len).ok_or_else(|| {
             FlpError::InvalidParameter("`bits*len` overflows addressable memory".into())
         })?;
 
-        // Check if the bit width is too large. This limit is defined to be one bit less than the
-        // number of bits required to encode `F::Integer`. (One less so that we can compute `1 <<
-        // bits` without overflowing.)
-        let limit = std::mem::size_of::<F::Integer>() * 8 - 1;
-        if bits > limit {
-            return Err(FlpError::InvalidParameter(format!(
-                "bit width exceeds limit of {limit}"
-            )));
+        let last_weight = max_measurement - ((F::Integer::one() << (bits - 1)) - F::Integer::one());
+        let last_weight_field = F::from(last_weight);
+
+        if max_measurement >= F::modulus() {
+            return Err(FlpError::InvalidParameter(
+                "max_measurement exceeds field modulus".to_string(),
+            ));
         }
 
         // Check for degenerate parameters.
-        if bits == 0 {
+        if max_measurement == F::Integer::zero() {
             return Err(FlpError::InvalidParameter(
-                "bits cannot be zero".to_string(),
+                "max_measurement cannot be zero".to_string(),
             ));
         }
         if len == 0 {
@@ -825,10 +836,6 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
             ));
         }
 
-        // Compute the largest encodable measurement.
-        let one = F::Integer::from(F::one());
-        let max = (one << bits) - one;
-
         let mut gadget_calls = flattened_len / chunk_length;
         if flattened_len % chunk_length != 0 {
             gadget_calls += 1;
@@ -837,8 +844,10 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
         Ok(Self {
             len,
             bits,
+            max_measurement,
+            last_weight,
+            last_weight_field,
             flattened_len,
-            max,
             chunk_length,
             gadget_calls,
             phantom: PhantomData,
@@ -851,8 +860,10 @@ impl<F: NttFriendlyFieldElement, S> Clone for SumVec<F, S> {
         Self {
             len: self.len,
             bits: self.bits,
+            max_measurement: self.max_measurement,
+            last_weight: self.last_weight,
+            last_weight_field: self.last_weight_field,
             flattened_len: self.flattened_len,
-            max: self.max,
             chunk_length: self.chunk_length,
             gadget_calls: self.gadget_calls,
             phantom: PhantomData,
@@ -935,13 +946,7 @@ where
 
         let mut flattened = Vec::with_capacity(self.flattened_len);
         for summand in measurement.iter() {
-            if summand > &self.max {
-                return Err(FlpError::Encode(format!(
-                    "summand exceeds maximum of 2^{}-1",
-                    self.bits
-                )));
-            }
-            flattened.extend(F::encode_as_bitvector(*summand, self.bits)?);
+            encode_range_checked_int(*summand, self.bits, self.last_weight, &mut flattened)?;
         }
 
         Ok(flattened)
@@ -951,7 +956,7 @@ where
         self.truncate_call_check(&input)?;
         let mut unflattened = Vec::with_capacity(self.len);
         for chunk in input.chunks(self.bits) {
-            unflattened.push(F::decode_bitvector(chunk)?);
+            unflattened.push(decode_range_checked_int(chunk, self.last_weight_field)?);
         }
         Ok(unflattened)
     }
@@ -1422,7 +1427,7 @@ mod tests {
 
     fn test_sum_vec<F, S>(f: F)
     where
-        F: Fn(usize, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
+        F: Fn(u64, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
         S: 'static + ParallelSumGadget<TestField, Mul<TestField>> + Eq,
     {
         let one = TestField::one();
@@ -1447,7 +1452,7 @@ mod tests {
         );
 
         let len = 23;
-        let sum_vec = f(4, len, 4).unwrap();
+        let sum_vec = f(15, len, 4).unwrap();
         TypeTest::expect_valid::<3>(
             &sum_vec,
             &sum_vec.encode_measurement(&vec![9; len]).unwrap(),
@@ -1462,7 +1467,7 @@ mod tests {
         }
 
         let len = 23;
-        let sum_vec = f(2, len, 4).unwrap();
+        let sum_vec = f(3, len, 4).unwrap();
         TypeTest::expect_invalid::<3>(&sum_vec, &vec![nine; 2 * len]);
 
         // Round trip
@@ -1478,6 +1483,24 @@ mod tests {
                 .unwrap(),
             want
         );
+
+        // Test range check edge cases.
+        for max_measurement in [6, 7, 8, 9] {
+            let sum_vec = f(max_measurement, 3, 5).unwrap();
+            for value in 0..=max_measurement {
+                let measurement = vec![value, 0, value];
+                let output = vec![
+                    TestField::from(value),
+                    TestField::zero(),
+                    TestField::from(value),
+                ];
+                TypeTest::expect_valid::<2>(
+                    &sum_vec,
+                    &sum_vec.encode_measurement(&measurement).unwrap(),
+                    &output,
+                );
+            }
+        }
     }
 
     #[test]
