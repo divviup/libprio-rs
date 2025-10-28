@@ -148,7 +148,7 @@ impl Prio3SumVecMultithreaded {
     }
 }
 
-/// The sum type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and the
+/// The sum type. Each measurement is an integer in `[0, max_measurement]` and the
 /// aggregate is the sum.
 pub type Prio3Sum = Prio3<Sum<Field64>, XofTurboShake128, 32>;
 
@@ -344,7 +344,7 @@ impl Prio3MultihotCountVecMultithreaded {
     }
 }
 
-/// The average type. Each measurement is an integer in `[0,2^bits)` for some `0 < bits < 64` and
+/// The average type. Each measurement is an integer in `[0, max_measurement]` and
 /// the aggregate is the arithmetic average.
 pub type Prio3Average = Prio3<Average<Field128>, XofTurboShake128, 32>;
 
