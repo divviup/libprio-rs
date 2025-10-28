@@ -260,7 +260,7 @@ mod tests {
                     .try_into()
                     .unwrap();
 
-            let sumvec: SumVec<_, ParallelSum<_, _>> = SumVec::new(2, SIZE, 1).unwrap();
+            let sumvec: SumVec<_, ParallelSum<_, _>> = SumVec::new(3, SIZE, 1).unwrap();
             sumvec
                 .add_noise(&dp_strategy, &mut share1, &mut rng)
                 .unwrap();
