@@ -2,7 +2,10 @@
 
 //! A collection of [`Type`] implementations.
 
-use crate::field::{FieldElementWithIntegerExt, FieldError, Integer, NttFriendlyFieldElement};
+use crate::field::{
+    FieldElementWithInteger, FieldElementWithIntegerExt, FieldError, Integer,
+    NttFriendlyFieldElement,
+};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{Flp, FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -533,7 +536,10 @@ where
 /// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
 /// values at each position across all measurements.
 #[derive(PartialEq, Eq)]
-pub struct MultihotCountVec<F, S> {
+pub struct MultihotCountVec<F, S>
+where
+    F: FieldElementWithInteger,
+{
     // Parameters
     /// The number of elements in the list of booleans
     length: usize,
@@ -545,7 +551,8 @@ pub struct MultihotCountVec<F, S> {
     // Calculated from parameters
     gadget_calls: usize,
     bits_for_weight: usize,
-    offset: usize,
+    last_weight: F::Integer,
+    last_weight_field: F,
     phantom: PhantomData<(F, S)>,
 }
 
@@ -586,16 +593,27 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
                 "max_weight cannot be zero".to_string(),
             ));
         }
+        let Ok(max_weight_converted) = F::Integer::try_from(max_weight) else {
+            return Err(FlpError::InvalidParameter(
+                "max_weight is too large".to_string(),
+            ));
+        };
+        if max_weight_converted >= F::modulus() {
+            return Err(FlpError::InvalidParameter(
+                "max_weight is greater than the field modulus".to_string(),
+            ));
+        }
 
         // The bitlength of a measurement is the number of buckets plus the bitlength of the max
         // weight
         let bits_for_weight = max_weight.ilog2() as usize + 1;
         let meas_length = num_buckets + bits_for_weight;
+        let last_weight = max_weight_converted
+            - ((F::Integer::one() << (bits_for_weight - 1)) - F::Integer::one());
+        let last_weight_field = F::from(last_weight);
 
         // Gadget calls is ⌈meas_length / chunk_length⌉
         let gadget_calls = meas_length.div_ceil(chunk_length);
-        // Offset is 2^max_weight.bitlen() - 1 - max_weight
-        let offset = (1 << bits_for_weight) - 1 - max_weight;
 
         Ok(Self {
             length: num_buckets,
@@ -603,21 +621,23 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
             chunk_length,
             gadget_calls,
             bits_for_weight,
-            offset,
+            last_weight,
+            last_weight_field,
             phantom: PhantomData,
         })
     }
 }
 
-// Cannot autoderive clone because it requires F and S to be Clone, which they're not in general
-impl<F, S> Clone for MultihotCountVec<F, S> {
+// Cannot autoderive clone because it requires S to be Clone, which does not generally hold
+impl<F: FieldElementWithInteger, S> Clone for MultihotCountVec<F, S> {
     fn clone(&self) -> Self {
         Self {
             length: self.length,
             max_weight: self.max_weight,
             chunk_length: self.chunk_length,
             bits_for_weight: self.bits_for_weight,
-            offset: self.offset,
+            last_weight: self.last_weight,
+            last_weight_field: self.last_weight_field,
             gadget_calls: self.gadget_calls,
             phantom: self.phantom,
         }
@@ -658,14 +678,10 @@ where
         // Check that the elements of `input` sum to at most `max_weight`.
         let count_vec = &input[..self.length];
         let weight = count_vec.iter().fold(F::zero(), |a, b| a + *b);
-        let offset_weight_reported = F::decode_bitvector(&input[self.length..])?;
+        let weight_reported =
+            decode_range_checked_int(&input[self.length..], self.last_weight_field)?;
 
-        // From spec: weight_check = self.offset*shares_inv + weight - weight_reported
-        let weight_check = {
-            let offset = F::from(F::valid_integer_try_from(self.offset)?);
-            let shares_inv = F::from(F::valid_integer_try_from(num_shares)?).inv();
-            offset * shares_inv + weight - offset_weight_reported
-        };
+        let weight_check = weight - weight_reported;
 
         Ok(vec![range_check, weight_check])
     }
@@ -722,20 +738,24 @@ where
             )));
         }
 
-        // Convert bool vector to field elems
-        let multihot_vec = measurement
-            .iter()
-            // We can unwrap because any Integer type can cast from bool
-            .map(|bit| F::from(F::valid_integer_try_from(*bit as usize).unwrap()));
+        let mut encoded = Vec::with_capacity(self.length + self.bits_for_weight);
 
-        // Encode the measurement weight in binary (actually, the weight plus some offset)
-        let offset_weight_bits = {
-            let offset_weight_reported = F::valid_integer_try_from(self.offset + weight_reported)?;
-            F::encode_as_bitvector(offset_weight_reported, self.bits_for_weight)?
-        };
+        // Convert bool vector to field elems
+        encoded.extend(measurement.iter().map(|bit| {
+            // We can unwrap because any Integer type can cast from bool
+            F::from(F::valid_integer_try_from(*bit as usize).unwrap())
+        }));
+
+        // Encode the measurement weight in a modified binary form
+        encode_range_checked_int::<F>(
+            F::valid_integer_try_from(weight_reported)?,
+            self.bits_for_weight,
+            self.last_weight,
+            &mut encoded,
+        )?;
 
         // Report the concat of the two
-        Ok(multihot_vec.chain(offset_weight_bits).collect())
+        Ok(encoded)
     }
 
     fn decode_result(
@@ -1337,28 +1357,31 @@ mod tests {
         let one = TestField::one();
         let nine = TestField::from(9);
 
-        let encoded_weight_plus_offset = |weight| {
+        let encoded_weight = |weight| {
             let bits_for_weight = max_weight.ilog2() as usize + 1;
-            let offset = (1 << bits_for_weight) - 1 - max_weight;
-            TestField::encode_as_bitvector(
-                <TestField as FieldElementWithInteger>::Integer::try_from(weight + offset).unwrap(),
+            let last_weight = max_weight - ((1 << (bits_for_weight - 1)) - 1);
+            let mut out = Vec::with_capacity(bits_for_weight);
+            encode_range_checked_int(
+                <TestField as FieldElementWithInteger>::Integer::try_from(weight).unwrap(),
                 bits_for_weight,
+                <TestField as FieldElementWithInteger>::Integer::try_from(last_weight).unwrap(),
+                &mut out,
             )
-            .unwrap()
-            .collect::<Vec<TestField>>()
+            .unwrap();
+            out
         };
 
         assert_eq!(
             multihot_instance
                 .encode_measurement(&vec![true, true, false])
                 .unwrap(),
-            [&[one, one, zero], &*encoded_weight_plus_offset(2)].concat(),
+            [&[one, one, zero], &*encoded_weight(2)].concat(),
         );
         assert_eq!(
             multihot_instance
                 .encode_measurement(&vec![false, true, true])
                 .unwrap(),
-            [&[zero, one, one], &*encoded_weight_plus_offset(2)].concat(),
+            [&[zero, one, one], &*encoded_weight(2)].concat(),
         );
 
         // Round trip
@@ -1403,20 +1426,33 @@ mod tests {
             &[zero, zero, zero],
         );
 
+        // Test alternate encodings of the weight. Note that max_weight = 2 means we will encode the
+        // claimed weight in two field elements, both of which have a weight of one.
+        TypeTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &[one, zero, zero, one, zero],
+            &[one, zero, zero],
+        );
+        TypeTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &[one, zero, zero, zero, one],
+            &[one, zero, zero],
+        );
+
         // Test invalid inputs.
 
         // Not binary
         TypeTest::expect_invalid::<NUM_SHARES>(
             &multihot_instance,
-            &[&[zero, zero, nine], &*encoded_weight_plus_offset(1)].concat(),
+            &[&[zero, zero, nine], &*encoded_weight(1)].concat(),
         );
         // Wrong weight
         TypeTest::expect_invalid::<NUM_SHARES>(
             &multihot_instance,
-            &[&[zero, zero, one], &*encoded_weight_plus_offset(2)].concat(),
+            &[&[zero, zero, one], &*encoded_weight(2)].concat(),
         );
-        // We cannot test the case where the weight is higher than max_weight. This is because
-        // weight + offset cannot fit into a bitvector of the correct length. In other words, being
+        // We cannot test the case where the weight is higher than max_weight. This is because the
+        // all-ones bitvector of the correct length decodes to max_weight. In other words, being
         // out-of-range requires the prover to lie about their weight, which is tested above
     }
 
