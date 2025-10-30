@@ -569,8 +569,8 @@ mod tests {
 
         let r = prng.get();
         for i in 0..g.arity() {
-            for j in 0..wire_poly_len {
-                wire_polys[i][j] = prng.get();
+            for out in wire_polys[i].iter_mut().take(wire_poly_len) {
+                *out = prng.get();
             }
             inp[i] = poly_eval(&wire_polys[i], r);
         }

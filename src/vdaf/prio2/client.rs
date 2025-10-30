@@ -7,7 +7,7 @@ use crate::{
     codec::CodecError,
     field::FftFriendlyFieldElement,
     polynomial::{fft_get_roots, poly_fft, PolyFFTTempMemory},
-    prng::{Prng, PrngError},
+    prng::Prng,
     vdaf::{
         xof::{Seed, SeedStreamAes128},
         VdafError,
@@ -15,20 +15,6 @@ use crate::{
 };
 
 use std::convert::TryFrom;
-
-/// Errors that might be emitted by the client.
-#[derive(Debug, thiserror::Error)]
-pub(crate) enum ClientError {
-    /// PRNG error
-    #[error("prng error: {0}")]
-    Prng(#[from] PrngError),
-    /// VDAF error
-    #[error("vdaf error: {0}")]
-    Vdaf(#[from] VdafError),
-    /// failure when calling getrandom().
-    #[error("getrandom: {0}")]
-    GetRandom(#[from] getrandom::Error),
-}
 
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]
@@ -153,7 +139,7 @@ pub(crate) struct UnpackedProofMut<'a, F: FftFriendlyFieldElement> {
 pub(crate) fn unpack_proof<F: FftFriendlyFieldElement>(
     proof: &[F],
     dimension: usize,
-) -> Result<UnpackedProof<F>, SerializeError> {
+) -> Result<UnpackedProof<'_, F>, SerializeError> {
     // check the proof length
     if proof.len() != proof_length(dimension) {
         return Err(SerializeError::UnpackInputSizeMismatch);
@@ -177,7 +163,7 @@ pub(crate) fn unpack_proof<F: FftFriendlyFieldElement>(
 pub(crate) fn unpack_proof_mut<F: FftFriendlyFieldElement>(
     proof: &mut [F],
     dimension: usize,
-) -> Result<UnpackedProofMut<F>, SerializeError> {
+) -> Result<UnpackedProofMut<'_, F>, SerializeError> {
     // check the share length
     if proof.len() != proof_length(dimension) {
         return Err(SerializeError::UnpackInputSizeMismatch);
