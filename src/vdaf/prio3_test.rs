@@ -55,14 +55,17 @@ where
     P: Xof<SEED_SIZE>,
 {
     fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
-        let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
+        let max_measurement = usize::try_from(parameters["max_measurement"].as_u64().unwrap())
+            .unwrap()
+            .try_into()
+            .unwrap();
         let length = parameters["length"].as_u64().unwrap().try_into().unwrap();
         let chunk_length = parameters["chunk_length"]
             .as_u64()
             .unwrap()
             .try_into()
             .unwrap();
-        let sum_vec = SumVec::new(bits, length, chunk_length).unwrap();
+        let sum_vec = SumVec::new(max_measurement, length, chunk_length).unwrap();
         Prio3::new(shares, 1, 0x00000003, sum_vec).unwrap()
     }
 
@@ -271,14 +274,18 @@ mod tests {
             check_test_vector_custom_constructor::<Prio3SumVecField64Multiproof, 32, 16>(
                 &test_vector,
                 |shares, parameters| {
-                    let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
+                    let max_measurement =
+                        usize::try_from(parameters["max_measurement"].as_u64().unwrap())
+                            .unwrap()
+                            .try_into()
+                            .unwrap();
                     let length = parameters["length"].as_u64().unwrap().try_into().unwrap();
                     let chunk_length = parameters["chunk_length"]
                         .as_u64()
                         .unwrap()
                         .try_into()
                         .unwrap();
-                    let sum_vec = SumVec::new(bits, length, chunk_length).unwrap();
+                    let sum_vec = SumVec::new(max_measurement, length, chunk_length).unwrap();
                     Prio3::new(shares, num_proofs, alg_id, sum_vec).unwrap()
                 },
             );

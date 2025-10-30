@@ -94,18 +94,18 @@ impl Prio3Count {
     }
 }
 
-/// The count-vector type. Each measurement is a vector of integers in `[0,2^bits)` and the
+/// The count-vector type. Each measurement is a vector of integers in `[0, max_measurement]` and the
 /// aggregate is the element-wise sum.
 pub type Prio3SumVec =
     Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3SumVec {
-    /// Construct an instance of Prio3SumVec with the given number of aggregators. `bits` defines
-    /// the bit width of each summand of the measurement; `len` defines the length of the
-    /// measurement vector.
+    /// Construct an instance of Prio3SumVec with the given number of aggregators. `max_measurement`
+    /// defines the maximum value of each element of the measurement vector; `len` defines the
+    /// length of the measurement vector.
     pub fn new_sum_vec(
         num_aggregators: u8,
-        bits: usize,
+        max_measurement: u128,
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
@@ -113,7 +113,7 @@ impl Prio3SumVec {
             num_aggregators,
             1,
             0x00000003,
-            SumVec::new(bits, len, chunk_length)?,
+            SumVec::new(max_measurement, len, chunk_length)?,
         )
     }
 }
@@ -131,11 +131,11 @@ pub type Prio3SumVecMultithreaded = Prio3<
 #[cfg(feature = "multithreaded")]
 impl Prio3SumVecMultithreaded {
     /// Construct an instance of Prio3SumVecMultithreaded with the given number of
-    /// aggregators. `bits` defines the bit width of each summand of the measurement; `len` defines
-    /// the length of the measurement vector.
+    /// aggregators. `max_measurement` defines the maximum value of each element of the measurement
+    /// vector; `len` defines the length of the measurement vector.
     pub fn new_sum_vec_multithreaded(
         num_aggregators: u8,
-        bits: usize,
+        max_measurement: u128,
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
@@ -143,7 +143,7 @@ impl Prio3SumVecMultithreaded {
             num_aggregators,
             1,
             0x00000003,
-            SumVec::new(bits, len, chunk_length)?,
+            SumVec::new(max_measurement, len, chunk_length)?,
         )
     }
 }
@@ -1894,7 +1894,7 @@ mod tests {
 
     #[test]
     fn test_prio3_sum_vec() {
-        let prio3 = Prio3::new_sum_vec(2, 2, 20, 4).unwrap();
+        let prio3 = Prio3::new_sum_vec(2, 3, 20, 4).unwrap();
         assert_eq!(
             run_vdaf(
                 CTX_STR,
@@ -1917,7 +1917,7 @@ mod tests {
             SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>,
             XofTurboShake128,
             32,
-        >::new(2, 2, 0xFFFF0000, SumVec::new(2, 20, 4).unwrap())
+        >::new(2, 2, 0xFFFF0000, SumVec::new(3, 20, 4).unwrap())
         .unwrap();
 
         assert_eq!(
@@ -1939,7 +1939,7 @@ mod tests {
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_prio3_sum_vec_multithreaded() {
-        let prio3 = Prio3::new_sum_vec_multithreaded(2, 2, 20, 4).unwrap();
+        let prio3 = Prio3::new_sum_vec_multithreaded(2, 3, 20, 4).unwrap();
         assert_eq!(
             run_vdaf(
                 CTX_STR,
