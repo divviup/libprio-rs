@@ -10,10 +10,10 @@
         "4356b26ddbf021fcf80f75978c42dcc66001980947ad49d0",
         "e40030d9d748c588c24f0917a8fa006691fc0d272dfa797b"
     ],
-    "bits": 16,
     "chunk_length": 7,
     "ctx": "736f6d65206170706c69636174696f6e",
     "length": 3,
+    "max_measurement": 65535,
     "operations": [
         {
             "operation": "shard",
