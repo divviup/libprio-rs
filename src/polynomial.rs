@@ -87,8 +87,10 @@ pub(crate) fn poly_eval_batched<F: FieldElement>(
     x: F,
 ) -> Vec<F> {
     let mut l = F::one();
-    let mut u = Vec::with_capacity(polynomials.len());
-    u.extend(polynomials.iter().map(|poly| poly[0]));
+    let mut u: Vec<F> = polynomials
+        .iter()
+        .map(|p| p.first().copied().unwrap_or_else(F::zero))
+        .collect();
     let mut d = roots[0] - x;
     for (i, wn_i) in (1..).zip(&roots[1..]) {
         l *= d;
@@ -102,10 +104,11 @@ pub(crate) fn poly_eval_batched<F: FieldElement>(
         }
     }
 
+    let mut num_roots_inv = inv_pow2::<F>(roots.len());
     if roots.len() > 1 {
-        let num_roots_inv = -inv_pow2::<F>(roots.len());
-        u.iter_mut().for_each(|u_j| *u_j *= num_roots_inv);
+        num_roots_inv = -num_roots_inv;
     }
+    u.iter_mut().for_each(|u_j| *u_j *= num_roots_inv);
 
     u
 }
@@ -117,6 +120,10 @@ pub(crate) fn poly_eval_batched<F: FieldElement>(
 /// where
 ///   w_n is the primitive n-th root of unity in `F`, and
 ///   `n` must be a power of two.
+///
+/// # Panics
+///
+/// It panics when `n` is not a power of two.
 pub(crate) fn nth_root_powers<F: NttFriendlyFieldElement>(n: usize) -> Vec<F> {
     let log2_n = usize::try_from(log2(n as u128)).unwrap();
     assert_eq!(n, 1 << log2_n);
