@@ -755,6 +755,7 @@ pub mod test_utils {
         /// Aggregation parameter.
         pub agg_param: HexEncoded,
         /// Per-report preparation information.
+        #[serde(alias = "reports")]
         pub prep: Vec<PreparationTestVector>,
         /// Aggregate shares.
         pub agg_shares: Vec<HexEncoded>,
@@ -797,10 +798,13 @@ pub mod test_utils {
         /// Shard a report.
         Shard,
         /// Initial step of preparation.
+        #[serde(alias = "verify_init")]
         PrepInit,
         /// Combine prepare shares into a prepare message.
+        #[serde(alias = "verifier_shares_to_message")]
         PrepSharesToPrep,
         /// Subsequent steps of preparation.
+        #[serde(alias = "verify_next")]
         PrepNext,
         /// Aggregate output shares into an aggregate share.
         Aggregate,
@@ -826,10 +830,12 @@ pub mod test_utils {
         /// Prepare shares.
         ///
         /// This is indexed first by round, then by aggregator ID.
+        #[serde(alias = "verifier_shares")]
         pub prep_shares: Vec<Vec<HexEncoded>>,
         /// Prepare messages.
         ///
         /// This is indexed by round.
+        #[serde(alias = "verifier_messages")]
         pub prep_messages: Vec<HexEncoded>,
         /// Output shares.
         ///
