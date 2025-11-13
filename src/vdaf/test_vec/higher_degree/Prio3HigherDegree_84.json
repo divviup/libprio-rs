@@ -1,0 +1,235 @@
+{
+    "agg_param": "",
+    "agg_result": [
+        8,
+        9,
+        10,
+        11,
+        12
+    ],
+    "agg_shares": [
+        "fb7582d026465e0f92e6d466e719dcbff5c1b7eca0cfccadb83a0e15c93ab68527106b9d326258db",
+        "0e8a7d2fd8b9a1f078192b9917e62340163e48135e30335254c5f1ea35c5497ae6ef9462cc9da724"
+    ],
+    "ctx": "736f6d65206170706c69636174696f6e",
+    "degree": 9,
+    "gadget_calls": 5,
+    "operations": [
+        {
+            "operation": "shard",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "verify_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "verify_init",
+            "report_index": 0,
+            "success": true
+        },
+        {
+            "operation": "verifier_shares_to_message",
+            "report_index": 0,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "verify_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "verify_next",
+            "report_index": 0,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "verify_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "verify_init",
+            "report_index": 1,
+            "success": true
+        },
+        {
+            "operation": "verifier_shares_to_message",
+            "report_index": 1,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "verify_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "verify_next",
+            "report_index": 1,
+            "round": 1,
+            "success": true
+        },
+        {
+            "operation": "shard",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "verify_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "verify_init",
+            "report_index": 2,
+            "success": true
+        },
+        {
+            "operation": "verifier_shares_to_message",
+            "report_index": 2,
+            "round": 0,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "verify_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "verify_next",
+            "report_index": 2,
+            "round": 1,
+            "success": true
+        },
+        {
+            "aggregator_id": 0,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "aggregator_id": 1,
+            "operation": "aggregate",
+            "success": true
+        },
+        {
+            "operation": "unshard",
+            "success": true
+        }
+    ],
+    "reports": [
+        {
+            "input_shares": [
+                "5127d69ab76c1f05d94c9c774cb39eea4febe74e8a9a99e48f135a5c9813922c09b023df10761d49958b121cf9c0e1b4f39acef05fd87e6bb88c18d2daf68202d46823cb7320a4987e2d2e0f66483c152d263fbed37cccab199b0f8c1c788ba14158a74b0fe7f2122d838868ff891c2dcf41a84387d27bec3a000ff22ab0fd4b8eafbbf37ee945495b483280c120dd4088a2979ab42ed314df4ec97b75126a39a1386b78985394b1ea973235d119f571bda6a87f97fe929527a14456be34d6453c2feeef7349bbca1507afae7cc391f6c9d3db6cad98ab7692c2a82e0bc1e1d519e81be34cb8ea6511b9e39eaa97666d5b3d8a6b91e8b574a5b277ea059ed1892ed215742a0fc9a6365cac907f6ddff4e3472757221a90be5667f393cd7e3a4a91e634de5141dcf179c18a5247f18b0668908eb8384b1383bd66d8fac11e16d0f7892ad85e3e99220d3f9f12a2bb0e59c4841ab7d5d9b2271c0816c25c9c308f95b7548a1e9a84acd4ca26da2f27c688dcff49c8320439eb3da183780273e8cb49e6ccaaecb04425a0910f558cfdda153e190d5c586c43af398fe713f06e3abd7e442f3edd7f77837192f2cfb8d110922b00487f1322ba2292a91d6cb14f070cfbe6d3f872a578b3ad4a6e456d6744b000e72a3a6d9fa60a0aae778a95ef26004e771c939062f286b98a69a98e70557a3fb976e792ce201b9fbc2b53f6feb78577842979a0fbaf5d78a6f7fb67eec299e44b27b2a261410006ea75345ca93fccd2303bd9c4be784c7c9b0d39cd0fd8ab",
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+            ],
+            "measurement": [
+                0,
+                0,
+                0,
+                0,
+                0
+            ],
+            "nonce": "000102030405060708090a0b0c0d0e0f",
+            "out_shares": [
+                "5127d69ab76c1f05d94c9c774cb39eea4febe74e8a9a99e48f135a5c9813922c09b023df10761d49",
+                "b0d829654793e0fa28b36388b24c6115b21418b17465661b72eca5a366ec6dd3f84fdc20ee89e2b6"
+            ],
+            "public_share": "",
+            "rand": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+            "verifier_messages": [
+                ""
+            ],
+            "verifier_shares": [
+                [
+                    "20a7c0e92ab67d115a8818c94752e9e719f6741e1436a3a7",
+                    "e1583f16d44982ee434594f5aedd884ca372040da0754152"
+                ]
+            ]
+        },
+        {
+            "input_shares": [
+                "5927d69ab76c1f05e14c9c774cb39eea57ebe74e8a9a99e497135a5c9813922c11b023df10761d49958b121cf9c0e1b44b621c7f25590f63d83c2462076df1f421d87aed9499ae9b25f3cf8a95d2131008b8b548f3394280d5e4cfc694ac7edcee14763c87d3c1d494ad19ee8d9364b8fc0610a644c171bea56604e35478f661e5d5055fe984ce721e923e9ef55a2eb2277461eba5d9dc96434b5d0a4e6c86176b6b29829801709e402dc06de20181c3cdf4dc3134674324294d952dba1daeef7ac75bfb6bd7cb2ef29235c70c8c6b5e2311359570a5c41d93138d3c6a906bec735698b60eaa33f36dbe1ca0443ee581425b4166ee8962aec8f1dc4728447043f2ab194a649412605c77a8ffef25e535ed6cacd855e5ccd0ad36bb7d8c4ee8761739e6d5540759c383950aa788cf150d59dd526b62a4d2f052430f43fe0039c0762761ae409a5265d5fb2bf806ed4a11077474d307d0b66b92e3abdd289482a350ff728caa87cf56314a70180ae688af873896eb8151278314e7b62047e4a4c1591b3a5c76cc8ee89742893c0445e6d6a4fd547ebff7f3ef8658b46a00f2579565bd6c15da6210a7c36db808cbdd668fcbbdf4164f603ea81332dbe15d47c4661e79049d451e9d0395d9cb08ead5849ab917c5b1939ed1b4d050d1a9ecbe27e03109fa9c7f0a0c48392215b92f11b5a8887d18dc60700bfe04104d3752e63dd91f1842dea4e39abd63f3624aabc13221a681cc76d9a08cc1063cb9e1b83188a3f72d47300ff40ab02b107b9ec32d8361",
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+            ],
+            "measurement": [
+                8,
+                8,
+                8,
+                8,
+                8
+            ],
+            "nonce": "000102030405060708090a0b0c0d0e0f",
+            "out_shares": [
+                "5927d69ab76c1f05e14c9c774cb39eea57ebe74e8a9a99e497135a5c9813922c11b023df10761d49",
+                "b0d829654793e0fa28b36388b24c6115b21418b17465661b72eca5a366ec6dd3f84fdc20ee89e2b6"
+            ],
+            "public_share": "",
+            "rand": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+            "verifier_messages": [
+                ""
+            ],
+            "verifier_shares": [
+                [
+                    "20a7c0e92ab67d11e38c8a728e36a791e101988743a68ad5",
+                    "e1583f16d44982ee434594f5aedd884ca372040da0754152"
+                ]
+            ]
+        },
+        {
+            "input_shares": [
+                "5127d69ab76c1f05da4c9c774cb39eea51ebe74e8a9a99e492135a5c9813922c0db023df10761d49958b121cf9c0e1b4117b6ba6d4aadebdcba5de9a1c98abb0e99cbb4f5d2340d80c3bc31c7f4eb59874bbbae54eb23b0102d7afdc2185ea210f21be857264742e2d5ba89c506505a789261f5fef7b7b1dbc3a1c8072f325bcc3b2f1d011476117ae13ad100d252a13f2fd271222fea7971a10debd8bfabfd8540d89b1c8933d8fbe07cb2d8d3ac8c21f2a9d3b18e6249cd3ef6efe6864c62b85596d2859f3387389e8739b229bcdcf8d14d939db277c015519d102c98c5c4c28c3ab31258df8d1f19dd76809e988185f6116f54f5d4374f8dbd9104a0dfc5576a78e9b012b005594f9bb12073c318d0134cc83ee54468aab6ccfe1baa9e1e66af49617bc9ab3c0e0fc562bb52268c42dd9304aa2614007f6372a35235cfb1e3602ddea11ba34579067aa15ee58d2ca02d2d679dc331db58d40ee15b8c1c80b2d75ef5006084556fb3f2e53d284ec5781ee03b87e4e6f47bef3a456524bb38d2c24bd86358f9721dc6a8ceacb356f69b8b161a70994b7c39107ce8b1a95c8f7a906d601bca53d66b0cb259e5d569f98ecb122dab29ded7b331de4c7fc64788c1393b5cb057ba2dbf004d2f9c6a93f356df4beedd5eca224075d91b0bb98bb54c2bc504a2ec753ed912ba2bb48486770d563abf4221a0b58b05992b981502b2462ebdef5d8a52ba0c39227a2f0251c882c3bd4579fc39b150431e48de9c8ad8d32e59e9c8ada802524e42110f1d656ac",
+                "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+            ],
+            "measurement": [
+                0,
+                1,
+                2,
+                3,
+                4
+            ],
+            "nonce": "000102030405060708090a0b0c0d0e0f",
+            "out_shares": [
+                "5127d69ab76c1f05da4c9c774cb39eea51ebe74e8a9a99e492135a5c9813922c0db023df10761d49",
+                "b0d829654793e0fa28b36388b24c6115b21418b17465661b72eca5a366ec6dd3f84fdc20ee89e2b6"
+            ],
+            "public_share": "",
+            "rand": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f",
+            "verifier_messages": [
+                ""
+            ],
+            "verifier_shares": [
+                [
+                    "20a7c0e92ab67d11e3ccd550c980ba8ee5a4ea6e9a9b1956",
+                    "e1583f16d44982ee434594f5aedd884ca372040da0754152"
+                ]
+            ]
+        }
+    ],
+    "shares": 2,
+    "verify_key": "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+}
