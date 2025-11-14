@@ -717,7 +717,7 @@ impl<F: NttFriendlyFieldElement> QueryShimGadget<F> {
         let gadget_degree = inner.degree();
         let gadget_arity = inner.arity();
         let m = (1 + inner.calls()).next_power_of_two();
-        let p = m * gadget_degree;
+        let p = (m - 1) * gadget_degree + 1;
 
         // Each call to this gadget records the values at which intermediate proof polynomials were
         // interpolated. The first point was a random value chosen by the prover and transmitted in
