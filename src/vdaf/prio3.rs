@@ -1732,6 +1732,37 @@ pub fn optimal_chunk_length(measurement_length: usize) -> usize {
     best_opt.unwrap().chunk_length
 }
 
+/// Utilities for testing Prio3.
+#[cfg(feature = "test-util")]
+pub mod test_utils {
+    use crate::{
+        field::Field64,
+        flp::types::test_utils::HigherDegree,
+        vdaf::{prio3::Prio3, xof::XofTurboShake128, VdafError},
+    };
+
+    /// A VDAF for testing purposes.
+    ///
+    /// This uses a gadget with a configurable degree and number of calls.
+    pub type Prio3HigherDegree = Prio3<HigherDegree<Field64>, XofTurboShake128, 32>;
+
+    impl Prio3HigherDegree {
+        /// Construct an instance of `Prio3HigherDegree` with the given parameters.
+        pub fn new_higher_degree(
+            num_aggregators: u8,
+            degree: usize,
+            gadget_calls: usize,
+        ) -> Result<Self, VdafError> {
+            Prio3::new(
+                num_aggregators,
+                1,
+                0xFFFFFFFF,
+                HigherDegree::new(degree, gadget_calls)?,
+            )
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

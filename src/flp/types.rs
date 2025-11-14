@@ -1057,6 +1057,135 @@ pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
     Ok(output)
 }
 
+/// Utilities for testing AFEs and validity circuits.
+#[cfg(feature = "test-util")]
+pub mod test_utils {
+    use std::slice;
+
+    use crate::{
+        field::NttFriendlyFieldElement,
+        flp::{gadgets::PolyEval, types::decode_result_vec, Flp, FlpError, Gadget, Type},
+        polynomial::poly_mul,
+    };
+
+    /// A type used for testing the FLP.
+    ///
+    /// This has a gadget with a configurable degree and number of calls in its validity circuit.
+    #[derive(Debug, Clone, PartialEq, Eq)]
+    pub struct HigherDegree<F: NttFriendlyFieldElement> {
+        degree: usize,
+        gadget_calls: usize,
+
+        // Constant
+        polynomial: Vec<F>,
+    }
+
+    impl<F: NttFriendlyFieldElement> HigherDegree<F> {
+        /// Return a new `HigherDegree` type with the given parameters.
+        pub fn new(degree: usize, gadget_calls: usize) -> Result<Self, FlpError> {
+            let mut polynomial = vec![F::one()];
+            for i in 0..degree {
+                let i_field = F::from(F::Integer::try_from(i).map_err(|_| {
+                    FlpError::InvalidParameter(format!(
+                        "degree {degree} is too large for the field"
+                    ))
+                })?);
+                polynomial = poly_mul(&polynomial, &[-i_field, F::one()])
+            }
+
+            Ok(Self {
+                degree,
+                gadget_calls,
+                polynomial,
+            })
+        }
+    }
+
+    impl<F: NttFriendlyFieldElement> Flp for HigherDegree<F> {
+        type Field = F;
+
+        fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>> {
+            vec![Box::new(PolyEval::new(
+                self.polynomial.clone(),
+                self.gadget_calls,
+            ))]
+        }
+
+        fn num_gadgets(&self) -> usize {
+            1
+        }
+
+        fn valid(
+            &self,
+            gadgets: &mut Vec<Box<dyn Gadget<Self::Field>>>,
+            input: &[Self::Field],
+            joint_rand: &[Self::Field],
+            _num_shares: usize,
+        ) -> Result<Vec<Self::Field>, FlpError> {
+            self.valid_call_check(input, joint_rand)?;
+            let gadget = gadgets.first_mut().unwrap();
+            let mut output = vec![F::zero(); input.len()];
+            for (input_elem, output_elem) in input.iter().zip(output.iter_mut()) {
+                *output_elem = gadget.call(slice::from_ref(input_elem))?;
+            }
+            Ok(output)
+        }
+
+        fn input_len(&self) -> usize {
+            self.gadget_calls
+        }
+
+        fn proof_len(&self) -> usize {
+            1 + self.degree * ((1 + self.gadget_calls).next_power_of_two() - 1) + 1
+        }
+
+        fn verifier_len(&self) -> usize {
+            3
+        }
+
+        fn joint_rand_len(&self) -> usize {
+            0
+        }
+
+        fn eval_output_len(&self) -> usize {
+            self.gadget_calls
+        }
+
+        fn prove_rand_len(&self) -> usize {
+            1
+        }
+    }
+
+    impl<F: NttFriendlyFieldElement> Type for HigherDegree<F> {
+        type Measurement = Vec<F::Integer>;
+        type AggregateResult = Vec<F::Integer>;
+
+        fn encode_measurement(
+            &self,
+            measurement: &Self::Measurement,
+        ) -> Result<Vec<Self::Field>, FlpError> {
+            Ok(measurement.iter().map(|value| F::from(*value)).collect())
+        }
+
+        fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
+            self.truncate_call_check(&input)?;
+            Ok(input)
+        }
+
+        fn decode_result(
+            &self,
+            data: &[Self::Field],
+            _num_measurements: usize,
+        ) -> Result<Self::AggregateResult, FlpError> {
+            decode_result_vec(data, self.gadget_calls)
+        }
+
+        fn output_len(&self) -> usize {
+            self.gadget_calls
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
