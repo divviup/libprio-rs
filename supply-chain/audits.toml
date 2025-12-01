@@ -646,6 +646,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.3.0"
 
+[[audits.prio]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.16.8"
+
 [[audits.proc-macro-error-attr]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
