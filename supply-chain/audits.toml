@@ -15,6 +15,7 @@ criteria = "safe-to-deploy"
 user-id = 213776
 start = "2020-09-28"
 end = "2026-01-07"
+renew = false
 
 [[audits.aes]]
 who = "Brandon Pitman <bran@bran.land>"
@@ -644,6 +645,11 @@ notes = "The unsafe code has moved from `compare_exchange` to a new `init` funct
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.3.0"
+
+[[audits.prio]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.16.8"
 
 [[audits.proc-macro-error-attr]]
 who = "David Cook <dcook@divviup.org>"
