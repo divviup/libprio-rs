@@ -7,7 +7,7 @@ exclude = ["/supply-chain"]
 description = "Implementation of the Prio aggregation system core: https://crypto.stanford.edu/prio/"
 license = "MPL-2.0 AND Apache-2.0 AND MIT"
 repository = "https://github.com/divviup/libprio-rs"
-rust-version = "1.83"
+rust-version = "1.86"
 resolver = "2"
 
 [dependencies]
