@@ -15,6 +15,7 @@ criteria = "safe-to-deploy"
 user-id = 213776
 start = "2020-09-28"
 end = "2026-01-07"
+renew = false
 
 [[audits.aes]]
 who = "Brandon Pitman <bran@bran.land>"
