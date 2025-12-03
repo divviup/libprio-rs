@@ -8,6 +8,12 @@ user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
+[[publisher.cc]]
+version = "1.2.30"
+when = "2025-07-18"
+user-id = 55123
+user-login = "rust-lang-owner"
+
 [[publisher.clap]]
 version = "4.5.38"
 when = "2025-05-11"
@@ -293,6 +299,12 @@ who = "Nick Fitzgerald <fitzgen@gmail.com>"
 criteria = "safe-to-deploy"
 version = "3.11.1"
 notes = "I am the author of this crate."
+
+[[audits.bytecode-alliance.audits.cc]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "1.2.30 -> 1.2.41"
+notes = "This is a trusted rust-lang/rust crate"
 
 [[audits.bytecode-alliance.audits.cfg-if]]
 who = "Alex Crichton <alex@alexcrichton.com>"
