@@ -42,6 +42,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "0.9.3"
 
+[[audits.alloca]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.4.0"
+
 [[audits.anstyle]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -108,6 +113,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.9.0"
 
+[[audits.cc]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "1.2.41 -> 1.2.48"
+
 [[audits.cfg-if]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -169,10 +179,25 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.6.0 -> 0.7.0"
 
+[[audits.criterion]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.7.0 -> 0.8.0"
+
 [[audits.criterion-plot]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.5.0 -> 0.6.0"
+
+[[audits.criterion-plot]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.6.0 -> 0.7.0"
+
+[[audits.criterion-plot]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.7.0 -> 0.8.0"
 
 [[audits.crunchy]]
 who = "David Cook <dcook@divviup.org>"
@@ -284,6 +309,11 @@ who = "Tim Geoghegan <timg@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.2.9 -> 0.3.0"
 notes = "The diff is huge, but that's because it introduces a wrapper around indexing into arrays which is used in many many places. There is no new unsafe code and no change to build scripts I can detect."
+
+[[audits.find-msvc-tools]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.1.4 -> 0.1.5"
 
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
@@ -645,6 +675,11 @@ notes = "The unsafe code has moved from `compare_exchange` to a new `init` funct
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.3.0"
+
+[[audits.page_size]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.6.0"
 
 [[audits.prio]]
 who = "David Cook <dcook@divviup.org>"
@@ -1144,6 +1179,12 @@ user-id = 189 # Andrew Gallant (BurntSushi)
 start = "2019-06-09"
 end = "2024-06-08"
 
+[[trusted.cc]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2022-10-29"
+end = "2026-12-03"
+
 [[trusted.clap]]
 criteria = "safe-to-deploy"
 user-id = 6743 # Ed Page (epage)
@@ -1155,6 +1196,12 @@ criteria = "safe-to-deploy"
 user-id = 6743 # Ed Page (epage)
 start = "2023-03-28"
 end = "2026-05-22"
+
+[[trusted.find-msvc-tools]]
+criteria = "safe-to-deploy"
+user-id = 539 # Josh Stone (cuviper)
+start = "2025-08-29"
+end = "2026-12-03"
 
 [[trusted.itoa]]
 criteria = "safe-to-deploy"
