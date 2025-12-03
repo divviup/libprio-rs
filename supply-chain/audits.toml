@@ -42,6 +42,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "0.9.3"
 
+[[audits.alloca]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+version = "0.4.0"
+
 [[audits.anstyle]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
