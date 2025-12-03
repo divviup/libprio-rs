@@ -179,6 +179,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.6.0 -> 0.7.0"
 
+[[audits.criterion]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.7.0 -> 0.8.0"
+
 [[audits.criterion-plot]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
