@@ -300,6 +300,11 @@ criteria = "safe-to-deploy"
 delta = "0.2.9 -> 0.3.0"
 notes = "The diff is huge, but that's because it introduces a wrapper around indexing into arrays which is used in many many places. There is no new unsafe code and no change to build scripts I can detect."
 
+[[audits.find-msvc-tools]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.1.4 -> 0.1.5"
+
 [[audits.fixed]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
