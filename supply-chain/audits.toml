@@ -184,6 +184,16 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 delta = "0.7.0 -> 0.8.0"
 
+[[audits.criterion]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-run"
+delta = "0.8.0 -> 0.8.1"
+
+[[audits.criterion-plot]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-run"
+version = "0.8.1"
+
 [[audits.criterion-plot]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
