@@ -67,10 +67,6 @@ notes = "This is only used when the \"crypto-dependencies\" or \"prio2\" feature
 version = "0.4.0"
 criteria = "safe-to-run"
 
-[[exemptions.criterion-plot]]
-version = "0.5.0"
-criteria = "safe-to-run"
-
 [[exemptions.crossbeam-deque]]
 version = "0.8.2"
 criteria = "safe-to-deploy"
