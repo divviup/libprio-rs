@@ -1050,7 +1050,7 @@ end = "2026-09-29"
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-02-28"
-end = "2025-07-01"
+end = "2026-12-22"
 
 [[trusted.syn]]
 criteria = "safe-to-deploy"

@@ -128,8 +128,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.140"
-when = "2025-03-03"
+version = "1.0.146"
+when = "2025-12-22"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -525,17 +525,6 @@ delta = "0.33.1 -> 0.33.2"
 who = "J.C. Jones <jc@insufficient.coffee>"
 criteria = "safe-to-deploy"
 delta = "1.20.3 -> 1.21.0"
-
-[[audits.isrg.audits.serde_json]]
-who = "Tim Geoghegan <timg@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.140 -> 1.0.141"
-notes = "There are three new `unsafe` blocks, but they are well-justified and appear safe by code inspection."
-
-[[audits.isrg.audits.serde_json]]
-who = "J.C. Jones <jc@divviup.org>"
-criteria = "safe-to-deploy"
-delta = "1.0.142 -> 1.0.143"
 
 [[audits.isrg.audits.sha2]]
 who = "David Cook <dcook@divviup.org>"
