@@ -16,7 +16,7 @@ jobs:
     name: Vet Dependencies
     runs-on: ubuntu-latest
     env:
-      CARGO_VET_VERSION: 0.10.0
+      CARGO_VET_COMMIT: 8b40d6351ed9758a73a4a0bf2c930c17a35c5e15
     steps:
     - uses: actions/checkout@v6
     - name: Install Rust toolchain
@@ -25,10 +25,10 @@ jobs:
       uses: actions/cache@v5
       with:
         path: ${{ runner.tool_cache }}/cargo-vet
-        key: cargo-vet-bin-${{ env.CARGO_VET_VERSION }}
+        key: cargo-vet-bin-${{ env.CARGO_VET_COMMIT }}
     - name: Add the tool cache directory to the search path
       run: echo "${{ runner.tool_cache }}/cargo-vet/bin/" >> $GITHUB_PATH
     - name: Ensure that the tool cache is populated with the cargo-vet binary
-      run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --version ${{ env.CARGO_VET_VERSION }} cargo-vet
+      run: cargo install --root ${{ runner.tool_cache }}/cargo-vet --git https://github.com/mozilla/cargo-vet.git --rev ${{ env.CARGO_VET_COMMIT }} --locked cargo-vet
     - name: Invoke cargo-vet
       run: cargo vet --locked
