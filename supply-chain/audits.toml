@@ -751,6 +751,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.6.4 -> 0.9.3"
 
+[[audits.rand_core]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.9.3 -> 0.9.5"
+
 [[audits.rand_distr]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
