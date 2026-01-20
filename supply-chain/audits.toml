@@ -1083,6 +1083,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.63 -> 1.0.64"
 
+[[audits.thiserror]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "2.0.17 -> 2.0.18"
+
 [[audits.thiserror-impl]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
@@ -1102,6 +1107,11 @@ delta = "1.0.40 -> 1.0.43"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.63 -> 1.0.64"
+
+[[audits.thiserror-impl]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "2.0.17 -> 2.0.18"
 
 [[audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
