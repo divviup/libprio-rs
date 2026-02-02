@@ -99,13 +99,6 @@ user-id = 6825
 user-login = "sunfishcode"
 user-name = "Dan Gohman"
 
-[[publisher.ryu]]
-version = "1.0.11"
-when = "2022-08-03"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
 [[publisher.serde]]
 version = "1.0.228"
 when = "2025-09-27"
@@ -128,8 +121,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.146"
-when = "2025-12-22"
+version = "1.0.149"
+when = "2026-01-06"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -273,6 +266,13 @@ when = "2023-03-31"
 user-id = 64539
 user-login = "kennykerr"
 user-name = "Kenny Kerr"
+
+[[publisher.zmij]]
+version = "1.0.19"
+when = "2026-02-01"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
 
 [[audits.bytecode-alliance.audits.anes]]
 who = "Pat Hickey <phickey@fastly.com>"
