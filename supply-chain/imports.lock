@@ -119,13 +119,6 @@ user-id = 189
 user-login = "BurntSushi"
 user-name = "Andrew Gallant"
 
-[[publisher.ryu]]
-version = "1.0.11"
-when = "2022-08-03"
-user-id = 3618
-user-login = "dtolnay"
-user-name = "David Tolnay"
-
 [[publisher.serde]]
 version = "1.0.228"
 when = "2025-09-27"
@@ -148,8 +141,8 @@ user-login = "dtolnay"
 user-name = "David Tolnay"
 
 [[publisher.serde_json]]
-version = "1.0.146"
-when = "2025-12-22"
+version = "1.0.149"
+when = "2026-01-06"
 user-id = 3618
 user-login = "dtolnay"
 user-name = "David Tolnay"
@@ -236,6 +229,13 @@ version = "0.39.0"
 when = "2025-02-05"
 user-id = 73222
 user-login = "wasmtime-publish"
+
+[[publisher.zmij]]
+version = "1.0.19"
+when = "2026-02-01"
+user-id = 3618
+user-login = "dtolnay"
+user-name = "David Tolnay"
 
 [[audits.bytecode-alliance.wildcard-audits.wit-bindgen-rt]]
 who = "Alex Crichton <alex@alexcrichton.com>"
