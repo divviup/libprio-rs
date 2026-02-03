@@ -57,6 +57,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
 version = "1.5.0"
 
+[[audits.az]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.2.1 -> 1.3.0"
+
 [[audits.base64]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -373,6 +378,11 @@ notes = """
 There is some new `unsafe` code but it does reasonable things like
 unchecked arithmetic.
 """
+
+[[audits.fixed]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.29.0 -> 1.30.0"
 
 [[audits.fixed-macro]]
 who = "David Cook <dcook@divviup.org>"
