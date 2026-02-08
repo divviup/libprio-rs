@@ -2,7 +2,10 @@
 
 //! A collection of [`Type`] implementations.
 
-use crate::field::{FieldElementWithIntegerExt, Integer, NttFriendlyFieldElement};
+use crate::field::{
+    FieldElementWithInteger, FieldElementWithIntegerExt, FieldError, Integer,
+    NttFriendlyFieldElement,
+};
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{Flp, FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
@@ -10,7 +13,7 @@ use std::convert::TryInto;
 use std::fmt::{self, Debug};
 use std::marker::PhantomData;
 use std::slice;
-use subtle::Choice;
+use subtle::{Choice, ConditionallySelectable, ConstantTimeGreater};
 
 #[cfg(feature = "experimental")]
 mod dp;
@@ -132,9 +135,9 @@ impl<F: NttFriendlyFieldElement> Type for Count<F> {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Sum<F: NttFriendlyFieldElement> {
     max_measurement: F::Integer,
+    last_weight: F::Integer,
+    last_weight_field: F,
 
-    // Computed from max_measurement
-    offset: F::Integer,
     bits: usize,
     // Constant
     bit_range_checker: Vec<F>,
@@ -162,9 +165,8 @@ impl<F: NttFriendlyFieldElement> Sum<F> {
         // Number of bits needed to represent x is ⌊log₂(x)⌋ + 1
         let bits = max_measurement.checked_ilog2().unwrap() as usize + 1;
 
-        // The offset we add to the summand for range-checking purposes
-        let one = F::Integer::try_from(1).unwrap();
-        let offset = (one << bits) - one - max_measurement;
+        let last_weight = max_measurement - ((F::Integer::one() << (bits - 1)) - F::Integer::one());
+        let last_weight_field = F::from(last_weight);
 
         // Construct a range checker to ensure encoded bits are in the range [0, 2)
         let bit_range_checker = poly_range_check(0, 2);
@@ -172,7 +174,8 @@ impl<F: NttFriendlyFieldElement> Sum<F> {
         Ok(Self {
             bits,
             max_measurement,
-            offset,
+            last_weight,
+            last_weight_field,
             bit_range_checker,
         })
     }
@@ -184,7 +187,7 @@ impl<F: NttFriendlyFieldElement> Flp for Sum<F> {
     fn gadget(&self) -> Vec<Box<dyn Gadget<F>>> {
         vec![Box::new(PolyEval::new(
             self.bit_range_checker.clone(),
-            2 * self.bits,
+            self.bits,
         ))]
     }
 
@@ -197,33 +200,24 @@ impl<F: NttFriendlyFieldElement> Flp for Sum<F> {
         g: &mut Vec<Box<dyn Gadget<F>>>,
         input: &[F],
         joint_rand: &[F],
-        num_shares: usize,
+        _num_shares: usize,
     ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
         let gadget = &mut g[0];
-        let mut output = vec![F::zero(); input.len() + 1];
+        let mut output = vec![F::zero(); input.len()];
         for (bit, output_elem) in input.iter().zip(output[..input.len()].iter_mut()) {
             *output_elem = gadget.call(slice::from_ref(bit))?;
         }
-
-        let range_check = {
-            let offset = F::from(self.offset);
-            let shares_inv = F::from(F::valid_integer_try_from(num_shares)?).inv();
-            let sum = F::decode_bitvector(&input[..self.bits])?;
-            let sum_plus_offset = F::decode_bitvector(&input[self.bits..])?;
-            offset * shares_inv + sum - sum_plus_offset
-        };
-        output[input.len()] = range_check;
 
         Ok(output)
     }
 
     fn input_len(&self) -> usize {
-        2 * self.bits
+        self.bits
     }
 
     fn proof_len(&self) -> usize {
-        2 * ((1 + 2 * self.bits).next_power_of_two() - 1) + 2
+        2 * ((1 + self.bits).next_power_of_two() - 1) + 2
     }
 
     fn verifier_len(&self) -> usize {
@@ -235,7 +229,7 @@ impl<F: NttFriendlyFieldElement> Flp for Sum<F> {
     }
 
     fn eval_output_len(&self) -> usize {
-        2 * self.bits + 1
+        self.bits
     }
 
     fn prove_rand_len(&self) -> usize {
@@ -255,16 +249,17 @@ impl<F: NttFriendlyFieldElement> Type for Sum<F> {
             )));
         }
 
-        let enc_summand = F::encode_as_bitvector(*summand, self.bits)?;
-        let enc_summand_plus_offset = F::encode_as_bitvector(self.offset + *summand, self.bits)?;
-
-        Ok(enc_summand.chain(enc_summand_plus_offset).collect())
+        let mut encoded = Vec::with_capacity(self.bits);
+        encode_range_checked_int(*summand, self.bits, self.last_weight, &mut encoded)?;
+        Ok(encoded)
     }
 
     fn truncate(&self, input: Vec<F>) -> Result<Vec<F>, FlpError> {
         self.truncate_call_check(&input)?;
-        let res = F::decode_bitvector(&input[..self.bits])?;
-        Ok(vec![res])
+        Ok(vec![decode_range_checked_int(
+            &input,
+            self.last_weight_field,
+        )?])
     }
 
     fn decode_result(&self, data: &[F], _num_measurements: usize) -> Result<F::Integer, FlpError> {
@@ -541,7 +536,10 @@ where
 /// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
 /// values at each position across all measurements.
 #[derive(PartialEq, Eq)]
-pub struct MultihotCountVec<F, S> {
+pub struct MultihotCountVec<F, S>
+where
+    F: FieldElementWithInteger,
+{
     // Parameters
     /// The number of elements in the list of booleans
     length: usize,
@@ -553,7 +551,8 @@ pub struct MultihotCountVec<F, S> {
     // Calculated from parameters
     gadget_calls: usize,
     bits_for_weight: usize,
-    offset: usize,
+    last_weight: F::Integer,
+    last_weight_field: F,
     phantom: PhantomData<(F, S)>,
 }
 
@@ -594,16 +593,27 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
                 "max_weight cannot be zero".to_string(),
             ));
         }
+        let Ok(max_weight_converted) = F::Integer::try_from(max_weight) else {
+            return Err(FlpError::InvalidParameter(
+                "max_weight is too large".to_string(),
+            ));
+        };
+        if max_weight_converted >= F::modulus() {
+            return Err(FlpError::InvalidParameter(
+                "max_weight is greater than the field modulus".to_string(),
+            ));
+        }
 
         // The bitlength of a measurement is the number of buckets plus the bitlength of the max
         // weight
         let bits_for_weight = max_weight.ilog2() as usize + 1;
         let meas_length = num_buckets + bits_for_weight;
+        let last_weight = max_weight_converted
+            - ((F::Integer::one() << (bits_for_weight - 1)) - F::Integer::one());
+        let last_weight_field = F::from(last_weight);
 
         // Gadget calls is ⌈meas_length / chunk_length⌉
         let gadget_calls = meas_length.div_ceil(chunk_length);
-        // Offset is 2^max_weight.bitlen() - 1 - max_weight
-        let offset = (1 << bits_for_weight) - 1 - max_weight;
 
         Ok(Self {
             length: num_buckets,
@@ -611,21 +621,23 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountV
             chunk_length,
             gadget_calls,
             bits_for_weight,
-            offset,
+            last_weight,
+            last_weight_field,
             phantom: PhantomData,
         })
     }
 }
 
-// Cannot autoderive clone because it requires F and S to be Clone, which they're not in general
-impl<F, S> Clone for MultihotCountVec<F, S> {
+// Cannot autoderive clone because it requires S to be Clone, which does not generally hold
+impl<F: FieldElementWithInteger, S> Clone for MultihotCountVec<F, S> {
     fn clone(&self) -> Self {
         Self {
             length: self.length,
             max_weight: self.max_weight,
             chunk_length: self.chunk_length,
             bits_for_weight: self.bits_for_weight,
-            offset: self.offset,
+            last_weight: self.last_weight,
+            last_weight_field: self.last_weight_field,
             gadget_calls: self.gadget_calls,
             phantom: self.phantom,
         }
@@ -666,14 +678,10 @@ where
         // Check that the elements of `input` sum to at most `max_weight`.
         let count_vec = &input[..self.length];
         let weight = count_vec.iter().fold(F::zero(), |a, b| a + *b);
-        let offset_weight_reported = F::decode_bitvector(&input[self.length..])?;
+        let weight_reported =
+            decode_range_checked_int(&input[self.length..], self.last_weight_field)?;
 
-        // From spec: weight_check = self.offset*shares_inv + weight - weight_reported
-        let weight_check = {
-            let offset = F::from(F::valid_integer_try_from(self.offset)?);
-            let shares_inv = F::from(F::valid_integer_try_from(num_shares)?).inv();
-            offset * shares_inv + weight - offset_weight_reported
-        };
+        let weight_check = weight - weight_reported;
 
         Ok(vec![range_check, weight_check])
     }
@@ -730,20 +738,24 @@ where
             )));
         }
 
-        // Convert bool vector to field elems
-        let multihot_vec = measurement
-            .iter()
-            // We can unwrap because any Integer type can cast from bool
-            .map(|bit| F::from(F::valid_integer_try_from(*bit as usize).unwrap()));
+        let mut encoded = Vec::with_capacity(self.length + self.bits_for_weight);
 
-        // Encode the measurement weight in binary (actually, the weight plus some offset)
-        let offset_weight_bits = {
-            let offset_weight_reported = F::valid_integer_try_from(self.offset + weight_reported)?;
-            F::encode_as_bitvector(offset_weight_reported, self.bits_for_weight)?
-        };
+        // Convert bool vector to field elems
+        encoded.extend(measurement.iter().map(|bit| {
+            // We can unwrap because any Integer type can cast from bool
+            F::from(F::valid_integer_try_from(*bit as usize).unwrap())
+        }));
+
+        // Encode the measurement weight in a modified binary form
+        encode_range_checked_int::<F>(
+            F::valid_integer_try_from(weight_reported)?,
+            self.bits_for_weight,
+            self.last_weight,
+            &mut encoded,
+        )?;
 
         // Report the concat of the two
-        Ok(multihot_vec.chain(offset_weight_bits).collect())
+        Ok(encoded)
     }
 
     fn decode_result(
@@ -769,16 +781,19 @@ where
     }
 }
 
-/// A sequence of integers in range `[0, 2^bits)`. This type uses a neat trick from [[BBCG+19],
-/// Corollary 4.9] to reduce the proof size to roughly the square root of the input size.
+/// A sequence of integers in the range `[0, max_measurement]`. This type uses a neat trick from
+/// [[BBCG+19], Corollary 4.9] to reduce the proof size to roughly the square root of the input
+/// size.
 ///
 /// [BBCG+19]: https://eprint.iacr.org/2019/188
 #[derive(PartialEq, Eq)]
 pub struct SumVec<F: NttFriendlyFieldElement, S> {
     len: usize,
     bits: usize,
+    max_measurement: F::Integer,
+    last_weight: F::Integer,
+    last_weight_field: F,
     flattened_len: usize,
-    max: F::Integer,
     chunk_length: usize,
     gadget_calls: usize,
     phantom: PhantomData<S>,
@@ -788,6 +803,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for SumVec<F, S> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SumVec")
             .field("len", &self.len)
+            .field("max_measurement", &self.max_measurement)
             .field("bits", &self.bits)
             .field("chunk_length", &self.chunk_length)
             .finish()
@@ -799,29 +815,36 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
     ///
     /// # Errors
     ///
-    /// * The length of the encoded measurement, i.e., `bits * len`, overflows addressable memory.
-    /// * The bit width cannot be encoded, i.e., `bits` is larger than or equal to the number of
-    ///   bits required to encode field elements.
-    /// * Any of `bits`, `len`, or `chunk_length` are zero.
-    pub fn new(bits: usize, len: usize, chunk_length: usize) -> Result<Self, FlpError> {
+    /// * The measurements cannot be encoded, i.e., `max_measurement` is larger than or equal to the
+    ///   field's modulus.
+    /// * Any of `max_measurement`, `len`, or `chunk_length` are zero.
+    /// * The length of the encoded measurement, i.e., `len` times the number of bits needed to
+    ///   represent `max_measurement`, overflows addressable memory.
+    pub fn new(
+        max_measurement: F::Integer,
+        len: usize,
+        chunk_length: usize,
+    ) -> Result<Self, FlpError> {
+        // Nubmer of bits needed to represent each element of the measurement.
+        let bits = max_measurement.checked_ilog2().unwrap() as usize + 1;
+
         let flattened_len = bits.checked_mul(len).ok_or_else(|| {
             FlpError::InvalidParameter("`bits*len` overflows addressable memory".into())
         })?;
 
-        // Check if the bit width is too large. This limit is defined to be one bit less than the
-        // number of bits required to encode `F::Integer`. (One less so that we can compute `1 <<
-        // bits` without overflowing.)
-        let limit = std::mem::size_of::<F::Integer>() * 8 - 1;
-        if bits > limit {
-            return Err(FlpError::InvalidParameter(format!(
-                "bit width exceeds limit of {limit}"
-            )));
+        let last_weight = max_measurement - ((F::Integer::one() << (bits - 1)) - F::Integer::one());
+        let last_weight_field = F::from(last_weight);
+
+        if max_measurement >= F::modulus() {
+            return Err(FlpError::InvalidParameter(
+                "max_measurement exceeds field modulus".to_string(),
+            ));
         }
 
         // Check for degenerate parameters.
-        if bits == 0 {
+        if max_measurement == F::Integer::zero() {
             return Err(FlpError::InvalidParameter(
-                "bits cannot be zero".to_string(),
+                "max_measurement cannot be zero".to_string(),
             ));
         }
         if len == 0 {
@@ -833,10 +856,6 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
             ));
         }
 
-        // Compute the largest encodable measurement.
-        let one = F::Integer::from(F::one());
-        let max = (one << bits) - one;
-
         let mut gadget_calls = flattened_len / chunk_length;
         if flattened_len % chunk_length != 0 {
             gadget_calls += 1;
@@ -845,8 +864,10 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
         Ok(Self {
             len,
             bits,
+            max_measurement,
+            last_weight,
+            last_weight_field,
             flattened_len,
-            max,
             chunk_length,
             gadget_calls,
             phantom: PhantomData,
@@ -859,8 +880,10 @@ impl<F: NttFriendlyFieldElement, S> Clone for SumVec<F, S> {
         Self {
             len: self.len,
             bits: self.bits,
+            max_measurement: self.max_measurement,
+            last_weight: self.last_weight,
+            last_weight_field: self.last_weight_field,
             flattened_len: self.flattened_len,
-            max: self.max,
             chunk_length: self.chunk_length,
             gadget_calls: self.gadget_calls,
             phantom: PhantomData,
@@ -943,13 +966,7 @@ where
 
         let mut flattened = Vec::with_capacity(self.flattened_len);
         for summand in measurement.iter() {
-            if summand > &self.max {
-                return Err(FlpError::Encode(format!(
-                    "summand exceeds maximum of 2^{}-1",
-                    self.bits
-                )));
-            }
-            flattened.extend(F::encode_as_bitvector(*summand, self.bits)?);
+            encode_range_checked_int(*summand, self.bits, self.last_weight, &mut flattened)?;
         }
 
         Ok(flattened)
@@ -959,7 +976,7 @@ where
         self.truncate_call_check(&input)?;
         let mut unflattened = Vec::with_capacity(self.len);
         for chunk in input.chunks(self.bits) {
-            unflattened.push(F::decode_bitvector(chunk)?);
+            unflattened.push(decode_range_checked_int(chunk, self.last_weight_field)?);
         }
         Ok(unflattened)
     }
@@ -1057,6 +1074,48 @@ pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
     Ok(output)
 }
 
+/// Encodes an integer into multiple field elements with values of 0 or 1.
+///
+/// This function implements the encoding scheme from the Sum circuit and others. It uses a modified
+/// bit vector encoding method, where the weight of the last field element may be any value, not
+/// necessarily a power of two. This means some numbers may have multiple possible representations,
+/// but all possible bit vectors will decode into the desired range.
+///
+/// # Arguments
+///
+/// * `value`: Integer to be encoded.
+/// * `bits`: Length of field element vector.
+/// * `last_weight`: Weight of the last field element. This can be chosen to determine the range of
+///   encodable values.
+/// * `out`: Output vector. Field elements will be appended to this.
+fn encode_range_checked_int<F: FieldElementWithIntegerExt>(
+    value: F::Integer,
+    bits: usize,
+    last_weight: F::Integer,
+    out: &mut Vec<F>,
+) -> Result<(), FieldError> {
+    let threshold = (F::Integer::one() << (bits - 1)) - F::Integer::one();
+    let high_bit = value.ct_gt(&threshold);
+    let to_encode =
+        value - F::Integer::conditional_select(&F::Integer::zero(), &last_weight, high_bit);
+    out.extend(F::encode_as_bitvector(to_encode, bits - 1)?);
+    out.push(F::conditional_select(&F::zero(), &F::one(), high_bit));
+    Ok(())
+}
+
+/// Decodes an integer from a vector of field elements produced by [encode_range_checked_int].
+///
+/// Note that this is a linear function, and thus it can be applied to secret shared field elements.
+fn decode_range_checked_int<F: FieldElementWithIntegerExt>(
+    input: &[F],
+    last_weight: F,
+) -> Result<F, FieldError> {
+    let Some((last, rest)) = input.split_last() else {
+        return Ok(F::zero());
+    };
+    Ok(F::decode_bitvector(rest)? + *last * last_weight)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1149,20 +1208,26 @@ mod tests {
         // Test FLP on invalid input, specifically on field elements outside of {0,1}
         {
             let sum = Sum::new((1 << 3) - 1).unwrap();
-            // The sum+offset value can be whatever. The binariness test should fail first
-            let sum_plus_offset = vec![zero; 3];
-            TypeTest::expect_invalid::<3>(
-                &sum,
-                &[&[one, nine, zero], sum_plus_offset.as_slice()].concat(),
-            );
+            TypeTest::expect_invalid::<3>(&sum, &[one, nine, zero]);
         }
         {
             let sum = Sum::new((1 << 5) - 1).unwrap();
-            let sum_plus_offset = vec![zero; 5];
-            TypeTest::expect_invalid::<3>(
-                &sum,
-                &[&[zero, zero, zero, zero, nine], sum_plus_offset.as_slice()].concat(),
-            );
+            TypeTest::expect_invalid::<3>(&sum, &[zero, zero, zero, zero, nine]);
+        }
+    }
+
+    #[test]
+    fn test_sum_exhaustive() {
+        for max_measurement in [6, 7, 8, 9] {
+            let sum = Sum::new(max_measurement).unwrap();
+            for measurement in 0..=max_measurement {
+                TypeTest::expect_valid::<2>(
+                    &sum,
+                    &sum.encode_measurement(&measurement).unwrap(),
+                    &[TestField::from(measurement)],
+                );
+            }
+            sum.encode_measurement(&(max_measurement + 1)).unwrap_err();
         }
     }
 
@@ -1292,28 +1357,31 @@ mod tests {
         let one = TestField::one();
         let nine = TestField::from(9);
 
-        let encoded_weight_plus_offset = |weight| {
+        let encoded_weight = |weight| {
             let bits_for_weight = max_weight.ilog2() as usize + 1;
-            let offset = (1 << bits_for_weight) - 1 - max_weight;
-            TestField::encode_as_bitvector(
-                <TestField as FieldElementWithInteger>::Integer::try_from(weight + offset).unwrap(),
+            let last_weight = max_weight - ((1 << (bits_for_weight - 1)) - 1);
+            let mut out = Vec::with_capacity(bits_for_weight);
+            encode_range_checked_int(
+                <TestField as FieldElementWithInteger>::Integer::try_from(weight).unwrap(),
                 bits_for_weight,
+                <TestField as FieldElementWithInteger>::Integer::try_from(last_weight).unwrap(),
+                &mut out,
             )
-            .unwrap()
-            .collect::<Vec<TestField>>()
+            .unwrap();
+            out
         };
 
         assert_eq!(
             multihot_instance
                 .encode_measurement(&vec![true, true, false])
                 .unwrap(),
-            [&[one, one, zero], &*encoded_weight_plus_offset(2)].concat(),
+            [&[one, one, zero], &*encoded_weight(2)].concat(),
         );
         assert_eq!(
             multihot_instance
                 .encode_measurement(&vec![false, true, true])
                 .unwrap(),
-            [&[zero, one, one], &*encoded_weight_plus_offset(2)].concat(),
+            [&[zero, one, one], &*encoded_weight(2)].concat(),
         );
 
         // Round trip
@@ -1358,20 +1426,33 @@ mod tests {
             &[zero, zero, zero],
         );
 
+        // Test alternate encodings of the weight. Note that max_weight = 2 means we will encode the
+        // claimed weight in two field elements, both of which have a weight of one.
+        TypeTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &[one, zero, zero, one, zero],
+            &[one, zero, zero],
+        );
+        TypeTest::expect_valid::<NUM_SHARES>(
+            &multihot_instance,
+            &[one, zero, zero, zero, one],
+            &[one, zero, zero],
+        );
+
         // Test invalid inputs.
 
         // Not binary
         TypeTest::expect_invalid::<NUM_SHARES>(
             &multihot_instance,
-            &[&[zero, zero, nine], &*encoded_weight_plus_offset(1)].concat(),
+            &[&[zero, zero, nine], &*encoded_weight(1)].concat(),
         );
         // Wrong weight
         TypeTest::expect_invalid::<NUM_SHARES>(
             &multihot_instance,
-            &[&[zero, zero, one], &*encoded_weight_plus_offset(2)].concat(),
+            &[&[zero, zero, one], &*encoded_weight(2)].concat(),
         );
-        // We cannot test the case where the weight is higher than max_weight. This is because
-        // weight + offset cannot fit into a bitvector of the correct length. In other words, being
+        // We cannot test the case where the weight is higher than max_weight. This is because the
+        // all-ones bitvector of the correct length decodes to max_weight. In other words, being
         // out-of-range requires the prover to lie about their weight, which is tested above
     }
 
@@ -1382,7 +1463,7 @@ mod tests {
 
     fn test_sum_vec<F, S>(f: F)
     where
-        F: Fn(usize, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
+        F: Fn(u64, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
         S: 'static + ParallelSumGadget<TestField, Mul<TestField>> + Eq,
     {
         let one = TestField::one();
@@ -1407,7 +1488,7 @@ mod tests {
         );
 
         let len = 23;
-        let sum_vec = f(4, len, 4).unwrap();
+        let sum_vec = f(15, len, 4).unwrap();
         TypeTest::expect_valid::<3>(
             &sum_vec,
             &sum_vec.encode_measurement(&vec![9; len]).unwrap(),
@@ -1422,7 +1503,7 @@ mod tests {
         }
 
         let len = 23;
-        let sum_vec = f(2, len, 4).unwrap();
+        let sum_vec = f(3, len, 4).unwrap();
         TypeTest::expect_invalid::<3>(&sum_vec, &vec![nine; 2 * len]);
 
         // Round trip
@@ -1438,6 +1519,24 @@ mod tests {
                 .unwrap(),
             want
         );
+
+        // Test range check edge cases.
+        for max_measurement in [6, 7, 8, 9] {
+            let sum_vec = f(max_measurement, 3, 5).unwrap();
+            for value in 0..=max_measurement {
+                let measurement = vec![value, 0, value];
+                let output = vec![
+                    TestField::from(value),
+                    TestField::zero(),
+                    TestField::from(value),
+                ];
+                TypeTest::expect_valid::<2>(
+                    &sum_vec,
+                    &sum_vec.encode_measurement(&measurement).unwrap(),
+                    &output,
+                );
+            }
+        }
     }
 
     #[test]

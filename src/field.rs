@@ -33,7 +33,9 @@ use std::{
         Sub, SubAssign,
     },
 };
-use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
+use subtle::{
+    Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess,
+};
 
 #[cfg(feature = "experimental")]
 mod field255;
@@ -222,7 +224,12 @@ pub trait Integer:
 /// use of the associated integer type.
 pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
     /// The integer representation of a field element.
-    type Integer: Integer + From<Self> + Copy;
+    type Integer: Integer
+        + From<Self>
+        + Copy
+        + ConstantTimeEq
+        + ConstantTimeLess
+        + ConditionallySelectable;
 
     /// Modular exponentation, i.e., `self^exp (mod p)`.
     fn pow(&self, exp: Self::Integer) -> Self;

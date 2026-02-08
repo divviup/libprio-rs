@@ -16,10 +16,10 @@
         "c39874de5db91c9413dab3c055c16f0401886fdef172d79f6d1c8a8a494c99f5155e78a9ca0b393ba7f04c7d467df46f06e28c26102df9680ffc45b7dd00264287a40c330560ea67b587fa6c2d22c3b2",
         "3e688b21a146e36bef264c3fa93e90fb027990210d8d286097e47575b5b3660af0a2875634f4c6c45f10b382b8820b90011f73d9eed20697f904ba4821ffd9bd825cf3ccf99f159855790593d1dd3c4d"
     ],
-    "bits": 8,
     "chunk_length": 9,
     "ctx": "736f6d65206170706c69636174696f6e",
     "length": 10,
+    "max_measurement": 255,
     "operations": [
         {
             "operation": "shard",
