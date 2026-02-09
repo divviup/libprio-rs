@@ -17,6 +17,13 @@ start = "2020-09-28"
 end = "2026-01-07"
 renew = false
 
+[[wildcard-audits.prio]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+trusted-publisher = "github:divviup/libprio-rs"
+start = "2025-11-03"
+end = "2027-02-09"
+
 [[audits.aes]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
