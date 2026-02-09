@@ -346,7 +346,7 @@ where
 mod tests {
     use super::*;
     use crate::vdaf::{test_utils::run_vdaf_sharded, Client};
-    use rand::{rng, Rng};
+    use rand::{rng, RngExt};
 
     fn run_test(rounds: u32, aggregation_parameter: u8) {
         let vdaf = Vdaf::new(rounds);

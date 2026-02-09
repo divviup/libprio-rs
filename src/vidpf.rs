@@ -15,7 +15,7 @@ use core::{
 };
 
 use bitvec::prelude::{BitVec, Lsb0};
-use rand::{rng, Rng, RngCore};
+use rand::{rng, Rng, RngExt};
 use std::fmt::Debug;
 use std::io::{Cursor, Read};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -668,7 +668,7 @@ impl<F: FieldElement> IdpfValue for VidpfWeight<F> {
     /// The parameter determines the number of field elements in the vector.
     type ValueParameter = usize;
 
-    fn generate<S: RngCore>(seed_stream: &mut S, length: &Self::ValueParameter) -> Self {
+    fn generate<S: Rng>(seed_stream: &mut S, length: &Self::ValueParameter) -> Self {
         Self(
             (0..*length)
                 .map(|_| <F as IdpfValue>::generate(seed_stream, &()))

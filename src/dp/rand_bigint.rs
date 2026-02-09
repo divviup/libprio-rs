@@ -31,7 +31,7 @@ use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::{ToPrimitive, Zero};
 use rand::distr::uniform::Error;
-use rand::Rng;
+use rand::{Rng, RngExt};
 
 /// Use [`Rng::fill`] to generate random bits.
 ///
