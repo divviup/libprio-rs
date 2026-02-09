@@ -664,7 +664,7 @@ mod tests {
             Flp, Type,
         },
     };
-    use rand::{rng, Rng};
+    use rand::{rng, RngExt};
 
     fn generic_szk_test<T: Type>(typ: T, encoded_measurement: &[T::Field], valid: bool) {
         let mut rng = rng();

@@ -193,8 +193,7 @@ use crate::vdaf::xof::SeedStreamTurboShake128;
 use fixed::traits::Fixed;
 use num_bigint::BigUint;
 use num_rational::Ratio;
-use rand::Rng;
-use rand_core::SeedableRng;
+use rand::{make_rng, Rng};
 use std::{convert::TryFrom, convert::TryInto, fmt::Debug, marker::PhantomData};
 
 /// The fixed point vector sum data type. Each measurement is a vector of fixed point numbers of
@@ -635,7 +634,7 @@ where
         self.add_noise(
             dp_strategy,
             agg_result,
-            &mut SeedStreamTurboShake128::from_os_rng(),
+            &mut make_rng::<SeedStreamTurboShake128>(),
         )
     }
 }

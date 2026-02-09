@@ -9,7 +9,7 @@ use crate::flp::{FlpError, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
-use rand::{distr::Distribution, Rng, SeedableRng};
+use rand::{distr::Distribution, make_rng, Rng};
 
 // TODO(#1071): This is implemented for the concrete fields `Field64` and `Field128` in order to
 // avoid imposing the `BigInt: From<F::Integer>` bound on all callers. In the future, we may want to
@@ -28,7 +28,7 @@ where
         self.add_noise(
             dp_strategy,
             agg_result,
-            &mut SeedStreamTurboShake128::from_os_rng(),
+            &mut make_rng::<SeedStreamTurboShake128>(),
         )
     }
 }
@@ -46,7 +46,7 @@ where
         self.add_noise(
             dp_strategy,
             agg_result,
-            &mut SeedStreamTurboShake128::from_os_rng(),
+            &mut make_rng::<SeedStreamTurboShake128>(),
         )
     }
 }
@@ -102,7 +102,7 @@ where
         self.add_noise(
             dp_strategy,
             agg_result,
-            &mut SeedStreamTurboShake128::from_os_rng(),
+            &mut make_rng::<SeedStreamTurboShake128>(),
         )
     }
 }
@@ -120,7 +120,7 @@ where
         self.add_noise(
             dp_strategy,
             agg_result,
-            &mut SeedStreamTurboShake128::from_os_rng(),
+            &mut make_rng::<SeedStreamTurboShake128>(),
         )
     }
 }

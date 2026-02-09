@@ -61,7 +61,7 @@ use crate::vdaf::{
 };
 #[cfg(feature = "experimental")]
 use fixed::traits::Fixed;
-use rand::{rng, Rng};
+use rand::{rng, RngExt};
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -382,7 +382,7 @@ impl Prio3Average {
 ///     Aggregator, Client, Collector, PrepareTransition,
 ///     prio3::Prio3,
 /// };
-/// use rand::{rng, Rng, RngCore};
+/// use rand::{rng, Rng, RngExt};
 ///
 /// let num_shares = 2;
 /// let ctx = b"my context str";

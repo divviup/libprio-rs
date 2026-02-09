@@ -33,7 +33,7 @@ use prio::{
     vdaf::poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
 };
 #[cfg(feature = "experimental")]
-use rand::{distr::Distribution, random, rngs::StdRng, Rng, SeedableRng};
+use rand::{distr::Distribution, random, rngs::StdRng, RngExt, SeedableRng};
 #[cfg(feature = "experimental")]
 use std::iter;
 use std::{hint::black_box, time::Duration};

@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use hmac::{Hmac, Mac};
-use rand::{rng, Rng, RngCore};
+use rand::{rng, Rng, RngExt};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
@@ -104,7 +104,7 @@ impl Prio2 {
     /// The point returned is not one of the roots used for polynomial interpolation.
     pub(crate) fn choose_eval_at<S>(&self, prng: &mut Prng<FieldPrio2, S>) -> FieldPrio2
     where
-        S: RngCore,
+        S: Rng,
     {
         // Make sure the query randomness isn't a root of unity. Evaluating the proof at any of
         // these points would be a privacy violation, since these points were used by the prover to

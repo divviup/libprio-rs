@@ -135,7 +135,7 @@ pub(crate) mod tests {
     use modinverse::modinverse;
     use num_bigint::{BigInt, ToBigInt};
     use num_traits::AsPrimitive;
-    use rand::{distr::Distribution, rng, Rng};
+    use rand::{distr::Distribution, rng, RngExt};
 
     use super::ops::Word;
     use crate::fp::{log2, FieldOps, FP128, FP32, FP64, MAX_ROOTS};

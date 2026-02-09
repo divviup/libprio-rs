@@ -12,11 +12,8 @@ use crate::{
     fp::{FieldOps, FieldParameters, FP128, FP32, FP64},
     prng::Prng,
 };
-use rand::{
-    distr::{Distribution, StandardUniform},
-    Rng,
-};
-use rand_core::RngCore;
+use rand::distr::{Distribution, StandardUniform};
+use rand_core::Rng;
 use serde::{
     de::{DeserializeOwned, Visitor},
     Deserialize, Deserializer, Serialize, Serializer,
@@ -358,7 +355,7 @@ pub(crate) trait FieldElementExt: FieldElement {
 
     /// Generate a uniformly random field element from the provided source of random bytes using
     /// rejection sampling.
-    fn generate_random<S: RngCore + ?Sized>(seed_stream: &mut S) -> Self {
+    fn generate_random<S: Rng + ?Sized>(seed_stream: &mut S) -> Self {
         // This is analogous to `Prng::get()`, but does not make use of a persistent buffer of
         // output.
         let mut buffer = [0u8; 64];
