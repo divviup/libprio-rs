@@ -29,10 +29,8 @@ use aes::{
 use ctr::Ctr64BE;
 #[cfg(feature = "crypto-dependencies")]
 use hmac::{Hmac, Mac};
-use rand_core::{
-    impls::{next_u32_via_fill, next_u64_via_fill},
-    RngCore, SeedableRng,
-};
+use rand::RngExt;
+use rand_core::{utils::next_word_via_fill, Rng, SeedableRng, TryRng};
 
 use rand::distr::{Distribution, StandardUniform};
 #[cfg(feature = "crypto-dependencies")]
@@ -44,6 +42,7 @@ use sha3::{
 #[cfg(feature = "crypto-dependencies")]
 use std::fmt::Formatter;
 use std::{
+    convert::Infallible,
     fmt::Debug,
     io::{Cursor, Read},
 };
@@ -108,12 +107,12 @@ impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {
 }
 
 /// Trait for deriving a vector of field elements.
-pub trait IntoFieldVec: RngCore + Sized {
+pub trait IntoFieldVec: Rng + Sized {
     /// Generate a finite field vector from the seed stream.
     fn into_field_vec<F: FieldElement>(self, length: usize) -> Vec<F>;
 }
 
-impl<S: RngCore> IntoFieldVec for S {
+impl<S: Rng> IntoFieldVec for S {
     fn into_field_vec<F: FieldElement>(self, length: usize) -> Vec<F> {
         Prng::from_seed_stream(self).take(length).collect()
     }
@@ -124,7 +123,7 @@ impl<S: RngCore> IntoFieldVec for S {
 /// [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this XOF.
-    type SeedStream: RngCore + Sized;
+    type SeedStream: Rng + Sized;
 
     /// Construct an instance of [`Xof`] with the given seed.
     fn init(seed_bytes: &[u8; SEED_SIZE], dst_parts: &[&[u8]]) -> Self;
@@ -178,17 +177,20 @@ impl SeedStreamAes128 {
 }
 
 #[cfg(feature = "crypto-dependencies")]
-impl RngCore for SeedStreamAes128 {
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+impl TryRng for SeedStreamAes128 {
+    type Error = Infallible;
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Infallible> {
         self.fill(dest);
+        Ok(())
     }
 
-    fn next_u32(&mut self) -> u32 {
-        next_u32_via_fill(self)
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        next_word_via_fill(self)
     }
 
-    fn next_u64(&mut self) -> u64 {
-        next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        next_word_via_fill(self)
     }
 }
 
@@ -263,17 +265,20 @@ impl SeedStreamTurboShake128 {
     }
 }
 
-impl RngCore for SeedStreamTurboShake128 {
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+impl TryRng for SeedStreamTurboShake128 {
+    type Error = Infallible;
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Infallible> {
         XofReader::read(&mut self.0, dest);
+        Ok(())
     }
 
-    fn next_u32(&mut self) -> u32 {
-        next_u32_via_fill(self)
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        next_word_via_fill(self)
     }
 
-    fn next_u64(&mut self) -> u64 {
-        next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        next_word_via_fill(self)
     }
 }
 
@@ -481,17 +486,20 @@ impl SeedStreamFixedKeyAes128 {
 }
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-impl RngCore for SeedStreamFixedKeyAes128 {
-    fn fill_bytes(&mut self, dest: &mut [u8]) {
+impl TryRng for SeedStreamFixedKeyAes128 {
+    type Error = Infallible;
+
+    fn try_fill_bytes(&mut self, dest: &mut [u8]) -> Result<(), Infallible> {
         self.fill(dest);
+        Ok(())
     }
 
-    fn next_u32(&mut self) -> u32 {
-        next_u32_via_fill(self)
+    fn try_next_u32(&mut self) -> Result<u32, Infallible> {
+        next_word_via_fill(self)
     }
 
-    fn next_u64(&mut self) -> u64 {
-        next_u64_via_fill(self)
+    fn try_next_u64(&mut self) -> Result<u64, Infallible> {
+        next_word_via_fill(self)
     }
 }
 
@@ -536,7 +544,7 @@ impl Xof<32> for XofHmacSha256Aes128 {
 mod tests {
     use super::*;
     use crate::{field::Field128, vdaf::equality_comparison_test};
-    use rand::{rng, Rng, RngCore};
+    use rand::{rng, Rng, RngExt};
     use serde::{Deserialize, Serialize};
     use std::{convert::TryInto, io::Cursor};
 

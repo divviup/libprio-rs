@@ -11,7 +11,7 @@ use crate::{
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
 
-use rand::{rng, Rng};
+use rand::{rng, RngExt};
 use std::convert::TryFrom;
 
 /// Serialization errors

@@ -9,7 +9,7 @@ use crate::field::{FieldElement, FieldElementExt};
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vdaf::xof::SeedStreamAes128;
 use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
-use rand::{rng, Rng, RngCore};
+use rand::{rng, Rng, RngExt};
 
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
@@ -48,7 +48,7 @@ impl<F: FieldElement> Prng<F, SeedStreamTurboShake128> {
 impl<F, S> Prng<F, S>
 where
     F: FieldElement,
-    S: RngCore,
+    S: Rng,
 {
     pub(crate) fn from_seed_stream(mut seed_stream: S) -> Self {
         let mut buffer = vec![0; BUFFER_SIZE_IN_ELEMENTS * F::ENCODED_SIZE];
@@ -105,7 +105,7 @@ where
 impl<F, S> Iterator for Prng<F, S>
 where
     F: FieldElement,
-    S: RngCore,
+    S: Rng,
 {
     type Item = F;
 

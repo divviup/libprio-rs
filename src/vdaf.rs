@@ -487,7 +487,7 @@ pub mod test_utils {
         flp::Type,
         vdaf::{prio3::Prio3, xof::Xof, Vdaf},
     };
-    use rand::{random, rng, Rng};
+    use rand::{random, rng, RngExt};
     use serde::Deserialize;
     use serde_json::Value;
 
