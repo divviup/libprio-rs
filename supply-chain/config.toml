@@ -117,6 +117,16 @@ criteria = "safe-to-deploy"
 version = "0.1.1"
 criteria = "safe-to-run"
 
+[[exemptions.id-arena]]
+version = "2.3.0"
+criteria = "safe-to-deploy"
+notes = "This is only used on WASI targets"
+
+[[exemptions.indexmap]]
+version = "2.13.0"
+criteria = "safe-to-deploy"
+notes = "This is only used on WASI targets"
+
 [[exemptions.matrixmultiply]]
 version = "0.3.7"
 criteria = "safe-to-run"
@@ -137,6 +147,11 @@ criteria = "safe-to-run"
 version = "0.2.16"
 criteria = "safe-to-deploy"
 
+[[exemptions.prettyplease]]
+version = "0.2.37"
+criteria = "safe-to-deploy"
+notes = "This is only used on WASI targets"
+
 [[exemptions.r-efi]]
 version = "5.2.0"
 criteria = "safe-to-deploy"
@@ -149,6 +164,11 @@ criteria = "safe-to-deploy"
 [[exemptions.safe_arch]]
 version = "0.7.0"
 criteria = "safe-to-run"
+
+[[exemptions.semver]]
+version = "1.0.27"
+criteria = "safe-to-deploy"
+notes = "This is only used on WASI targets"
 
 [[exemptions.simba]]
 version = "0.6.0"
