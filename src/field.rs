@@ -71,6 +71,10 @@ pub enum FieldError {
     /// if the number of bits is larger than the bit length of the field's modulus.
     #[error("bit vector length exceeds modulus bit length")]
     BitVectorTooLong,
+    /// Returned when encoding an integer to "bitvector representation" if the value is greater than
+    /// the allowed maximum value.
+    #[error("value exceeds maximum allowed by bit vector representation")]
+    BitVectorOverflow,
 }
 
 /// Objects with this trait represent an element of `GF(p)` for some prime `p`.
@@ -254,7 +258,7 @@ pub trait FieldElementWithInteger: FieldElement + From<Self::Integer> {
         // it. The above check on `bits` ensures this shift won't panic due to the shift width
         // being too large.
         if input >> bits != Self::Integer::zero() {
-            return Err(FieldError::InputSizeMismatch);
+            return Err(FieldError::BitVectorOverflow);
         }
 
         Ok(BitvectorRepresentationIter {
