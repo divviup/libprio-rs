@@ -227,7 +227,6 @@ where
     ) -> Result<Vec<Self::Field>, FlpError> {
         // The measurement encoding is the elements of the measurement with the claimed weight (the
         // L1 norm) appended at the end.
-
         if measurement.len() != self.measurement_len {
             return Err(FlpError::Encode(format!(
                 "unexpected measurement length: got {}; want {}",
@@ -242,7 +241,9 @@ where
             encode_range_checked_int(*summand, self.bits, self.last_weight, &mut flattened)?;
 
             // Accumulate measurement elements into L1 norm.
-            l1_norm = l1_norm + *summand;
+            l1_norm = l1_norm
+                .checked_add(*summand)
+                .ok_or_else(|| FlpError::Encode("L1 norm of measurement overflowed".to_string()))?;
         }
 
         encode_range_checked_int(l1_norm, self.bits, self.last_weight, &mut flattened)?;
@@ -387,11 +388,15 @@ mod tests {
         }
     }
 
+    /// Manually construct some improperly encoded measurements, and confirm that the FLP rejects
+    /// them.
+    ///
+    /// The test cases exercise different constraints imposed by the validity circuit.
     #[test]
     fn invalid_measurements() {
-        let bits = 3;
         let l1_bound_sum =
             L1BoundSum::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(6, 4, 3).unwrap();
+        let bits = l1_bound_sum.bits;
 
         let mut measurement_1 = Vec::new();
         encode_range_checked_int(6, bits, l1_bound_sum.last_weight, &mut measurement_1).unwrap();

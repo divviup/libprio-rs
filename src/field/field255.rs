@@ -404,6 +404,11 @@ mod tests {
             // use BigUint::bits()
             unimplemented!()
         }
+
+        fn checked_add(&self, _rhs: Self) -> Option<Self> {
+            // This is a test module, and this code is never used.
+            unimplemented!()
+        }
     }
 
     impl TestFieldElementWithInteger for Field255 {

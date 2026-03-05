@@ -218,6 +218,9 @@ pub trait Integer:
 
     /// Returns ⌊log₂(self)⌋, or `None` if `self == 0`
     fn checked_ilog2(&self) -> Option<u32>;
+
+    /// Computes `self + rhs`, returning `None` if it overflows.
+    fn checked_add(&self, rhs: Self) -> Option<Self>;
 }
 
 /// Extension trait for field elements that can be converted back and forth to an integer type.
@@ -815,6 +818,10 @@ impl Integer for u32 {
     fn checked_ilog2(&self) -> Option<u32> {
         u32::checked_ilog2(*self)
     }
+
+    fn checked_add(&self, rhs: Self) -> Option<Self> {
+        u32::checked_add(*self, rhs)
+    }
 }
 
 impl Integer for u64 {
@@ -832,6 +839,10 @@ impl Integer for u64 {
     fn checked_ilog2(&self) -> Option<u32> {
         u64::checked_ilog2(*self)
     }
+
+    fn checked_add(&self, rhs: Self) -> Option<Self> {
+        u64::checked_add(*self, rhs)
+    }
 }
 
 impl Integer for u128 {
@@ -848,6 +859,10 @@ impl Integer for u128 {
 
     fn checked_ilog2(&self) -> Option<u32> {
         u128::checked_ilog2(*self)
+    }
+
+    fn checked_add(&self, rhs: Self) -> Option<Self> {
+        u128::checked_add(*self, rhs)
     }
 }
 
