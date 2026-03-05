@@ -49,11 +49,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for L1BoundSum<F, S> {
             .field("measurement_len", &self.measurement_len)
             .field("max_value", &self.max_value)
             .field("bits", &self.bits)
-            .field("measurement_len_in_bits", &self.measurement_len_in_bits)
             .field("chunk_length", &self.chunk_length)
-            .field("gadget_calls", &self.gadget_calls)
-            .field("last_weight", &self.last_weight)
-            .field("last_weight_field", &self.last_weight_field)
             .finish()
     }
 }
