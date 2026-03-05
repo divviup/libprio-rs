@@ -4,7 +4,7 @@ use crate::dp::{distributions::PureDpDiscreteLaplace, DifferentialPrivacyStrateg
 use crate::dp::{DifferentialPrivacyDistribution, DpError};
 use crate::field::{Field128, Field64, NttFriendlyFieldElement};
 use crate::flp::gadgets::{Mul, ParallelSumGadget};
-use crate::flp::types::{Histogram, SumVec};
+use crate::flp::types::{Histogram, L1BoundSum, SumVec};
 use crate::flp::{FlpError, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
@@ -154,6 +154,75 @@ where
     }
 }
 
+impl<S> TypeWithNoise<PureDpDiscreteLaplace> for L1BoundSum<Field64, S>
+where
+    S: ParallelSumGadget<Field64, Mul<Field64>> + Eq + 'static,
+{
+    fn add_noise_to_agg_share(
+        &self,
+        dp_strategy: &PureDpDiscreteLaplace,
+        agg_result: &mut [Self::Field],
+        _num_measurements: usize,
+    ) -> Result<(), FlpError> {
+        self.add_noise(
+            dp_strategy,
+            agg_result,
+            &mut SeedStreamTurboShake128::from_os_rng(),
+        )
+    }
+}
+
+impl<S> TypeWithNoise<PureDpDiscreteLaplace> for L1BoundSum<Field128, S>
+where
+    S: ParallelSumGadget<Field128, Mul<Field128>> + Eq + 'static,
+{
+    fn add_noise_to_agg_share(
+        &self,
+        dp_strategy: &PureDpDiscreteLaplace,
+        agg_result: &mut [Self::Field],
+        _num_measurements: usize,
+    ) -> Result<(), FlpError> {
+        self.add_noise(
+            dp_strategy,
+            agg_result,
+            &mut SeedStreamTurboShake128::from_os_rng(),
+        )
+    }
+}
+
+impl<F, S> L1BoundSum<F, S>
+where
+    F: NttFriendlyFieldElement,
+    BigInt: From<F::Integer>,
+    F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
+{
+    fn add_noise<R>(
+        &self,
+        dp_strategy: &PureDpDiscreteLaplace,
+        agg_result: &mut [F],
+        rng: &mut R,
+    ) -> Result<(), FlpError>
+    where
+        R: Rng,
+    {
+        // Compute the global sensitivity of the aggregation function, using the L1 norm as a
+        // distance metric, and using the substitution-DP model. The worst case is when one
+        // individual's measurement changes such that the vector's L1 norm before and after are both
+        // equal to max_value, and the vector elements at any given position are nonzero in at most
+        // one of the before and after measurements. Then, the L1 distance from the initial query
+        // result to the new query result will be 2 * max_value.
+
+        // Unwrap safety: the constructor confirms that max_value is positive.
+        let sensitivity = BigUint::try_from(BigInt::from(self.max_value) * 2).unwrap();
+
+        // Initialize sampler.
+        let sampler = dp_strategy.create_distribution(sensitivity.into())?;
+
+        // Generate noise for each vector coordinate and apply it.
+        add_iid_noise_to_field_vec(agg_result, rng, &sampler)
+    }
+}
+
 /// This generates independent, identically-distributed noise, and adds it to a vector of field
 /// elements after projecting it into the field.
 pub(super) fn add_iid_noise_to_field_vec<F, R, D>(
@@ -206,7 +275,7 @@ mod tests {
         field::{merge_vector, split_vector, Field128, FieldElement},
         flp::{
             gadgets::ParallelSum,
-            types::{Histogram, SumVec},
+            types::{Histogram, L1BoundSum, SumVec},
         },
         vdaf::xof::{Xof, XofTurboShake128},
     };
@@ -326,6 +395,47 @@ mod tests {
                 Field128::from(4),
                 Field128::from(3),
                 -Field128::from(2),
+            ]
+        );
+    }
+
+    #[test]
+    fn l1boundsum_laplace_noise() {
+        let dp_strategy = PureDpDiscreteLaplace::from_budget(
+            PureDpBudget::new(Rational::from_unsigned(2u8, 1u8).unwrap()).unwrap(),
+        );
+        const SIZE: usize = 10;
+
+        let mut rng = XofTurboShake128::init(&[3; 32], &[]).into_seed_stream();
+        let [mut share1, mut share2]: [Vec<Field128>; 2] =
+            split_vector(&[Field128::zero(); SIZE], 2)
+                .try_into()
+                .unwrap();
+
+        let l1_bound_sum = L1BoundSum::<_, ParallelSum<_, _>>::new(2, SIZE, 5).unwrap();
+        l1_bound_sum
+            .add_noise(&dp_strategy, &mut share1, &mut rng)
+            .unwrap();
+        l1_bound_sum
+            .add_noise(&dp_strategy, &mut share2, &mut rng)
+            .unwrap();
+
+        let mut aggregate_result = share1;
+        merge_vector(&mut aggregate_result, &share2).unwrap();
+
+        assert_eq!(
+            aggregate_result,
+            [
+                -Field128::from(10),
+                Field128::zero(),
+                Field128::from(3),
+                -Field128::from(3),
+                -Field128::from(7),
+                Field128::from(2),
+                Field128::zero(),
+                Field128::from(4),
+                -Field128::from(2),
+                Field128::from(2),
             ]
         );
     }
