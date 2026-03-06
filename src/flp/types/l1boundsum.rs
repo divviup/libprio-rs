@@ -54,7 +54,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for L1BoundSum<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> L1BoundSum<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> L1BoundSum<F, S> {
     /// Create a new instance of the FLP.
     pub fn new(
         max_value: F::Integer,
@@ -133,7 +133,7 @@ impl<F: NttFriendlyFieldElement, S> Clone for L1BoundSum<F, S> {
 impl<F, S> Flp for L1BoundSum<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -211,7 +211,7 @@ where
 impl<F, S> Type for L1BoundSum<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     /// The measurement is the input represented as a vector of integers, without any norm
     /// appended.
@@ -291,7 +291,7 @@ mod tests {
 
     fn roundtrip_encoding_with_field<F: NttFriendlyFieldElement>() {
         let l1_bound_sum =
-            L1BoundSum::<F, ParallelSum<F, Mul<F>>>::new(7.try_into().unwrap(), 4, 3).unwrap();
+            L1BoundSum::<F, ParallelSum<F, Mul>>::new(7.try_into().unwrap(), 4, 3).unwrap();
 
         for measurement in [
             [7usize, 0, 0, 0],
@@ -315,7 +315,7 @@ mod tests {
         }
 
         let l1_bound_sum =
-            L1BoundSum::<F, ParallelSum<F, Mul<F>>>::new(4.try_into().unwrap(), 4, 3).unwrap();
+            L1BoundSum::<F, ParallelSum<F, Mul>>::new(4.try_into().unwrap(), 4, 3).unwrap();
         for measurement in [
             [4usize, 0, 0, 0],
             [0, 0, 0, 4],
@@ -351,7 +351,7 @@ mod tests {
     #[test]
     fn valid_measurements() {
         let l1_bound_sum =
-            L1BoundSum::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(7, 4, 3).unwrap();
+            L1BoundSum::<Field128, ParallelSum<Field128, Mul>>::new(7, 4, 3).unwrap();
 
         for measurement in [
             [7, 0, 0, 0],
@@ -370,7 +370,7 @@ mod tests {
         }
 
         let l1_bound_sum =
-            L1BoundSum::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(4, 4, 3).unwrap();
+            L1BoundSum::<Field128, ParallelSum<Field128, Mul>>::new(4, 4, 3).unwrap();
         for measurement in [
             [4, 0, 0, 0],
             [0, 0, 0, 4],
@@ -395,7 +395,7 @@ mod tests {
     #[test]
     fn invalid_measurements() {
         let l1_bound_sum =
-            L1BoundSum::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(6, 4, 3).unwrap();
+            L1BoundSum::<Field128, ParallelSum<Field128, Mul>>::new(6, 4, 3).unwrap();
         let bits = l1_bound_sum.bits;
 
         let mut measurement_1 = Vec::new();

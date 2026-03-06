@@ -394,7 +394,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for Histogram<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> Histogram<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> Histogram<F, S> {
     /// Return a new [`Histogram`] type with the given number of buckets.
     pub fn new(length: usize, chunk_length: usize) -> Result<Self, FlpError> {
         if length >= u32::MAX as usize {
@@ -441,7 +441,7 @@ impl<F, S> Clone for Histogram<F, S> {
 impl<F, S> Flp for Histogram<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -506,7 +506,7 @@ where
 impl<F, S> Type for Histogram<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Measurement = usize;
     type AggregateResult = Vec<F::Integer>;
@@ -570,7 +570,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for MultihotCountVec<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountVec<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> MultihotCountVec<F, S> {
     /// Return a new [`MultihotCountVec`] type with the given number of buckets.
     pub fn new(
         num_buckets: usize,
@@ -651,7 +651,7 @@ impl<F: FieldElementWithInteger, S> Clone for MultihotCountVec<F, S> {
 impl<F, S> Flp for MultihotCountVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -720,7 +720,7 @@ where
 impl<F, S> Type for MultihotCountVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Measurement = Vec<bool>;
     type AggregateResult = Vec<F::Integer>;
@@ -814,7 +814,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for SumVec<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> SumVec<F, S> {
     /// Returns a new [`SumVec`] with the desired bit width and vector length.
     ///
     /// # Errors
@@ -897,7 +897,7 @@ impl<F: NttFriendlyFieldElement, S> Clone for SumVec<F, S> {
 impl<F, S> Flp for SumVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -953,7 +953,7 @@ where
 impl<F, S> Type for SumVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Measurement = Vec<F::Integer>;
     type AggregateResult = Vec<F::Integer>;
@@ -1281,7 +1281,7 @@ mod tests {
     fn test_histogram<F, S>(f: F)
     where
         F: Fn(usize, usize) -> Result<Histogram<TestField, S>, FlpError>,
-        S: ParallelSumGadget<TestField, Mul<TestField>> + Eq + 'static,
+        S: ParallelSumGadget<TestField, Mul> + Eq + 'static,
     {
         let hist = f(3, 2).unwrap();
         let zero = TestField::zero();
@@ -1330,21 +1330,19 @@ mod tests {
 
     #[test]
     fn test_histogram_serial() {
-        test_histogram(Histogram::<TestField, ParallelSum<TestField, Mul<TestField>>>::new);
+        test_histogram(Histogram::<TestField, ParallelSum<TestField, Mul>>::new);
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_histogram_parallel() {
-        test_histogram(
-            Histogram::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new,
-        );
+        test_histogram(Histogram::<TestField, ParallelSumMultithreaded<TestField, Mul>>::new);
     }
 
     fn test_multihot<F, S>(constructor: F)
     where
         F: Fn(usize, usize, usize) -> Result<MultihotCountVec<TestField, S>, FlpError>,
-        S: ParallelSumGadget<TestField, Mul<TestField>> + Eq + 'static,
+        S: ParallelSumGadget<TestField, Mul> + Eq + 'static,
     {
         const NUM_SHARES: usize = 3;
 
@@ -1461,13 +1459,13 @@ mod tests {
 
     #[test]
     fn test_multihot_serial() {
-        test_multihot(MultihotCountVec::<TestField, ParallelSum<TestField, Mul<TestField>>>::new);
+        test_multihot(MultihotCountVec::<TestField, ParallelSum<TestField, Mul>>::new);
     }
 
     fn test_sum_vec<F, S>(f: F)
     where
         F: Fn(u64, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
-        S: 'static + ParallelSumGadget<TestField, Mul<TestField>> + Eq,
+        S: 'static + ParallelSumGadget<TestField, Mul> + Eq,
     {
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -1544,13 +1542,13 @@ mod tests {
 
     #[test]
     fn test_sum_vec_serial() {
-        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, Mul<TestField>>>::new)
+        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, Mul>>::new)
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_sum_vec_parallel() {
-        test_sum_vec(SumVec::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new)
+        test_sum_vec(SumVec::<TestField, ParallelSumMultithreaded<TestField, Mul>>::new)
     }
 
     #[test]

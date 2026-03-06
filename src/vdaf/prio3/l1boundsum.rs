@@ -16,7 +16,7 @@ use crate::{
 /// itself must be within the same range as the vector elements, effectively bounding the L1 norm
 /// to `max_value`.
 pub type Prio3L1BoundSum =
-    Prio3<L1BoundSum<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
+    Prio3<L1BoundSum<Field128, ParallelSum<Field128, Mul>>, XofTurboShake128, 32>;
 
 impl Prio3L1BoundSum {
     /// Construct an instance of Prio3L1BoundSum with the given number of aggregators. `max_value` defines

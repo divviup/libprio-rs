@@ -20,9 +20,7 @@ use prio::vdaf::prio2::Prio2;
 #[cfg(feature = "experimental")]
 use prio::vidpf::VidpfServerId;
 use prio::{
-    benchmarked::*,
     field::{Field128 as F, FieldElement},
-    flp::gadgets::Mul,
     vdaf::{prio3::Prio3, Aggregator, Client},
 };
 #[cfg(feature = "experimental")]
@@ -77,44 +75,6 @@ pub fn dp_noise(c: &mut Criterion) {
             BenchmarkId::new("discrete_gaussian", std.to_f64().unwrap_or(f64::INFINITY)),
             |b| b.iter(|| sampler.sample(&mut rng)),
         );
-    }
-    group.finish();
-}
-
-/// The asymptotic cost of polynomial multiplication is `O(n log n)` using NTT and `O(n^2)` using
-/// the naive method. This benchmark demonstrates that the latter has better concrete performance
-/// for small polynomials. The result is used to pick the `NTT_THRESHOLD` constant in
-/// `src/flp/gadgets.rs`.
-fn poly_mul(c: &mut Criterion) {
-    let test_sizes = [1_usize, 30, 60, 90, 120, 150, 255];
-
-    let mut group = c.benchmark_group("poly_mul");
-    for size in test_sizes {
-        group.bench_with_input(BenchmarkId::new("ntt", size), &size, |b, size| {
-            let m = (size + 1).next_power_of_two();
-            let mut g: Mul<F> = Mul::new(*size);
-            let mut outp = vec![F::zero(); 2 * m];
-            let mut inp = vec![];
-            inp.push(F::random_vector(m));
-            inp.push(F::random_vector(m));
-
-            b.iter(|| {
-                benchmarked_gadget_mul_call_poly_ntt(&mut g, &mut outp, &inp).unwrap();
-            })
-        });
-
-        group.bench_with_input(BenchmarkId::new("direct", size), &size, |b, size| {
-            let m = (size + 1).next_power_of_two();
-            let mut g: Mul<F> = Mul::new(*size);
-            let mut outp = vec![F::zero(); 2 * m];
-            let mut inp = vec![];
-            inp.push(F::random_vector(m));
-            inp.push(F::random_vector(m));
-
-            b.iter(|| {
-                benchmarked_gadget_mul_call_poly_direct(&mut g, &mut outp, &inp).unwrap();
-            })
-        });
     }
     group.finish();
 }
@@ -1022,8 +982,8 @@ fn vidpf(c: &mut Criterion) {
 }
 
 #[cfg(feature = "experimental")]
-criterion_group!(benches, poplar1, prio3, prio2, poly_mul, prng, idpf, dp_noise, vidpf);
+criterion_group!(benches, poplar1, prio3, prio2, prng, idpf, dp_noise, vidpf);
 #[cfg(not(feature = "experimental"))]
-criterion_group!(benches, prio3, prng, poly_mul);
+criterion_group!(benches, prio3, prng);
 
 criterion_main!(benches);

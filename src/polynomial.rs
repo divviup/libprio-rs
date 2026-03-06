@@ -3,11 +3,10 @@
 
 //! Functions for polynomial interpolation and evaluation
 
-#[cfg(test)]
-use crate::ntt::{ntt_inv, ntt_set_s, NttError};
 use crate::{
     field::{FieldElement, NttFriendlyFieldElement},
     fp::log2,
+    ntt::{ntt_inv, ntt_set_s, NttError},
 };
 
 use std::convert::TryFrom;
@@ -91,36 +90,33 @@ fn inv_pow2<F: FieldElement>(n: usize) -> F {
 ///
 /// [1]: https://eprint.iacr.org/2025/1727
 /// [2]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.3.2
-// TODO(#1394): make available outside of tests
-#[cfg(test)]
 pub(crate) fn poly_mul_lagrange<F: NttFriendlyFieldElement>(
+    output: &mut [F],
     p: &[F],
     q: &[F],
-) -> Result<Vec<F>, NttError> {
+) -> Result<(), NttError> {
     assert_eq!(p.len(), q.len());
     assert!(p.len().is_power_of_two());
 
-    let mut p_doubled = double_evaluations(p)?;
+    double_evaluations(output, p)?;
 
-    for (p_element, q_element) in p_doubled.iter_mut().zip(double_evaluations(q)?) {
+    for (p_element, q_element) in output.iter_mut().zip(get_double_evaluations(q)?) {
         *p_element *= q_element;
     }
 
-    Ok(p_doubled)
+    Ok(())
 }
 
 /// Evaluates multiple polynomials given in the Lagrange basis. All the polynomials must have the
-/// same length `n`, and `roots` must contain the same number of powers of the primitive `n`-th root
-/// of unity (which you can compute using [`nth_root_powers`]).
+/// same length `n`, which must be a power of 2.
 ///
 /// Implements `Lagrange.poly_eval_batched` of [6.1.3.2][2], using algorithm 7 from [Faz25][1].
 /// `Lagrange.poly_eval` can be realized by passing a slice containing a single polynomial.
 ///
 /// [1]: https://eprint.iacr.org/2025/1727
 /// [2]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.3.2
-pub(crate) fn poly_eval_lagrange_batched<F: FieldElement, P: AsRef<[F]>>(
+pub(crate) fn poly_eval_lagrange_batched<F: NttFriendlyFieldElement, P: AsRef<[F]>>(
     polynomials: &[P],
-    roots: &[F],
     x: F,
 ) -> Vec<F> {
     let poly_len = polynomials[0].as_ref().len();
@@ -128,10 +124,8 @@ pub(crate) fn poly_eval_lagrange_batched<F: FieldElement, P: AsRef<[F]>>(
         polynomials.iter().all(|p| p.as_ref().len() == poly_len),
         "polynomials must be of equal length"
     );
-    // TODO(#1394): enable these assertions once `Flp.query` is fixed to match
-    // https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-7.3.4
-    // assert!(polynomials[0].as_ref().len().is_power_of_two());
-    // assert_eq!(roots.len(), poly_len, "incorrect number of roots provided");
+    assert!(polynomials[0].as_ref().len().is_power_of_two());
+    let roots = nth_root_powers(poly_len);
 
     let mut l = F::one();
     let mut u: Vec<F> = polynomials
@@ -208,8 +202,6 @@ pub(crate) fn nth_root_powers<F: NttFriendlyFieldElement>(n: usize) -> Vec<F> {
 /// Corresponds to `extend_values_to_power_of_2` of [6.1.3.2][1].
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.3.2
-// TODO(#1394): make available outside of tests
-#[cfg(test)]
 pub(crate) fn extend_values_to_power_of_2<F: NttFriendlyFieldElement>(
     polynomial: &mut [F],
     num_values: usize,
@@ -245,18 +237,22 @@ pub(crate) fn extend_values_to_power_of_2<F: NttFriendlyFieldElement>(
 }
 
 /// Compute `2n` evaluations of the polynomial interpolated from `evaluations`, which consists of
-/// `n` Lagrange basis evaluations. `n` must be a power of 2.
+/// `n` Lagrange basis evaluations. `n` must be a power of 2. The `2n` evaluations are written to
+/// `output`.
 ///
 /// Corresponds to `double_evaluations` of [6.1.3.2][1].
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.3.2
-// TODO(#1394): make available outside of tests
-#[cfg(test)]
 pub(crate) fn double_evaluations<F: NttFriendlyFieldElement>(
+    output: &mut [F],
     evaluations: &[F],
-) -> Result<Vec<F>, NttError> {
-    assert!(evaluations.len().is_power_of_two());
-    let mut output = vec![F::zero(); evaluations.len() * 2];
+) -> Result<(), NttError> {
+    if !evaluations.len().is_power_of_two() {
+        return Err(NttError::SizeInvalid);
+    }
+    if output.len() != 2 * evaluations.len() {
+        return Err(NttError::SizeInvalid);
+    }
 
     // Do inverse NTT into the front half of output, then forward NTT into the back half to get odd
     // indices of output
@@ -274,6 +270,16 @@ pub(crate) fn double_evaluations<F: NttFriendlyFieldElement>(
             output[evaluations.len() + output_position / 2]
         };
     }
+
+    Ok(())
+}
+
+/// Same as [`double_evaluations`], but returns the result.
+pub(crate) fn get_double_evaluations<F: NttFriendlyFieldElement>(
+    evaluations: &[F],
+) -> Result<Vec<F>, NttError> {
+    let mut output = vec![F::zero(); evaluations.len() * 2];
+    double_evaluations(&mut output, evaluations)?;
 
     Ok(output)
 }
@@ -297,7 +303,7 @@ mod tests {
         fp::log2,
         ntt::get_ntt,
         polynomial::{
-            double_evaluations, extend_values_to_power_of_2, nth_root_powers, poly_deg,
+            extend_values_to_power_of_2, get_double_evaluations, nth_root_powers, poly_deg,
             poly_eval_lagrange_batched, poly_eval_monomial, poly_interpret_eval, poly_mul_lagrange,
             poly_mul_monomial, poly_range_check,
         },
@@ -430,7 +436,6 @@ mod tests {
 
         let &n = sizes.iter().max().unwrap();
         let mut ntt_mem = vec![Field64::zero(); n];
-        let roots = nth_root_powers(n);
 
         // Evaluates several polynomials converting them to the monomial basis (iteratively).
         let want = polynomials
@@ -442,7 +447,7 @@ mod tests {
             .collect::<Vec<_>>();
 
         // Simultaneously evaluates several polynomials directly in the Lagrange basis (batched).
-        let got = poly_eval_lagrange_batched(&polynomials, &roots, x);
+        let got = poly_eval_lagrange_batched(&polynomials, x);
         assert_eq!(got, want, "sizes: {sizes:?} x: {x} P: {polynomials:?}");
     }
 
@@ -457,7 +462,8 @@ mod tests {
             let p_lagrange = get_ntt(&p_monomial, n).unwrap();
             let q_lagrange = get_ntt(&q_monomial, n).unwrap();
 
-            let product_lagrange = poly_mul_lagrange(&p_lagrange, &q_lagrange).unwrap();
+            let mut product_lagrange = vec![Field64::zero(); 2 * n];
+            poly_mul_lagrange(&mut product_lagrange, &p_lagrange, &q_lagrange).unwrap();
             let product_monomial = poly_mul_monomial(&p_monomial, &q_monomial);
             let product_monomial_ntt = get_ntt(&product_monomial, 2 * n).unwrap();
             assert_eq!(product_lagrange, product_monomial_ntt);
@@ -501,7 +507,7 @@ mod tests {
             let p_lagrange = get_ntt(&p_monomial, n).unwrap();
 
             assert_eq!(
-                double_evaluations(&p_lagrange).unwrap(),
+                get_double_evaluations(&p_lagrange).unwrap(),
                 get_ntt(&p_monomial, 2 * n).unwrap()
             );
         }

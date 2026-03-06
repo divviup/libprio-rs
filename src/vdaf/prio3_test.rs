@@ -51,7 +51,7 @@ impl TestVectorVdaf for Prio3Sum {
 impl<F, S, P, const SEED_SIZE: usize> TestVectorVdaf for Prio3<SumVec<F, S>, P, SEED_SIZE>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
     P: Xof<SEED_SIZE>,
 {
     fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
@@ -260,7 +260,7 @@ mod tests {
     #[test]
     fn test_vec_prio3_sum_vec_multiproof() {
         type Prio3SumVecField64Multiproof =
-            Prio3<SumVec<Field64, ParallelSum<Field64, Mul<Field64>>>, XofTurboShake128, 32>;
+            Prio3<SumVec<Field64, ParallelSum<Field64, Mul>>, XofTurboShake128, 32>;
         let num_proofs = 3;
         let alg_id = 0xFFFFFFFF;
 
@@ -319,7 +319,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "test vector needs to be updated after other VDAF draft 18 changes"]
     fn test_vec_prio3_l1bound_sum() {
         let test_vector =
             serde_json::from_str(include_str!("test_vec/l1boundsum/Prio3L1BoundSum_0.json"))

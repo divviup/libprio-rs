@@ -53,8 +53,6 @@ pub(crate) fn ntt<F: NttFriendlyFieldElement>(
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.2
 /// [2]: https://eprint.iacr.org/2025/1727.pdf
-// TODO(#1394): make available outside of tests
-#[cfg(test)]
 pub(crate) fn ntt_set_s<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[F],
@@ -131,8 +129,6 @@ fn ntt_internal<F: NttFriendlyFieldElement>(
 }
 
 /// Does the same thing as [`ntt`], but returns the output.
-// TODO(#1394): make available outside of tests
-#[cfg(test)]
 pub(crate) fn get_ntt<F: NttFriendlyFieldElement>(
     input: &[F],
     size: usize,
@@ -144,8 +140,6 @@ pub(crate) fn get_ntt<F: NttFriendlyFieldElement>(
 }
 
 /// Sets `outp` to the inverse of the NTT of `inp`.
-// TODO(#1394): make available outside of tests and config experimental
-#[cfg(any(test, all(feature = "crypto-dependencies", feature = "experimental")))]
 pub(crate) fn ntt_inv<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[F],
@@ -158,8 +152,6 @@ pub(crate) fn ntt_inv<F: NttFriendlyFieldElement>(
 }
 
 /// Does the same thing as [`ntt_inv`], but returns the output.
-// TODO(#1394): make available outside of tests
-#[cfg(test)]
 pub(crate) fn get_ntt_inv<F: NttFriendlyFieldElement>(
     inp: &[F],
     size: usize,

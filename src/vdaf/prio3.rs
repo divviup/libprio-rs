@@ -94,8 +94,7 @@ impl Prio3Count {
 
 /// The count-vector type. Each measurement is a vector of integers in `[0, max_measurement]` and the
 /// aggregate is the element-wise sum.
-pub type Prio3SumVec =
-    Prio3<SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
+pub type Prio3SumVec = Prio3<SumVec<Field128, ParallelSum<Field128, Mul>>, XofTurboShake128, 32>;
 
 impl Prio3SumVec {
     /// Construct an instance of Prio3SumVec with the given number of aggregators. `max_measurement`
@@ -120,11 +119,8 @@ impl Prio3SumVec {
 /// time. Note that the improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
-pub type Prio3SumVecMultithreaded = Prio3<
-    SumVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
-    XofTurboShake128,
-    32,
->;
+pub type Prio3SumVecMultithreaded =
+    Prio3<SumVec<Field128, ParallelSumMultithreaded<Field128, Mul>>, XofTurboShake128, 32>;
 
 #[cfg(feature = "multithreaded")]
 impl Prio3SumVecMultithreaded {
@@ -179,7 +175,7 @@ pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
     FixedPointBoundedL2VecSum<
         Fx,
         ParallelSum<Field128, PolyEval<Field128>>,
-        ParallelSum<Field128, Mul<Field128>>,
+        ParallelSum<Field128, Mul>,
     >,
     XofTurboShake128,
     32,
@@ -215,7 +211,7 @@ pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
     FixedPointBoundedL2VecSum<
         Fx,
         ParallelSumMultithreaded<Field128, PolyEval<Field128>>,
-        ParallelSumMultithreaded<Field128, Mul<Field128>>,
+        ParallelSumMultithreaded<Field128, Mul>,
     >,
     XofTurboShake128,
     32,
@@ -242,7 +238,7 @@ impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx
 /// The histogram type. Each measurement is an integer in `[0, length)` and the result is a
 /// histogram counting the number of occurrences of each measurement.
 pub type Prio3Histogram =
-    Prio3<Histogram<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
+    Prio3<Histogram<Field128, ParallelSum<Field128, Mul>>, XofTurboShake128, 32>;
 
 impl Prio3Histogram {
     /// Constructs an instance of Prio3Histogram with the given number of aggregators,
@@ -265,11 +261,8 @@ impl Prio3Histogram {
 /// time. Note that this improvement is only noticeable for very large input lengths.
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
-pub type Prio3HistogramMultithreaded = Prio3<
-    Histogram<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
-    XofTurboShake128,
-    32,
->;
+pub type Prio3HistogramMultithreaded =
+    Prio3<Histogram<Field128, ParallelSumMultithreaded<Field128, Mul>>, XofTurboShake128, 32>;
 
 #[cfg(feature = "multithreaded")]
 impl Prio3HistogramMultithreaded {
@@ -293,7 +286,7 @@ impl Prio3HistogramMultithreaded {
 /// at most `max_weight` true values, and the aggregate is a histogram counting the number of true
 /// values at each position across all measurements.
 pub type Prio3MultihotCountVec =
-    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
+    Prio3<MultihotCountVec<Field128, ParallelSum<Field128, Mul>>, XofTurboShake128, 32>;
 
 impl Prio3MultihotCountVec {
     /// Constructs an instance of Prio3MultihotCountVec with the given number of aggregators, number
@@ -318,7 +311,7 @@ impl Prio3MultihotCountVec {
 #[cfg(feature = "multithreaded")]
 #[cfg_attr(docsrs, doc(cfg(feature = "multithreaded")))]
 pub type Prio3MultihotCountVecMultithreaded = Prio3<
-    MultihotCountVec<Field128, ParallelSumMultithreaded<Field128, Mul<Field128>>>,
+    MultihotCountVec<Field128, ParallelSumMultithreaded<Field128, Mul>>,
     XofTurboShake128,
     32,
 >;
@@ -1911,12 +1904,14 @@ mod tests {
 
     #[test]
     fn test_prio3_sum_vec_multiproof() {
-        let prio3 = Prio3::<
-            SumVec<Field128, ParallelSum<Field128, Mul<Field128>>>,
-            XofTurboShake128,
-            32,
-        >::new(2, 2, 0xFFFF0000, SumVec::new(3, 20, 4).unwrap())
-        .unwrap();
+        let prio3 =
+            Prio3::<SumVec<Field128, ParallelSum<Field128, Mul>>, XofTurboShake128, 32>::new(
+                2,
+                2,
+                0xFFFF0000,
+                SumVec::new(3, 20, 4).unwrap(),
+            )
+            .unwrap();
 
         assert_eq!(
             run_vdaf(
@@ -1988,7 +1983,7 @@ mod tests {
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
-            M: Eq + ParallelSumGadget<Field128, Mul<Field128>> + Clone + 'static,
+            M: Eq + ParallelSumGadget<Field128, Mul> + Clone + 'static,
         {
             let fp_vec = vec![fp_0; SIZE];
 
@@ -2081,7 +2076,7 @@ mod tests {
         ) where
             Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
             PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
-            M: Eq + ParallelSumGadget<Field128, Mul<Field128>> + Clone + 'static,
+            M: Eq + ParallelSumGadget<Field128, Mul> + Clone + 'static,
         {
             let fp_vec1 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
             let fp_vec2 = vec![fp_4_inv, fp_8_inv, fp_16_inv];

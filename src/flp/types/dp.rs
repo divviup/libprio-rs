@@ -17,7 +17,7 @@ use rand::{distr::Distribution, Rng, SeedableRng};
 // here.
 impl<S> TypeWithNoise<PureDpDiscreteLaplace> for SumVec<Field64, S>
 where
-    S: ParallelSumGadget<Field64, Mul<Field64>> + Eq + 'static,
+    S: ParallelSumGadget<Field64, Mul> + Eq + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
@@ -35,7 +35,7 @@ where
 
 impl<S> TypeWithNoise<PureDpDiscreteLaplace> for SumVec<Field128, S>
 where
-    S: ParallelSumGadget<Field128, Mul<Field128>> + Eq + 'static,
+    S: ParallelSumGadget<Field128, Mul> + Eq + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
@@ -91,7 +91,7 @@ where
 
 impl<S> TypeWithNoise<PureDpDiscreteLaplace> for Histogram<Field64, S>
 where
-    S: ParallelSumGadget<Field64, Mul<Field64>> + Eq + 'static,
+    S: ParallelSumGadget<Field64, Mul> + Eq + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
@@ -109,7 +109,7 @@ where
 
 impl<S> TypeWithNoise<PureDpDiscreteLaplace> for Histogram<Field128, S>
 where
-    S: ParallelSumGadget<Field128, Mul<Field128>> + Eq + 'static,
+    S: ParallelSumGadget<Field128, Mul> + Eq + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
@@ -156,7 +156,7 @@ where
 
 impl<S> TypeWithNoise<PureDpDiscreteLaplace> for L1BoundSum<Field64, S>
 where
-    S: ParallelSumGadget<Field64, Mul<Field64>> + Eq + 'static,
+    S: ParallelSumGadget<Field64, Mul> + Eq + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
@@ -174,7 +174,7 @@ where
 
 impl<S> TypeWithNoise<PureDpDiscreteLaplace> for L1BoundSum<Field128, S>
 where
-    S: ParallelSumGadget<Field128, Mul<Field128>> + Eq + 'static,
+    S: ParallelSumGadget<Field128, Mul> + Eq + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
