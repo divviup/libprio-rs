@@ -74,7 +74,7 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> L1BoundSum<F, 
         }
         if max_value <= F::Integer::zero() {
             return Err(FlpError::InvalidParameter(
-                "max_value cannot be zero".to_string(),
+                "max_value must be positive".to_string(),
             ));
         }
         if max_value >= F::modulus() {
