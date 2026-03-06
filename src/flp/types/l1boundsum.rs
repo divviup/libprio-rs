@@ -26,7 +26,7 @@ pub struct L1BoundSum<F: NttFriendlyFieldElement, S> {
     /// L1 norm.
     measurement_len: usize,
     /// Maximum allowed value for each element of the measurement, and for the L1 norm.
-    max_value: F::Integer,
+    pub(super) max_value: F::Integer,
     /// Size in bits of each element of the measurement.
     bits: usize,
     /// Length in bits of an encoded measurement, including the L1 norm.
@@ -72,9 +72,9 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> L1BoundSum<F, 
                 "chunk_length cannot be zero".to_string(),
             ));
         }
-        if max_value == F::Integer::zero() {
+        if max_value <= F::Integer::zero() {
             return Err(FlpError::InvalidParameter(
-                "max_value cannot be zero".to_string(),
+                "max_value must be positive".to_string(),
             ));
         }
         if max_value >= F::modulus() {
