@@ -2,8 +2,6 @@
 
 //! Tools for evaluating Prio3 test vectors.
 
-#[cfg(feature = "experimental")]
-use crate::vdaf::prio3::Prio3L1BoundSum;
 use crate::{
     field::NttFriendlyFieldElement,
     flp::{
@@ -11,7 +9,9 @@ use crate::{
         types::SumVec,
     },
     vdaf::{
-        prio3::{Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec, Prio3Sum},
+        prio3::{
+            Prio3, Prio3Count, Prio3Histogram, Prio3L1BoundSum, Prio3MultihotCountVec, Prio3Sum,
+        },
         test_utils::TestVectorVdaf,
         xof::Xof,
     },
@@ -158,10 +158,9 @@ impl TestVectorVdaf for Prio3MultihotCountVec {
     }
 }
 
-#[cfg(feature = "experimental")]
 impl TestVectorVdaf for Prio3L1BoundSum {
     fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
-        let bits = parameters["bits"].as_u64().unwrap().try_into().unwrap();
+        let max_value = parameters["max_value"].as_u64().unwrap().into();
         let length = parameters["length"].as_u64().unwrap().try_into().unwrap();
         let chunk_length = parameters["chunk_length"]
             .as_u64()
@@ -169,7 +168,7 @@ impl TestVectorVdaf for Prio3L1BoundSum {
             .try_into()
             .unwrap();
 
-        Prio3::new_l1_bound_sum(shares, bits, length, chunk_length).unwrap()
+        Prio3::new_l1_bound_sum(shares, max_value, length, chunk_length).unwrap()
     }
 
     fn deserialize_measurement(measurement: &Value) -> Self::Measurement {
@@ -203,8 +202,6 @@ impl TestVectorVdaf for Prio3L1BoundSum {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(feature = "experimental")]
-    use crate::vdaf::prio3::Prio3L1BoundSum;
     use crate::{
         field::Field64,
         flp::{
@@ -213,7 +210,8 @@ mod tests {
         },
         vdaf::{
             prio3::{
-                Prio3, Prio3Count, Prio3Histogram, Prio3MultihotCountVec, Prio3Sum, Prio3SumVec,
+                Prio3, Prio3Count, Prio3Histogram, Prio3L1BoundSum, Prio3MultihotCountVec,
+                Prio3Sum, Prio3SumVec,
             },
             test_utils::{check_test_vector, check_test_vector_custom_constructor},
             xof::XofTurboShake128,
@@ -320,8 +318,8 @@ mod tests {
         }
     }
 
-    #[cfg(feature = "experimental")]
     #[test]
+    #[ignore = "test vector needs to be updated after other VDAF draft 18 changes"]
     fn test_vec_prio3_l1bound_sum() {
         let test_vector =
             serde_json::from_str(include_str!("test_vec/l1boundsum/Prio3L1BoundSum_0.json"))

@@ -1,6 +1,6 @@
 //! Implementation of the Prio3L1BoundSum VDAF defined in [1].
 //!
-//! [1]: https://ietf-wg-ppm.github.io/draft-ietf-ppm-l1-bound-sum/draft-ietf-ppm-l1-bound-sum.html
+//! [1]: https://www.ietf.org/archive/id/draft-ietf-ppm-l1-bound-sum-01.html
 
 use crate::{
     field::Field128,
@@ -14,26 +14,26 @@ use crate::{
 /// A VDAF which sums over vectors, checking that each element of each vector is within some range
 /// and that the L1 norm of each vector matches a claimed weight encoded into the input, which
 /// itself must be within the same range as the vector elements, effectively bounding the L1 norm
-/// to 2^bits - 1.
+/// to `max_value`.
 pub type Prio3L1BoundSum =
     Prio3<L1BoundSum<Field128, ParallelSum<Field128, Mul<Field128>>>, XofTurboShake128, 32>;
 
 impl Prio3L1BoundSum {
-    /// Construct an instance of Prio3L1BoundSum with the given number of aggregators. `bits` defines
-    /// the bit width of each summand of the measurement; `len` defines the length of the
+    /// Construct an instance of Prio3L1BoundSum with the given number of aggregators. `max_value` defines
+    /// the upper bound of each element of the measurement; `len` defines the length of the
     /// measurement vector.
     pub fn new_l1_bound_sum(
         num_aggregators: u8,
-        bits: usize,
+        max_value: u128,
         len: usize,
         chunk_length: usize,
     ) -> Result<Self, VdafError> {
         Prio3::new(
             num_aggregators,
             1,
-            // https://ietf-wg-ppm.github.io/draft-ietf-ppm-l1-bound-sum/draft-ietf-ppm-l1-bound-sum.html#section-5
+            // https://www.ietf.org/archive/id/draft-ietf-ppm-l1-bound-sum-01.html#section-6
             0x00000007,
-            L1BoundSum::new(bits, len, chunk_length)?,
+            L1BoundSum::new(max_value, len, chunk_length)?,
         )
     }
 }
@@ -45,7 +45,7 @@ mod tests {
 
     #[test]
     fn test() {
-        let l1_bound_sum = Prio3::new_l1_bound_sum(2, 3, 4, 3).unwrap();
+        let l1_bound_sum = Prio3::new_l1_bound_sum(2, 7, 4, 3).unwrap();
 
         assert_eq!(
             run_vdaf(
