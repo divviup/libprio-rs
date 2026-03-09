@@ -51,7 +51,7 @@ use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{FieldElement, FieldElementWithInteger, FieldError, NttFriendlyFieldElement};
 use crate::fp::log2;
 use crate::ntt::{ntt, ntt_inv_finish, NttError};
-use crate::polynomial::{nth_root_powers, poly_eval, poly_eval_batched};
+use crate::polynomial::{nth_root_powers, poly_eval_lagrange_batched, poly_eval_monomial};
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -471,7 +471,7 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             // This avoids using NTTs to convert them to the monomial basis.
             let roots = nth_root_powers(m);
             let polynomials = &gadget.f_vals[..gadget.arity()];
-            let mut evals = poly_eval_batched(polynomials, &roots, *query_rand_val);
+            let mut evals = poly_eval_lagrange_batched(polynomials, &roots, *query_rand_val);
             verifier.append(&mut evals);
 
             // Add the value of the gadget polynomial evaluated at the query randomness value.
@@ -737,7 +737,7 @@ impl<F: NttFriendlyFieldElement> QueryShimGadget<F> {
         let step = (1 << (log2(p as u128) - log2(m as u128))) as usize;
 
         // Evaluate the gadget polynomial `p` at query randomness `r`.
-        let p_at_r = poly_eval(&proof_data[gadget_arity..], r);
+        let p_at_r = poly_eval_monomial(&proof_data[gadget_arity..], r);
 
         Ok(Self {
             inner,

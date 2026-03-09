@@ -22,16 +22,53 @@ pub enum NttError {
     SizeInvalid,
 }
 
-/// Sets `outp` to the NTT of `inp`.
+/// Sets `outp` to the NTT of `inp`, converting a polynomial in the monomial basis to the Lagrange
+/// basis.
 ///
 /// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
 /// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `2^size`-th principal root of
 /// unity.
-#[allow(clippy::many_single_char_names)]
-pub fn ntt<F: NttFriendlyFieldElement>(
+///
+/// This corresponds to the `Field.ntt` interface of [6.1.2][1], with `set_s = false`, and uses
+/// Algorithm 4 of [Faz25][2].
+///
+/// [1]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.2
+/// [2]: https://eprint.iacr.org/2025/1727.pdf
+pub(crate) fn ntt<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[F],
     size: usize,
+) -> Result<(), NttError> {
+    ntt_internal(outp, inp, size, false)
+}
+
+/// Sets `outp` to the NTT of `inp`.
+///
+/// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
+/// evaluated at points `s * p^0, s * p^1, ... s * p^(size-1)`, where `p` is the n-th principal
+/// root of unity and `s` is a 2n-th root of unity.
+///
+/// This corresponds to the `Field.ntt` interface of [6.1.2][1], with `set_s = true` and uses
+/// Algorithm 4 of [Faz25][2].
+///
+/// [1]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-6.1.2
+/// [2]: https://eprint.iacr.org/2025/1727.pdf
+// TODO(#1394): make available outside of tests
+#[cfg(test)]
+pub(crate) fn ntt_set_s<F: NttFriendlyFieldElement>(
+    outp: &mut [F],
+    inp: &[F],
+    size: usize,
+) -> Result<(), NttError> {
+    ntt_internal(outp, inp, size, true)
+}
+
+#[allow(clippy::many_single_char_names)]
+fn ntt_internal<F: NttFriendlyFieldElement>(
+    outp: &mut [F],
+    inp: &[F],
+    size: usize,
+    set_s: bool,
 ) -> Result<(), NttError> {
     let d = usize::try_from(log2(size as u128)).map_err(|_| NttError::SizeTooLarge)?;
 
@@ -58,7 +95,11 @@ pub fn ntt<F: NttFriendlyFieldElement>(
 
     let mut w: F;
     for l in 1..d + 1 {
-        w = F::one();
+        w = if set_s {
+            F::root(l + 1).unwrap()
+        } else {
+            F::one()
+        };
         let r = F::root(l).unwrap();
         let y = 1 << (l - 1);
         let chunk = (size / y) >> 1;
@@ -67,7 +108,7 @@ pub fn ntt<F: NttFriendlyFieldElement>(
         for j in 0..chunk {
             let x = j << l;
             let u = outp[x];
-            let v = outp[x + y];
+            let v = w * outp[x + y];
             outp[x] = u + v;
             outp[x + y] = u - v;
         }
@@ -87,7 +128,21 @@ pub fn ntt<F: NttFriendlyFieldElement>(
     Ok(())
 }
 
-/// Sets `outp` to the inverse of the DFT of `inp`.
+/// Does the same thing as [`ntt`], but returns the output.
+// TODO(#1394): make available outside of tests
+#[cfg(test)]
+pub(crate) fn get_ntt<F: NttFriendlyFieldElement>(
+    input: &[F],
+    size: usize,
+) -> Result<Vec<F>, NttError> {
+    let mut output = vec![F::zero(); size];
+    ntt(&mut output, input, size)?;
+
+    Ok(output)
+}
+
+/// Sets `outp` to the inverse of the NTT of `inp`.
+// TODO(#1394): make available outside of tests and config experimental
 #[cfg(any(test, all(feature = "crypto-dependencies", feature = "experimental")))]
 pub(crate) fn ntt_inv<F: NttFriendlyFieldElement>(
     outp: &mut [F],
@@ -98,6 +153,19 @@ pub(crate) fn ntt_inv<F: NttFriendlyFieldElement>(
     ntt(outp, inp, size)?;
     ntt_inv_finish(outp, size, size_inv);
     Ok(())
+}
+
+/// Does the same thing as [`ntt_inv`], but returns the output.
+// TODO(#1394): make available outside of tests
+#[cfg(test)]
+pub(crate) fn get_ntt_inv<F: NttFriendlyFieldElement>(
+    inp: &[F],
+    size: usize,
+) -> Result<Vec<F>, NttError> {
+    let mut output = vec![F::zero(); size];
+    ntt_inv(&mut output, inp, size)?;
+
+    Ok(output)
 }
 
 /// An intermediate step in the computation of the inverse DFT. Exposing this function allows us to
@@ -121,24 +189,49 @@ fn bitrev(d: usize, x: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::field::{
-        split_vector, Field128, Field64, FieldElement, FieldElementWithInteger, FieldPrio2,
+    use crate::{
+        field::{
+            split_vector, Field128, Field64, FieldElement, FieldElementWithInteger, FieldPrio2,
+        },
+        polynomial::poly_eval_monomial,
     };
 
     fn ntt_then_inv_test<F: NttFriendlyFieldElement>() -> Result<(), NttError> {
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];
 
         for size in test_sizes.iter() {
-            let mut tmp = vec![F::zero(); *size];
-            let mut got = vec![F::zero(); *size];
             let want = F::random_vector(*size);
 
-            ntt(&mut tmp, &want, want.len())?;
-            ntt_inv(&mut got, &tmp, tmp.len())?;
+            let tmp = get_ntt(&want, *size)?;
+            let got = get_ntt_inv(&tmp, tmp.len())?;
             assert_eq!(got, want);
         }
 
         Ok(())
+    }
+
+    fn test_ntt_set_s<F: NttFriendlyFieldElement>() {
+        for log_n in 0..8 {
+            let n = 1 << log_n;
+            let nth_root = F::root(log_n).unwrap();
+            let two_nth_root = F::root(log_n + 1).unwrap();
+
+            // Random polynomial in monomial basis
+            let p_monomial = F::random_vector(n);
+
+            // Evaluate the polynomial at the powers of an n-th root of unity multiplied by a 2n-th
+            // root of unity
+            let monomial_evaluations = (0..n)
+                .map(|power| F::Integer::try_from(power).unwrap())
+                .map(|power| poly_eval_monomial(&p_monomial, two_nth_root * nth_root.pow(power)))
+                .collect::<Vec<_>>();
+
+            let mut ntt = vec![F::zero(); n];
+            ntt_set_s(&mut ntt, &p_monomial, n).unwrap();
+
+            // Monomial evaluations should match NTT with set_s = true
+            assert_eq!(monomial_evaluations, ntt);
+        }
     }
 
     #[test]
@@ -149,11 +242,13 @@ mod tests {
     #[test]
     fn test_field64() {
         ntt_then_inv_test::<Field64>().expect("unexpected error");
+        test_ntt_set_s::<Field64>();
     }
 
     #[test]
     fn test_field128() {
         ntt_then_inv_test::<Field128>().expect("unexpected error");
+        test_ntt_set_s::<Field128>();
     }
 
     // This test demonstrates a consequence of \[BBG+19, Fact 4.4\]: interpolating a polynomial
@@ -187,8 +282,7 @@ mod tests {
             }
         }
 
-        let mut want = vec![Field64::zero(); len];
-        ntt_inv(&mut want, &x, len).unwrap();
+        let want = get_ntt_inv(&x, len).unwrap();
 
         assert_eq!(got, want);
     }
@@ -197,8 +291,7 @@ mod tests {
     fn test_ntt_interpolation() {
         let count = 128;
         let points = Field128::random_vector(count);
-        let mut poly = vec![Field128::zero(); count];
-        ntt(&mut poly, &points, count).unwrap();
+        let poly = get_ntt(&points, count).unwrap();
         let principal_root = Field128::root(7).unwrap(); // log_2(128);
         for (power, poly_coeff) in poly.iter().enumerate() {
             let expected = points
