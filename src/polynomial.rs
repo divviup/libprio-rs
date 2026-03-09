@@ -52,10 +52,7 @@ pub fn poly_mul_monomial<F: NttFriendlyFieldElement>(p: &[F], q: &[F]) -> Vec<F>
 
 /// Interpolate a polynomial from the provided points and evaluate it, using `tmp_coeffs` as scratch
 /// space for the NTT.
-#[cfg(any(
-    feature = "test-util",
-    all(feature = "crypto-dependencies", feature = "experimental")
-))]
+#[cfg(any(test, all(feature = "crypto-dependencies", feature = "experimental")))]
 #[inline]
 pub fn poly_interpret_eval<F: NttFriendlyFieldElement>(
     points: &[F],
