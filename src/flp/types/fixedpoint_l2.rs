@@ -477,13 +477,13 @@ where
             for chunk in decoded_entries?.chunks(self.gadget1_chunk_length) {
                 let d = chunk.len();
                 if d == self.gadget1_chunk_length {
-                    outp += g[1].call(chunk)?;
+                    outp += g[1].eval(chunk)?;
                 } else {
                     // If the chunk is smaller than the chunk length, extend
                     // chunk with zeros.
                     let mut padded_chunk: Vec<_> = chunk.to_owned();
                     padded_chunk.resize(self.gadget1_chunk_length, zero_enc_share);
-                    outp += g[1].call(&padded_chunk)?;
+                    outp += g[1].eval(&padded_chunk)?;
                 }
             }
 

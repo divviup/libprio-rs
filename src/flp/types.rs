@@ -68,7 +68,7 @@ impl<F: NttFriendlyFieldElement> Flp for Count<F> {
         _num_shares: usize,
     ) -> Result<Vec<F>, FlpError> {
         self.valid_call_check(input, joint_rand)?;
-        let out = g[0].call(&[input[0], input[0]])? - input[0];
+        let out = g[0].eval(&[input[0], input[0]])? - input[0];
         Ok(vec![out])
     }
 
@@ -210,7 +210,7 @@ impl<F: NttFriendlyFieldElement> Flp for Sum<F> {
         let gadget = &mut g[0];
         let mut output = vec![F::zero(); input.len()];
         for (bit, output_elem) in input.iter().zip(output[..input.len()].iter_mut()) {
-            *output_elem = gadget.call(slice::from_ref(bit))?;
+            *output_elem = gadget.eval(slice::from_ref(bit))?;
         }
 
         Ok(output)
@@ -1071,7 +1071,7 @@ pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
             // accessed again before returning.
         }
 
-        output += gadget.call(&padded_chunk)?;
+        output += gadget.eval(&padded_chunk)?;
     }
 
     Ok(output)
@@ -1626,7 +1626,7 @@ mod tests {
             _num_shares: usize,
         ) -> Result<Vec<Self::Field>, FlpError> {
             self.valid_call_check(input, joint_rand)?;
-            let check = gadgets[0].call(input)?;
+            let check = gadgets[0].eval(input)?;
             Ok(vec![check])
         }
 
