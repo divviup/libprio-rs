@@ -8,7 +8,6 @@ use crate::ntt::{ntt_inv, ntt_set_s, NttError};
 use crate::{
     field::{FieldElement, NttFriendlyFieldElement},
     fp::log2,
-    ntt::ntt,
 };
 
 use std::convert::TryFrom;
@@ -63,7 +62,7 @@ pub fn poly_interpret_eval<F: NttFriendlyFieldElement>(
     eval_at: F,
     tmp_coeffs: &mut [F],
 ) -> F {
-    use crate::ntt::ntt_inv_finish;
+    use crate::ntt::{ntt, ntt_inv_finish};
 
     let size_inv = F::from(F::Integer::try_from(points.len()).unwrap()).inv();
     ntt(tmp_coeffs, points, points.len()).unwrap();
