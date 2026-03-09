@@ -75,12 +75,12 @@ impl<F: NttFriendlyFieldElement> Mul<F> {
 }
 
 impl<F: NttFriendlyFieldElement> Gadget<F> for Mul<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(inp[0] * inp[1])
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
         if inp[0].len() >= NTT_THRESHOLD {
             self.call_poly_ntt(outp, inp)
@@ -184,12 +184,12 @@ impl<F: NttFriendlyFieldElement> PolyEval<F> {
 }
 
 impl<F: NttFriendlyFieldElement> Gadget<F> for PolyEval<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         Ok(poly_eval(&self.poly, inp[0]))
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         for item in outp.iter_mut() {
@@ -249,16 +249,16 @@ impl<F: NttFriendlyFieldElement, G: 'static + Gadget<F>> ParallelSumGadget<F, G>
 }
 
 impl<F: NttFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelSum<F, G> {
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
         let mut outp = F::zero();
         for chunk in inp.chunks(self.inner.arity()) {
-            outp += self.inner.call(chunk)?;
+            outp += self.inner.eval(chunk)?;
         }
         Ok(outp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         for x in outp.iter_mut() {
@@ -268,7 +268,7 @@ impl<F: NttFriendlyFieldElement, G: 'static + Gadget<F>> Gadget<F> for ParallelS
         let mut partial_outp = vec![F::zero(); outp.len()];
 
         for chunk in inp.chunks(self.inner.arity()) {
-            self.inner.call_poly(&mut partial_outp, chunk)?;
+            self.inner.eval_poly(&mut partial_outp, chunk)?;
             for i in 0..outp.len() {
                 outp[i] += partial_outp[i]
             }
@@ -349,11 +349,11 @@ where
     F: NttFriendlyFieldElement + Sync + Send,
     G: 'static + Gadget<F> + Clone + Sync + Send,
 {
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
-        self.serial_sum.call(inp)
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
+        self.serial_sum.eval(inp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
 
         // Create a copy of the inner gadget and two working buffers on each thread. Evaluate the
@@ -369,7 +369,7 @@ where
                 |mut state, chunk| {
                     state
                         .inner
-                        .call_poly(&mut state.partial_output, chunk)
+                        .eval_poly(&mut state.partial_output, chunk)
                         .unwrap();
                     for (sum_elem, output_elem) in state
                         .partial_sum
@@ -524,8 +524,8 @@ mod tests {
 
             // Test that both gadgets evaluate to the same value when run on scalar inputs.
             let inp = TestField::random_vector(arity);
-            let result = g.call(&inp).unwrap();
-            let result_serial = g_serial.call(&inp).unwrap();
+            let result = g.eval(&inp).unwrap();
+            let result_serial = g_serial.eval(&inp).unwrap();
             assert_eq!(result, result_serial);
 
             // Test that both gadgets evaluate to the same value when run on polynomial inputs.
@@ -542,9 +542,9 @@ mod tests {
             .take(arity)
             .collect();
 
-            g.call_poly(&mut poly_outp, &poly_inp).unwrap();
+            g.eval_poly(&mut poly_outp, &poly_inp).unwrap();
             g_serial
-                .call_poly(&mut poly_outp_serial, &poly_inp)
+                .eval_poly(&mut poly_outp_serial, &poly_inp)
                 .unwrap();
             assert_eq!(poly_outp, poly_outp_serial);
         }
@@ -567,13 +567,13 @@ mod tests {
             inp[i] = poly_eval(&wire_polys[i], r);
         }
 
-        g.call_poly(&mut gadget_poly, &wire_polys).unwrap();
+        g.eval_poly(&mut gadget_poly, &wire_polys).unwrap();
         let got = poly_eval(&gadget_poly, r);
-        let want = g.call(&inp).unwrap();
+        let want = g.eval(&inp).unwrap();
         assert_eq!(got, want);
 
         // Repeat the call to make sure that the gadget's memory is reset properly between calls.
-        g.call_poly(&mut gadget_poly, &wire_polys).unwrap();
+        g.eval_poly(&mut gadget_poly, &wire_polys).unwrap();
         let got = poly_eval(&gadget_poly, r);
         assert_eq!(got, want);
     }

@@ -318,7 +318,7 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             let gadget_poly_len = gadget_poly_len(gadget.degree(), m);
             let start = proof_len + gadget.arity();
             let end = start + gadget_poly_len.next_power_of_two();
-            gadget.call_poly(&mut proof[start..end], &f)?;
+            gadget.eval_poly(&mut proof[start..end], &f)?;
             proof_len += gadget.arity() + gadget_poly_len;
         }
 
@@ -503,7 +503,7 @@ pub trait Flp: Sized + Eq + Clone + Debug {
         for gadget in gadgets.iter_mut() {
             let next_len = 1 + gadget.arity();
 
-            let e = gadget.call(&verifier[verifier_len..verifier_len + next_len - 1])?;
+            let e = gadget.eval(&verifier[verifier_len..verifier_len + next_len - 1])?;
             if e != verifier[verifier_len + next_len - 1] {
                 return Ok(false);
             }
@@ -608,10 +608,10 @@ where
 /// A gadget, a non-affine arithmetic circuit that is called when evaluating a validity circuit.
 pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
     /// Evaluates the gadget on input `inp` and returns the output.
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError>;
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError>;
 
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
+    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
 
     /// Returns the arity of the gadget. This is the length of `inp` passed to `call` or
     /// `call_poly`.
@@ -661,16 +661,16 @@ impl<F: NttFriendlyFieldElement> ProveShimGadget<F> {
 }
 
 impl<F: NttFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
         for (wire_poly_vals, inp_val) in self.f_vals[..inp.len()].iter_mut().zip(inp.iter()) {
             wire_poly_vals[self.ct] = *inp_val;
         }
         self.ct += 1;
-        self.inner.call(inp)
+        self.inner.eval(inp)
     }
 
-    fn call_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
-        self.inner.call_poly(outp, inp)
+    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+        self.inner.eval_poly(outp, inp)
     }
 
     fn arity(&self) -> usize {
@@ -751,7 +751,7 @@ impl<F: NttFriendlyFieldElement> QueryShimGadget<F> {
 }
 
 impl<F: NttFriendlyFieldElement> Gadget<F> for QueryShimGadget<F> {
-    fn call(&mut self, inp: &[F]) -> Result<F, FlpError> {
+    fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
         for (wire_poly_vals, inp_val) in self.f_vals[..inp.len()].iter_mut().zip(inp.iter()) {
             wire_poly_vals[self.ct] = *inp_val;
         }
@@ -760,7 +760,7 @@ impl<F: NttFriendlyFieldElement> Gadget<F> for QueryShimGadget<F> {
         Ok(outp)
     }
 
-    fn call_poly(&mut self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&mut self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), FlpError> {
         panic!("no-op");
     }
 
@@ -1078,13 +1078,13 @@ mod tests {
 
             // Check that `data[0]^3 == data[1]`.
             let mut inp = [input[0], input[0]];
-            inp[0] = g[0].call(&inp)?;
-            inp[0] = g[0].call(&inp)?;
+            inp[0] = g[0].eval(&inp)?;
+            inp[0] = g[0].eval(&inp)?;
             let x3_diff = inp[0] - input[1];
             res += r * x3_diff;
 
             // Check that `data[0]` is in the correct range.
-            let x_checked = g[1].call(&[input[0]])?;
+            let x_checked = g[1].eval(&[input[0]])?;
             res += (r * r) * x_checked;
 
             Ok(vec![res])
@@ -1218,10 +1218,10 @@ mod tests {
             // use of multiple gadgets, each of which is called an arbitrary number of times.
             let mut res = F::zero();
             for _ in 0..self.num_gadget_calls[0] {
-                res += g[0].call(&[input[0]])?;
+                res += g[0].eval(&[input[0]])?;
             }
             for _ in 0..self.num_gadget_calls[1] {
-                res += g[1].call(&[input[0]])?;
+                res += g[1].eval(&[input[0]])?;
             }
             Ok(vec![res])
         }
