@@ -613,7 +613,7 @@ pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
     fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
 
-    /// Returns the arity of the gadget. This is the length of `inp` passed to `call` or
+    /// Returns the arity of the gadget. This is the length of `inp` passed to `eval` or
     /// `eval_poly`.
     fn arity(&self) -> usize;
 

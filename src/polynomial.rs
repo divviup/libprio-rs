@@ -83,7 +83,8 @@ fn inv_pow2<F: FieldElement>(n: usize) -> F {
 
 /// Multiplies polynomials `p` and `q`, given in the Lagrange basis. The polynomials must have the
 /// same length, which must be a power of 2. For input polynomials of length `k` and degree `k - 1`,
-/// the output polynomial will have length `2k` and degree `2k - 1`.
+/// the output polynomial will have length `2k` and degree `2k - 2`, containing one excess
+/// coordinate. This is necessary for compatibility with NTT algorithms.
 ///
 /// Implements `Lagrange.poly_mul` of [6.1.3.2][2], using the polynomial multiplication technique of
 /// [Faz25 section 3.3][1].
