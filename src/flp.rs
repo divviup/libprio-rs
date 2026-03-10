@@ -51,7 +51,7 @@ use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{FieldElement, FieldElementWithInteger, FieldError, NttFriendlyFieldElement};
 use crate::fp::log2;
 use crate::ntt::{ntt, ntt_inv_finish, NttError};
-use crate::polynomial::{nth_root_powers, poly_eval, poly_eval_batched};
+use crate::polynomial::{nth_root_powers, poly_eval_lagrange_batched, poly_eval_monomial};
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -471,7 +471,7 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             // This avoids using NTTs to convert them to the monomial basis.
             let roots = nth_root_powers(m);
             let polynomials = &gadget.f_vals[..gadget.arity()];
-            let mut evals = poly_eval_batched(polynomials, &roots, *query_rand_val);
+            let mut evals = poly_eval_lagrange_batched(polynomials, &roots, *query_rand_val);
             verifier.append(&mut evals);
 
             // Add the value of the gadget polynomial evaluated at the query randomness value.
@@ -613,12 +613,12 @@ pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
     fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
 
-    /// Returns the arity of the gadget. This is the length of `inp` passed to `call` or
-    /// `call_poly`.
+    /// Returns the arity of the gadget. This is the length of `inp` passed to `eval` or
+    /// `eval_poly`.
     fn arity(&self) -> usize;
 
     /// Returns the circuit's arithmetic degree. This determines the minimum length the `outp`
-    /// buffer passed to `call_poly`.
+    /// buffer passed to `eval_poly`.
     fn degree(&self) -> usize;
 
     /// Returns the number of times the gadget is expected to be called.
@@ -737,7 +737,7 @@ impl<F: NttFriendlyFieldElement> QueryShimGadget<F> {
         let step = (1 << (log2(p as u128) - log2(m as u128))) as usize;
 
         // Evaluate the gadget polynomial `p` at query randomness `r`.
-        let p_at_r = poly_eval(&proof_data[gadget_arity..], r);
+        let p_at_r = poly_eval_monomial(&proof_data[gadget_arity..], r);
 
         Ok(Self {
             inner,
@@ -1169,7 +1169,7 @@ mod tests {
     }
 
     // In https://github.com/divviup/libprio-rs/issues/254 an out-of-bounds bug was reported that
-    // gets triggered when the size of the buffer passed to `gadget.call_poly()` is larger than
+    // gets triggered when the size of the buffer passed to `gadget.eval_poly()` is larger than
     // needed for computing the gadget polynomial.
     #[test]
     fn issue254() {

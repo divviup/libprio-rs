@@ -7,7 +7,7 @@ use crate::field::add_vector;
 use crate::field::NttFriendlyFieldElement;
 use crate::flp::{gadget_poly_len, wire_poly_len, FlpError, Gadget};
 use crate::ntt::{ntt, ntt_inv_finish};
-use crate::polynomial::{poly_deg, poly_eval, poly_mul};
+use crate::polynomial::{poly_deg, poly_eval_monomial, poly_mul_monomial};
 
 #[cfg(feature = "multithreaded")]
 use rayon::prelude::*;
@@ -46,18 +46,18 @@ impl<F: NttFriendlyFieldElement> Mul<F> {
     }
 
     /// Multiply input polynomials directly.
-    pub(crate) fn call_poly_direct(
+    pub(crate) fn eval_poly_direct(
         &mut self,
         outp: &mut [F],
         inp: &[Vec<F>],
     ) -> Result<(), FlpError> {
-        let v = poly_mul(&inp[0], &inp[1]);
+        let v = poly_mul_monomial(&inp[0], &inp[1]);
         outp[..v.len()].clone_from_slice(&v);
         Ok(())
     }
 
     /// Multiply input polynomials using NTT.
-    pub(crate) fn call_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    pub(crate) fn eval_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
@@ -83,9 +83,9 @@ impl<F: NttFriendlyFieldElement> Gadget<F> for Mul<F> {
     fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
         if inp[0].len() >= NTT_THRESHOLD {
-            self.call_poly_ntt(outp, inp)
+            self.eval_poly_ntt(outp, inp)
         } else {
-            self.call_poly_direct(outp, inp)
+            self.eval_poly_direct(outp, inp)
         }
     }
 
@@ -137,7 +137,7 @@ impl<F: NttFriendlyFieldElement> PolyEval<F> {
 
 impl<F: NttFriendlyFieldElement> PolyEval<F> {
     /// Multiply input polynomials directly.
-    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         outp[0] = self.poly[0];
         let mut x = inp[0].to_vec();
         for i in 1..self.poly.len() {
@@ -146,14 +146,14 @@ impl<F: NttFriendlyFieldElement> PolyEval<F> {
             }
 
             if i < self.poly.len() - 1 {
-                x = poly_mul(&x, &inp[0]);
+                x = poly_mul_monomial(&x, &inp[0]);
             }
         }
         Ok(())
     }
 
     /// Multiply input polynomials using NTT.
-    fn call_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let inp = &inp[0];
 
@@ -186,7 +186,7 @@ impl<F: NttFriendlyFieldElement> PolyEval<F> {
 impl<F: NttFriendlyFieldElement> Gadget<F> for PolyEval<F> {
     fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
         gadget_call_check(self, inp.len())?;
-        Ok(poly_eval(&self.poly, inp[0]))
+        Ok(poly_eval_monomial(&self.poly, inp[0]))
     }
 
     fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
@@ -197,9 +197,9 @@ impl<F: NttFriendlyFieldElement> Gadget<F> for PolyEval<F> {
         }
 
         if inp[0].len() >= NTT_THRESHOLD {
-            self.call_poly_ntt(outp, inp)
+            self.eval_poly_ntt(outp, inp)
         } else {
-            self.call_poly_direct(outp, inp)
+            self.eval_poly_direct(outp, inp)
         }
     }
 
@@ -322,7 +322,7 @@ where
 struct ParallelSumFoldState<F, G> {
     /// Inner gadget.
     inner: G,
-    /// Output buffer for `call_poly()`.
+    /// Output buffer for `eval_poly()`.
     partial_output: Vec<F>,
     /// Sum accumulator.
     partial_sum: Vec<F>,
@@ -405,7 +405,7 @@ where
     }
 }
 
-/// Check that the input parameters of g.call() are well-formed.
+/// Check that the input parameters of g.eval() are well-formed.
 fn gadget_call_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     in_len: usize,
@@ -425,23 +425,23 @@ fn gadget_call_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
     Ok(())
 }
 
-/// Check that the input parameters of g.call_poly() are well-formed.
-fn gadget_call_poly_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
+/// Check that the input parameters of g.eval_poly() are well-formed.
+fn gadget_call_poly_check<F: NttFriendlyFieldElement, G: Gadget<F>, P: AsRef<[F]>>(
     gadget: &G,
     outp: &[F],
-    inp: &[Vec<F>],
+    inp: &[P],
 ) -> Result<(), FlpError> {
     gadget_call_check(gadget, inp.len())?;
 
     for i in 1..inp.len() {
-        if inp[i].len() != inp[0].len() {
+        if inp[i].as_ref().len() != inp[0].as_ref().len() {
             return Err(FlpError::Gadget(
                 "gadget called on wire polynomials with different lengths".to_string(),
             ));
         }
     }
 
-    let expected = gadget_poly_len(gadget.degree(), inp[0].len()).next_power_of_two();
+    let expected = gadget_poly_len(gadget.degree(), inp[0].as_ref().len()).next_power_of_two();
     if outp.len() != expected {
         return Err(FlpError::Gadget(format!(
             "incorrect output length: got {}; want {}",
@@ -550,8 +550,8 @@ mod tests {
         }
     }
 
-    /// Test that calling g.call_poly() and evaluating the output at a given point is equivalent
-    /// to evaluating each of the inputs at the same point and applying g.call() on the results.
+    /// Test that calling g.eval_poly() and evaluating the output at a given point is equivalent
+    /// to evaluating each of the inputs at the same point and applying g.eval() on the results.
     fn gadget_test<F: NttFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
         let wire_poly_len = (1 + num_calls).next_power_of_two();
         let mut prng = Prng::new();
@@ -564,17 +564,17 @@ mod tests {
             for out in wire_polys[i].iter_mut().take(wire_poly_len) {
                 *out = prng.get();
             }
-            inp[i] = poly_eval(&wire_polys[i], r);
+            inp[i] = poly_eval_monomial(&wire_polys[i], r);
         }
 
         g.eval_poly(&mut gadget_poly, &wire_polys).unwrap();
-        let got = poly_eval(&gadget_poly, r);
+        let got = poly_eval_monomial(&gadget_poly, r);
         let want = g.eval(&inp).unwrap();
         assert_eq!(got, want);
 
         // Repeat the call to make sure that the gadget's memory is reset properly between calls.
         g.eval_poly(&mut gadget_poly, &wire_polys).unwrap();
-        let got = poly_eval(&gadget_poly, r);
+        let got = poly_eval_monomial(&gadget_poly, r);
         assert_eq!(got, want);
     }
 }
