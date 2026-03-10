@@ -614,11 +614,11 @@ pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
     fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
 
     /// Returns the arity of the gadget. This is the length of `inp` passed to `call` or
-    /// `call_poly`.
+    /// `eval_poly`.
     fn arity(&self) -> usize;
 
     /// Returns the circuit's arithmetic degree. This determines the minimum length the `outp`
-    /// buffer passed to `call_poly`.
+    /// buffer passed to `eval_poly`.
     fn degree(&self) -> usize;
 
     /// Returns the number of times the gadget is expected to be called.
@@ -1169,7 +1169,7 @@ mod tests {
     }
 
     // In https://github.com/divviup/libprio-rs/issues/254 an out-of-bounds bug was reported that
-    // gets triggered when the size of the buffer passed to `gadget.call_poly()` is larger than
+    // gets triggered when the size of the buffer passed to `gadget.eval_poly()` is larger than
     // needed for computing the gadget polynomial.
     #[test]
     fn issue254() {

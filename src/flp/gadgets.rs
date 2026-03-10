@@ -46,7 +46,7 @@ impl<F: NttFriendlyFieldElement> Mul<F> {
     }
 
     /// Multiply input polynomials directly.
-    pub(crate) fn call_poly_direct(
+    pub(crate) fn eval_poly_direct(
         &mut self,
         outp: &mut [F],
         inp: &[Vec<F>],
@@ -57,7 +57,7 @@ impl<F: NttFriendlyFieldElement> Mul<F> {
     }
 
     /// Multiply input polynomials using NTT.
-    pub(crate) fn call_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    pub(crate) fn eval_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let mut buf = vec![F::zero(); n];
 
@@ -83,9 +83,9 @@ impl<F: NttFriendlyFieldElement> Gadget<F> for Mul<F> {
     fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         gadget_call_poly_check(self, outp, inp)?;
         if inp[0].len() >= NTT_THRESHOLD {
-            self.call_poly_ntt(outp, inp)
+            self.eval_poly_ntt(outp, inp)
         } else {
-            self.call_poly_direct(outp, inp)
+            self.eval_poly_direct(outp, inp)
         }
     }
 
@@ -137,7 +137,7 @@ impl<F: NttFriendlyFieldElement> PolyEval<F> {
 
 impl<F: NttFriendlyFieldElement> PolyEval<F> {
     /// Multiply input polynomials directly.
-    fn call_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly_direct(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         outp[0] = self.poly[0];
         let mut x = inp[0].to_vec();
         for i in 1..self.poly.len() {
@@ -153,7 +153,7 @@ impl<F: NttFriendlyFieldElement> PolyEval<F> {
     }
 
     /// Multiply input polynomials using NTT.
-    fn call_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly_ntt(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         let n = self.n;
         let inp = &inp[0];
 
@@ -197,9 +197,9 @@ impl<F: NttFriendlyFieldElement> Gadget<F> for PolyEval<F> {
         }
 
         if inp[0].len() >= NTT_THRESHOLD {
-            self.call_poly_ntt(outp, inp)
+            self.eval_poly_ntt(outp, inp)
         } else {
-            self.call_poly_direct(outp, inp)
+            self.eval_poly_direct(outp, inp)
         }
     }
 
@@ -322,7 +322,7 @@ where
 struct ParallelSumFoldState<F, G> {
     /// Inner gadget.
     inner: G,
-    /// Output buffer for `call_poly()`.
+    /// Output buffer for `eval_poly()`.
     partial_output: Vec<F>,
     /// Sum accumulator.
     partial_sum: Vec<F>,
@@ -405,7 +405,7 @@ where
     }
 }
 
-/// Check that the input parameters of g.call() are well-formed.
+/// Check that the input parameters of g.eval() are well-formed.
 fn gadget_call_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
     gadget: &G,
     in_len: usize,
@@ -425,7 +425,7 @@ fn gadget_call_check<F: NttFriendlyFieldElement, G: Gadget<F>>(
     Ok(())
 }
 
-/// Check that the input parameters of g.call_poly() are well-formed.
+/// Check that the input parameters of g.eval_poly() are well-formed.
 fn gadget_call_poly_check<F: NttFriendlyFieldElement, G: Gadget<F>, P: AsRef<[F]>>(
     gadget: &G,
     outp: &[F],
@@ -550,8 +550,8 @@ mod tests {
         }
     }
 
-    /// Test that calling g.call_poly() and evaluating the output at a given point is equivalent
-    /// to evaluating each of the inputs at the same point and applying g.call() on the results.
+    /// Test that calling g.eval_poly() and evaluating the output at a given point is equivalent
+    /// to evaluating each of the inputs at the same point and applying g.eval() on the results.
     fn gadget_test<F: NttFriendlyFieldElement, G: Gadget<F>>(g: &mut G, num_calls: usize) {
         let wire_poly_len = (1 + num_calls).next_power_of_two();
         let mut prng = Prng::new();

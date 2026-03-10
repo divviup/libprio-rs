@@ -26,7 +26,7 @@ pub enum NttError {
 /// basis.
 ///
 /// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
-/// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `2^size`-th principal root of
+/// evaluated at points `p^0, p^1, ... p^(size-1)`, where `p` is the `size`-th principal root of
 /// unity.
 ///
 /// This corresponds to the `Field.ntt` interface of [6.1.2][1], with `set_s = false`, and uses
@@ -45,8 +45,8 @@ pub(crate) fn ntt<F: NttFriendlyFieldElement>(
 /// Sets `outp` to the NTT of `inp`.
 ///
 /// Interpreting the input as the coefficients of a polynomial, the output is equal to the input
-/// evaluated at points `s * p^0, s * p^1, ... s * p^(size-1)`, where `p` is the n-th principal
-/// root of unity and `s` is a 2n-th root of unity.
+/// evaluated at points `s * p^0, s * p^1, ... s * p^(size-1)`, where `p` is the size-th principal
+/// root of unity and `s` is a (2 * size)-th root of unity.
 ///
 /// This corresponds to the `Field.ntt` interface of [6.1.2][1], with `set_s = true` and uses
 /// Algorithm 4 of [Faz25][2].
@@ -76,7 +76,7 @@ fn ntt_internal<F: NttFriendlyFieldElement>(
         return Err(NttError::OutputTooSmall);
     }
 
-    if size > 1 << MAX_ROOTS {
+    if (set_s && size > 1 << (MAX_ROOTS - 1)) || size > 1 << MAX_ROOTS {
         return Err(NttError::SizeTooLarge);
     }
 
@@ -96,6 +96,8 @@ fn ntt_internal<F: NttFriendlyFieldElement>(
     let mut w: F;
     for l in 1..d + 1 {
         w = if set_s {
+            // Unwrap safety: we ensure above that size is small enough to ensure that we have all
+            // the roots we need.
             F::root(l + 1).unwrap()
         } else {
             F::one()

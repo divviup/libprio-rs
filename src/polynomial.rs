@@ -263,7 +263,9 @@ pub(crate) fn double_evaluations<F: NttFriendlyFieldElement>(
     ntt_inv(front, evaluations, evaluations.len())?;
     ntt_set_s(back, front, evaluations.len())?;
 
-    // Interleave the input (even indices) with the back half of output (odd indices), into output
+    // Interleave the input (even indices) with the back half of output (odd indices), into output.
+    // This is safe to do because any element of pre-overwrite output can only contribute to a
+    // smaller index post-overwrite, and thus overwriting doesn't destroy any information we need.
     for output_position in 0..output.len() {
         output[output_position] = if output_position % 2 == 0 {
             evaluations[output_position / 2]

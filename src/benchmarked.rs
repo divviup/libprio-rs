@@ -16,7 +16,7 @@ pub fn benchmarked_gadget_mul_call_poly_ntt<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[Vec<F>],
 ) -> Result<(), FlpError> {
-    g.call_poly_ntt(outp, inp)
+    g.eval_poly_ntt(outp, inp)
 }
 
 /// Sets `outp` to `inp[0] * inp[1]`, where `inp[0]` and `inp[1]` are polynomials. This function
@@ -26,5 +26,5 @@ pub fn benchmarked_gadget_mul_call_poly_direct<F: NttFriendlyFieldElement>(
     outp: &mut [F],
     inp: &[Vec<F>],
 ) -> Result<(), FlpError> {
-    g.call_poly_direct(outp, inp)
+    g.eval_poly_direct(outp, inp)
 }
