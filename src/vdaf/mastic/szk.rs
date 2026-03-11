@@ -868,8 +868,7 @@ mod tests {
         let mut rng = rng();
         let mut nonce = [0u8; 16];
         rng.fill(&mut nonce[..]);
-        let sumvec =
-            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(31, 3, 3).unwrap();
+        let sumvec = SumVec::<Field128, ParallelSum<Field128, Mul>>::new(31, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let szk_typ = Szk::new(sumvec, 0);
         let prove_rand_seed = rng.random();
@@ -1093,8 +1092,7 @@ mod tests {
         let mut rng = rng();
         let mut nonce = [0u8; 16];
         rng.fill(&mut nonce[..]);
-        let sumvec =
-            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(31, 3, 3).unwrap();
+        let sumvec = SumVec::<Field128, ParallelSum<Field128, Mul>>::new(31, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let szk_typ = Szk::new(sumvec, 0);
         let prove_rand_seed = rng.random();
@@ -1133,8 +1131,7 @@ mod tests {
         let mut rng = rng();
         let mut nonce = [0u8; 16];
         rng.fill(&mut nonce[..]);
-        let sumvec =
-            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(31, 3, 3).unwrap();
+        let sumvec = SumVec::<Field128, ParallelSum<Field128, Mul>>::new(31, 3, 3).unwrap();
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();
         let szk_typ = Szk::new(sumvec, 0);
         let prove_rand_seed = rng.random();
@@ -1182,8 +1179,7 @@ mod tests {
 
     #[test]
     fn test_sumvec() {
-        let sumvec =
-            SumVec::<Field128, ParallelSum<Field128, Mul<Field128>>>::new(31, 3, 3).unwrap();
+        let sumvec = SumVec::<Field128, ParallelSum<Field128, Mul>>::new(31, 3, 3).unwrap();
 
         let five = Field128::from(5);
         let encoded_measurement = sumvec.encode_measurement(&vec![1, 16, 0]).unwrap();

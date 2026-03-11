@@ -394,7 +394,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for Histogram<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> Histogram<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> Histogram<F, S> {
     /// Return a new [`Histogram`] type with the given number of buckets.
     pub fn new(length: usize, chunk_length: usize) -> Result<Self, FlpError> {
         if length >= u32::MAX as usize {
@@ -441,7 +441,7 @@ impl<F, S> Clone for Histogram<F, S> {
 impl<F, S> Flp for Histogram<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -506,7 +506,7 @@ where
 impl<F, S> Type for Histogram<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Measurement = usize;
     type AggregateResult = Vec<F::Integer>;
@@ -570,7 +570,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for MultihotCountVec<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> MultihotCountVec<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> MultihotCountVec<F, S> {
     /// Return a new [`MultihotCountVec`] type with the given number of buckets.
     pub fn new(
         num_buckets: usize,
@@ -651,7 +651,7 @@ impl<F: FieldElementWithInteger, S> Clone for MultihotCountVec<F, S> {
 impl<F, S> Flp for MultihotCountVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -720,7 +720,7 @@ where
 impl<F, S> Type for MultihotCountVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Measurement = Vec<bool>;
     type AggregateResult = Vec<F::Integer>;
@@ -814,7 +814,7 @@ impl<F: NttFriendlyFieldElement, S> Debug for SumVec<F, S> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul<F>>> SumVec<F, S> {
+impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> SumVec<F, S> {
     /// Returns a new [`SumVec`] with the desired bit width and vector length.
     ///
     /// # Errors
@@ -897,7 +897,7 @@ impl<F: NttFriendlyFieldElement, S> Clone for SumVec<F, S> {
 impl<F, S> Flp for SumVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Field = F;
 
@@ -953,7 +953,7 @@ where
 impl<F, S> Type for SumVec<F, S>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
 {
     type Measurement = Vec<F::Integer>;
     type AggregateResult = Vec<F::Integer>;
@@ -1281,7 +1281,7 @@ mod tests {
     fn test_histogram<F, S>(f: F)
     where
         F: Fn(usize, usize) -> Result<Histogram<TestField, S>, FlpError>,
-        S: ParallelSumGadget<TestField, Mul<TestField>> + Eq + 'static,
+        S: ParallelSumGadget<TestField, Mul> + Eq + 'static,
     {
         let hist = f(3, 2).unwrap();
         let zero = TestField::zero();
@@ -1330,21 +1330,19 @@ mod tests {
 
     #[test]
     fn test_histogram_serial() {
-        test_histogram(Histogram::<TestField, ParallelSum<TestField, Mul<TestField>>>::new);
+        test_histogram(Histogram::<TestField, ParallelSum<TestField, Mul>>::new);
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_histogram_parallel() {
-        test_histogram(
-            Histogram::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new,
-        );
+        test_histogram(Histogram::<TestField, ParallelSumMultithreaded<TestField, Mul>>::new);
     }
 
     fn test_multihot<F, S>(constructor: F)
     where
         F: Fn(usize, usize, usize) -> Result<MultihotCountVec<TestField, S>, FlpError>,
-        S: ParallelSumGadget<TestField, Mul<TestField>> + Eq + 'static,
+        S: ParallelSumGadget<TestField, Mul> + Eq + 'static,
     {
         const NUM_SHARES: usize = 3;
 
@@ -1461,13 +1459,13 @@ mod tests {
 
     #[test]
     fn test_multihot_serial() {
-        test_multihot(MultihotCountVec::<TestField, ParallelSum<TestField, Mul<TestField>>>::new);
+        test_multihot(MultihotCountVec::<TestField, ParallelSum<TestField, Mul>>::new);
     }
 
     fn test_sum_vec<F, S>(f: F)
     where
         F: Fn(u64, usize, usize) -> Result<SumVec<TestField, S>, FlpError>,
-        S: 'static + ParallelSumGadget<TestField, Mul<TestField>> + Eq,
+        S: 'static + ParallelSumGadget<TestField, Mul> + Eq,
     {
         let one = TestField::one();
         let nine = TestField::from(9);
@@ -1544,13 +1542,13 @@ mod tests {
 
     #[test]
     fn test_sum_vec_serial() {
-        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, Mul<TestField>>>::new)
+        test_sum_vec(SumVec::<TestField, ParallelSum<TestField, Mul>>::new)
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_sum_vec_parallel() {
-        test_sum_vec(SumVec::<TestField, ParallelSumMultithreaded<TestField, Mul<TestField>>>::new)
+        test_sum_vec(SumVec::<TestField, ParallelSumMultithreaded<TestField, Mul>>::new)
     }
 
     #[test]
@@ -1586,121 +1584,10 @@ mod tests {
         assert_eq!(verifier.len(), typ.verifier_len());
         assert!(typ.decide(&verifier).unwrap());
     }
-
-    /// Validity circuit using a degree 3 gadget, for test purposes.
-    ///
-    /// This circuit evaluates x * (x - 1) * (x - 2), and only accepts the measurements 0, 1, and 2.
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    struct HigherDegree;
-
-    impl HigherDegree {
-        fn new() -> Self {
-            Self
-        }
-    }
-
-    impl Flp for HigherDegree {
-        type Field = TestField;
-
-        fn gadget(&self) -> Vec<Box<dyn Gadget<Self::Field>>> {
-            vec![Box::new(PolyEval::new(
-                vec![
-                    TestField::from(0),
-                    TestField::from(2),
-                    -TestField::from(3),
-                    TestField::from(1),
-                ],
-                1,
-            ))]
-        }
-
-        fn num_gadgets(&self) -> usize {
-            1
-        }
-
-        fn valid(
-            &self,
-            gadgets: &mut Vec<Box<dyn Gadget<Self::Field>>>,
-            input: &[Self::Field],
-            joint_rand: &[Self::Field],
-            _num_shares: usize,
-        ) -> Result<Vec<Self::Field>, FlpError> {
-            self.valid_call_check(input, joint_rand)?;
-            let check = gadgets[0].eval(input)?;
-            Ok(vec![check])
-        }
-
-        fn input_len(&self) -> usize {
-            1
-        }
-
-        fn proof_len(&self) -> usize {
-            let gadget_arity = 1;
-            let gadget_degree = 3;
-            let gadget_calls = 1usize;
-            let p = (gadget_calls + 1).next_power_of_two();
-            gadget_arity + gadget_degree * (p - 1) + 1
-        }
-
-        fn verifier_len(&self) -> usize {
-            3
-        }
-
-        fn joint_rand_len(&self) -> usize {
-            0
-        }
-
-        fn eval_output_len(&self) -> usize {
-            1
-        }
-
-        fn prove_rand_len(&self) -> usize {
-            1
-        }
-    }
-
-    impl Type for HigherDegree {
-        type Measurement = u64;
-
-        type AggregateResult = u64;
-
-        fn encode_measurement(
-            &self,
-            measurement: &Self::Measurement,
-        ) -> Result<Vec<Self::Field>, FlpError> {
-            Ok(vec![TestField::from(*measurement)])
-        }
-
-        fn truncate(&self, input: Vec<Self::Field>) -> Result<Vec<Self::Field>, FlpError> {
-            self.truncate_call_check(&input)?;
-            Ok(input)
-        }
-
-        fn decode_result(
-            &self,
-            data: &[Self::Field],
-            _num_measurements: usize,
-        ) -> Result<Self::AggregateResult, FlpError> {
-            decode_result(data)
-        }
-
-        fn output_len(&self) -> usize {
-            1
-        }
-    }
-
-    #[test]
-    fn test_degree_3() {
-        let typ = HigherDegree::new();
-        TypeTest::expect_valid::<2>(&typ, &[TestField::from(0)], &[TestField::from(0)]);
-        TypeTest::expect_valid::<2>(&typ, &[TestField::from(1)], &[TestField::from(1)]);
-        TypeTest::expect_valid::<2>(&typ, &[TestField::from(2)], &[TestField::from(2)]);
-        TypeTest::expect_valid::<3>(&typ, &[TestField::from(2)], &[TestField::from(2)]);
-        TypeTest::expect_invalid::<2>(&typ, &[TestField::from(3)]);
-        TypeTest::expect_invalid::<3>(&typ, &[TestField::from(3)]);
-    }
 }
 
 #[cfg(feature = "experimental")]
 #[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub mod fixedpoint_l2;
+#[cfg(feature = "test-util")]
+pub mod higher_degree;

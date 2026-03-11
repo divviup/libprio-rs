@@ -6,14 +6,14 @@ use crate::{
     field::NttFriendlyFieldElement,
     flp::{
         gadgets::{Mul, ParallelSumGadget},
-        types::SumVec,
+        types::{higher_degree::HigherDegree, SumVec},
     },
     vdaf::{
         prio3::{
             Prio3, Prio3Count, Prio3Histogram, Prio3L1BoundSum, Prio3MultihotCountVec, Prio3Sum,
         },
         test_utils::TestVectorVdaf,
-        xof::Xof,
+        xof::{Xof, XofTurboShake128},
     },
 };
 use serde_json::Value;
@@ -51,7 +51,7 @@ impl TestVectorVdaf for Prio3Sum {
 impl<F, S, P, const SEED_SIZE: usize> TestVectorVdaf for Prio3<SumVec<F, S>, P, SEED_SIZE>
 where
     F: NttFriendlyFieldElement,
-    S: ParallelSumGadget<F, Mul<F>> + Eq + 'static,
+    S: ParallelSumGadget<F, Mul> + Eq + 'static,
     P: Xof<SEED_SIZE>,
 {
     fn new(shares: u8, parameters: &HashMap<String, Value>) -> Self {
@@ -200,13 +200,27 @@ impl TestVectorVdaf for Prio3L1BoundSum {
     }
 }
 
+impl TestVectorVdaf for Prio3<HigherDegree, XofTurboShake128, 32> {
+    fn new(shares: u8, _parameters: &HashMap<String, Value>) -> Self {
+        Prio3::new_higher_degree(shares).unwrap()
+    }
+
+    fn deserialize_measurement(measurement: &Value) -> Self::Measurement {
+        measurement.as_u64().unwrap()
+    }
+
+    fn deserialize_aggregate_result(aggregate_result: &Value) -> Self::AggregateResult {
+        aggregate_result.as_u64().unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         field::Field64,
         flp::{
             gadgets::{Mul, ParallelSum},
-            types::SumVec,
+            types::{higher_degree::HigherDegree, SumVec},
         },
         vdaf::{
             prio3::{
@@ -221,13 +235,13 @@ mod tests {
     #[test]
     fn test_vec_prio3_count() {
         for test_vector_str in [
-            include_str!("test_vec/15/Prio3Count_0.json"),
-            include_str!("test_vec/15/Prio3Count_1.json"),
-            include_str!("test_vec/15/Prio3Count_2.json"),
-            include_str!("test_vec/15/Prio3Count_bad_meas_share.json"),
-            include_str!("test_vec/15/Prio3Count_bad_wire_seed.json"),
-            include_str!("test_vec/15/Prio3Count_bad_gadget_poly.json"),
-            include_str!("test_vec/15/Prio3Count_bad_helper_seed.json"),
+            include_str!("test_vec/18/Prio3Count_0.json"),
+            include_str!("test_vec/18/Prio3Count_1.json"),
+            include_str!("test_vec/18/Prio3Count_2.json"),
+            include_str!("test_vec/18/Prio3Count_bad_meas_share.json"),
+            include_str!("test_vec/18/Prio3Count_bad_wire_seed.json"),
+            include_str!("test_vec/18/Prio3Count_bad_gadget_poly.json"),
+            include_str!("test_vec/18/Prio3Count_bad_helper_seed.json"),
         ] {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3Count, 32, 16>(&test_vector);
@@ -237,9 +251,9 @@ mod tests {
     #[test]
     fn test_vec_prio3_sum() {
         for test_vector_str in [
-            include_str!("test_vec/15/Prio3Sum_0.json"),
-            include_str!("test_vec/15/Prio3Sum_1.json"),
-            include_str!("test_vec/15/Prio3Sum_2.json"),
+            include_str!("test_vec/18/Prio3Sum_0.json"),
+            include_str!("test_vec/18/Prio3Sum_1.json"),
+            include_str!("test_vec/18/Prio3Sum_2.json"),
         ] {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3Sum, 32, 16>(&test_vector);
@@ -249,8 +263,8 @@ mod tests {
     #[test]
     fn test_vec_prio3_sum_vec() {
         for test_vector_str in [
-            include_str!("test_vec/15/Prio3SumVec_0.json"),
-            include_str!("test_vec/15/Prio3SumVec_1.json"),
+            include_str!("test_vec/18/Prio3SumVec_0.json"),
+            include_str!("test_vec/18/Prio3SumVec_1.json"),
         ] {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3SumVec, 32, 16>(&test_vector);
@@ -260,13 +274,13 @@ mod tests {
     #[test]
     fn test_vec_prio3_sum_vec_multiproof() {
         type Prio3SumVecField64Multiproof =
-            Prio3<SumVec<Field64, ParallelSum<Field64, Mul<Field64>>>, XofTurboShake128, 32>;
+            Prio3<SumVec<Field64, ParallelSum<Field64, Mul>>, XofTurboShake128, 32>;
         let num_proofs = 3;
         let alg_id = 0xFFFFFFFF;
 
         for test_vector_str in [
-            include_str!("test_vec/15/Prio3SumVecWithMultiproof_0.json"),
-            include_str!("test_vec/15/Prio3SumVecWithMultiproof_1.json"),
+            include_str!("test_vec/18/Prio3SumVecWithMultiproof_0.json"),
+            include_str!("test_vec/18/Prio3SumVecWithMultiproof_1.json"),
         ] {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector_custom_constructor::<Prio3SumVecField64Multiproof, 32, 16>(
@@ -291,15 +305,22 @@ mod tests {
     }
 
     #[test]
+    fn test_vec_prio3_higher_degree() {
+        let test_vector =
+            serde_json::from_str(include_str!("test_vec/18/Prio3HigherDegree_0.json")).unwrap();
+        check_test_vector::<Prio3<HigherDegree, XofTurboShake128, 32>, 32, 16>(&test_vector);
+    }
+
+    #[test]
     fn test_vec_prio3_histogram() {
         for test_vector_str in [
-            include_str!("test_vec/15/Prio3Histogram_0.json"),
-            include_str!("test_vec/15/Prio3Histogram_1.json"),
-            include_str!("test_vec/15/Prio3Histogram_2.json"),
-            include_str!("test_vec/15/Prio3Histogram_bad_leader_jr_blind.json"),
-            include_str!("test_vec/15/Prio3Histogram_bad_helper_jr_blind.json"),
-            include_str!("test_vec/15/Prio3Histogram_bad_public_share.json"),
-            include_str!("test_vec/15/Prio3Histogram_bad_prep_msg.json"),
+            include_str!("test_vec/18/Prio3Histogram_0.json"),
+            include_str!("test_vec/18/Prio3Histogram_1.json"),
+            include_str!("test_vec/18/Prio3Histogram_2.json"),
+            include_str!("test_vec/18/Prio3Histogram_bad_leader_jr_blind.json"),
+            include_str!("test_vec/18/Prio3Histogram_bad_helper_jr_blind.json"),
+            include_str!("test_vec/18/Prio3Histogram_bad_public_share.json"),
+            include_str!("test_vec/18/Prio3Histogram_bad_verifier_message.json"),
         ] {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3Histogram, 32, 16>(&test_vector);
@@ -309,9 +330,9 @@ mod tests {
     #[test]
     fn test_vec_prio3_multihot_count_vec() {
         for test_vector_str in [
-            include_str!("test_vec/15/Prio3MultihotCountVec_0.json"),
-            include_str!("test_vec/15/Prio3MultihotCountVec_1.json"),
-            include_str!("test_vec/15/Prio3MultihotCountVec_2.json"),
+            include_str!("test_vec/18/Prio3MultihotCountVec_0.json"),
+            include_str!("test_vec/18/Prio3MultihotCountVec_1.json"),
+            include_str!("test_vec/18/Prio3MultihotCountVec_2.json"),
         ] {
             let test_vector = serde_json::from_str(test_vector_str).unwrap();
             check_test_vector::<Prio3MultihotCountVec, 32, 16>(&test_vector);
@@ -319,7 +340,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "test vector needs to be updated after other VDAF draft 18 changes"]
     fn test_vec_prio3_l1bound_sum() {
         let test_vector =
             serde_json::from_str(include_str!("test_vec/l1boundsum/Prio3L1BoundSum_0.json"))

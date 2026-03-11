@@ -50,8 +50,10 @@
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{FieldElement, FieldElementWithInteger, FieldError, NttFriendlyFieldElement};
 use crate::fp::log2;
-use crate::ntt::{ntt, ntt_inv_finish, NttError};
-use crate::polynomial::{nth_root_powers, poly_eval_lagrange_batched, poly_eval_monomial};
+use crate::ntt::NttError;
+use crate::polynomial::{
+    extend_values_to_power_of_2, get_double_evaluations, poly_eval_lagrange_batched,
+};
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -259,11 +261,15 @@ pub trait Flp: Sized + Eq + Clone + Debug {
                 Ok(gadget)
             })
             .collect::<Result<Vec<_>, FlpError>>()?;
-        assert_eq!(prove_rand_len, self.prove_rand_len());
+        assert_eq!(
+            prove_rand_len,
+            self.prove_rand_len(),
+            "sum of arities of gadgets is not equal to prover randomness length",
+        );
 
-        // Create a buffer for storing the proof. The buffer is longer than the proof itself; the extra
-        // length is to accommodate the computation of each gadget polynomial.
-        let data_len = shims
+        // Create a buffer for storing the proof. The buffer is longer than the proof itself; the
+        // extra length is to accommodate the computation of each gadget polynomial.
+        let proof_len = shims
             .iter()
             .map(|shim| {
                 let gadget_poly_len = gadget_poly_len(shim.degree(), wire_poly_len(shim.calls()));
@@ -277,7 +283,7 @@ pub trait Flp: Sized + Eq + Clone + Debug {
                 shim.arity() + gadget_poly_len.next_power_of_two()
             })
             .sum();
-        let mut proof = vec![Self::Field::zero(); data_len];
+        let mut proof = vec![Self::Field::zero(); proof_len];
 
         // Run the validity circuit with a sequence of "shim" gadgets that record the value of each
         // input wire of each gadget evaluation. These values are used to construct the wire
@@ -285,46 +291,42 @@ pub trait Flp: Sized + Eq + Clone + Debug {
         let _ = self.valid(&mut shims, input, joint_rand, 1)?;
 
         // Construct the proof.
-        let mut proof_len = 0;
+        let mut used_proof_len = 0;
         for shim in shims.iter_mut() {
             let gadget = shim
                 .as_any()
                 .downcast_mut::<ProveShimGadget<Self::Field>>()
                 .unwrap();
 
-            // Interpolate the wire polynomials `f[0], ..., f[g_arity-1]` from the input wires of each
-            // evaluation of the gadget.
-            let m = wire_poly_len(gadget.calls());
-            let m_inv = Self::Field::from(
-                <Self::Field as FieldElementWithInteger>::Integer::try_from(m).unwrap(),
-            )
-            .inv();
-            let mut f = vec![vec![Self::Field::zero(); m]; gadget.arity()];
-            for ((coefficients, values), proof_val) in f[..gadget.arity()]
+            let p = wire_poly_len(gadget.calls());
+
+            // Iterate over input wire values
+            for (proof_element, wires) in proof
                 .iter_mut()
-                .zip(gadget.f_vals[..gadget.arity()].iter())
-                .zip(proof[proof_len..proof_len + gadget.arity()].iter_mut())
+                .skip(used_proof_len)
+                .take(gadget.arity())
+                .zip(gadget.wire_values.iter().take(gadget.arity()))
             {
-                ntt(coefficients, values, m)?;
-                ntt_inv_finish(coefficients, m, m_inv);
-
-                // The first point on each wire polynomial is a random value chosen by the prover. This
-                // point is stored in the proof so that the verifier can reconstruct the wire
-                // polynomials.
-                *proof_val = values[0];
+                // The first point on each wire polynomial is a random value chosen by the prover.
+                // This wire seed is stored in the proof so that the verifier can reconstruct the
+                // wire polynomials.
+                *proof_element = wires[0];
             }
+            used_proof_len += gadget.arity();
 
-            // Construct the gadget polynomial `G(f[0], ..., f[g_arity-1])` and append it to `proof`.
-            let gadget_poly_len = gadget_poly_len(gadget.degree(), m);
-            let start = proof_len + gadget.arity();
-            let end = start + gadget_poly_len.next_power_of_two();
-            gadget.eval_poly(&mut proof[start..end], &f)?;
-            proof_len += gadget.arity() + gadget_poly_len;
+            // Construct the gadget polynomial `G(f[0], ..., f[g_arity-1])` and write it to `proof`.
+            let gadget_poly_len = gadget_poly_len(gadget.degree(), p);
+            let end = used_proof_len + gadget_poly_len.next_power_of_two();
+            gadget.eval_poly(
+                &mut proof[used_proof_len..end],
+                &gadget.wire_values[..gadget.arity()],
+            )?;
+            used_proof_len += gadget_poly_len;
         }
 
-        // Truncate the buffer to the size of the proof.
-        assert_eq!(proof_len, self.proof_len());
-        proof.truncate(proof_len);
+        // Truncate the buffer to the size of the proof, removing extra space reserved for NTT.
+        assert_eq!(used_proof_len, self.proof_len());
+        proof.truncate(used_proof_len);
         Ok(proof)
     }
 
@@ -378,13 +380,12 @@ pub trait Flp: Sized + Eq + Clone + Debug {
         };
 
         // Another check that we have the right amount of randomness
-        let my_gadgets = self.gadget();
-        if query_rand_for_gadgets.len() != my_gadgets.len() {
+        if query_rand_for_gadgets.len() != self.gadget().len() {
             return Err(FlpError::Query(format!(
                 "length of query randomness for gadgets doesn't match number of gadgets: \
                 got {}; want {}",
                 query_rand_for_gadgets.len(),
-                my_gadgets.len()
+                self.gadget().len()
             )));
         }
 
@@ -396,52 +397,56 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             )));
         }
 
-        let mut proof_len = 0;
-        let mut shims = my_gadgets
-            .into_iter()
-            .zip(query_rand_for_gadgets)
-            .map(|(gadget, &r)| {
-                let gadget_degree = gadget.degree();
-                let gadget_arity = gadget.arity();
-                let m = (1 + gadget.calls()).next_power_of_two();
+        // Make sure the query randomness `r` isn't a root of unity. Evaluating a gadget polynomial
+        // at any of these points would be a privacy violation, since these points were used by the
+        // prover to construct the wire polynomials.
+        for (gadget, r) in self.gadget().iter().zip(query_rand_for_gadgets) {
+            let wire_poly_len = wire_poly_len(gadget.calls());
+            if r.pow(
+                <Self::Field as FieldElementWithInteger>::Integer::try_from(wire_poly_len).unwrap(),
+            ) == Self::Field::one()
+            {
+                return Err(FlpError::Query(format!(
+                    "invalid query randomness: encountered 2^{wire_poly_len}-th root of unity"
+                )));
+            }
+        }
 
-                // Make sure the query randomness isn't a root of unity. Evaluating the gadget
-                // polynomial at any of these points would be a privacy violation, since these points
-                // were used by the prover to construct the wire polynomials.
-                if r.pow(<Self::Field as FieldElementWithInteger>::Integer::try_from(m).unwrap())
-                    == Self::Field::one()
-                {
-                    return Err(FlpError::Query(format!(
-                        "invalid query randomness: encountered 2^{m}-th root of unity"
-                    )));
-                }
+        // Shim the gadgets for querying
+        let mut proof_index = 0;
+        let mut shims = self
+            .gadget()
+            .into_iter()
+            .map(|gadget| {
+                let wire_poly_len = wire_poly_len(gadget.calls());
 
                 // Compute the length of the sub-proof corresponding to this gadget.
-                let next_len = gadget_arity + gadget_degree * (m - 1) + 1;
-                let proof_data = &proof[proof_len..proof_len + next_len];
-                proof_len += next_len;
+                let next_len = gadget.arity() + gadget_poly_len(gadget.degree(), wire_poly_len);
+                let proof_data = &proof[proof_index..proof_index + next_len];
+                proof_index += next_len;
 
-                Ok(Box::new(QueryShimGadget::new(gadget, r, proof_data)?)
+                Ok(Box::new(QueryShimGadget::new(gadget, proof_data)?)
                     as Box<dyn Gadget<Self::Field>>)
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, FlpError>>()?;
 
-        // Create a buffer for the verifier data. This includes the output of the validity circuit and,
-        // for each gadget `shim[idx].inner`, the wire polynomials evaluated at the query randomness
-        // `query_rand[idx]` and the gadget polynomial evaluated at `query_rand[idx]`.
-        let data_len = 1 + shims.iter().map(|shim| shim.arity() + 1).sum::<usize>();
-        let mut verifier = Vec::with_capacity(data_len);
+        // Create a buffer for the verifier data. This includes the output of the validity circuit
+        // and, for each gadget `shim[idx].inner`, the wire polynomials evaluated at the query
+        // randomness `query_rand[idx]` and the gadget polynomial evaluated at `query_rand[idx]`.
+        let mut verifier =
+            Vec::with_capacity(1 + shims.iter().map(|shim| shim.arity() + 1).sum::<usize>());
 
         // Run the validity circuit with a sequence of "shim" gadgets that record the inputs to each
         // wire for each gadget call. Record the output of the circuit and append it to the verifier
         // message.
         //
-        // NOTE The proof of [BBC+19, Theorem 4.3] assumes that the output of the validity circuit is
-        // equal to the output of the last gadget evaluation. Here we relax this assumption. This
-        // should be OK, since it's possible to transform any circuit into one for which this is true.
-        // (Needs security analysis.)
+        // NOTE The proof of [BBC+19, Theorem 4.3] assumes that the output of the validity circuit
+        // is equal to the output of the last gadget evaluation. Here we relax this assumption. This
+        // should be OK, since it's possible to transform any circuit into one for which this is
+        // true. (Needs security analysis.)
         let validity = self.valid(&mut shims, input, joint_rand, num_shares)?;
         assert_eq!(validity.len(), self.eval_output_len());
+
         // If `valid()` outputs multiple field elements, compress them into 1 field element using
         // query randomness
         let check = if validity.len() > 1 {
@@ -464,18 +469,16 @@ pub trait Flp: Sized + Eq + Clone + Debug {
                 .unwrap();
 
             // Reconstruct the wire polynomials `f[0], ..., f[g_arity-1]` and evaluate each wire
-            // polynomial at query randomness value.
-            let m = (1 + gadget.calls()).next_power_of_two();
-
-            // Evaluates a batch of polynomials in the Lagrange basis.
-            // This avoids using NTTs to convert them to the monomial basis.
-            let roots = nth_root_powers(m);
-            let polynomials = &gadget.f_vals[..gadget.arity()];
-            let mut evals = poly_eval_lagrange_batched(polynomials, &roots, *query_rand_val);
-            verifier.append(&mut evals);
-
-            // Add the value of the gadget polynomial evaluated at the query randomness value.
-            verifier.push(gadget.p_at_r);
+            // polynomial at the query randomness value and append the results to the proof.
+            let wire_polynomials = &gadget.wire_values[..gadget.arity()];
+            verifier.append(&mut poly_eval_lagrange_batched(
+                wire_polynomials,
+                *query_rand_val,
+            ));
+            // Evaluate the gadget polynomial at the query randomness value and append that to the
+            // proof.
+            verifier
+                .push(poly_eval_lagrange_batched(&[&gadget.gadget_polynomial], *query_rand_val)[0]);
         }
 
         assert_eq!(verifier.len(), self.verifier_len());
@@ -492,23 +495,22 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             )));
         }
 
-        // Check if the output of the circuit is 0.
+        // Check that the output of the circuit is 0.
         if verifier[0] != Self::Field::zero() {
             return Ok(false);
         }
 
         // Check that each of the proof polynomials are well-formed.
-        let mut gadgets = self.gadget();
-        let mut verifier_len = 1;
-        for gadget in gadgets.iter_mut() {
-            let next_len = 1 + gadget.arity();
+        let mut verifier_index = 1;
+        for gadget in self.gadget().iter_mut() {
+            let wire_checks = &verifier[verifier_index..verifier_index + gadget.arity()];
+            let gadget_check = verifier[verifier_index + wire_checks.len()];
 
-            let e = gadget.eval(&verifier[verifier_len..verifier_len + next_len - 1])?;
-            if e != verifier[verifier_len + next_len - 1] {
+            if gadget.eval(wire_checks)? != gadget_check {
                 return Ok(false);
             }
 
-            verifier_len += next_len;
+            verifier_index += wire_checks.len() + 1;
         }
 
         Ok(true)
@@ -611,7 +613,7 @@ pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
     fn eval(&mut self, inp: &[F]) -> Result<F, FlpError>;
 
     /// Evaluate the gadget on input of a sequence of polynomials. The output is written to `outp`.
-    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
+    fn eval_poly(&self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError>;
 
     /// Returns the arity of the gadget. This is the length of `inp` passed to `eval` or
     /// `eval_poly`.
@@ -632,21 +634,26 @@ pub trait Gadget<F: NttFriendlyFieldElement>: Debug {
 /// evaluated.
 #[derive(Debug)]
 struct ProveShimGadget<F: NttFriendlyFieldElement> {
+    /// Inner gadget whose input wire values are being recorded by this shim.
     inner: Box<dyn Gadget<F>>,
 
-    /// Points at which the wire polynomials are interpolated.
-    f_vals: Vec<Vec<F>>,
+    /// Input wire seeds and values recorded during successive evaluations of this gadget. Indexed
+    /// by wire number and number of calls. i.e., `wire_values[i][0]` is the wire seed for the
+    /// `i`-th input wire and for `j > 0`, `wire_values[i][j] is the value of the `i`-th input wire
+    /// during the `j - 1`-th invocation of this gadget.
+    wire_values: Vec<Vec<F>>,
 
     /// The number of times the gadget has been called so far.
-    ct: usize,
+    num_calls: usize,
 }
 
 impl<F: NttFriendlyFieldElement> ProveShimGadget<F> {
     fn new(inner: Box<dyn Gadget<F>>, prove_rand: &[F]) -> Result<Self, FlpError> {
-        let mut f_vals = vec![vec![F::zero(); 1 + inner.calls()]; inner.arity()];
+        let mut wire_values = vec![vec![F::zero(); wire_poly_len(inner.calls())]; inner.arity()];
 
-        for (prove_rand_val, wire_poly_vals) in
-            prove_rand[..f_vals.len()].iter().zip(f_vals.iter_mut())
+        for (prove_rand_val, wire_poly_vals) in prove_rand[..wire_values.len()]
+            .iter()
+            .zip(wire_values.iter_mut())
         {
             // Choose a random field element as the first point on the wire polynomial.
             wire_poly_vals[0] = *prove_rand_val;
@@ -654,22 +661,22 @@ impl<F: NttFriendlyFieldElement> ProveShimGadget<F> {
 
         Ok(Self {
             inner,
-            f_vals,
-            ct: 1,
+            wire_values,
+            num_calls: 0,
         })
     }
 }
 
 impl<F: NttFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
     fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
-        for (wire_poly_vals, inp_val) in self.f_vals[..inp.len()].iter_mut().zip(inp.iter()) {
-            wire_poly_vals[self.ct] = *inp_val;
+        self.num_calls += 1;
+        for (wire_poly_vals, inp_val) in self.wire_values[..inp.len()].iter_mut().zip(inp.iter()) {
+            wire_poly_vals[self.num_calls] = *inp_val;
         }
-        self.ct += 1;
         self.inner.eval(inp)
     }
 
-    fn eval_poly(&mut self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&self, outp: &mut [F], inp: &[Vec<F>]) -> Result<(), FlpError> {
         self.inner.eval_poly(outp, inp)
     }
 
@@ -694,73 +701,81 @@ impl<F: NttFriendlyFieldElement> Gadget<F> for ProveShimGadget<F> {
 /// proof polynomials are evaluated.
 #[derive(Debug)]
 struct QueryShimGadget<F: NttFriendlyFieldElement> {
+    /// Inner gadget whose input wire values are being recorded by this shim.
     inner: Box<dyn Gadget<F>>,
 
-    /// Points at which intermediate proof polynomials are interpolated.
-    f_vals: Vec<Vec<F>>,
+    /// Input wire seeds and values recorded during successive evaluations of this gadget. Indexed
+    /// by wire number and number of calls. i.e., `wire_values[i][0]` is the wire seed for the
+    /// `i`-th input wire and for `j > 0`, `wire_values[i][j] is the value of the `i`-th input wire
+    /// during the `j - 1`-th invocation of this gadget.
+    wire_values: Vec<Vec<F>>,
 
-    /// Points at which the gadget polynomial is interpolated.
-    p_vals: Vec<F>,
-
-    /// The gadget polynomial evaluated on a random input `r`.
-    p_at_r: F,
+    /// The gadget polynomial, in the Lagrange basis.
+    gadget_polynomial: Vec<F>,
 
     /// Used to compute an index into `p_val`.
     step: usize,
 
     /// The number of times the gadget has been called so far.
-    ct: usize,
+    num_calls: usize,
 }
 
 impl<F: NttFriendlyFieldElement> QueryShimGadget<F> {
-    fn new(inner: Box<dyn Gadget<F>>, r: F, proof_data: &[F]) -> Result<Self, FlpError> {
-        let gadget_degree = inner.degree();
-        let gadget_arity = inner.arity();
-        let m = (1 + inner.calls()).next_power_of_two();
-        let p = m * gadget_degree;
+    /// Instantiate a new `QueryShimGadget` wrapping the provided gadget. `proof_data` consists of
+    /// one wire seed for each of the `inner.arity` wires in the wrapped gadget, then evaluations of
+    /// the gadget polynomial.
+    fn new(inner: Box<dyn Gadget<F>>, proof_data: &[F]) -> Result<Self, FlpError> {
+        let p = wire_poly_len(inner.calls());
 
         // Each call to this gadget records the values at which intermediate proof polynomials were
         // interpolated. The first point was a random value chosen by the prover and transmitted in
         // the proof.
-        let mut f_vals = vec![vec![F::zero(); 1 + inner.calls()]; gadget_arity];
-        for wire in 0..gadget_arity {
-            f_vals[wire][0] = proof_data[wire];
+        let mut wire_values = vec![vec![F::zero(); p]; inner.arity()];
+        for wire in 0..inner.arity() {
+            wire_values[wire][0] = proof_data[wire];
         }
 
-        // Evaluate the gadget polynomial at roots of unity.
-        let size = p.next_power_of_two();
-        let mut p_vals = vec![F::zero(); size];
-        ntt(&mut p_vals, &proof_data[gadget_arity..], size)?;
+        // Recover all the values of the gadget polynomial by first extending the gadget polynomial
+        // from the proof to the next power of 2 and then doubling until we reach the desired size.
+        let gadget_polynomial = &proof_data[inner.arity()..];
 
-        // The step is used to compute the element of `p_val` that will be returned by a call to
-        // the gadget.
-        let step = (1 << (log2(p as u128) - log2(m as u128))) as usize;
+        let next_power_of_two = gadget_polynomial.len().next_power_of_two();
+        let mut gadget_polynomial_evaluations = Vec::with_capacity(next_power_of_two);
+        gadget_polynomial_evaluations.extend_from_slice(gadget_polynomial);
+        gadget_polynomial_evaluations.resize(next_power_of_two, F::zero());
 
-        // Evaluate the gadget polynomial `p` at query randomness `r`.
-        let p_at_r = poly_eval_monomial(&proof_data[gadget_arity..], r);
+        extend_values_to_power_of_2(&mut gadget_polynomial_evaluations, gadget_polynomial.len());
+
+        let size = gadget_poly_len(inner.degree(), p).next_power_of_two();
+        while gadget_polynomial_evaluations.len() < size {
+            gadget_polynomial_evaluations = get_double_evaluations(&gadget_polynomial_evaluations)?;
+        }
+
+        // The step is used to compute the element of `gadget_polynomial_evaluations` that will be
+        // returned by a call to the gadget.
+        let step = (1 << (log2(size as u128) - log2(p as u128))) as usize;
 
         Ok(Self {
             inner,
-            f_vals,
-            p_vals,
-            p_at_r,
+            wire_values,
+            gadget_polynomial: gadget_polynomial_evaluations,
             step,
-            ct: 1,
+            num_calls: 0,
         })
     }
 }
 
 impl<F: NttFriendlyFieldElement> Gadget<F> for QueryShimGadget<F> {
     fn eval(&mut self, inp: &[F]) -> Result<F, FlpError> {
-        for (wire_poly_vals, inp_val) in self.f_vals[..inp.len()].iter_mut().zip(inp.iter()) {
-            wire_poly_vals[self.ct] = *inp_val;
+        self.num_calls += 1;
+        for (wire_poly_vals, inp_val) in self.wire_values[..inp.len()].iter_mut().zip(inp.iter()) {
+            wire_poly_vals[self.num_calls] = *inp_val;
         }
-        let outp = self.p_vals[self.ct * self.step];
-        self.ct += 1;
-        Ok(outp)
+
+        Ok(self.gadget_polynomial[self.num_calls * self.step])
     }
 
-    fn eval_poly(&mut self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), FlpError> {
+    fn eval_poly(&self, _outp: &mut [F], _inp: &[Vec<F>]) -> Result<(), FlpError> {
         panic!("no-op");
     }
 
@@ -956,7 +971,7 @@ pub mod test_utils {
             // Try verifying various proof mutants.
             for i in 0..std::cmp::min(proof.len(), 10) {
                 let mut mutated_proof = proof.clone();
-                mutated_proof[i] *= T::Field::from(
+                mutated_proof[i] += T::Field::from(
                     <T::Field as FieldElementWithInteger>::Integer::try_from(23).unwrap(),
                 );
                 let verifier = self
@@ -965,7 +980,9 @@ pub mod test_utils {
                     .unwrap();
                 assert!(
                     !self.flp.decide(&verifier).unwrap(),
-                    "{name}: proof mutant {i} deemed valid"
+                    "{name}: proof mutant {i} deemed valid {:?} -> {:?}",
+                    proof[i],
+                    mutated_proof[i],
                 );
             }
 

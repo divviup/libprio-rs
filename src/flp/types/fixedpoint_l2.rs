@@ -218,7 +218,7 @@ use std::{convert::TryFrom, convert::TryInto, fmt::Debug, marker::PhantomData};
 pub struct FixedPointBoundedL2VecSum<
     T: Fixed,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Clone,
-    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Clone,
+    SMul: ParallelSumGadget<Field128, Mul> + Clone,
 > {
     bits_per_entry: usize,
     entries: usize,
@@ -241,7 +241,7 @@ impl<T, SPoly, SMul> Debug for FixedPointBoundedL2VecSum<T, SPoly, SMul>
 where
     T: Fixed,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Clone,
-    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Clone,
+    SMul: ParallelSumGadget<Field128, Mul> + Clone,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("FixedPointBoundedL2VecSum")
@@ -255,7 +255,7 @@ impl<T, SPoly, SMul> FixedPointBoundedL2VecSum<T, SPoly, SMul>
 where
     T: Fixed,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Clone,
-    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Clone,
+    SMul: ParallelSumGadget<Field128, Mul> + Clone,
 {
     /// Return a new [`FixedPointBoundedL2VecSum`] type parameter. Each value of this type is a
     /// fixed point vector with `entries` entries.
@@ -384,7 +384,7 @@ impl<T, SPoly, SMul> Flp for FixedPointBoundedL2VecSum<T, SPoly, SMul>
 where
     T: Fixed + CompatibleFloat,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
-    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
+    SMul: ParallelSumGadget<Field128, Mul> + Eq + Clone + 'static,
 {
     type Field = Field128;
 
@@ -539,7 +539,7 @@ impl<T, SPoly, SMul> Type for FixedPointBoundedL2VecSum<T, SPoly, SMul>
 where
     T: Fixed + CompatibleFloat,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
-    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
+    SMul: ParallelSumGadget<Field128, Mul> + Eq + Clone + 'static,
 {
     type Measurement = Vec<T>;
     type AggregateResult = Vec<f64>;
@@ -624,7 +624,7 @@ impl<T, SPoly, SMul> TypeWithNoise<ZCdpDiscreteGaussian>
 where
     T: Fixed + CompatibleFloat,
     SPoly: ParallelSumGadget<Field128, PolyEval<Field128>> + Eq + Clone + 'static,
-    SMul: ParallelSumGadget<Field128, Mul<Field128>> + Eq + Clone + 'static,
+    SMul: ParallelSumGadget<Field128, Mul> + Eq + Clone + 'static,
 {
     fn add_noise_to_agg_share(
         &self,
@@ -734,7 +734,7 @@ mod tests {
         let n: usize = (F::INT_NBITS + F::FRAC_NBITS).try_into().unwrap();
 
         type Ps = ParallelSum<Field128, PolyEval<Field128>>;
-        type Psm = ParallelSum<Field128, Mul<Field128>>;
+        type Psm = ParallelSum<Field128, Mul>;
 
         let vsum: FixedPointBoundedL2VecSum<F, Ps, Psm> =
             FixedPointBoundedL2VecSum::new(3).unwrap();
@@ -874,21 +874,21 @@ mod tests {
         <FixedPointBoundedL2VecSum<
             FixedI128<U127>,
             ParallelSum<Field128, PolyEval<Field128>>,
-            ParallelSum<Field128, Mul<Field128>>,
+            ParallelSum<Field128, Mul>,
         >>::new(3)
         .unwrap_err();
         // vector too large
         <FixedPointBoundedL2VecSum<
             FixedI64<U63>,
             ParallelSum<Field128, PolyEval<Field128>>,
-            ParallelSum<Field128, Mul<Field128>>,
+            ParallelSum<Field128, Mul>,
         >>::new(3000000000)
         .unwrap_err();
         // fixed point type has more than one int bit
         <FixedPointBoundedL2VecSum<
             FixedI16<U14>,
             ParallelSum<Field128, PolyEval<Field128>>,
-            ParallelSum<Field128, Mul<Field128>>,
+            ParallelSum<Field128, Mul>,
         >>::new(3)
         .unwrap_err();
     }

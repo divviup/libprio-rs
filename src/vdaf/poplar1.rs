@@ -2203,49 +2203,49 @@ mod tests {
 
     #[test]
     fn test_vec_poplar1_0() {
-        let contents = include_str!("test_vec/15/Poplar1_0.json");
+        let contents = include_str!("test_vec/18/Poplar1_0.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_1() {
-        let contents = include_str!("test_vec/15/Poplar1_1.json");
+        let contents = include_str!("test_vec/18/Poplar1_1.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_2() {
-        let contents = include_str!("test_vec/15/Poplar1_2.json");
+        let contents = include_str!("test_vec/18/Poplar1_2.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_3() {
-        let contents = include_str!("test_vec/15/Poplar1_3.json");
+        let contents = include_str!("test_vec/18/Poplar1_3.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_4() {
-        let contents = include_str!("test_vec/15/Poplar1_4.json");
+        let contents = include_str!("test_vec/18/Poplar1_4.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_5() {
-        let contents = include_str!("test_vec/15/Poplar1_5.json");
+        let contents = include_str!("test_vec/18/Poplar1_5.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
     fn test_vec_poplar1_bad_corr_inner() {
-        let contents = include_str!("test_vec/15/Poplar1_bad_corr_inner.json");
+        let contents = include_str!("test_vec/18/Poplar1_bad_corr_inner.json");
         let test_vector = serde_json::from_str(contents).unwrap();
         check_test_vector::<Poplar1<XofTurboShake128, 32>, 32, 16>(&test_vector);
     }

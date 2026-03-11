@@ -25,7 +25,7 @@ use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
 /// version. This will be revised with each draft with breaking changes.
-pub(crate) const VERSION: u8 = 12;
+pub(crate) const VERSION: u8 = 18;
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -754,8 +754,8 @@ pub mod test_utils {
         pub verify_key: HexEncoded,
         /// Aggregation parameter.
         pub agg_param: HexEncoded,
-        /// Per-report preparation information.
-        pub prep: Vec<PreparationTestVector>,
+        /// Per-report verification information.
+        pub reports: Vec<VerificationTestVector>,
         /// Aggregate shares.
         pub agg_shares: Vec<HexEncoded>,
         /// Aggregate result.
@@ -796,21 +796,21 @@ pub mod test_utils {
     pub enum OperationKind {
         /// Shard a report.
         Shard,
-        /// Initial step of preparation.
-        PrepInit,
-        /// Combine prepare shares into a prepare message.
-        PrepSharesToPrep,
-        /// Subsequent steps of preparation.
-        PrepNext,
+        /// Initial step of verification.
+        VerifyInit,
+        /// Combine verifier shares into a message.
+        VerifierSharesToMessage,
+        /// Subsequent steps of verification.
+        VerifyNext,
         /// Aggregate output shares into an aggregate share.
         Aggregate,
         /// Unshard aggregate shares into an aggregate result.
         Unshard,
     }
 
-    /// Per-report preparation information in a test vector.
+    /// Per-report verification information in a test vector.
     #[derive(Debug, Deserialize)]
-    pub struct PreparationTestVector {
+    pub struct VerificationTestVector {
         /// The original measurement.
         pub measurement: Value,
         /// The nonce associated with this report.
@@ -823,14 +823,14 @@ pub mod test_utils {
         ///
         /// This is indexed by aggregator ID.
         pub input_shares: Vec<HexEncoded>,
-        /// Prepare shares.
+        /// Verifier shares.
         ///
         /// This is indexed first by round, then by aggregator ID.
-        pub prep_shares: Vec<Vec<HexEncoded>>,
-        /// Prepare messages.
+        pub verifier_shares: Vec<Vec<HexEncoded>>,
+        /// Verifier messages.
         ///
         /// This is indexed by round.
-        pub prep_messages: Vec<HexEncoded>,
+        pub verifier_messages: Vec<HexEncoded>,
         /// Output shares.
         ///
         /// This is indexed by aggregator ID.
@@ -886,15 +886,15 @@ pub mod test_utils {
     {
         let vdaf = constructor(test_vector.shares, &test_vector.other_params);
         let agg_param = V::AggregationParam::get_decoded(test_vector.agg_param.as_ref()).unwrap();
-        let mut prepare_states = HashMap::new();
+        let mut verify_states = HashMap::new();
         for operation in test_vector.operations.iter() {
             match operation.operation {
                 OperationKind::Shard => {
                     assert!(operation.success);
                     let report_index = operation.report_index.unwrap();
-                    let preparation_test_vector = &test_vector.prep[report_index];
+                    let verify_test_vector = &test_vector.reports[report_index];
 
-                    let input_shares = preparation_test_vector
+                    let input_shares = verify_test_vector
                         .input_shares
                         .iter()
                         .map(|encoded| encoded.as_ref())
@@ -903,31 +903,31 @@ pub mod test_utils {
                     check_shard_operation(
                         &vdaf,
                         test_vector.ctx.as_ref(),
-                        &preparation_test_vector.measurement,
-                        preparation_test_vector.nonce.as_ref(),
-                        preparation_test_vector.rand.as_ref(),
-                        preparation_test_vector.public_share.as_ref(),
+                        &verify_test_vector.measurement,
+                        verify_test_vector.nonce.as_ref(),
+                        verify_test_vector.rand.as_ref(),
+                        verify_test_vector.public_share.as_ref(),
                         &input_shares,
                     );
                 }
-                OperationKind::PrepInit => {
+                OperationKind::VerifyInit => {
                     assert!(operation.success);
                     let aggregator_id = operation.aggregator_id.unwrap();
                     let report_index = operation.report_index.unwrap();
-                    let preparation_test_vector = &test_vector.prep[report_index];
+                    let verify_test_vector = &test_vector.reports[report_index];
 
-                    let state = check_prep_init_operation(
+                    let state = check_verify_init_operation(
                         &vdaf,
                         test_vector.verify_key.as_ref(),
                         test_vector.ctx.as_ref(),
                         aggregator_id,
                         &agg_param,
-                        preparation_test_vector.nonce.as_ref(),
-                        preparation_test_vector.public_share.as_ref(),
-                        preparation_test_vector.input_shares[aggregator_id].as_ref(),
-                        preparation_test_vector.prep_shares[0][aggregator_id].as_ref(),
+                        verify_test_vector.nonce.as_ref(),
+                        verify_test_vector.public_share.as_ref(),
+                        verify_test_vector.input_shares[aggregator_id].as_ref(),
+                        verify_test_vector.verifier_shares[0][aggregator_id].as_ref(),
                     );
-                    prepare_states.insert(
+                    verify_states.insert(
                         StateKey {
                             round: 0,
                             aggregator_id,
@@ -936,75 +936,75 @@ pub mod test_utils {
                         state,
                     );
                 }
-                OperationKind::PrepSharesToPrep => {
+                OperationKind::VerifierSharesToMessage => {
                     let round = operation.round.unwrap();
                     let report_index = operation.report_index.unwrap();
-                    let preparation_test_vector = &test_vector.prep[report_index];
+                    let verify_test_vector = &test_vector.reports[report_index];
 
-                    let prep_shares = preparation_test_vector.prep_shares[round]
+                    let verifier_shares = verify_test_vector.verifier_shares[round]
                         .iter()
                         .map(|share| share.as_ref())
                         .collect::<Vec<_>>();
                     for aggregator_id in 0..vdaf.num_aggregators() {
-                        let prep_state = &prepare_states[&StateKey {
+                        let verify_state = &verify_states[&StateKey {
                             round,
                             aggregator_id,
                             report_index,
                         }];
 
                         if operation.success {
-                            check_prep_shares_to_prep_operation_success(
+                            check_verifier_shares_to_verify_operation_success(
                                 &vdaf,
                                 test_vector.ctx.as_ref(),
                                 &agg_param,
-                                prep_state,
-                                &prep_shares,
-                                preparation_test_vector.prep_messages[round].as_ref(),
+                                verify_state,
+                                &verifier_shares,
+                                verify_test_vector.verifier_messages[round].as_ref(),
                             );
                         } else {
-                            check_prep_shares_to_prep_operation_failure(
+                            check_verifier_shares_to_verify_operation_failure(
                                 &vdaf,
                                 test_vector.ctx.as_ref(),
                                 &agg_param,
-                                prep_state,
-                                &prep_shares,
+                                verify_state,
+                                &verifier_shares,
                             );
                         }
                     }
                 }
-                OperationKind::PrepNext => {
+                OperationKind::VerifyNext => {
                     let round = operation.round.unwrap();
                     let aggregator_id = operation.aggregator_id.unwrap();
                     let report_index = operation.report_index.unwrap();
-                    let preparation_test_vector = &test_vector.prep[report_index];
+                    let verify_test_vector = &test_vector.reports[report_index];
 
-                    let prep_state = &prepare_states[&StateKey {
+                    let verify_state = &verify_states[&StateKey {
                         round: round - 1,
                         aggregator_id,
                         report_index,
                     }];
 
                     if operation.success {
-                        let prep_share_opt = preparation_test_vector
-                            .prep_shares
+                        let verify_share_opt = verify_test_vector
+                            .verifier_shares
                             .get(round)
                             .map(|list| list[aggregator_id].as_ref());
-                        let out_share_opt = prep_share_opt
+                        let out_share_opt = verify_share_opt
                             .is_none()
-                            .then(|| preparation_test_vector.out_shares[aggregator_id].as_ref());
+                            .then(|| verify_test_vector.out_shares[aggregator_id].as_ref());
 
-                        let state_opt = check_prep_next_operation_success(
+                        let state_opt = check_verify_next_operation_success(
                             &vdaf,
                             test_vector.ctx.as_ref(),
                             &agg_param,
-                            prep_state,
-                            preparation_test_vector.prep_messages[round - 1].as_ref(),
-                            prep_share_opt,
+                            verify_state,
+                            verify_test_vector.verifier_messages[round - 1].as_ref(),
+                            verify_share_opt,
                             out_share_opt,
                         );
 
                         if let Some(state) = state_opt {
-                            prepare_states.insert(
+                            verify_states.insert(
                                 StateKey {
                                     round,
                                     aggregator_id,
@@ -1014,11 +1014,11 @@ pub mod test_utils {
                             );
                         }
                     } else {
-                        check_prep_next_operation_failure(
+                        check_verify_next_operation_failure(
                             &vdaf,
                             test_vector.ctx.as_ref(),
-                            prep_state,
-                            preparation_test_vector.prep_messages[round - 1].as_ref(),
+                            verify_state,
+                            verify_test_vector.verifier_messages[round - 1].as_ref(),
                         );
                     }
                 }
@@ -1027,10 +1027,10 @@ pub mod test_utils {
                     let aggregator_id = operation.aggregator_id.unwrap();
 
                     let output_shares = test_vector
-                        .prep
+                        .reports
                         .iter()
-                        .map(|preparation_test_vector| {
-                            preparation_test_vector.out_shares[aggregator_id].as_ref()
+                        .map(|verify_test_vector| {
+                            verify_test_vector.out_shares[aggregator_id].as_ref()
                         })
                         .collect::<Vec<_>>();
 
@@ -1054,7 +1054,7 @@ pub mod test_utils {
                         &vdaf,
                         &agg_param,
                         &agg_shares,
-                        test_vector.prep.len(),
+                        test_vector.reports.len(),
                         &test_vector.agg_result,
                     );
                 }
@@ -1102,7 +1102,7 @@ pub mod test_utils {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn check_prep_init_operation<V, const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>(
+    fn check_verify_init_operation<V, const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>(
         vdaf: &V,
         verify_key: &[u8],
         ctx: &[u8],
@@ -1111,7 +1111,7 @@ pub mod test_utils {
         nonce: &[u8],
         public_share: &[u8],
         input_share: &[u8],
-        expected_prep_share: &[u8],
+        expected_verifier_share: &[u8],
     ) -> V::PrepareState
     where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
@@ -1121,7 +1121,7 @@ pub mod test_utils {
         let public_share = V::PublicShare::get_decoded_with_param(vdaf, public_share).unwrap();
         let input_share =
             V::InputShare::get_decoded_with_param(&(vdaf, agg_id), input_share).unwrap();
-        let (prepare_state, prepare_share) = vdaf
+        let (verify_state, verify_share) = vdaf
             .prepare_init(
                 verify_key,
                 ctx,
@@ -1133,16 +1133,17 @@ pub mod test_utils {
             )
             .unwrap();
 
-        assert_eq!(prepare_share.get_encoded().unwrap(), expected_prep_share);
+        assert_eq!(verify_share.get_encoded().unwrap(), expected_verifier_share);
         assert_eq!(
-            prepare_share,
-            V::PrepareShare::get_decoded_with_param(&prepare_state, expected_prep_share).unwrap()
+            verify_share,
+            V::PrepareShare::get_decoded_with_param(&verify_state, expected_verifier_share)
+                .unwrap()
         );
 
-        prepare_state
+        verify_state
     }
 
-    fn check_prep_shares_to_prep_operation_success<
+    fn check_verifier_shares_to_verify_operation_success<
         V,
         const VERIFY_KEY_SIZE: usize,
         const NONCE_SIZE: usize,
@@ -1150,28 +1151,32 @@ pub mod test_utils {
         vdaf: &V,
         ctx: &[u8],
         agg_param: &V::AggregationParam,
-        prep_state: &V::PrepareState,
-        prep_shares: &[&[u8]],
-        expected_prep_message: &[u8],
+        verifier_state: &V::PrepareState,
+        verifier_shares: &[&[u8]],
+        expected_verifier_message: &[u8],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     {
-        let prep_shares = prep_shares
+        let verifier_shares = verifier_shares
             .iter()
-            .map(|bytes| V::PrepareShare::get_decoded_with_param(prep_state, bytes).unwrap())
+            .map(|bytes| V::PrepareShare::get_decoded_with_param(verifier_state, bytes).unwrap())
             .collect::<Vec<_>>();
-        let prep_message = vdaf
-            .prepare_shares_to_prepare_message(ctx, agg_param, prep_shares)
+        let verifier_message = vdaf
+            .prepare_shares_to_prepare_message(ctx, agg_param, verifier_shares)
             .unwrap();
 
-        assert_eq!(prep_message.get_encoded().unwrap(), expected_prep_message);
         assert_eq!(
-            prep_message,
-            V::PrepareMessage::get_decoded_with_param(prep_state, expected_prep_message).unwrap()
+            verifier_message.get_encoded().unwrap(),
+            expected_verifier_message
+        );
+        assert_eq!(
+            verifier_message,
+            V::PrepareMessage::get_decoded_with_param(verifier_state, expected_verifier_message)
+                .unwrap()
         );
     }
 
-    fn check_prep_shares_to_prep_operation_failure<
+    fn check_verifier_shares_to_verify_operation_failure<
         V,
         const VERIFY_KEY_SIZE: usize,
         const NONCE_SIZE: usize,
@@ -1179,26 +1184,30 @@ pub mod test_utils {
         vdaf: &V,
         ctx: &[u8],
         agg_param: &V::AggregationParam,
-        prep_state: &V::PrepareState,
-        prep_shares: &[&[u8]],
+        verifier_state: &V::PrepareState,
+        verifier_shares: &[&[u8]],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     {
-        let prep_shares = prep_shares
+        let verifier_shares = verifier_shares
             .iter()
-            .map(|bytes| V::PrepareShare::get_decoded_with_param(prep_state, bytes).unwrap())
+            .map(|bytes| V::PrepareShare::get_decoded_with_param(verifier_state, bytes).unwrap())
             .collect::<Vec<_>>();
-        vdaf.prepare_shares_to_prepare_message(ctx, agg_param, prep_shares)
+        vdaf.prepare_shares_to_prepare_message(ctx, agg_param, verifier_shares)
             .unwrap_err();
     }
 
-    fn check_prep_next_operation_success<V, const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>(
+    fn check_verify_next_operation_success<
+        V,
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+    >(
         vdaf: &V,
         ctx: &[u8],
         agg_param: &V::AggregationParam,
-        prep_state: &V::PrepareState,
-        prep_message: &[u8],
-        expected_prep_share: Option<&[u8]>,
+        verifier_state: &V::PrepareState,
+        verifier_message: &[u8],
+        expected_verifier_share: Option<&[u8]>,
         expected_out_share: Option<&[u8]>,
     ) -> Option<V::PrepareState>
     where
@@ -1206,27 +1215,27 @@ pub mod test_utils {
         V::PrepareShare: PartialEq,
         V::OutputShare: PartialEq,
     {
-        let prep_message =
-            V::PrepareMessage::get_decoded_with_param(prep_state, prep_message).unwrap();
+        let verifier_message =
+            V::PrepareMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
         let transition = vdaf
-            .prepare_next(ctx, prep_state.clone(), prep_message)
+            .prepare_next(ctx, verifier_state.clone(), verifier_message)
             .unwrap();
         match transition {
-            PrepareTransition::Continue(prep_state, prep_share) => {
+            PrepareTransition::Continue(verifier_state, verifier_share) => {
                 assert_eq!(
-                    prep_share.get_encoded().unwrap(),
-                    expected_prep_share.unwrap()
+                    verifier_share.get_encoded().unwrap(),
+                    expected_verifier_share.unwrap()
                 );
                 assert_eq!(
-                    prep_share,
+                    verifier_share,
                     V::PrepareShare::get_decoded_with_param(
-                        &prep_state,
-                        expected_prep_share.unwrap()
+                        &verifier_state,
+                        expected_verifier_share.unwrap()
                     )
                     .unwrap()
                 );
 
-                Some(prep_state)
+                Some(verifier_state)
             }
             PrepareTransition::Finish(out_share) => {
                 assert_eq!(
@@ -1247,18 +1256,22 @@ pub mod test_utils {
         }
     }
 
-    fn check_prep_next_operation_failure<V, const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>(
+    fn check_verify_next_operation_failure<
+        V,
+        const VERIFY_KEY_SIZE: usize,
+        const NONCE_SIZE: usize,
+    >(
         vdaf: &V,
         ctx: &[u8],
-        prep_state: &V::PrepareState,
-        prep_message: &[u8],
+        verifier_state: &V::PrepareState,
+        verifier_message: &[u8],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     {
-        let prep_message =
-            V::PrepareMessage::get_decoded_with_param(prep_state, prep_message).unwrap();
+        let verifier_message =
+            V::PrepareMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
 
-        vdaf.prepare_next(ctx, prep_state.clone(), prep_message)
+        vdaf.prepare_next(ctx, verifier_state.clone(), verifier_message)
             .unwrap_err();
     }
 

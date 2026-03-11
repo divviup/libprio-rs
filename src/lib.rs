@@ -14,7 +14,6 @@
 //!
 //! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
-pub mod benchmarked;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 mod bt;
 pub mod codec;
