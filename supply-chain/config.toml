@@ -145,7 +145,7 @@ criteria = "safe-to-run"
 
 [[exemptions.ppv-lite86]]
 version = "0.2.16"
-criteria = "safe-to-deploy"
+criteria = "safe-to-run"
 
 [[exemptions.prettyplease]]
 version = "0.2.37"
@@ -181,11 +181,6 @@ criteria = "safe-to-run"
 [[exemptions.typenum]]
 version = "1.15.0"
 criteria = "safe-to-deploy"
-
-[[exemptions.wasi]]
-version = "0.14.2+wasi-0.2.4"
-criteria = "safe-to-deploy"
-notes = "This is only used on WASI targets"
 
 [[exemptions.wide]]
 version = "0.7.11"
