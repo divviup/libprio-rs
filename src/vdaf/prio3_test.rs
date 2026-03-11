@@ -6,14 +6,14 @@ use crate::{
     field::NttFriendlyFieldElement,
     flp::{
         gadgets::{Mul, ParallelSumGadget},
-        types::SumVec,
+        types::{higher_degree::HigherDegree, SumVec},
     },
     vdaf::{
         prio3::{
             Prio3, Prio3Count, Prio3Histogram, Prio3L1BoundSum, Prio3MultihotCountVec, Prio3Sum,
         },
         test_utils::TestVectorVdaf,
-        xof::Xof,
+        xof::{Xof, XofTurboShake128},
     },
 };
 use serde_json::Value;
@@ -200,13 +200,27 @@ impl TestVectorVdaf for Prio3L1BoundSum {
     }
 }
 
+impl TestVectorVdaf for Prio3<HigherDegree, XofTurboShake128, 32> {
+    fn new(shares: u8, _parameters: &HashMap<String, Value>) -> Self {
+        Prio3::new_higher_degree(shares).unwrap()
+    }
+
+    fn deserialize_measurement(measurement: &Value) -> Self::Measurement {
+        measurement.as_u64().unwrap()
+    }
+
+    fn deserialize_aggregate_result(aggregate_result: &Value) -> Self::AggregateResult {
+        aggregate_result.as_u64().unwrap()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::{
         field::Field64,
         flp::{
             gadgets::{Mul, ParallelSum},
-            types::SumVec,
+            types::{higher_degree::HigherDegree, SumVec},
         },
         vdaf::{
             prio3::{
@@ -288,6 +302,13 @@ mod tests {
                 },
             );
         }
+    }
+
+    #[test]
+    fn test_vec_prio3_higher_degree() {
+        let test_vector =
+            serde_json::from_str(include_str!("test_vec/18/Prio3HigherDegree_0.json")).unwrap();
+        check_test_vector::<Prio3<HigherDegree, XofTurboShake128, 32>, 32, 16>(&test_vector);
     }
 
     #[test]
