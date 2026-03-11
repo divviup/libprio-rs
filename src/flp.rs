@@ -397,26 +397,28 @@ pub trait Flp: Sized + Eq + Clone + Debug {
             )));
         }
 
+        // Make sure the query randomness `r` isn't a root of unity. Evaluating a gadget polynomial
+        // at any of these points would be a privacy violation, since these points were used by the
+        // prover to construct the wire polynomials.
+        for (gadget, r) in self.gadget().iter().zip(query_rand_for_gadgets) {
+            let wire_poly_len = wire_poly_len(gadget.calls());
+            if r.pow(
+                <Self::Field as FieldElementWithInteger>::Integer::try_from(wire_poly_len).unwrap(),
+            ) == Self::Field::one()
+            {
+                return Err(FlpError::Query(format!(
+                    "invalid query randomness: encountered 2^{wire_poly_len}-th root of unity"
+                )));
+            }
+        }
+
         // Shim the gadgets for querying
         let mut proof_index = 0;
         let mut shims = self
             .gadget()
             .into_iter()
-            .zip(query_rand_for_gadgets)
-            .map(|(gadget, &r)| {
+            .map(|gadget| {
                 let wire_poly_len = wire_poly_len(gadget.calls());
-                // Make sure the query randomness isn't a root of unity. Evaluating the gadget
-                // polynomial at any of these points would be a privacy violation, since these
-                // points were used by the prover to construct the wire polynomials.
-                if r.pow(
-                    <Self::Field as FieldElementWithInteger>::Integer::try_from(wire_poly_len)
-                        .unwrap(),
-                ) == Self::Field::one()
-                {
-                    return Err(FlpError::Query(format!(
-                        "invalid query randomness: encountered 2^{wire_poly_len}-th root of unity"
-                    )));
-                }
 
                 // Compute the length of the sub-proof corresponding to this gadget.
                 let next_len = gadget.arity() + gadget_poly_len(gadget.degree(), wire_poly_len);
@@ -426,7 +428,7 @@ pub trait Flp: Sized + Eq + Clone + Debug {
                 Ok(Box::new(QueryShimGadget::new(gadget, proof_data)?)
                     as Box<dyn Gadget<Self::Field>>)
             })
-            .collect::<Result<Vec<_>, _>>()?;
+            .collect::<Result<Vec<_>, FlpError>>()?;
 
         // Create a buffer for the verifier data. This includes the output of the validity circuit
         // and, for each gadget `shim[idx].inner`, the wire polynomials evaluated at the query
@@ -635,9 +637,10 @@ struct ProveShimGadget<F: NttFriendlyFieldElement> {
     /// Inner gadget whose input wire values are being recorded by this shim.
     inner: Box<dyn Gadget<F>>,
 
-    /// Input wire values recorded during successive evaluations of this gadget. Indexed by wire
-    /// number and number of calls. i.e., `wire_values[i][j]` is the value of the `i`-th input wire
-    /// during the `j`-th invocation of this gadget.
+    /// Input wire seeds and values recorded during successive evaluations of this gadget. Indexed
+    /// by wire number and number of calls. i.e., `wire_values[i][0]` is the wire seed for the
+    /// `i`-th input wire and for `j > 0`, `wire_values[i][j] is the value of the `i`-th input wire
+    /// during the `j - 1`-th invocation of this gadget.
     wire_values: Vec<Vec<F>>,
 
     /// The number of times the gadget has been called so far.
@@ -701,9 +704,10 @@ struct QueryShimGadget<F: NttFriendlyFieldElement> {
     /// Inner gadget whose input wire values are being recorded by this shim.
     inner: Box<dyn Gadget<F>>,
 
-    /// Input wire values recorded during successive evaluations of this gadget. Indexed by wire
-    /// number and number of calls. i.e., `wire_values[i][j]` is the value of the `i`-th input wire
-    /// during the `j`-th invocation of this gadget.
+    /// Input wire seeds and values recorded during successive evaluations of this gadget. Indexed
+    /// by wire number and number of calls. i.e., `wire_values[i][0]` is the wire seed for the
+    /// `i`-th input wire and for `j > 0`, `wire_values[i][j] is the value of the `i`-th input wire
+    /// during the `j - 1`-th invocation of this gadget.
     wire_values: Vec<Vec<F>>,
 
     /// The gadget polynomial, in the Lagrange basis.
