@@ -44,7 +44,10 @@ increases (e.g., 0.10 to 0.11).
 | 0.15 | `release/0.15` | [`draft-irtf-cfrg-vdaf-07`][vdaf-07] | [`draft-ietf-ppm-dap-07`][dap-07] | Yes | Unmaintained as of June 24, 2024 |
 | 0.16 | `release/0.16` | [`draft-irtf-cfrg-vdaf-08`][vdaf-08] | [`draft-ietf-ppm-dap-09`][dap-09] | Yes | Supported |
 | 0.17 | `release/0.17` | [`draft-irtf-cfrg-vdaf-13`][vdaf-13] | [`draft-ietf-ppm-dap-13`][dap-13] | Yes | Unmaintained as of August 28, 2025 |
-| 0.18 | `main` | `draft-irtf-cfrg-vdaf-16` (forthcoming) | `draft-ietf-ppm-dap-16` (forthcoming) | Yes | Supported |
+| 0.18 | `main` | [`draft-irtf-cfrg-vdaf-18`][vdaf-18] | [`draft-ietf-ppm-dap-17`][dap-17][^1] | Yes | Supported |
+
+[^1]: Draft versions beyond `draft-ietf-ppm-dap-17` are likely to also be compatible with
+     `draft-irtf-cfrg-vdaf-18` even if they are not listed in the table.
 
 [vdaf-01]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/01/
 [vdaf-03]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/03/
@@ -54,6 +57,7 @@ increases (e.g., 0.10 to 0.11).
 [vdaf-07]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/07/
 [vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 [vdaf-13]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/13/
+[vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 [dap-01]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/01/
 [dap-02]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/02/
 [dap-03]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/03/
@@ -62,6 +66,7 @@ increases (e.g., 0.10 to 0.11).
 [dap-07]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/07/
 [dap-09]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/09/
 [dap-13]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/13/
+[dap-17]: https://datatracker.ietf.org/doc/draft-ietf-ppm-dap/17/
 [enpa]: https://www.abetterinternet.org/post/prio-services-for-covid-en/
 [enpa-whitepaper]: https://covid19-static.cdn-apple.com/applications/covid19/current/static/contact-tracing/pdf/ENPA_White_Paper.pdf
 [prio-server]: https://github.com/divviup/prio-server
