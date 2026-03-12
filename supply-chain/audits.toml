@@ -145,6 +145,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "1.0.3 -> 1.0.4"
 
+[[audits.chacha20]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+version = "0.10.0"
+
 [[audits.ciborium-io]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-run"
@@ -174,6 +179,36 @@ version = "0.7.1"
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "0.7.1 -> 0.7.2"
+
+[[audits.cpufeatures]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.6 -> 0.2.7"
+
+[[audits.cpufeatures]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.12 -> 0.2.13"
+
+[[audits.cpufeatures]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.14 -> 0.2.15"
+
+[[audits.cpufeatures]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.15 -> 0.2.16"
+
+[[audits.cpufeatures]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.16 -> 0.2.17"
+
+[[audits.cpufeatures]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.2.17 -> 0.3.0"
 
 [[audits.criterion]]
 who = "Brandon Pitman <bran@bran.land>"
@@ -451,6 +486,21 @@ delta = "0.2.14 -> 0.2.15"
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.3.1 -> 0.3.2"
+
+[[audits.getrandom]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.3.3 -> 0.3.4"
+
+[[audits.getrandom]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.3.4 -> 0.4.0"
+
+[[audits.getrandom]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.4.0 -> 0.4.1"
 
 [[audits.ghash]]
 who = "David Cook <dcook@divviup.org>"
@@ -748,6 +798,11 @@ who = "Tim Geoghegan <timg@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.9.1 -> 0.9.2"
 
+[[audits.rand]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.9.2 -> 0.10.0"
+
 [[audits.rand_chacha]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
@@ -783,10 +838,20 @@ who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.9.3 -> 0.9.5"
 
+[[audits.rand_core]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.9.5 -> 0.10.0"
+
 [[audits.rand_distr]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.4.3 -> 0.5.1"
+
+[[audits.rand_distr]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.5.1 -> 0.6.0"
 
 [[audits.rand_hc]]
 who = "David Cook <dcook@divviup.org>"
@@ -1255,6 +1320,12 @@ user-id = 539 # Josh Stone (cuviper)
 start = "2025-08-29"
 end = "2026-12-03"
 
+[[trusted.hashbrown]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2025-04-30"
+end = "2027-02-10"
+
 [[trusted.itoa]]
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
@@ -1275,9 +1346,15 @@ end = "2024-06-08"
 
 [[trusted.libc]]
 criteria = "safe-to-deploy"
-user-id = 51017 # Yuki Okushi (JohnTitor)
+user-id = 51017
 start = "2020-03-17"
 end = "2025-05-06"
+
+[[trusted.libc]]
+criteria = "safe-to-deploy"
+user-id = 55123 # rust-lang-owner
+start = "2024-08-15"
+end = "2027-02-10"
 
 [[trusted.libm]]
 criteria = "safe-to-deploy"
@@ -1325,7 +1402,7 @@ end = "2024-06-08"
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-04-23"
-end = "2024-07-03"
+end = "2027-03-03"
 
 [[trusted.quote]]
 criteria = "safe-to-deploy"
@@ -1391,7 +1468,7 @@ end = "2026-12-22"
 criteria = "safe-to-deploy"
 user-id = 3618 # David Tolnay (dtolnay)
 start = "2019-03-01"
-end = "2025-11-04"
+end = "2027-03-03"
 
 [[trusted.thiserror]]
 criteria = "safe-to-deploy"

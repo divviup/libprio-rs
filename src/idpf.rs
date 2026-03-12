@@ -19,7 +19,7 @@ use bitvec::{
     vec::BitVec,
     view::BitView,
 };
-use rand::{rng, Rng, RngCore};
+use rand::{rng, Rng, RngExt};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -175,7 +175,7 @@ pub trait IdpfValue:
     /// Generate a pseudorandom value from a seed stream.
     fn generate<S>(seed_stream: &mut S, parameter: &Self::ValueParameter) -> Self
     where
-        S: RngCore;
+        S: Rng;
 
     /// Returns the additive identity.
     fn zero(parameter: &Self::ValueParameter) -> Self;
@@ -195,7 +195,7 @@ where
 
     fn generate<S>(seed_stream: &mut S, _: &()) -> Self
     where
-        S: RngCore,
+        S: Rng,
     {
         F::generate_random(seed_stream)
     }
@@ -2148,7 +2148,7 @@ mod tests {
 
             fn generate<S>(_: &mut S, _: &Self::ValueParameter) -> Self
             where
-                S: rand_core::RngCore,
+                S: rand_core::Rng,
             {
                 MyUnit
             }
@@ -2215,7 +2215,7 @@ mod tests {
 
             fn generate<S>(seed_stream: &mut S, length: &Self::ValueParameter) -> Self
             where
-                S: rand_core::RngCore,
+                S: rand_core::Rng,
             {
                 let mut output = vec![<Field128 as FieldElement>::zero(); *length];
                 for element in output.iter_mut() {

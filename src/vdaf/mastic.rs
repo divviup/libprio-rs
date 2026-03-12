@@ -23,7 +23,7 @@ use crate::{
 
 use szk::{Szk, SzkJointShare, SzkProofShare, SzkQueryShare, SzkQueryState};
 
-use rand::{rng, Rng};
+use rand::{rng, RngExt};
 use std::io::{Cursor, Read};
 use std::ops::BitAnd;
 use std::slice::from_ref;
@@ -797,7 +797,7 @@ mod tests {
     use crate::flp::gadgets::{Mul, ParallelSum};
     use crate::flp::types::{Count, Histogram, Sum, SumVec};
     use crate::vdaf::test_utils::run_vdaf;
-    use rand::{rng, Rng};
+    use rand::rng;
 
     const CTX_STR: &[u8] = b"mastic ctx";
 
