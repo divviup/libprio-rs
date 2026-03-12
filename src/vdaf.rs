@@ -5,7 +5,6 @@
 //!
 //! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 
-#[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
@@ -301,8 +300,6 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
 }
 
 /// Aggregator that implements differential privacy with Aggregator-side noise addition.
-#[cfg(feature = "experimental")]
-#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub trait AggregatorWithNoise<
     const VERIFY_KEY_SIZE: usize,
     const NONCE_SIZE: usize,
