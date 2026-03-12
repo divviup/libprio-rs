@@ -46,7 +46,6 @@
 //!
 //! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 
-#[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{FieldElement, FieldElementWithInteger, FieldError, NttFriendlyFieldElement};
 use crate::fp::log2;
@@ -109,7 +108,6 @@ pub enum FlpError {
     #[error("Field error: {0}")]
     Field(#[from] FieldError),
 
-    #[cfg(feature = "experimental")]
     /// An error happened during noising.
     #[error("differential privacy error: {0}")]
     DifferentialPrivacy(#[from] crate::dp::DpError),
@@ -592,8 +590,6 @@ pub trait Type: Flp {
 }
 
 /// A type which supports adding noise to aggregate shares for Server Differential Privacy.
-#[cfg(feature = "experimental")]
-#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
 pub trait TypeWithNoise<S>: Type
 where
     S: DifferentialPrivacyStrategy,
