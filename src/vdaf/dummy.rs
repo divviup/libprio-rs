@@ -7,7 +7,7 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode},
-    vdaf::{self, Aggregatable, PrepareTransition, VdafError},
+    vdaf::{self, Aggregatable, VdafError, VerifyTransition},
 };
 use rand::random;
 use std::{fmt::Debug, io::Cursor, sync::Arc};
@@ -15,10 +15,10 @@ use std::{fmt::Debug, io::Cursor, sync::Arc};
 /// The Dummy VDAF does summation modulus 256 so we can predict aggregation results.
 const MODULUS: u64 = u8::MAX as u64 + 1;
 
-type ArcPrepInitFn =
+type ArcVerifyInitFn =
     Arc<dyn Fn(&AggregationParam) -> Result<(), VdafError> + 'static + Send + Sync>;
-type ArcPrepStepFn = Arc<
-    dyn Fn(&PrepareState) -> Result<PrepareTransition<Vdaf, 0, 16>, VdafError>
+type ArcVerifyNextFn = Arc<
+    dyn Fn(&VerifierState) -> Result<VerifyTransition<Vdaf, 0, 16>, VdafError>
         + 'static
         + Send
         + Sync,
@@ -27,15 +27,15 @@ type ArcPrepStepFn = Arc<
 /// Dummy VDAF that does nothing.
 #[derive(Clone)]
 pub struct Vdaf {
-    prep_init_fn: ArcPrepInitFn,
-    prep_step_fn: ArcPrepStepFn,
+    verify_init_fn: ArcVerifyInitFn,
+    verify_next_fn: ArcVerifyNextFn,
 }
 
 impl Debug for Vdaf {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Vdaf")
-            .field("prep_init_fn", &"[redacted]")
-            .field("prep_step_fn", &"[redacted]")
+            .field("verify_init_fn", &"[redacted]")
+            .field("verify_next_fn", &"[redacted]")
             .finish()
     }
 }
@@ -47,17 +47,17 @@ impl Vdaf {
     /// Construct a new instance of the dummy VDAF.
     pub fn new(rounds: u32) -> Self {
         Self {
-            prep_init_fn: Arc::new(|_| -> Result<(), VdafError> { Ok(()) }),
-            prep_step_fn: Arc::new(
-                move |state| -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
+            verify_init_fn: Arc::new(|_| -> Result<(), VdafError> { Ok(()) }),
+            verify_next_fn: Arc::new(
+                move |state| -> Result<VerifyTransition<Self, 0, 16>, VdafError> {
                     let new_round = state.current_round + 1;
                     if new_round == rounds {
-                        Ok(PrepareTransition::Finish(OutputShare(u64::from(
+                        Ok(VerifyTransition::Finish(OutputShare(u64::from(
                             state.input_share,
                         ))))
                     } else {
-                        Ok(PrepareTransition::Continue(
-                            PrepareState {
+                        Ok(VerifyTransition::Continue(
+                            VerifierState {
                                 current_round: new_round,
                                 ..*state
                             },
@@ -69,24 +69,24 @@ impl Vdaf {
         }
     }
 
-    /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_init`].
-    pub fn with_prep_init_fn<F>(mut self, f: F) -> Self
+    /// Provide an alternate implementation of [`vdaf::Aggregator::verify_init`].
+    pub fn with_verify_init_fn<F>(mut self, f: F) -> Self
     where
         F: Fn(&AggregationParam) -> Result<(), VdafError> + Send + Sync + 'static,
     {
-        self.prep_init_fn = Arc::new(f);
+        self.verify_init_fn = Arc::new(f);
         self
     }
 
-    /// Provide an alternate implementation of [`vdaf::Aggregator::prepare_next`].
-    pub fn with_prep_step_fn<F>(mut self, f: F) -> Self
+    /// Provide an alternate implementation of [`vdaf::Aggregator::verify_next`].
+    pub fn with_verify_next_fn<F>(mut self, f: F) -> Self
     where
-        F: Fn(&PrepareState) -> Result<PrepareTransition<Self, 0, 16>, VdafError>
+        F: Fn(&VerifierState) -> Result<VerifyTransition<Self, 0, 16>, VdafError>
             + Send
             + Sync
             + 'static,
     {
-        self.prep_step_fn = Arc::new(f);
+        self.verify_next_fn = Arc::new(f);
         self
     }
 }
@@ -116,11 +116,11 @@ impl vdaf::Vdaf for Vdaf {
 }
 
 impl vdaf::Aggregator<0, 16> for Vdaf {
-    type PrepareState = PrepareState;
-    type PrepareShare = ();
-    type PrepareMessage = ();
+    type VerifyState = VerifierState;
+    type VerifierShare = ();
+    type VerifierMessage = ();
 
-    fn prepare_init(
+    fn verify_init(
         &self,
         _verify_key: &[u8; 0],
         _ctx: &[u8],
@@ -129,10 +129,10 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
         _nonce: &[u8; 16],
         _: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, Self::PrepareShare), VdafError> {
-        (self.prep_init_fn)(aggregation_param)?;
+    ) -> Result<(Self::VerifyState, Self::VerifierShare), VdafError> {
+        (self.verify_init_fn)(aggregation_param)?;
         Ok((
-            PrepareState {
+            VerifierState {
                 input_share: input_share.0,
                 current_round: 0,
             },
@@ -140,22 +140,22 @@ impl vdaf::Aggregator<0, 16> for Vdaf {
         ))
     }
 
-    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
+    fn verifier_shares_to_message<M: IntoIterator<Item = Self::VerifierShare>>(
         &self,
         _ctx: &[u8],
         _: &Self::AggregationParam,
         _: M,
-    ) -> Result<Self::PrepareMessage, VdafError> {
+    ) -> Result<Self::VerifierMessage, VdafError> {
         Ok(())
     }
 
-    fn prepare_next(
+    fn verify_next(
         &self,
         _ctx: &[u8],
-        state: Self::PrepareState,
-        _: Self::PrepareMessage,
-    ) -> Result<PrepareTransition<Self, 0, 16>, VdafError> {
-        (self.prep_step_fn)(&state)
+        state: Self::VerifyState,
+        _: Self::VerifierMessage,
+    ) -> Result<VerifyTransition<Self, 0, 16>, VdafError> {
+        (self.verify_next_fn)(&state)
     }
 
     fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
@@ -262,14 +262,14 @@ impl Encode for OutputShare {
     }
 }
 
-/// Dummy prepare state.
+/// Dummy verifier state.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct PrepareState {
+pub struct VerifierState {
     input_share: u8,
     current_round: u32,
 }
 
-impl Encode for PrepareState {
+impl Encode for VerifierState {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.input_share.encode(bytes)?;
         self.current_round.encode(bytes)
@@ -280,7 +280,7 @@ impl Encode for PrepareState {
     }
 }
 
-impl Decode for PrepareState {
+impl Decode for VerifierState {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         let input_share = u8::decode(bytes)?;
         let current_round = u32::decode(bytes)?;

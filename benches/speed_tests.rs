@@ -99,7 +99,7 @@ fn prio2(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("prio2_prepare_init");
+    let mut group = c.benchmark_group("prio2_verify_init");
     for input_length in [10, 100, 1_000] {
         group.bench_with_input(
             BenchmarkId::from_parameter(input_length),
@@ -113,7 +113,7 @@ fn prio2(c: &mut Criterion) {
                 let verify_key = black_box([0u8; 32]);
                 let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(
+                    vdaf.verify_init(
                         &verify_key,
                         b"",
                         0,
@@ -141,14 +141,14 @@ fn prio3(c: &mut Criterion) {
         b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
     });
 
-    c.bench_function("prio3count_prepare_init", |b| {
+    c.bench_function("prio3count_verify_init", |b| {
         let vdaf = Prio3::new_count(num_shares).unwrap();
         let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
         let verify_key = black_box([0u8; 32]);
         let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
         b.iter(|| {
-            vdaf.prepare_init(
+            vdaf.verify_init(
                 &verify_key,
                 b"",
                 0,
@@ -174,7 +174,7 @@ fn prio3(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("prio3sum_prepare_init");
+    let mut group = c.benchmark_group("prio3sum_verify_init");
     for bits in [8, 32] {
         group.bench_with_input(BenchmarkId::from_parameter(bits), &bits, |b, bits| {
             let max_measurement = (1 << bits) - 1;
@@ -184,7 +184,7 @@ fn prio3(c: &mut Criterion) {
             let verify_key = black_box([0u8; 32]);
             let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
             b.iter(|| {
-                vdaf.prepare_init(
+                vdaf.verify_init(
                     &verify_key,
                     b"",
                     0,
@@ -240,7 +240,7 @@ fn prio3(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("prio3sumvec_prepare_init");
+    let mut group = c.benchmark_group("prio3sumvec_verify_init");
     for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
         group.bench_with_input(
             BenchmarkId::new("serial", input_length),
@@ -254,7 +254,7 @@ fn prio3(c: &mut Criterion) {
                 let verify_key = black_box([0u8; 32]);
                 let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(
+                    vdaf.verify_init(
                         &verify_key,
                         b"",
                         0,
@@ -291,7 +291,7 @@ fn prio3(c: &mut Criterion) {
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
-                        vdaf.prepare_init(
+                        vdaf.verify_init(
                             &verify_key,
                             b"",
                             0,
@@ -362,7 +362,7 @@ fn prio3(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("prio3histogram_prepare_init");
+    let mut group = c.benchmark_group("prio3histogram_verify_init");
     for (input_length, chunk_length) in [
         (10, 3),
         (100, 10),
@@ -383,7 +383,7 @@ fn prio3(c: &mut Criterion) {
                 let verify_key = black_box([0u8; 32]);
                 let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(
+                    vdaf.verify_init(
                         &verify_key,
                         b"",
                         0,
@@ -426,7 +426,7 @@ fn prio3(c: &mut Criterion) {
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
-                        vdaf.prepare_init(
+                        vdaf.verify_init(
                             &verify_key,
                             b"",
                             0,
@@ -488,7 +488,7 @@ fn prio3(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("prio3multihotcountvec_prepare_init");
+    let mut group = c.benchmark_group("prio3multihotcountvec_verify_init");
     for (input_length, chunk_length) in [(10, 3), (100, 10), (1_000, 31)] {
         group.bench_with_input(
             BenchmarkId::new("serial", input_length),
@@ -505,7 +505,7 @@ fn prio3(c: &mut Criterion) {
                 let verify_key = black_box([0u8; 32]);
                 let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
                 b.iter(|| {
-                    vdaf.prepare_init(
+                    vdaf.verify_init(
                         &verify_key,
                         b"",
                         0,
@@ -543,7 +543,7 @@ fn prio3(c: &mut Criterion) {
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
-                        vdaf.prepare_init(
+                        vdaf.verify_init(
                             &verify_key,
                             b"",
                             0,
@@ -605,7 +605,7 @@ fn prio3(c: &mut Criterion) {
         }
         group.finish();
 
-        let mut group = c.benchmark_group("prio3fixedpointboundedl2vecsum_i1f15_prepare_init");
+        let mut group = c.benchmark_group("prio3fixedpointboundedl2vecsum_i1f15_verify_init");
         for dimension in [10, 100, 1_000] {
             group.bench_with_input(
                 BenchmarkId::new("series", dimension),
@@ -620,7 +620,7 @@ fn prio3(c: &mut Criterion) {
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
-                        vdaf.prepare_init(
+                        vdaf.verify_init(
                             &verify_key,
                             b"",
                             0,
@@ -654,7 +654,7 @@ fn prio3(c: &mut Criterion) {
                         let (public_share, input_shares) =
                             vdaf.shard(b"", &measurement, &nonce).unwrap();
                         b.iter(|| {
-                            vdaf.prepare_init(
+                            vdaf.verify_init(
                                 &verify_key,
                                 b"",
                                 0,
@@ -709,7 +709,7 @@ fn prio3(c: &mut Criterion) {
         }
         group.finish();
 
-        let mut group = c.benchmark_group("prio3fixedpointboundedl2vecsum_i1f31_prepare_init");
+        let mut group = c.benchmark_group("prio3fixedpointboundedl2vecsum_i1f31_verify_init");
         for dimension in [10, 100, 1_000] {
             group.bench_with_input(
                 BenchmarkId::new("series", dimension),
@@ -724,7 +724,7 @@ fn prio3(c: &mut Criterion) {
                     let (public_share, input_shares) =
                         vdaf.shard(b"", &measurement, &nonce).unwrap();
                     b.iter(|| {
-                        vdaf.prepare_init(
+                        vdaf.verify_init(
                             &verify_key,
                             b"",
                             0,
@@ -758,7 +758,7 @@ fn prio3(c: &mut Criterion) {
                         let (public_share, input_shares) =
                             vdaf.shard(b"", &measurement, &nonce).unwrap();
                         b.iter(|| {
-                            vdaf.prepare_init(
+                            vdaf.verify_init(
                                 &verify_key,
                                 b"",
                                 0,
@@ -874,7 +874,7 @@ fn poplar1(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("poplar1_prepare_init");
+    let mut group = c.benchmark_group("poplar1_verify_init");
     for size in test_sizes.iter() {
         group.measurement_time(Duration::from_secs(30)); // slower benchmark
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
@@ -894,20 +894,20 @@ fn poplar1(c: &mut Criterion) {
                 1.03,     // Zipf exponent
             );
 
-            // We are benchmarking preparation of a single report. For this test, it doesn't matter
+            // We are benchmarking verification of a single report. For this test, it doesn't matter
             // which measurement we generate a report for, so pick the first measurement
             // arbitrarily.
             let (public_share, input_shares) = vdaf.shard(b"", &measurements[0], &nonce).unwrap();
             let input_share = input_shares.into_iter().next().unwrap();
 
             // For the aggregation paramter, we use the candidate prefixes from the prefix tree for
-            // the sampled measurements. Run preparation for the last step, which ought to represent
-            // the worst-case performance.
+            // the sampled measurements. Run verification for the last step, which ought to
+            // represent the worst-case performance.
             let agg_param =
                 Poplar1AggregationParam::try_from_prefixes(prefix_tree[size - 1].clone()).unwrap();
 
             b.iter(|| {
-                vdaf.prepare_init(
+                vdaf.verify_init(
                     &verify_key,
                     b"",
                     0,

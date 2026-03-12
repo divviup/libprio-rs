@@ -9,7 +9,7 @@
 
 use crate::{
     codec::{decode_u32_items, encode_u32_items, CodecError, Decode, Encode, ParameterizedDecode},
-    vdaf::{Aggregator, PrepareTransition, VdafError},
+    vdaf::{Aggregator, VdafError, VerifyTransition},
 };
 use std::fmt::Debug;
 
@@ -17,25 +17,25 @@ use std::fmt::Debug;
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum PingPongError {
-    /// Error running prepare_init
-    #[error("vdaf.prepare_init: {0}")]
-    VdafPrepareInit(VdafError),
+    /// Error running verify_init
+    #[error("vdaf.verify_init: {0}")]
+    VdafVerifyInit(VdafError),
 
-    /// Error running prepare_shares_to_prepare_message
-    #[error("vdaf.prepare_shares_to_prepare_message {0}")]
-    VdafPrepareSharesToPrepareMessage(VdafError),
+    /// Error running verifier_shares_to_message
+    #[error("vdaf.verifier_shares_to_message {0}")]
+    VdafVerifierSharesToMessage(VdafError),
 
-    /// Error running prepare_next
-    #[error("vdaf.prepare_next {0}")]
-    VdafPrepareNext(VdafError),
+    /// Error running verify_next
+    #[error("vdaf.verify_next {0}")]
+    VdafVerifyNext(VdafError),
 
-    /// Error encoding or decoding a prepare share
-    #[error("encode/decode prep share {0}")]
-    CodecPrepShare(CodecError),
+    /// Error encoding or decoding a verifier share
+    #[error("encode/decode verifier share {0}")]
+    CodecVerifierShare(CodecError),
 
-    /// Error encoding or decoding a prepare message
-    #[error("encode/decode prep message {0}")]
-    CodecPrepMessage(CodecError),
+    /// Error encoding or decoding a verifier message
+    #[error("encode/decode verifier message {0}")]
+    CodecVerifierMessage(CodecError),
 
     /// Message from peer indicates it is in an unexpected state
     #[error("peer message mismatch: message is {found} expected {expected}")]
@@ -49,27 +49,27 @@ pub enum PingPongError {
 
 /// Corresponds to `struct Message` in [VDAF's Ping-Pong Topology][VDAF]. All of the fields of the
 /// variants are opaque byte buffers. This is because the ping-pong routines take responsibility for
-/// decoding preparation shares and messages, which usually requires having the preparation state.
+/// decoding verifier shares and messages, which usually requires having the verifier state.
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 #[derive(Clone, PartialEq, Eq)]
 pub enum PingPongMessage {
     /// Corresponds to MessageType.initialize.
     Initialize {
-        /// The leader's initial preparation share.
-        prepare_share: Vec<u8>,
+        /// The leader's initial verifier share.
+        verifier_share: Vec<u8>,
     },
     /// Corresponds to MessageType.continue.
     Continue {
-        /// The current round's preparation message.
-        prepare_message: Vec<u8>,
-        /// The next round's preparation share.
-        prepare_share: Vec<u8>,
+        /// The current round's verifier message.
+        verifier_message: Vec<u8>,
+        /// The next round's verifier share.
+        verifier_share: Vec<u8>,
     },
     /// Corresponds to MessageType.finish.
     Finish {
-        /// The current round's preparation message.
-        prepare_message: Vec<u8>,
+        /// The current round's verifier message.
+        verifier_message: Vec<u8>,
     },
 }
 
@@ -85,7 +85,7 @@ impl PingPongMessage {
 
 impl Debug for PingPongMessage {
     // We want `PingPongMessage` to implement `Debug`, but we don't want that impl to print out
-    // prepare shares or messages, because (1) their contents are sensitive and (2) their contents
+    // verifier shares or messages, because (1) their contents are sensitive and (2) their contents
     // are long and not intelligible to humans. For both reasons they generally shouldn't get
     // logged. Normally, we'd use the `derivative` crate to customize a derived `Debug`, but that
     // crate has not been audited (in the `cargo vet` sense) so we can't use it here unless we audit
@@ -100,21 +100,21 @@ impl Encode for PingPongMessage {
         // The encoding includes an implicit discriminator byte, called MessageType in the VDAF
         // spec.
         match self {
-            Self::Initialize { prepare_share } => {
+            Self::Initialize { verifier_share } => {
                 0u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), prepare_share)?;
+                encode_u32_items(bytes, &(), verifier_share)?;
             }
             Self::Continue {
-                prepare_message,
-                prepare_share,
+                verifier_message,
+                verifier_share,
             } => {
                 1u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), prepare_message)?;
-                encode_u32_items(bytes, &(), prepare_share)?;
+                encode_u32_items(bytes, &(), verifier_message)?;
+                encode_u32_items(bytes, &(), verifier_share)?;
             }
-            Self::Finish { prepare_message } => {
+            Self::Finish { verifier_message } => {
                 2u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), prepare_message)?;
+                encode_u32_items(bytes, &(), verifier_message)?;
             }
         }
         Ok(())
@@ -122,12 +122,12 @@ impl Encode for PingPongMessage {
 
     fn encoded_len(&self) -> Option<usize> {
         match self {
-            Self::Initialize { prepare_share } => Some(1 + 4 + prepare_share.len()),
+            Self::Initialize { verifier_share } => Some(1 + 4 + verifier_share.len()),
             Self::Continue {
-                prepare_message,
-                prepare_share,
-            } => Some(1 + 4 + prepare_message.len() + 4 + prepare_share.len()),
-            Self::Finish { prepare_message } => Some(1 + 4 + prepare_message.len()),
+                verifier_message,
+                verifier_share,
+            } => Some(1 + 4 + verifier_message.len() + 4 + verifier_share.len()),
+            Self::Finish { verifier_message } => Some(1 + 4 + verifier_message.len()),
         }
     }
 }
@@ -137,20 +137,20 @@ impl Decode for PingPongMessage {
         let message_type = u8::decode(bytes)?;
         Ok(match message_type {
             0 => {
-                let prepare_share = decode_u32_items(&(), bytes)?;
-                Self::Initialize { prepare_share }
+                let verifier_share = decode_u32_items(&(), bytes)?;
+                Self::Initialize { verifier_share }
             }
             1 => {
-                let prepare_message = decode_u32_items(&(), bytes)?;
-                let prepare_share = decode_u32_items(&(), bytes)?;
+                let verifier_message = decode_u32_items(&(), bytes)?;
+                let verifier_share = decode_u32_items(&(), bytes)?;
                 Self::Continue {
-                    prepare_message,
-                    prepare_share,
+                    verifier_message,
+                    verifier_share,
                 }
             }
             2 => {
-                let prepare_message = decode_u32_items(&(), bytes)?;
-                Self::Finish { prepare_message }
+                let verifier_message = decode_u32_items(&(), bytes)?;
+                Self::Finish { verifier_message }
             }
             _ => return Err(CodecError::UnexpectedValue),
         })
@@ -164,12 +164,12 @@ impl Decode for PingPongMessage {
 ///
 /// The obvious implementation of `ping_pong_transition` would be a method on [`PingPongTopology`]
 /// that returns [`PingPongState`], and then other methods on `PingPongTopology` would use that. But
-/// then DAP implementations would have to store relatively large VDAF prepare shares between rounds
-/// of input preparation.
+/// then DAP implementations would have to store relatively large VDAF verifier shares between
+/// rounds of input verification.
 ///
-/// Instead, this structure stores just the previous round's prepare state and the current round's
-/// preprocessed prepare message. Their encoding is much smaller than the `PingPongState`, which can
-/// always be recomputed with [`Self::evaluate`]. Some motivating analysis of relative sizes of
+/// Instead, this structure stores just the previous round's verifier state and the current round's
+/// preprocessed verifier message. Their encoding is much smaller than the `PingPongState`, which
+/// can always be recomputed with [`Self::evaluate`]. Some motivating analysis of relative sizes of
 /// protocol objects is [here][sizes].
 ///
 /// If the `PingPongContinuation` evaluates to [`PingPongState::Finished`], then the output share
@@ -178,7 +178,7 @@ impl Decode for PingPongMessage {
 ///
 /// If it evaluates to either [`PingPongState::FinishedWithOutbound`] or
 /// [`PingPongState::Continued`], then the message should be sent to the peer aggregator. Clients
-/// can encode the previously cloned `PingPongContinuation` so that preparation can be gracefully
+/// can encode the previously cloned `PingPongContinuation` so that verification can be gracefully
 /// resumed later.
 ///
 /// See [`PingPongState`]'s documentation for detailed discussion of how to handle each of its
@@ -212,7 +212,7 @@ impl<
         &self,
         ctx: &[u8],
         vdaf: &A,
-    ) -> Result<PingPongState<A::PrepareState, A::OutputShare>, PingPongError> {
+    ) -> Result<PingPongState<A::VerifyState, A::OutputShare>, PingPongError> {
         match self.0 {
             PingPongContinuationInner::OutputShare(ref output_share) => {
                 Ok(PingPongState::Finished {
@@ -220,13 +220,13 @@ impl<
                 })
             }
             PingPongContinuationInner::Transition {
-                ref previous_prepare_state,
-                ref current_prepare_message,
+                ref previous_verifier_state,
+                ref current_verifier_message,
             } => Self::evaluate_transition(
                 ctx,
                 vdaf,
-                previous_prepare_state,
-                current_prepare_message,
+                previous_verifier_state,
+                current_verifier_message,
             ),
         }
     }
@@ -234,34 +234,34 @@ impl<
     fn evaluate_transition(
         ctx: &[u8],
         vdaf: &A,
-        previous_prepare_state: &A::PrepareState,
-        current_prepare_message: &A::PrepareMessage,
-    ) -> Result<PingPongState<A::PrepareState, A::OutputShare>, PingPongError> {
-        let prepare_message = current_prepare_message
+        previous_verifier_state: &A::VerifyState,
+        current_verifier_message: &A::VerifierMessage,
+    ) -> Result<PingPongState<A::VerifyState, A::OutputShare>, PingPongError> {
+        let verifier_message = current_verifier_message
             .get_encoded()
-            .map_err(PingPongError::CodecPrepMessage)?;
+            .map_err(PingPongError::CodecVerifierMessage)?;
 
-        vdaf.prepare_next(
+        vdaf.verify_next(
             ctx,
-            previous_prepare_state.clone(),
-            current_prepare_message.clone(),
+            previous_verifier_state.clone(),
+            current_verifier_message.clone(),
         )
-        .map_err(PingPongError::VdafPrepareNext)
+        .map_err(PingPongError::VdafVerifyNext)
         .and_then(|transition| match transition {
-            PrepareTransition::Continue(prepare_state, prepare_share) => {
+            VerifyTransition::Continue(verifier_state, verifier_share) => {
                 Ok(PingPongState::Continued(Continued {
-                    prepare_state,
+                    verifier_state,
                     message: PingPongMessage::Continue {
-                        prepare_message,
-                        prepare_share: prepare_share
+                        verifier_message,
+                        verifier_share: verifier_share
                             .get_encoded()
-                            .map_err(PingPongError::CodecPrepShare)?,
+                            .map_err(PingPongError::CodecVerifierShare)?,
                     },
                 }))
             }
-            PrepareTransition::Finish(output_share) => Ok(PingPongState::FinishedWithOutbound {
+            VerifyTransition::Finish(output_share) => Ok(PingPongState::FinishedWithOutbound {
                 output_share,
-                message: PingPongMessage::Finish { prepare_message },
+                message: PingPongMessage::Finish { verifier_message },
             }),
         })
     }
@@ -271,16 +271,16 @@ impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> Encode
     for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::PrepareState: Encode,
+    A::VerifyState: Encode,
 {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match &self.0 {
             PingPongContinuationInner::Transition {
-                previous_prepare_state,
-                current_prepare_message,
+                previous_verifier_state,
+                current_verifier_message,
             } => {
-                previous_prepare_state.encode(bytes)?;
-                current_prepare_message.encode(bytes)
+                previous_verifier_state.encode(bytes)?;
+                current_verifier_message.encode(bytes)
             }
             _ => Err(CodecError::Other(
                 "cannot encode anything but a transition".into(),
@@ -291,33 +291,34 @@ where
     fn encoded_len(&self) -> Option<usize> {
         match &self.0 {
             PingPongContinuationInner::Transition {
-                previous_prepare_state,
-                current_prepare_message,
+                previous_verifier_state,
+                current_verifier_message,
             } => Some(
-                previous_prepare_state.encoded_len()? + current_prepare_message.encoded_len()?,
+                previous_verifier_state.encoded_len()? + current_verifier_message.encoded_len()?,
             ),
             _ => None,
         }
     }
 }
 
-impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A, PrepareStateDecode>
-    ParameterizedDecode<PrepareStateDecode> for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A, VerifierStateDecode>
+    ParameterizedDecode<VerifierStateDecode>
+    for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
 where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-    A::PrepareState: ParameterizedDecode<PrepareStateDecode>,
+    A::VerifyState: ParameterizedDecode<VerifierStateDecode>,
 {
     fn decode_with_param(
-        decoding_param: &PrepareStateDecode,
+        decoding_param: &VerifierStateDecode,
         bytes: &mut std::io::Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        let previous_prepare_state = A::PrepareState::decode_with_param(decoding_param, bytes)?;
-        let current_prepare_message =
-            A::PrepareMessage::decode_with_param(&previous_prepare_state, bytes)?;
+        let previous_verifier_state = A::VerifyState::decode_with_param(decoding_param, bytes)?;
+        let current_verifier_message =
+            A::VerifierMessage::decode_with_param(&previous_verifier_state, bytes)?;
 
         Ok(Self(PingPongContinuationInner::Transition {
-            previous_prepare_state,
-            current_prepare_message,
+            previous_verifier_state,
+            current_verifier_message,
         }))
     }
 }
@@ -336,12 +337,12 @@ where
             ) => self_share == other_share,
             (
                 PingPongContinuationInner::Transition {
-                    previous_prepare_state: lhs_state,
-                    current_prepare_message: lhs_message,
+                    previous_verifier_state: lhs_state,
+                    current_verifier_message: lhs_message,
                 },
                 PingPongContinuationInner::Transition {
-                    previous_prepare_state: rhs_state,
-                    current_prepare_message: rhs_message,
+                    previous_verifier_state: rhs_state,
+                    current_verifier_message: rhs_message,
                 },
             ) => lhs_state == rhs_state && lhs_message == rhs_message,
             _ => false,
@@ -381,30 +382,30 @@ enum PingPongContinuationInner<
     /// The continuation will yield one of `PingPongState::Continued` or
     /// `PingPongState::FinishedWithOutbound`.
     Transition {
-        /// The last round's prepare state.
-        previous_prepare_state: A::PrepareState,
-        /// The current round's prepare message.
-        current_prepare_message: A::PrepareMessage,
+        /// The last round's verifier state.
+        previous_verifier_state: A::VerifyState,
+        /// The current round's verifier message.
+        current_verifier_message: A::VerifierMessage,
     },
 }
 
-/// Preparation of the report will continue. Corresponds to the `Continued` state defined in
+/// Verification of the report will continue. Corresponds to the `Continued` state defined in
 /// [VDAF's Ping-Pong Topology][VDAF].
 ///
-/// The `message` should be transmitted to the peer aggregator so it can continue preparing the
+/// The `message` should be transmitted to the peer aggregator so it can continue verifying the
 /// report.
 ///
-/// The `prepare_state` should be used along with the next [`PingPongMessage`] received from the
+/// The `verifier_state` should be used along with the next [`PingPongMessage`] received from the
 /// peer as input to the appropriate `PingPongTopology::{leader,helper}_continued` function to
 /// advance to the next round.
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Continued<P> {
+pub struct Continued<S> {
     /// A message for the peer aggregator.
     pub message: PingPongMessage,
     /// The state to which the aggregator has advanced.
-    pub prepare_state: P,
+    pub verifier_state: S,
 }
 
 /// Corresponds to the `State` enumeration implicitly defined in [VDAF's Ping-Pong Topology][VDAF].
@@ -415,34 +416,34 @@ pub struct Continued<P> {
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PingPongState<P, O> {
-    /// Preparation of the report will continue.
+    /// Verification of the report will continue.
     Continued(Continued<P>),
 
-    /// Preparation of the report is finished. Corresponds to the `FinishedWithOutbound` state
+    /// Verification of the report is finished. Corresponds to the `FinishedWithOutbound` state
     /// defined in [VDAF's Ping-Pong Topology][VDAF].
     ///
-    /// The `message` should be transmitted to the peer aggregator so it can finish preparing the
+    /// The `message` should be transmitted to the peer aggregator so it can finish verifying the
     /// report.
     ///
     /// The `output_share` may be accumulated by the aggregator.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     FinishedWithOutbound {
-        /// The output share this aggregator prepared.
+        /// The output share this aggregator verified.
         output_share: O,
         /// A message for the peer aggregator.
         message: PingPongMessage,
     },
 
-    /// Preparation of the report is finished. Corresponds to the `Finished` state defined in
+    /// Verification of the report is finished. Corresponds to the `Finished` state defined in
     /// [VDAF's Ping-Pong Topology][VDAF].
     ///
     /// The `output_share` may be accumulated by the aggregator. No message need be transmitted to
-    /// the peer, which has already finished preparing the report.
+    /// the peer, which has already finished verifying the report.
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
     Finished {
-        /// The output share this aggregator prepared.
+        /// The output share this aggregator verified.
         output_share: O,
     },
 }
@@ -475,15 +476,15 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<Continued<Self::PrepareState>, PingPongError>;
+    ) -> Result<Continued<Self::VerifyState>, PingPongError>;
 
-    /// Initialize helper state using the helper's input share and the leader's first round prepare
+    /// Initialize helper state using the helper's input share and the leader's first round verifier
     /// share. Corresponds to `ping_pong_helper_init` in [VDAF].
     ///
     /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
     /// [`PingPongState`], which should be handled according to that item's documentation. On
     /// failure, the helper has transitioned to the `Rejected` state. The `PingPongContinuation` may
-    /// be stored between rounds of preparation instead of the `PingPongState` it evaluates to.
+    /// be stored between rounds of verification instead of the `PingPongState` it evaluates to.
     ///
     /// # Errors
     ///
@@ -502,13 +503,13 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         leader_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 
-    /// Continue preparation based on the leader's current state and an incoming [`PingPongMessage`]
-    /// from the helper. Corresponds to `ping_pong_leader_continued` in [VDAF].
+    /// Continue verification based on the leader's current state and an incoming
+    /// [`PingPongMessage`] from the helper. Corresponds to `ping_pong_leader_continued` in [VDAF].
     ///
     /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
     /// [`PingPongState`], which should be handled according to that item's documentation. On
     /// failure, the leader has transitioned to the `Rejected` state. The `PingPongContinuation` may
-    /// be stored between rounds of preparation instead of the `PingPongState` it evaluates to.
+    /// be stored between rounds of verification instead of the `PingPongState` it evaluates to.
     ///
     /// # Errors
     ///
@@ -519,17 +520,17 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         &self,
         ctx: &[u8],
         aggregation_parameter: &Self::AggregationParam,
-        leader_prepare_state: Self::PrepareState,
+        leader_verifier_state: Self::VerifyState,
         helper_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 
-    /// Continue preparation based on the helper's current state and an incoming [`PingPongMessage`]
-    /// from the leader. Corresponds to `ping_pong_helper_contnued` in [VDAF].
+    /// Continue verification based on the helper's current state and an incoming
+    /// [`PingPongMessage`] from the leader. Corresponds to `ping_pong_helper_contnued` in [VDAF].
     ///
     /// On success, the returned [`PingPongContinuation`] should be evaluated, yielding a
     /// [`PingPongState`], which should be handled according to that item's documentation. On
     /// failure, the helper has transitioned to the `Rejected` state. The `PingPongContinuation` may
-    /// be stored between rounds of preparation instead of the `PingPongState` it evaluates to.
+    /// be stored between rounds of verification instead of the `PingPongState` it evaluates to.
     ///
     /// # Errors
     ///
@@ -540,7 +541,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
         &self,
         ctx: &[u8],
         aggregation_parameter: &Self::AggregationParam,
-        helper_prepare_state: Self::PrepareState,
+        helper_verifier_state: Self::VerifyState,
         leader_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
@@ -554,7 +555,7 @@ trait PingPongTopologyPrivate<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: us
         ctx: &[u8],
         is_leader: bool,
         aggregation_parameter: &Self::AggregationParam,
-        host_prepare_state: Self::PrepareState,
+        host_verifier_state: Self::VerifyState,
         peer_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError>;
 }
@@ -565,7 +566,7 @@ impl<
         A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     > PingPongTopology<VERIFY_KEY_SIZE, NONCE_SIZE> for A
 {
-    type PingPongState = PingPongState<A::PrepareState, A::OutputShare>;
+    type PingPongState = PingPongState<A::VerifyState, A::OutputShare>;
     type PingPongContinuation = PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, Self>;
 
     fn leader_initialized(
@@ -576,8 +577,8 @@ impl<
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<Continued<Self::PrepareState>, PingPongError> {
-        self.prepare_init(
+    ) -> Result<Continued<Self::VerifyState>, PingPongError> {
+        self.verify_init(
             verify_key,
             ctx,
             /* Leader */ 0,
@@ -586,14 +587,14 @@ impl<
             public_share,
             input_share,
         )
-        .map_err(PingPongError::VdafPrepareInit)
-        .and_then(|(prepare_state, prepare_share)| {
+        .map_err(PingPongError::VdafVerifyInit)
+        .and_then(|(verifier_state, verifier_share)| {
             Ok(Continued {
-                prepare_state,
+                verifier_state,
                 message: PingPongMessage::Initialize {
-                    prepare_share: prepare_share
+                    verifier_share: verifier_share
                         .get_encoded()
-                        .map_err(PingPongError::CodecPrepShare)?,
+                        .map_err(PingPongError::CodecVerifierShare)?,
                 },
             })
         })
@@ -609,8 +610,8 @@ impl<
         input_share: &Self::InputShare,
         leader_message: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
-        let (prepare_state, prepare_share) = self
-            .prepare_init(
+        let (verifier_state, verifier_share) = self
+            .verify_init(
                 verify_key,
                 ctx,
                 /* Helper */ 1,
@@ -619,12 +620,12 @@ impl<
                 public_share,
                 input_share,
             )
-            .map_err(PingPongError::VdafPrepareInit)?;
+            .map_err(PingPongError::VdafVerifyInit)?;
 
-        let leader_prepare_share =
-            if let PingPongMessage::Initialize { prepare_share } = leader_message {
-                Self::PrepareShare::get_decoded_with_param(&prepare_state, prepare_share)
-                    .map_err(PingPongError::CodecPrepShare)?
+        let leader_verifier_share =
+            if let PingPongMessage::Initialize { verifier_share } = leader_message {
+                Self::VerifierShare::get_decoded_with_param(&verifier_state, verifier_share)
+                    .map_err(PingPongError::CodecVerifierShare)?
             } else {
                 return Err(PingPongError::PeerMessageMismatch {
                     found: leader_message.variant(),
@@ -632,17 +633,17 @@ impl<
                 });
             };
 
-        let current_prepare_message = self
-            .prepare_shares_to_prepare_message(
+        let current_verifier_message = self
+            .verifier_shares_to_message(
                 ctx,
                 aggregation_parameter,
-                [leader_prepare_share, prepare_share],
+                [leader_verifier_share, verifier_share],
             )
-            .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
+            .map_err(PingPongError::VdafVerifierSharesToMessage)?;
 
         Ok(PingPongContinuationInner::Transition {
-            previous_prepare_state: prepare_state,
-            current_prepare_message,
+            previous_verifier_state: verifier_state,
+            current_verifier_message,
         }
         .into())
     }
@@ -651,7 +652,7 @@ impl<
         &self,
         ctx: &[u8],
         aggregation_parameter: &Self::AggregationParam,
-        leader_state: Self::PrepareState,
+        leader_state: Self::VerifyState,
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
         self.continued(ctx, true, aggregation_parameter, leader_state, inbound)
@@ -661,7 +662,7 @@ impl<
         &self,
         ctx: &[u8],
         aggregation_parameter: &Self::AggregationParam,
-        helper_state: Self::PrepareState,
+        helper_state: Self::VerifyState,
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
         self.continued(ctx, false, aggregation_parameter, helper_state, inbound)
@@ -679,10 +680,10 @@ impl<
         ctx: &[u8],
         is_leader: bool,
         aggregation_parameter: &Self::AggregationParam,
-        host_prepare_state: Self::PrepareState,
+        host_verifier_state: Self::VerifyState,
         inbound: &PingPongMessage,
     ) -> Result<Self::PingPongContinuation, PingPongError> {
-        let (prepare_message, next_peer_prepare_share) = match inbound {
+        let (verifier_message, next_peer_verifier_share) = match inbound {
             PingPongMessage::Initialize { .. } => {
                 return Err(PingPongError::PeerMessageMismatch {
                     found: inbound.variant(),
@@ -690,51 +691,51 @@ impl<
                 });
             }
             PingPongMessage::Continue {
-                prepare_message,
-                prepare_share,
-            } => (prepare_message, Some(prepare_share)),
-            PingPongMessage::Finish { prepare_message } => (prepare_message, None),
+                verifier_message,
+                verifier_share,
+            } => (verifier_message, Some(verifier_share)),
+            PingPongMessage::Finish { verifier_message } => (verifier_message, None),
         };
 
-        let prepare_message =
-            Self::PrepareMessage::get_decoded_with_param(&host_prepare_state, prepare_message)
-                .map_err(PingPongError::CodecPrepMessage)?;
-        let host_prepare_transition = self
-            .prepare_next(ctx, host_prepare_state, prepare_message)
-            .map_err(PingPongError::VdafPrepareNext)?;
+        let verifier_message =
+            Self::VerifierMessage::get_decoded_with_param(&host_verifier_state, verifier_message)
+                .map_err(PingPongError::CodecVerifierMessage)?;
+        let host_verify_transition = self
+            .verify_next(ctx, host_verifier_state, verifier_message)
+            .map_err(PingPongError::VdafVerifyNext)?;
 
-        match (host_prepare_transition, next_peer_prepare_share) {
+        match (host_verify_transition, next_peer_verifier_share) {
             (
-                PrepareTransition::Continue(next_prepare_state, next_host_prepare_share),
-                Some(next_peer_prepare_share),
+                VerifyTransition::Continue(next_verifier_state, next_host_verifier_share),
+                Some(next_peer_verifier_share),
             ) => {
-                let next_peer_prepare_share = Self::PrepareShare::get_decoded_with_param(
-                    &next_prepare_state,
-                    next_peer_prepare_share,
+                let next_peer_verifier_share = Self::VerifierShare::get_decoded_with_param(
+                    &next_verifier_state,
+                    next_peer_verifier_share,
                 )
-                .map_err(PingPongError::CodecPrepShare)?;
-                let mut prepare_shares = [next_peer_prepare_share, next_host_prepare_share];
+                .map_err(PingPongError::CodecVerifierShare)?;
+                let mut verifier_shares = [next_peer_verifier_share, next_host_verifier_share];
                 if is_leader {
-                    prepare_shares.reverse();
+                    verifier_shares.reverse();
                 }
-                let current_prepare_message = self
-                    .prepare_shares_to_prepare_message(ctx, aggregation_parameter, prepare_shares)
-                    .map_err(PingPongError::VdafPrepareSharesToPrepareMessage)?;
+                let current_verifier_message = self
+                    .verifier_shares_to_message(ctx, aggregation_parameter, verifier_shares)
+                    .map_err(PingPongError::VdafVerifierSharesToMessage)?;
 
                 Ok(PingPongContinuationInner::Transition {
-                    previous_prepare_state: next_prepare_state,
-                    current_prepare_message,
+                    previous_verifier_state: next_verifier_state,
+                    current_verifier_message,
                 }
                 .into())
             }
-            (PrepareTransition::Finish(output_share), None) => {
+            (VerifyTransition::Finish(output_share), None) => {
                 Ok(PingPongContinuationInner::OutputShare(output_share).into())
             }
-            (PrepareTransition::Continue(_, _), None) => Err(PingPongError::PeerMessageMismatch {
+            (VerifyTransition::Continue(_, _), None) => Err(PingPongError::PeerMessageMismatch {
                 found: inbound.variant(),
                 expected: "continue",
             }),
-            (PrepareTransition::Finish(_), Some(_)) => Err(PingPongError::PeerMessageMismatch {
+            (VerifyTransition::Finish(_), Some(_)) => Err(PingPongError::PeerMessageMismatch {
                 found: inbound.variant(),
                 expected: "finish",
             }),
@@ -766,7 +767,7 @@ mod tests {
 
         // Leader inits into round 0
         let Continued {
-            prepare_state: leader_state,
+            verifier_state: leader_state,
             message: leader_message,
         } = leader
             .leader_initialized(
@@ -822,7 +823,7 @@ mod tests {
 
         // Leader inits into round 0
         let Continued {
-            prepare_state: leader_state,
+            verifier_state: leader_state,
             message: leader_message,
         } = leader
             .leader_initialized(
@@ -852,8 +853,8 @@ mod tests {
 
         // 2 round VDAF, round 1: helper should continue.
         let (helper_state, helper_message) = assert_matches!(helper_state, PingPongState::Continued(
-            Continued { prepare_state, message }
-        ) => (prepare_state, message));
+            Continued { verifier_state, message }
+        ) => (verifier_state, message));
 
         let leader_state = leader
             .leader_continued(CTX_STR, &aggregation_param, leader_state, &helper_message)
@@ -888,7 +889,7 @@ mod tests {
 
         // Leader inits into round 0
         let Continued {
-            prepare_state: leader_state,
+            verifier_state: leader_state,
             message: leader_message,
         } = leader
             .leader_initialized(
@@ -917,8 +918,8 @@ mod tests {
             .unwrap();
         // 3 round VDAF, round 1: helper should continue.
         let (helper_state, helper_message) = assert_matches!(helper_state, PingPongState::Continued(
-            Continued { prepare_state, message }
-        ) => (prepare_state, message));
+            Continued { verifier_state, message }
+        ) => (verifier_state, message));
 
         let leader_state = leader
             .leader_continued(CTX_STR, &aggregation_param, leader_state, &helper_message)
@@ -927,8 +928,8 @@ mod tests {
             .unwrap();
         // 3 round VDAF, round 1: leader should continue and emit a continue message.
         let (leader_state, leader_message) = assert_matches!(leader_state, PingPongState::Continued(
-            Continued { prepare_state, message }
-        ) => (prepare_state, message));
+            Continued { verifier_state, message }
+        ) => (verifier_state, message));
 
         let helper_state = helper
             .helper_continued(CTX_STR, &aggregation_param, helper_state, &leader_message)
@@ -954,46 +955,46 @@ mod tests {
         let messages = [
             (
                 PingPongMessage::Initialize {
-                    prepare_share: Vec::from("prepare share"),
+                    verifier_share: Vec::from("verifier share"),
                 },
                 concat!(
                     "00", // enum discriminant
                     concat!(
-                        // prepare_share
-                        "0000000d",                   // length
-                        "70726570617265207368617265", // contents
+                        // verifier_share
+                        "0000000e",                     // length
+                        "7665726966696572207368617265", // contents
                     ),
                 ),
             ),
             (
                 PingPongMessage::Continue {
-                    prepare_message: Vec::from("prepare message"),
-                    prepare_share: Vec::from("prepare share"),
+                    verifier_message: Vec::from("verifier message"),
+                    verifier_share: Vec::from("verifier share"),
                 },
                 concat!(
                     "01", // enum discriminant
                     concat!(
-                        // prepare_message
-                        "0000000f",                       // length
-                        "70726570617265206d657373616765", // contents
+                        // verifier_message
+                        "00000010",                         // length
+                        "7665726966696572206d657373616765", // contents
                     ),
                     concat!(
-                        // prepare_share
-                        "0000000d",                   // length
-                        "70726570617265207368617265", // contents
+                        // verifier_share
+                        "0000000e",                     // length
+                        "7665726966696572207368617265", // contents
                     ),
                 ),
             ),
             (
                 PingPongMessage::Finish {
-                    prepare_message: Vec::from("prepare message"),
+                    verifier_message: Vec::from("verifier message"),
                 },
                 concat!(
                     "02", // enum discriminant
                     concat!(
-                        // prepare_message
-                        "0000000f",                       // length
-                        "70726570617265206d657373616765", // contents
+                        // verifier_message
+                        "00000010",                         // length
+                        "7665726966696572206d657373616765", // contents
                     ),
                 ),
             ),
@@ -1022,12 +1023,12 @@ mod tests {
 
     #[test]
     fn roundtrip_continuation() {
-        // VDAF implementations have tests for encoding/decoding their respective PrepareShare and
-        // PrepareMessage types, so we test here using the dummy VDAF.
+        // VDAF implementations have tests for encoding/decoding their respective VerifierShare and
+        // VerifierMessage types, so we test here using the dummy VDAF.
         let continuation =
             PingPongContinuation::<0, 16, dummy::Vdaf>(PingPongContinuationInner::Transition {
-                previous_prepare_state: dummy::PrepareState::default(),
-                current_prepare_message: (),
+                previous_verifier_state: dummy::VerifierState::default(),
+                current_verifier_message: (),
             });
 
         let encoded = continuation.get_encoded().unwrap();
@@ -1037,11 +1038,11 @@ mod tests {
             hex_encoded,
             concat!(
                 concat!(
-                    // previous_prepare_state
+                    // previous_verifier_state
                     "00",       // input_share
                     "00000000", // current_round
                 ),
-                // current_prepare_message (0 length encoding)
+                // current_verifier_message (0 length encoding)
             )
         );
 

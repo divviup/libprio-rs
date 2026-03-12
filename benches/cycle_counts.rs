@@ -9,7 +9,7 @@ use prio::{
     idpf::{Idpf, IdpfInput, IdpfPublicShare, RingBufferCache},
     vdaf::{
         poplar1::Poplar1IdpfValue,
-        prio2::{Prio2, Prio2PrepareShare},
+        prio2::{Prio2, Prio2VerifierShare},
         xof::Seed,
         Aggregator, Share,
     },
@@ -69,7 +69,7 @@ fn prio2_client_1000() -> Vec<Share<FieldPrio2, 32>> {
 }
 
 #[cfg(feature = "experimental")]
-fn prio2_shard_and_prepare(size: usize) -> Prio2PrepareShare {
+fn prio2_shard_and_verify(size: usize) -> Prio2VerifierShare {
     let prio2 = Prio2::new(size).unwrap();
     let input = vec![0u32; size];
     let nonce = [0; 16];
@@ -77,7 +77,7 @@ fn prio2_shard_and_prepare(size: usize) -> Prio2PrepareShare {
         .shard(b"", &black_box(input), &black_box(nonce))
         .unwrap();
     prio2
-        .prepare_init(
+        .verify_init(
             &[0; 32],
             b"",
             0,
@@ -91,18 +91,18 @@ fn prio2_shard_and_prepare(size: usize) -> Prio2PrepareShare {
 }
 
 #[cfg(feature = "experimental")]
-fn prio2_shard_and_prepare_10() -> Prio2PrepareShare {
-    prio2_shard_and_prepare(10)
+fn prio2_shard_and_verify_10() -> Prio2VerifierShare {
+    prio2_shard_and_verify(10)
 }
 
 #[cfg(feature = "experimental")]
-fn prio2_shard_and_prepare_100() -> Prio2PrepareShare {
-    prio2_shard_and_prepare(100)
+fn prio2_shard_and_verify_100() -> Prio2VerifierShare {
+    prio2_shard_and_verify(100)
 }
 
 #[cfg(feature = "experimental")]
-fn prio2_shard_and_prepare_1000() -> Prio2PrepareShare {
-    prio2_shard_and_prepare(1000)
+fn prio2_shard_and_verify_1000() -> Prio2VerifierShare {
+    prio2_shard_and_verify(1000)
 }
 
 fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 32>> {
@@ -299,9 +299,9 @@ macro_rules! main_add_experimental {
             prio2_client_10,
             prio2_client_100,
             prio2_client_1000,
-            prio2_shard_and_prepare_10,
-            prio2_shard_and_prepare_100,
-            prio2_shard_and_prepare_1000,
+            prio2_shard_and_verify_10,
+            prio2_shard_and_verify_100,
+            prio2_shard_and_verify_1000,
             idpf_codec,
             idpf_poplar_gen_8,
             idpf_poplar_gen_128,
