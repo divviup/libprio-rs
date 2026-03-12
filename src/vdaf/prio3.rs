@@ -27,17 +27,12 @@
 //! [DPRS23]: https://ia.cr/2023/130
 //! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
 
-use super::xof::XofTurboShake128;
-#[cfg(feature = "experimental")]
-use super::AggregatorWithNoise;
 use crate::codec::{encode_fixlen_items, CodecError, Decode, Encode, ParameterizedDecode};
-#[cfg(feature = "experimental")]
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{
-    add_assign_vector, decode_fieldvec, sub_assign_vector, FieldElement, FieldElementWithInteger,
-    NttFriendlyFieldElement,
+    add_assign_vector, decode_fieldvec, sub_assign_vector, Field128, Field64, FieldElement,
+    FieldElementWithInteger, NttFriendlyFieldElement,
 };
-use crate::field::{Field128, Field64};
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
 #[cfg(feature = "experimental")]
@@ -47,17 +42,15 @@ use crate::flp::gadgets::{Mul, ParallelSum};
 use crate::flp::types::fixedpoint_l2::{
     compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
 };
-#[cfg(feature = "experimental")]
-use crate::flp::TypeWithNoise;
 use crate::flp::{
     types::{Average, Count, Histogram, MultihotCountVec, Sum, SumVec},
-    Type,
+    Type, TypeWithNoise,
 };
 use crate::prng::Prng;
-use crate::vdaf::xof::{IntoFieldVec, Seed, Xof};
 use crate::vdaf::{
-    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, Share,
-    ShareDecodingParameter, Vdaf, VdafError, VerifyTransition, VERSION,
+    xof::{IntoFieldVec, Seed, Xof, XofTurboShake128},
+    Aggregatable, AggregateShare, Aggregator, AggregatorWithNoise, Client, Collector, OutputShare,
+    Share, ShareDecodingParameter, Vdaf, VdafError, VerifyTransition, VERSION,
 };
 #[cfg(feature = "experimental")]
 use fixed::traits::Fixed;
@@ -1585,7 +1578,6 @@ where
     }
 }
 
-#[cfg(feature = "experimental")]
 impl<T, P, S, const SEED_SIZE: usize> AggregatorWithNoise<SEED_SIZE, 16, S>
     for Prio3<T, P, SEED_SIZE>
 where

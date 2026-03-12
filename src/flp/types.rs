@@ -15,8 +15,12 @@ use std::marker::PhantomData;
 use std::slice;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeGreater};
 
-#[cfg(feature = "experimental")]
 mod dp;
+#[cfg(feature = "experimental")]
+#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
+pub mod fixedpoint_l2;
+#[cfg(feature = "test-util")]
+pub mod higher_degree;
 mod l1boundsum;
 
 pub use l1boundsum::L1BoundSum;
@@ -1585,9 +1589,3 @@ mod tests {
         assert!(typ.decide(&verifier).unwrap());
     }
 }
-
-#[cfg(feature = "experimental")]
-#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
-pub mod fixedpoint_l2;
-#[cfg(feature = "test-util")]
-pub mod higher_degree;
