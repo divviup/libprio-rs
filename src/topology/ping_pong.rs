@@ -624,7 +624,7 @@ impl<
 
         let leader_verifier_share =
             if let PingPongMessage::Initialize { verifier_share } = leader_message {
-                Self::VerifierShare::get_decoded_with_param(&verifier_state, &verifier_share)
+                Self::VerifierShare::get_decoded_with_param(&verifier_state, verifier_share)
                     .map_err(PingPongError::CodecVerifierShare)?
             } else {
                 return Err(PingPongError::PeerMessageMismatch {

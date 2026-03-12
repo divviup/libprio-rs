@@ -12,8 +12,8 @@ use crate::{
     vdaf::{
         poplar1::{Poplar1, Poplar1AggregationParam},
         xof::{Seed, Xof},
-        Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare,
-        VerifyTransition, Vdaf, VdafError,
+        Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, Vdaf, VdafError,
+        VerifyTransition,
     },
     vidpf::{
         Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
@@ -1500,11 +1500,7 @@ mod tests {
                 }
 
                 let prep_msg = mastic
-                    .verifier_shares_to_message(
-                        ctx,
-                        &agg_param,
-                        [prep_share_0, prep_share_1],
-                    )
+                    .verifier_shares_to_message(ctx, &agg_param, [prep_share_0, prep_share_1])
                     .unwrap();
                 {
                     let expected_prep_msg = MasticPrepareMessage::get_decoded_with_param(
