@@ -13,7 +13,7 @@ use crate::{
         poplar1::{Poplar1, Poplar1AggregationParam},
         xof::{Seed, Xof},
         Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare,
-        PrepareTransition, Vdaf, VdafError,
+        VerifyTransition, Vdaf, VdafError,
     },
     vidpf::{
         Vidpf, VidpfError, VidpfInput, VidpfKey, VidpfPublicShare, VidpfServerId, VidpfWeight,
@@ -494,9 +494,9 @@ impl<F: FieldElement> ParameterizedDecode<MasticPrepareState<F>> for MasticPrepa
 }
 
 impl<T: Type> Aggregator<SEED_SIZE, NONCE_SIZE> for Mastic<T> {
-    type PrepareState = MasticPrepareState<T::Field>;
-    type PrepareShare = MasticPrepareShare<T::Field>;
-    type PrepareMessage = MasticPrepareMessage;
+    type VerifyState = MasticPrepareState<T::Field>;
+    type VerifierShare = MasticPrepareShare<T::Field>;
+    type VerifierMessage = MasticPrepareMessage;
 
     fn is_agg_param_valid(cur: &MasticAggregationParam, prev: &[MasticAggregationParam]) -> bool {
         // First agg param should be the only one that requires weight check.
@@ -516,7 +516,7 @@ impl<T: Type> Aggregator<SEED_SIZE, NONCE_SIZE> for Mastic<T> {
         )
     }
 
-    fn prepare_init(
+    fn verify_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
         ctx: &[u8],
@@ -670,7 +670,7 @@ impl<T: Type> Aggregator<SEED_SIZE, NONCE_SIZE> for Mastic<T> {
         })
     }
 
-    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = MasticPrepareShare<T::Field>>>(
+    fn verifier_shares_to_message<M: IntoIterator<Item = MasticPrepareShare<T::Field>>>(
         &self,
         ctx: &[u8],
         _agg_param: &MasticAggregationParam,
@@ -708,19 +708,19 @@ impl<T: Type> Aggregator<SEED_SIZE, NONCE_SIZE> for Mastic<T> {
         }
     }
 
-    fn prepare_next(
+    fn verify_next(
         &self,
         _ctx: &[u8],
         state: MasticPrepareState<T::Field>,
         input: MasticPrepareMessage,
-    ) -> Result<PrepareTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
+    ) -> Result<VerifyTransition<Self, SEED_SIZE, NONCE_SIZE>, VdafError> {
         let MasticPrepareState {
             output_shares,
             szk_query_state,
             verifier_len: _,
         } = state;
         self.szk.decide(szk_query_state, input)?;
-        Ok(PrepareTransition::Finish(output_shares))
+        Ok(VerifyTransition::Finish(output_shares))
     }
 
     fn aggregate_init(&self, agg_param: &Self::AggregationParam) -> Self::AggregateShare {
@@ -1279,7 +1279,7 @@ mod tests {
             // Test both aggregators.
             for agg_id in [0, 1] {
                 let (prep_state, _prep_share) = mastic
-                    .prepare_init(
+                    .verify_init(
                         &verify_key,
                         ctx,
                         agg_id,
@@ -1453,7 +1453,7 @@ mod tests {
 
                 // Preparation.
                 let (prep_state_0, prep_share_0) = mastic
-                    .prepare_init(
+                    .verify_init(
                         &verify_key,
                         ctx,
                         0,
@@ -1464,7 +1464,7 @@ mod tests {
                     )
                     .unwrap();
                 let (prep_state_1, prep_share_1) = mastic
-                    .prepare_init(
+                    .verify_init(
                         &verify_key,
                         ctx,
                         1,
@@ -1500,7 +1500,7 @@ mod tests {
                 }
 
                 let prep_msg = mastic
-                    .prepare_shares_to_prepare_message(
+                    .verifier_shares_to_message(
                         ctx,
                         &agg_param,
                         [prep_share_0, prep_share_1],
@@ -1516,14 +1516,14 @@ mod tests {
                     assert_eq!(prep_msg.get_encoded().unwrap(), prep.prep_messages[0].0);
                 }
 
-                let PrepareTransition::Finish(out_share_0) = mastic
-                    .prepare_next(ctx, prep_state_0, prep_msg.clone())
+                let VerifyTransition::Finish(out_share_0) = mastic
+                    .verify_next(ctx, prep_state_0, prep_msg.clone())
                     .unwrap()
                 else {
                     panic!("unexpected transition");
                 };
-                let PrepareTransition::Finish(out_share_1) =
-                    mastic.prepare_next(ctx, prep_state_1, prep_msg).unwrap()
+                let VerifyTransition::Finish(out_share_1) =
+                    mastic.verify_next(ctx, prep_state_1, prep_msg).unwrap()
                 else {
                     panic!("unexpected transition");
                 };

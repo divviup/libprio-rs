@@ -11,7 +11,7 @@ use crate::{
     prng::Prng,
     vdaf::{
         xof::{Seed, Xof, XofTurboShake128},
-        Aggregatable, Aggregator, Client, Collector, PrepareTransition, Vdaf, VdafError, VERSION,
+        Aggregatable, Aggregator, Client, Collector, Vdaf, VdafError, VerifyTransition, VERSION,
     },
 };
 use rand::{rng, Rng, RngCore};
@@ -112,7 +112,7 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for P
 /// Poplar1 input share.
 ///
 /// This is comprised of an IDPF key share and the correlated randomness used to compute the sketch
-/// during preparation.
+/// during verification.
 #[derive(Debug, Clone)]
 pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// IDPF key share.
@@ -202,25 +202,25 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     }
 }
 
-/// Poplar1 preparation state.
+/// Poplar1 verification state.
 #[derive(Clone, Debug)]
-pub struct Poplar1PrepareState(PrepareStateVariant);
+pub struct Poplar1VerifierState(VerifierStateVariant);
 
-impl PartialEq for Poplar1PrepareState {
+impl PartialEq for Poplar1VerifierState {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl Eq for Poplar1PrepareState {}
+impl Eq for Poplar1VerifierState {}
 
-impl ConstantTimeEq for Poplar1PrepareState {
+impl ConstantTimeEq for Poplar1VerifierState {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.0.ct_eq(&other.0)
     }
 }
 
-impl Encode for Poplar1PrepareState {
+impl Encode for Poplar1VerifierState {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.0.encode(bytes)
     }
@@ -231,13 +231,13 @@ impl Encode for Poplar1PrepareState {
 }
 
 impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZE>, usize)>
-    for Poplar1PrepareState
+    for Poplar1VerifierState
 {
     fn decode_with_param(
         decoding_parameter: &(&'a Poplar1<P, SEED_SIZE>, usize),
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
-        Ok(Self(PrepareStateVariant::decode_with_param(
+        Ok(Self(VerifierStateVariant::decode_with_param(
             decoding_parameter,
             bytes,
         )?))
@@ -245,20 +245,20 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 }
 
 #[derive(Clone, Debug)]
-enum PrepareStateVariant {
-    Inner(PrepareState<Field64>),
-    Leaf(PrepareState<Field255>),
+enum VerifierStateVariant {
+    Inner(VerifierState<Field64>),
+    Leaf(VerifierState<Field255>),
 }
 
-impl PartialEq for PrepareStateVariant {
+impl PartialEq for VerifierStateVariant {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl Eq for PrepareStateVariant {}
+impl Eq for VerifierStateVariant {}
 
-impl ConstantTimeEq for PrepareStateVariant {
+impl ConstantTimeEq for VerifierStateVariant {
     fn ct_eq(&self, other: &Self) -> Choice {
         // We allow short-circuiting on the type (Inner vs Leaf).
         match (self, other) {
@@ -269,16 +269,16 @@ impl ConstantTimeEq for PrepareStateVariant {
     }
 }
 
-impl Encode for PrepareStateVariant {
+impl Encode for VerifierStateVariant {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self {
-            PrepareStateVariant::Inner(prep_state) => {
+            VerifierStateVariant::Inner(verifier_state) => {
                 0u8.encode(bytes)?;
-                prep_state.encode(bytes)
+                verifier_state.encode(bytes)
             }
-            PrepareStateVariant::Leaf(prep_state) => {
+            VerifierStateVariant::Leaf(verifier_state) => {
                 1u8.encode(bytes)?;
-                prep_state.encode(bytes)
+                verifier_state.encode(bytes)
             }
         }
     }
@@ -286,15 +286,15 @@ impl Encode for PrepareStateVariant {
     fn encoded_len(&self) -> Option<usize> {
         Some(
             1 + match self {
-                PrepareStateVariant::Inner(prep_state) => prep_state.encoded_len()?,
-                PrepareStateVariant::Leaf(prep_state) => prep_state.encoded_len()?,
+                VerifierStateVariant::Inner(verifier_state) => verifier_state.encoded_len()?,
+                VerifierStateVariant::Leaf(verifier_state) => verifier_state.encoded_len()?,
             },
         )
     }
 }
 
 impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZE>, usize)>
-    for PrepareStateVariant
+    for VerifierStateVariant
 {
     fn decode_with_param(
         decoding_parameter: &(&'a Poplar1<P, SEED_SIZE>, usize),
@@ -302,12 +302,12 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
     ) -> Result<Self, CodecError> {
         match u8::decode(bytes)? {
             0 => {
-                let prep_state = PrepareState::decode_with_param(decoding_parameter, bytes)?;
-                Ok(Self::Inner(prep_state))
+                let verifier_state = VerifierState::decode_with_param(decoding_parameter, bytes)?;
+                Ok(Self::Inner(verifier_state))
             }
             1 => {
-                let prep_state = PrepareState::decode_with_param(decoding_parameter, bytes)?;
-                Ok(Self::Leaf(prep_state))
+                let verifier_state = VerifierState::decode_with_param(decoding_parameter, bytes)?;
+                Ok(Self::Leaf(verifier_state))
             }
             _ => Err(CodecError::UnexpectedValue),
         }
@@ -315,35 +315,35 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 }
 
 #[derive(Clone)]
-struct PrepareState<F> {
+struct VerifierState<F> {
     sketch: SketchState<F>,
     output_share: Vec<F>,
 }
 
-impl<F: ConstantTimeEq> PartialEq for PrepareState<F> {
+impl<F: ConstantTimeEq> PartialEq for VerifierState<F> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<F: ConstantTimeEq> Eq for PrepareState<F> {}
+impl<F: ConstantTimeEq> Eq for VerifierState<F> {}
 
-impl<F: ConstantTimeEq> ConstantTimeEq for PrepareState<F> {
+impl<F: ConstantTimeEq> ConstantTimeEq for VerifierState<F> {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.sketch.ct_eq(&other.sketch) & self.output_share.ct_eq(&other.output_share)
     }
 }
 
-impl<F> Debug for PrepareState<F> {
+impl<F> Debug for VerifierState<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PrepareState")
+        f.debug_struct("VerifierState")
             .field("sketch", &"[redacted]")
             .field("output_share", &"[redacted]")
             .finish()
     }
 }
 
-impl<F: FieldElement> Encode for PrepareState<F> {
+impl<F: FieldElement> Encode for VerifierState<F> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.sketch.encode(bytes)?;
         // `expect` safety: output_share's length is the same as the number of prefixes; the number
@@ -363,7 +363,7 @@ impl<F: FieldElement> Encode for PrepareState<F> {
 }
 
 impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<(&'a Poplar1<P, SEED_SIZE>, usize)> for PrepareState<F>
+    ParameterizedDecode<(&'a Poplar1<P, SEED_SIZE>, usize)> for VerifierState<F>
 {
     fn decode_with_param(
         decoding_parameter: &(&'a Poplar1<P, SEED_SIZE>, usize),
@@ -510,63 +510,63 @@ impl<F: FieldElement> SketchState<F> {
     }
 }
 
-/// Poplar1 preparation message.
+/// Poplar1 verifier message.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Poplar1PrepareMessage(PrepareMessageVariant);
+pub struct Poplar1VerifierMessage(VerifierMessageVariant);
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-enum PrepareMessageVariant {
+enum VerifierMessageVariant {
     SketchInner([Field64; 3]),
     SketchLeaf([Field255; 3]),
     Done,
 }
 
-impl Encode for Poplar1PrepareMessage {
+impl Encode for Poplar1VerifierMessage {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         match self.0 {
-            PrepareMessageVariant::SketchInner(vec) => {
+            VerifierMessageVariant::SketchInner(vec) => {
                 vec[0].encode(bytes)?;
                 vec[1].encode(bytes)?;
                 vec[2].encode(bytes)
             }
-            PrepareMessageVariant::SketchLeaf(vec) => {
+            VerifierMessageVariant::SketchLeaf(vec) => {
                 vec[0].encode(bytes)?;
                 vec[1].encode(bytes)?;
                 vec[2].encode(bytes)
             }
-            PrepareMessageVariant::Done => Ok(()),
+            VerifierMessageVariant::Done => Ok(()),
         }
     }
 
     fn encoded_len(&self) -> Option<usize> {
         match self.0 {
-            PrepareMessageVariant::SketchInner(..) => Some(3 * Field64::ENCODED_SIZE),
-            PrepareMessageVariant::SketchLeaf(..) => Some(3 * Field255::ENCODED_SIZE),
-            PrepareMessageVariant::Done => Some(0),
+            VerifierMessageVariant::SketchInner(..) => Some(3 * Field64::ENCODED_SIZE),
+            VerifierMessageVariant::SketchLeaf(..) => Some(3 * Field255::ENCODED_SIZE),
+            VerifierMessageVariant::Done => Some(0),
         }
     }
 }
 
-impl ParameterizedDecode<Poplar1PrepareState> for Poplar1PrepareMessage {
+impl ParameterizedDecode<Poplar1VerifierState> for Poplar1VerifierMessage {
     fn decode_with_param(
-        state: &Poplar1PrepareState,
+        state: &Poplar1VerifierState,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match state.0 {
-            PrepareStateVariant::Inner(ref state_variant) => Ok(Self(
+            VerifierStateVariant::Inner(ref state_variant) => Ok(Self(
                 state_variant
                     .sketch
                     .decode_sketch(bytes)?
-                    .map_or(PrepareMessageVariant::Done, |sketch| {
-                        PrepareMessageVariant::SketchInner(sketch)
+                    .map_or(VerifierMessageVariant::Done, |sketch| {
+                        VerifierMessageVariant::SketchInner(sketch)
                     }),
             )),
-            PrepareStateVariant::Leaf(ref state_variant) => Ok(Self(
+            VerifierStateVariant::Leaf(ref state_variant) => Ok(Self(
                 state_variant
                     .sketch
                     .decode_sketch(bytes)?
-                    .map_or(PrepareMessageVariant::Done, |sketch| {
-                        PrepareMessageVariant::SketchLeaf(sketch)
+                    .map_or(VerifierMessageVariant::Done, |sketch| {
+                        VerifierMessageVariant::SketchLeaf(sketch)
                     }),
             )),
         }
@@ -658,16 +658,16 @@ impl<'a, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
     }
 }
 
-impl ParameterizedDecode<Poplar1PrepareState> for Poplar1FieldVec {
+impl ParameterizedDecode<Poplar1VerifierState> for Poplar1FieldVec {
     fn decode_with_param(
-        state: &Poplar1PrepareState,
+        state: &Poplar1VerifierState,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         match state.0 {
-            PrepareStateVariant::Inner(ref state_variant) => Ok(Poplar1FieldVec::Inner(
+            VerifierStateVariant::Inner(ref state_variant) => Ok(Poplar1FieldVec::Inner(
                 state_variant.sketch.decode_sketch_share(bytes)?,
             )),
-            PrepareStateVariant::Leaf(ref state_variant) => Ok(Poplar1FieldVec::Leaf(
+            VerifierStateVariant::Leaf(ref state_variant) => Ok(Poplar1FieldVec::Leaf(
                 state_variant.sketch.decode_sketch_share(bytes)?,
             )),
         }
@@ -917,7 +917,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
         // Generate the correlated randomness for the inner nodes. This includes additive shares of
         // the random offsets `a, b, c` and additive shares of `A := -2*a + auth` and `B := a^2 + b
         // - a*auth + c`, where `auth` is the authenticator for the level of the tree. These values
-        // are used, respectively, to compute and verify the sketch during the preparation phase.
+        // are used, respectively, to compute and verify the sketch during the verification phase.
         // (See Section 4.2 of [BBCG+21].)
         let corr_seed_0 = &poplar_random[0];
         let corr_seed_1 = &poplar_random[1];
@@ -1060,12 +1060,12 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
 impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
     for Poplar1<P, SEED_SIZE>
 {
-    type PrepareState = Poplar1PrepareState;
-    type PrepareShare = Poplar1FieldVec;
-    type PrepareMessage = Poplar1PrepareMessage;
+    type VerifyState = Poplar1VerifierState;
+    type VerifierShare = Poplar1FieldVec;
+    type VerifierMessage = Poplar1VerifierMessage;
 
     #[allow(clippy::type_complexity)]
-    fn prepare_init(
+    fn verify_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
         ctx: &[u8],
@@ -1074,7 +1074,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         nonce: &[u8; 16],
         public_share: &Poplar1PublicShare,
         input_share: &Poplar1InputShare<SEED_SIZE>,
-    ) -> Result<(Poplar1PrepareState, Poplar1FieldVec), VdafError> {
+    ) -> Result<(Poplar1VerifierState, Poplar1FieldVec), VdafError> {
         let is_leader = match agg_id {
             0 => true,
             1 => false,
@@ -1110,7 +1110,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             )?;
 
             Ok((
-                Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundOne {
                         A_share: input_share.corr_inner[usize::from(agg_param.level)][0],
                         B_share: input_share.corr_inner[usize::from(agg_param.level)][1],
@@ -1140,7 +1140,7 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
             )?;
 
             Ok((
-                Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundOne {
                         A_share: input_share.corr_leaf[0],
                         B_share: input_share.corr_leaf[1],
@@ -1153,56 +1153,58 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
         }
     }
 
-    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Poplar1FieldVec>>(
+    fn verifier_shares_to_message<M: IntoIterator<Item = Poplar1FieldVec>>(
         &self,
         _ctx: &[u8],
         _: &Poplar1AggregationParam,
         inputs: M,
-    ) -> Result<Poplar1PrepareMessage, VdafError> {
+    ) -> Result<Poplar1VerifierMessage, VdafError> {
         let mut inputs = inputs.into_iter();
-        let prep_share_0 = inputs
-            .next()
-            .ok_or_else(|| VdafError::Uncategorized("insufficient number of prep shares".into()))?;
-        let prep_share_1 = inputs
-            .next()
-            .ok_or_else(|| VdafError::Uncategorized("insufficient number of prep shares".into()))?;
+        let verifier_share_0 = inputs.next().ok_or_else(|| {
+            VdafError::Uncategorized("insufficient number of verifier shares".into())
+        })?;
+        let verifier_share_1 = inputs.next().ok_or_else(|| {
+            VdafError::Uncategorized("insufficient number of verifier shares".into())
+        })?;
         if inputs.next().is_some() {
             return Err(VdafError::Uncategorized(
-                "more prep shares than expected".into(),
+                "more verifier shares than expected".into(),
             ));
         }
 
-        match (prep_share_0, prep_share_1) {
+        match (verifier_share_0, verifier_share_1) {
             (Poplar1FieldVec::Inner(share_0), Poplar1FieldVec::Inner(share_1)) => {
-                Ok(Poplar1PrepareMessage(
-                    next_message(share_0, share_1)?.map_or(PrepareMessageVariant::Done, |sketch| {
-                        PrepareMessageVariant::SketchInner(sketch)
-                    }),
+                Ok(Poplar1VerifierMessage(
+                    next_message(share_0, share_1)?
+                        .map_or(VerifierMessageVariant::Done, |sketch| {
+                            VerifierMessageVariant::SketchInner(sketch)
+                        }),
                 ))
             }
             (Poplar1FieldVec::Leaf(share_0), Poplar1FieldVec::Leaf(share_1)) => {
-                Ok(Poplar1PrepareMessage(
-                    next_message(share_0, share_1)?.map_or(PrepareMessageVariant::Done, |sketch| {
-                        PrepareMessageVariant::SketchLeaf(sketch)
-                    }),
+                Ok(Poplar1VerifierMessage(
+                    next_message(share_0, share_1)?
+                        .map_or(VerifierMessageVariant::Done, |sketch| {
+                            VerifierMessageVariant::SketchLeaf(sketch)
+                        }),
                 ))
             }
             _ => Err(VdafError::Uncategorized(
-                "received prep shares with mismatched field types".into(),
+                "received verifier shares with mismatched field types".into(),
             )),
         }
     }
 
-    fn prepare_next(
+    fn verify_next(
         &self,
         _ctx: &[u8],
-        state: Poplar1PrepareState,
-        msg: Poplar1PrepareMessage,
-    ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
+        state: Poplar1VerifierState,
+        msg: Poplar1VerifierMessage,
+    ) -> Result<VerifyTransition<Self, SEED_SIZE, 16>, VdafError> {
         match (state.0, msg.0) {
             // Round one
             (
-                PrepareStateVariant::Inner(PrepareState {
+                VerifierStateVariant::Inner(VerifierState {
                     sketch:
                         SketchState::RoundOne {
                             A_share,
@@ -1211,16 +1213,16 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                         },
                     output_share,
                 }),
-                PrepareMessageVariant::SketchInner(sketch),
-            ) => Ok(PrepareTransition::Continue(
-                Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                VerifierMessageVariant::SketchInner(sketch),
+            ) => Ok(VerifyTransition::Continue(
+                Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share,
                 })),
                 Poplar1FieldVec::Inner(finish_sketch(sketch, A_share, B_share, is_leader)),
             )),
             (
-                PrepareStateVariant::Leaf(PrepareState {
+                VerifierStateVariant::Leaf(VerifierState {
                     sketch:
                         SketchState::RoundOne {
                             A_share,
@@ -1229,9 +1231,9 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
                         },
                     output_share,
                 }),
-                PrepareMessageVariant::SketchLeaf(sketch),
-            ) => Ok(PrepareTransition::Continue(
-                Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                VerifierMessageVariant::SketchLeaf(sketch),
+            ) => Ok(VerifyTransition::Continue(
+                Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share,
                 })),
@@ -1240,26 +1242,26 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Aggregator<SEED_SIZE, 16>
 
             // Round two
             (
-                PrepareStateVariant::Inner(PrepareState {
+                VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share,
                 }),
-                PrepareMessageVariant::Done,
-            ) => Ok(PrepareTransition::Finish(Poplar1FieldVec::Inner(
+                VerifierMessageVariant::Done,
+            ) => Ok(VerifyTransition::Finish(Poplar1FieldVec::Inner(
                 output_share,
             ))),
             (
-                PrepareStateVariant::Leaf(PrepareState {
+                VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share,
                 }),
-                PrepareMessageVariant::Done,
-            ) => Ok(PrepareTransition::Finish(Poplar1FieldVec::Leaf(
+                VerifierMessageVariant::Done,
+            ) => Ok(VerifyTransition::Finish(Poplar1FieldVec::Leaf(
                 output_share,
             ))),
 
             _ => Err(VdafError::Uncategorized(
-                "prep message field type does not match state".into(),
+                "verifier message field type does not match state".into(),
             )),
         }
     }
@@ -1560,7 +1562,7 @@ mod tests {
     use super::*;
     use crate::vdaf::{
         equality_comparison_test,
-        test_utils::{check_test_vector, run_vdaf_prepare, TestVectorVdaf},
+        test_utils::{check_test_vector, run_vdaf_verify, TestVectorVdaf},
     };
     use assert_matches::assert_matches;
     use serde_json::Value;
@@ -1568,7 +1570,7 @@ mod tests {
 
     const CTX_STR: &[u8] = b"poplar1 ctx";
 
-    fn test_prepare<P: Xof<SEED_SIZE>, const SEED_SIZE: usize>(
+    fn test_verify<P: Xof<SEED_SIZE>, const SEED_SIZE: usize>(
         vdaf: &Poplar1<P, SEED_SIZE>,
         verify_key: &[u8; SEED_SIZE],
         nonce: &[u8; 16],
@@ -1577,7 +1579,7 @@ mod tests {
         agg_param: &Poplar1AggregationParam,
         expected_result: Vec<u64>,
     ) {
-        let out_shares = run_vdaf_prepare(
+        let out_shares = run_vdaf_verify(
             vdaf,
             verify_key,
             CTX_STR,
@@ -1643,9 +1645,9 @@ mod tests {
             let mut out_shares_0 = Vec::with_capacity(reports.len());
             let mut out_shares_1 = Vec::with_capacity(reports.len());
 
-            // Preparation step
+            // Verification step
             for (nonce, public_share, input_shares) in reports.iter() {
-                let out_shares = run_vdaf_prepare(
+                let out_shares = run_vdaf_verify(
                     vdaf,
                     verify_key,
                     CTX_STR,
@@ -1703,7 +1705,7 @@ mod tests {
     }
 
     #[test]
-    fn shard_prepare() {
+    fn shard_verify() {
         let mut rng = rng();
         let vdaf = Poplar1::new_turboshake128(64);
         let verify_key = rng.random();
@@ -1711,7 +1713,7 @@ mod tests {
         let nonce = rng.random();
         let (public_share, input_shares) = vdaf.shard(CTX_STR, &input, &nonce).unwrap();
 
-        test_prepare(
+        test_verify(
             &vdaf,
             &verify_key,
             &nonce,
@@ -1730,7 +1732,7 @@ mod tests {
         );
 
         for level in 0..vdaf.bits {
-            test_prepare(
+            test_verify(
                 &vdaf,
                 &verify_key,
                 &nonce,
@@ -1782,29 +1784,29 @@ mod tests {
             input_share.encoded_len().unwrap()
         );
 
-        // Prepaare message variants
-        let prep_msg = Poplar1PrepareMessage(PrepareMessageVariant::SketchInner([
+        // Verifier message variants
+        let verifier_msg = Poplar1VerifierMessage(VerifierMessageVariant::SketchInner([
             Field64::one(),
             Field64::one(),
             Field64::one(),
         ]));
         assert_eq!(
-            prep_msg.get_encoded().unwrap().len(),
-            prep_msg.encoded_len().unwrap()
+            verifier_msg.get_encoded().unwrap().len(),
+            verifier_msg.encoded_len().unwrap()
         );
-        let prep_msg = Poplar1PrepareMessage(PrepareMessageVariant::SketchLeaf([
+        let verifier_msg = Poplar1VerifierMessage(VerifierMessageVariant::SketchLeaf([
             Field255::one(),
             Field255::one(),
             Field255::one(),
         ]));
         assert_eq!(
-            prep_msg.get_encoded().unwrap().len(),
-            prep_msg.encoded_len().unwrap()
+            verifier_msg.get_encoded().unwrap().len(),
+            verifier_msg.encoded_len().unwrap()
         );
-        let prep_msg = Poplar1PrepareMessage(PrepareMessageVariant::Done);
+        let verifier_msg = Poplar1VerifierMessage(VerifierMessageVariant::Done);
         assert_eq!(
-            prep_msg.get_encoded().unwrap().len(),
-            prep_msg.encoded_len().unwrap()
+            verifier_msg.get_encoded().unwrap().len(),
+            verifier_msg.encoded_len().unwrap()
         );
 
         // Field vector variants.
@@ -1841,12 +1843,12 @@ mod tests {
     }
 
     #[test]
-    fn round_trip_prepare_state() {
+    fn round_trip_verifier_state() {
         let vdaf = Poplar1::new_turboshake128(1);
-        for (agg_id, prep_state) in [
+        for (agg_id, verifier_state) in [
             (
                 0,
-                Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundOne {
                         A_share: Field64::from(0),
                         B_share: Field64::from(1),
@@ -1857,7 +1859,7 @@ mod tests {
             ),
             (
                 1,
-                Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundOne {
                         A_share: Field64::from(5),
                         B_share: Field64::from(6),
@@ -1868,7 +1870,7 @@ mod tests {
             ),
             (
                 0,
-                Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share: Vec::from([
                         Field64::from(10),
@@ -1879,7 +1881,7 @@ mod tests {
             ),
             (
                 1,
-                Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share: Vec::from([
                         Field64::from(13),
@@ -1890,7 +1892,7 @@ mod tests {
             ),
             (
                 0,
-                Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundOne {
                         A_share: Field255::from(16),
                         B_share: Field255::from(17),
@@ -1905,7 +1907,7 @@ mod tests {
             ),
             (
                 1,
-                Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundOne {
                         A_share: Field255::from(21),
                         B_share: Field255::from(22),
@@ -1920,7 +1922,7 @@ mod tests {
             ),
             (
                 0,
-                Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share: Vec::from([
                         Field255::from(26),
@@ -1931,7 +1933,7 @@ mod tests {
             ),
             (
                 1,
-                Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+                Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                     sketch: SketchState::RoundTwo,
                     output_share: Vec::from([
                         Field255::from(29),
@@ -1941,12 +1943,17 @@ mod tests {
                 })),
             ),
         ] {
-            let encoded_prep_state = prep_state.get_encoded().unwrap();
-            assert_eq!(prep_state.encoded_len(), Some(encoded_prep_state.len()));
-            let decoded_prep_state =
-                Poplar1PrepareState::get_decoded_with_param(&(&vdaf, agg_id), &encoded_prep_state)
-                    .unwrap();
-            assert_eq!(prep_state, decoded_prep_state);
+            let encoded_verifier_state = verifier_state.get_encoded().unwrap();
+            assert_eq!(
+                verifier_state.encoded_len(),
+                Some(encoded_verifier_state.len())
+            );
+            let decoded_verifier_state = Poplar1VerifierState::get_decoded_with_param(
+                &(&vdaf, agg_id),
+                &encoded_verifier_state,
+            )
+            .unwrap();
+            assert_eq!(verifier_state, decoded_verifier_state);
         }
     }
 
@@ -2312,11 +2319,11 @@ mod tests {
     }
 
     #[test]
-    fn prepare_state_equality_test() {
-        // This test effectively covers PrepareStateVariant, PrepareState, SketchState as well.
+    fn verifier_state_equality_test() {
+        // This test effectively covers VerifierStateVariant, VerifierState, SketchState as well.
         equality_comparison_test(&[
             // Inner, round one. (default)
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field64::from(0),
                     B_share: Field64::from(1),
@@ -2325,7 +2332,7 @@ mod tests {
                 output_share: Vec::from([Field64::from(2), Field64::from(3)]),
             })),
             // Inner, round one, modified A_share.
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field64::from(100),
                     B_share: Field64::from(1),
@@ -2334,7 +2341,7 @@ mod tests {
                 output_share: Vec::from([Field64::from(2), Field64::from(3)]),
             })),
             // Inner, round one, modified B_share.
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field64::from(0),
                     B_share: Field64::from(101),
@@ -2343,7 +2350,7 @@ mod tests {
                 output_share: Vec::from([Field64::from(2), Field64::from(3)]),
             })),
             // Inner, round one, modified is_leader.
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field64::from(0),
                     B_share: Field64::from(1),
@@ -2352,7 +2359,7 @@ mod tests {
                 output_share: Vec::from([Field64::from(2), Field64::from(3)]),
             })),
             // Inner, round one, modified output_share.
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field64::from(0),
                     B_share: Field64::from(1),
@@ -2361,17 +2368,17 @@ mod tests {
                 output_share: Vec::from([Field64::from(3), Field64::from(2)]),
             })),
             // Inner, round two. (default)
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundTwo,
                 output_share: Vec::from([Field64::from(2), Field64::from(3)]),
             })),
             // Inner, round two, modified output_share.
-            Poplar1PrepareState(PrepareStateVariant::Inner(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Inner(VerifierState {
                 sketch: SketchState::RoundTwo,
                 output_share: Vec::from([Field64::from(3), Field64::from(2)]),
             })),
             // Leaf, round one. (default)
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field255::from(0),
                     B_share: Field255::from(1),
@@ -2380,7 +2387,7 @@ mod tests {
                 output_share: Vec::from([Field255::from(2), Field255::from(3)]),
             })),
             // Leaf, round one, modified A_share.
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field255::from(100),
                     B_share: Field255::from(1),
@@ -2389,7 +2396,7 @@ mod tests {
                 output_share: Vec::from([Field255::from(2), Field255::from(3)]),
             })),
             // Leaf, round one, modified B_share.
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field255::from(0),
                     B_share: Field255::from(101),
@@ -2398,7 +2405,7 @@ mod tests {
                 output_share: Vec::from([Field255::from(2), Field255::from(3)]),
             })),
             // Leaf, round one, modified is_leader.
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field255::from(0),
                     B_share: Field255::from(1),
@@ -2407,7 +2414,7 @@ mod tests {
                 output_share: Vec::from([Field255::from(2), Field255::from(3)]),
             })),
             // Leaf, round one, modified output_share.
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundOne {
                     A_share: Field255::from(0),
                     B_share: Field255::from(1),
@@ -2416,12 +2423,12 @@ mod tests {
                 output_share: Vec::from([Field255::from(3), Field255::from(2)]),
             })),
             // Leaf, round two. (default)
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundTwo,
                 output_share: Vec::from([Field255::from(2), Field255::from(3)]),
             })),
             // Leaf, round two, modified output_share.
-            Poplar1PrepareState(PrepareStateVariant::Leaf(PrepareState {
+            Poplar1VerifierState(VerifierStateVariant::Leaf(VerifierState {
                 sketch: SketchState::RoundTwo,
                 output_share: Vec::from([Field255::from(3), Field255::from(2)]),
             })),

@@ -14,8 +14,8 @@ use crate::{
             server as v2_server,
         },
         xof::Seed,
-        Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare,
-        PrepareTransition, Share, ShareDecodingParameter, Vdaf, VdafError,
+        Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, Share,
+        ShareDecodingParameter, Vdaf, VdafError, VerifyTransition,
     },
 };
 use hmac::{Hmac, Mac};
@@ -56,18 +56,18 @@ impl Prio2 {
         Ok(Prio2 { input_len })
     }
 
-    /// Prepare an input share for aggregation using the given field element `query_rand` to
-    /// compute the verifier share.
+    /// Verify an input share for aggregation using the given field element `query_rand` to compute
+    /// the verifier share.
     ///
     /// In the [`Aggregator`] trait implementation for [`Prio2`], the query randomness is computed
     /// jointly by the Aggregators. This method is designed to be used in applications, like ENPA,
     /// in which the query randomness is instead chosen by a third-party.
-    pub fn prepare_init_with_query_rand(
+    pub fn verify_init_with_query_rand(
         &self,
         query_rand: FieldPrio2,
         input_share: &Share<FieldPrio2, 32>,
         is_leader: bool,
-    ) -> Result<(Prio2PrepareState, Prio2PrepareShare), VdafError> {
+    ) -> Result<(Prio2VerifierState, Prio2VerifierShare), VdafError> {
         let expanded_data: Option<Vec<FieldPrio2>> = match input_share {
             Share::Leader(_) => None,
             Share::Helper(ref seed) => {
@@ -94,8 +94,8 @@ impl Prio2 {
         };
 
         Ok((
-            Prio2PrepareState(truncated_share),
-            Prio2PrepareShare(verifier_share),
+            Prio2VerifierState(truncated_share),
+            Prio2VerifierShare(verifier_share),
         ))
     }
 
@@ -177,25 +177,25 @@ impl Client<16> for Prio2 {
     }
 }
 
-/// State of each [`Aggregator`] during the Preparation phase.
+/// State of each [`Aggregator`] during the verification phase.
 #[derive(Clone, Debug)]
-pub struct Prio2PrepareState(Share<FieldPrio2, 32>);
+pub struct Prio2VerifierState(Share<FieldPrio2, 32>);
 
-impl PartialEq for Prio2PrepareState {
+impl PartialEq for Prio2VerifierState {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl Eq for Prio2PrepareState {}
+impl Eq for Prio2VerifierState {}
 
-impl ConstantTimeEq for Prio2PrepareState {
+impl ConstantTimeEq for Prio2VerifierState {
     fn ct_eq(&self, other: &Self) -> Choice {
         self.0.ct_eq(&other.0)
     }
 }
 
-impl Encode for Prio2PrepareState {
+impl Encode for Prio2VerifierState {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.0.encode(bytes)
     }
@@ -205,7 +205,7 @@ impl Encode for Prio2PrepareState {
     }
 }
 
-impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
+impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2VerifierState {
     fn decode_with_param(
         (prio2, agg_id): &(&'a Prio2, usize),
         bytes: &mut Cursor<&[u8]>,
@@ -220,11 +220,11 @@ impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2PrepareState {
     }
 }
 
-/// Message emitted by each [`Aggregator`] during the Preparation phase.
+/// Message emitted by each [`Aggregator`] during the verification phase.
 #[derive(Clone, Debug)]
-pub struct Prio2PrepareShare(v2_server::VerificationMessage<FieldPrio2>);
+pub struct Prio2VerifierShare(v2_server::VerificationMessage<FieldPrio2>);
 
-impl Encode for Prio2PrepareShare {
+impl Encode for Prio2VerifierShare {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.0.f_r.encode(bytes)?;
         self.0.g_r.encode(bytes)?;
@@ -236,9 +236,9 @@ impl Encode for Prio2PrepareShare {
     }
 }
 
-impl ParameterizedDecode<Prio2PrepareState> for Prio2PrepareShare {
+impl ParameterizedDecode<Prio2VerifierState> for Prio2VerifierShare {
     fn decode_with_param(
-        _state: &Prio2PrepareState,
+        _state: &Prio2VerifierState,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         Ok(Self(v2_server::VerificationMessage {
@@ -250,11 +250,11 @@ impl ParameterizedDecode<Prio2PrepareState> for Prio2PrepareShare {
 }
 
 impl Aggregator<32, 16> for Prio2 {
-    type PrepareState = Prio2PrepareState;
-    type PrepareShare = Prio2PrepareShare;
-    type PrepareMessage = ();
+    type VerifyState = Prio2VerifierState;
+    type VerifierShare = Prio2VerifierShare;
+    type VerifierMessage = ();
 
-    fn prepare_init(
+    fn verify_init(
         &self,
         agg_key: &[u8; 32],
         _ctx: &[u8],
@@ -263,7 +263,7 @@ impl Aggregator<32, 16> for Prio2 {
         nonce: &[u8; 16],
         _public_share: &Self::PublicShare,
         input_share: &Share<FieldPrio2, 32>,
-    ) -> Result<(Prio2PrepareState, Prio2PrepareShare), VdafError> {
+    ) -> Result<(Prio2VerifierState, Prio2VerifierShare), VdafError> {
         let is_leader = role_try_from(agg_id)?;
 
         // In the ENPA Prio system, the query randomness is generated by a third party and
@@ -278,10 +278,10 @@ impl Aggregator<32, 16> for Prio2 {
         let mut prng = Prng::from_prio2_seed(&hmac_tag.into_bytes().into());
         let query_rand = self.choose_eval_at(&mut prng);
 
-        self.prepare_init_with_query_rand(query_rand, input_share, is_leader)
+        self.verify_init_with_query_rand(query_rand, input_share, is_leader)
     }
 
-    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Prio2PrepareShare>>(
+    fn verifier_shares_to_message<M: IntoIterator<Item = Prio2VerifierShare>>(
         &self,
         _ctx: &[u8],
         _: &Self::AggregationParam,
@@ -304,12 +304,12 @@ impl Aggregator<32, 16> for Prio2 {
         Ok(())
     }
 
-    fn prepare_next(
+    fn verify_next(
         &self,
         _ctx: &[u8],
-        state: Prio2PrepareState,
+        state: Prio2VerifierState,
         _input: (),
-    ) -> Result<PrepareTransition<Self, 32, 16>, VdafError> {
+    ) -> Result<VerifyTransition<Self, 32, 16>, VdafError> {
         let data = match state.0 {
             Share::Leader(data) => data,
             Share::Helper(seed) => {
@@ -317,7 +317,7 @@ impl Aggregator<32, 16> for Prio2 {
                 prng.take(self.input_len).collect()
             }
         };
-        Ok(PrepareTransition::Finish(OutputShare::from(data)))
+        Ok(VerifyTransition::Finish(OutputShare::from(data)))
     }
 
     fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
@@ -430,7 +430,7 @@ mod tests {
     }
 
     #[test]
-    fn prepare_state_serialization() {
+    fn verifier_state_serialization() {
         let mut rng = rng();
         let verify_key = rng.random::<[u8; 32]>();
         let nonce = rng.random::<[u8; 16]>();
@@ -438,8 +438,8 @@ mod tests {
         let prio2 = Prio2::new(data.len()).unwrap();
         let (public_share, input_shares) = prio2.shard(CTX_STR, &data, &nonce).unwrap();
         for (agg_id, input_share) in input_shares.iter().enumerate() {
-            let (prepare_state, prepare_share) = prio2
-                .prepare_init(
+            let (verifier_state, verifier_share) = prio2
+                .verify_init(
                     &verify_key,
                     CTX_STR,
                     agg_id,
@@ -450,28 +450,30 @@ mod tests {
                 )
                 .unwrap();
 
-            let encoded_prepare_state = prepare_state.get_encoded().unwrap();
-            let decoded_prepare_state = Prio2PrepareState::get_decoded_with_param(
+            let encoded_verifier_state = verifier_state.get_encoded().unwrap();
+            let decoded_verifier_state = Prio2VerifierState::get_decoded_with_param(
                 &(&prio2, agg_id),
-                &encoded_prepare_state,
+                &encoded_verifier_state,
             )
-            .expect("failed to decode prepare state");
-            assert_eq!(decoded_prepare_state, prepare_state);
+            .expect("failed to decode verifier state");
+            assert_eq!(decoded_verifier_state, verifier_state);
             assert_eq!(
-                prepare_state.encoded_len().unwrap(),
-                encoded_prepare_state.len()
+                verifier_state.encoded_len().unwrap(),
+                encoded_verifier_state.len()
             );
 
-            let encoded_prepare_share = prepare_share.get_encoded().unwrap();
-            let decoded_prepare_share =
-                Prio2PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
-                    .expect("failed to decode prepare share");
-            assert_eq!(decoded_prepare_share.0.f_r, prepare_share.0.f_r);
-            assert_eq!(decoded_prepare_share.0.g_r, prepare_share.0.g_r);
-            assert_eq!(decoded_prepare_share.0.h_r, prepare_share.0.h_r);
+            let encoded_verifier_share = verifier_share.get_encoded().unwrap();
+            let decoded_verifier_share = Prio2VerifierShare::get_decoded_with_param(
+                &verifier_state,
+                &encoded_verifier_share,
+            )
+            .expect("failed to decode verifier share");
+            assert_eq!(decoded_verifier_share.0.f_r, verifier_share.0.f_r);
+            assert_eq!(decoded_verifier_share.0.g_r, verifier_share.0.g_r);
+            assert_eq!(decoded_verifier_share.0.h_r, verifier_share.0.h_r);
             assert_eq!(
-                prepare_share.encoded_len().unwrap(),
-                encoded_prepare_share.len()
+                verifier_share.encoded_len().unwrap(),
+                encoded_verifier_share.len()
             );
         }
     }
@@ -502,24 +504,20 @@ mod tests {
         {
             let input_share_1 = Share::get_decoded_with_param(&(&vdaf, 0), server_1_share).unwrap();
             let input_share_2 = Share::get_decoded_with_param(&(&vdaf, 1), server_2_share).unwrap();
-            let (prepare_state_1, prepare_share_1) = vdaf
-                .prepare_init(&[0; 32], CTX_STR, 0, &(), &[0; 16], &(), &input_share_1)
+            let (verifier_state_1, verifier_share_1) = vdaf
+                .verify_init(&[0; 32], CTX_STR, 0, &(), &[0; 16], &(), &input_share_1)
                 .unwrap();
-            let (prepare_state_2, prepare_share_2) = vdaf
-                .prepare_init(&[0; 32], CTX_STR, 1, &(), &[0; 16], &(), &input_share_2)
+            let (verifier_state_2, verifier_share_2) = vdaf
+                .verify_init(&[0; 32], CTX_STR, 1, &(), &[0; 16], &(), &input_share_2)
                 .unwrap();
-            vdaf.prepare_shares_to_prepare_message(
-                CTX_STR,
-                &(),
-                [prepare_share_1, prepare_share_2],
-            )
-            .unwrap();
-            let transition_1 = vdaf.prepare_next(CTX_STR, prepare_state_1, ()).unwrap();
+            vdaf.verifier_shares_to_message(CTX_STR, &(), [verifier_share_1, verifier_share_2])
+                .unwrap();
+            let transition_1 = vdaf.verify_next(CTX_STR, verifier_state_1, ()).unwrap();
             let output_share_1 =
-                assert_matches!(transition_1, PrepareTransition::Finish(out) => out);
-            let transition_2 = vdaf.prepare_next(CTX_STR, prepare_state_2, ()).unwrap();
+                assert_matches!(transition_1, VerifyTransition::Finish(out) => out);
+            let transition_2 = vdaf.verify_next(CTX_STR, verifier_state_2, ()).unwrap();
             let output_share_2 =
-                assert_matches!(transition_2, PrepareTransition::Finish(out) => out);
+                assert_matches!(transition_2, VerifyTransition::Finish(out) => out);
             leader_output_shares.push(output_share_1);
             helper_output_shares.push(output_share_2);
         }
@@ -542,20 +540,20 @@ mod tests {
     }
 
     #[test]
-    fn prepare_state_equality_test() {
+    fn verifier_state_equality_test() {
         equality_comparison_test(&[
-            Prio2PrepareState(Share::Leader(Vec::from([
+            Prio2VerifierState(Share::Leader(Vec::from([
                 FieldPrio2::from(0),
                 FieldPrio2::from(1),
             ]))),
-            Prio2PrepareState(Share::Leader(Vec::from([
+            Prio2VerifierState(Share::Leader(Vec::from([
                 FieldPrio2::from(1),
                 FieldPrio2::from(0),
             ]))),
-            Prio2PrepareState(Share::Helper(Seed(
+            Prio2VerifierState(Share::Helper(Seed(
                 (0..32).collect::<Vec<_>>().try_into().unwrap(),
             ))),
-            Prio2PrepareState(Share::Helper(Seed(
+            Prio2VerifierState(Share::Helper(Seed(
                 (1..33).collect::<Vec<_>>().try_into().unwrap(),
             ))),
         ])

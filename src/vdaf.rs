@@ -208,35 +208,36 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
 
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vdaf {
-    /// State of the Aggregator during the Prepare process.
-    type PrepareState: Clone + Debug + PartialEq + Eq;
+    /// State of the Aggregator during the verification process.
+    type VerifyState: Clone + Debug + PartialEq + Eq;
 
-    /// The type of messages sent by each aggregator at each round of the Prepare Process.
+    /// The type of messages sent by each aggregator at each round of the verification process.
     ///
-    /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
+    /// Decoding takes a [`Self::VerifyState`] as a parameter; this [`Self::VerifyState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type PrepareShare: Clone + Debug + ParameterizedDecode<Self::PrepareState> + Encode;
+    type VerifierShare: Clone + Debug + ParameterizedDecode<Self::VerifyState> + Encode;
 
-    /// Result of preprocessing a round of preparation shares. This is used by all aggregators as an
-    /// input to the next round of the Prepare Process.
+    /// Result of preprocessing a round of verifier shares. This is used by all aggregators as an
+    /// input to the next round of the verification process.
     ///
-    /// Decoding takes a [`Self::PrepareState`] as a parameter; this [`Self::PrepareState`] may be
+    /// Decoding takes a [`Self::VerifyState`] as a parameter; this [`Self::VerifyState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type PrepareMessage: Clone
+    type VerifierMessage: Clone
         + Debug
         + PartialEq
         + Eq
-        + ParameterizedDecode<Self::PrepareState>
+        + ParameterizedDecode<Self::VerifyState>
         + Encode;
 
-    /// Begins the Prepare process with the other Aggregators. The [`Self::PrepareState`] returned
-    /// is passed to [`Self::prepare_next`] to get this aggregator's first-round prepare message.
+    /// Begins the verification process with the other Aggregators. The [`Self::VerifyState`]
+    /// returned is passed to [`Self::verify_next`] to get this aggregator's first-round verifier
+    /// message.
     ///
-    /// Implements `Vdaf.prep_init` from [VDAF].
+    /// Implements `Vdaf.verify_init` from [VDAF].
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
     #[allow(clippy::too_many_arguments)]
-    fn prepare_init(
+    fn verify_init(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
         ctx: &[u8],
@@ -245,37 +246,37 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
         nonce: &[u8; NONCE_SIZE],
         public_share: &Self::PublicShare,
         input_share: &Self::InputShare,
-    ) -> Result<(Self::PrepareState, Self::PrepareShare), VdafError>;
+    ) -> Result<(Self::VerifyState, Self::VerifierShare), VdafError>;
 
-    /// Preprocess a round of preparation shares into a single input to [`Self::prepare_next`].
+    /// Preprocess a round of verifier shares into a single input to [`Self::verify_next`].
     ///
-    /// Implements `Vdaf.prep_shares_to_prep` from [VDAF].
+    /// Implements `Vdaf.verifier_shares_to_message` from [VDAF].
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
-    fn prepare_shares_to_prepare_message<M: IntoIterator<Item = Self::PrepareShare>>(
+    fn verifier_shares_to_message<M: IntoIterator<Item = Self::VerifierShare>>(
         &self,
         ctx: &[u8],
         agg_param: &Self::AggregationParam,
         inputs: M,
-    ) -> Result<Self::PrepareMessage, VdafError>;
+    ) -> Result<Self::VerifierMessage, VdafError>;
 
     /// Compute the next state transition from the current state and the previous round of input
-    /// messages. If this returns [`PrepareTransition::Continue`], then the returned
-    /// [`Self::PrepareShare`] should be combined with the other Aggregators' `PrepareShare`s from
+    /// messages. If this returns [`VerifyTransition::Continue`], then the returned
+    /// [`Self::VerifierShare`] should be combined with the other Aggregators' `VerifierShare`s from
     /// this round and passed into another call to this method. This continues until this method
-    /// returns [`PrepareTransition::Finish`], at which point the returned output share may be
+    /// returns [`VerifyTransition::Finish`], at which point the returned output share may be
     /// aggregated. If the method returns an error, the aggregator should consider its input share
     /// invalid and not attempt to process it any further.
     ///
-    /// Implements `Vdaf.prep_next` from [VDAF].
+    /// Implements `Vdaf.verify_next` from [VDAF].
     ///
     /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
-    fn prepare_next(
+    fn verify_next(
         &self,
         ctx: &[u8],
-        state: Self::PrepareState,
-        input: Self::PrepareMessage,
-    ) -> Result<PrepareTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError>;
+        state: Self::VerifyState,
+        input: Self::VerifierMessage,
+    ) -> Result<VerifyTransition<Self, VERIFY_KEY_SIZE, NONCE_SIZE>, VdafError>;
 
     /// Aggregates a sequence of output shares into an aggregate share.
     fn aggregate<M: IntoIterator<Item = Self::OutputShare>>(
@@ -330,15 +331,15 @@ pub trait Collector: Vdaf {
     ) -> Result<Self::AggregateResult, VdafError>;
 }
 
-/// A state transition of an Aggregator during the Prepare process.
+/// A state transition of an Aggregator during the verification process.
 #[derive(Clone, Debug)]
-pub enum PrepareTransition<
+pub enum VerifyTransition<
     V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     const VERIFY_KEY_SIZE: usize,
     const NONCE_SIZE: usize,
 > {
     /// Continue processing.
-    Continue(V::PrepareState, V::PrepareShare),
+    Continue(V::VerifyState, V::VerifierShare),
 
     /// Finish processing and return the output share.
     Finish(V::OutputShare),
@@ -479,7 +480,7 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
 pub mod test_utils {
     use std::collections::HashMap;
 
-    use super::{Aggregatable, Aggregator, Client, Collector, PrepareTransition, VdafError};
+    use super::{Aggregatable, Aggregator, Client, Collector, VdafError, VerifyTransition};
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     use crate::vdaf::poplar1::Poplar1;
     use crate::{
@@ -533,7 +534,7 @@ pub mod test_utils {
         let mut num_measurements: usize = 0;
         for (public_share, nonce, input_shares) in sharded_measurements.into_iter() {
             num_measurements += 1;
-            let out_shares = run_vdaf_prepare(
+            let out_shares = run_vdaf_verify(
                 vdaf,
                 &verify_key,
                 ctx,
@@ -582,8 +583,8 @@ pub mod test_utils {
         Ok(res)
     }
 
-    /// Execute VDAF preparation for a single report and return the recovered output shares.
-    pub fn run_vdaf_prepare<V, M, const SEED_SIZE: usize>(
+    /// Execute VDAF verification for a single report and return the recovered output shares.
+    pub fn run_vdaf_verify<V, M, const SEED_SIZE: usize>(
         vdaf: &V,
         verify_key: &[u8; SEED_SIZE],
         ctx: &[u8],
@@ -606,7 +607,7 @@ pub mod test_utils {
         let mut states = Vec::new();
         let mut outbound = Vec::new();
         for (agg_id, input_share) in input_shares.enumerate() {
-            let (state, msg) = vdaf.prepare_init(
+            let (state, msg) = vdaf.verify_init(
                 verify_key,
                 ctx,
                 agg_id,
@@ -621,12 +622,12 @@ pub mod test_utils {
         }
 
         let mut inbound = vdaf
-            .prepare_shares_to_prepare_message(
+            .verifier_shares_to_message(
                 ctx,
                 agg_param,
                 outbound.iter().map(|encoded| {
-                    V::PrepareShare::get_decoded_with_param(&states[0], encoded)
-                        .expect("failed to decode prep share")
+                    V::VerifierShare::get_decoded_with_param(&states[0], encoded)
+                        .expect("failed to decode verifier share")
                 }),
             )?
             .get_encoded()
@@ -636,17 +637,17 @@ pub mod test_utils {
         loop {
             let mut outbound = Vec::new();
             for state in states.iter_mut() {
-                match vdaf.prepare_next(
+                match vdaf.verify_next(
                     ctx,
                     state.clone(),
-                    V::PrepareMessage::get_decoded_with_param(state, &inbound)
-                        .expect("failed to decode prep message"),
+                    V::VerifierMessage::get_decoded_with_param(state, &inbound)
+                        .expect("failed to decode verifier message"),
                 )? {
-                    PrepareTransition::Continue(new_state, msg) => {
+                    VerifyTransition::Continue(new_state, msg) => {
                         outbound.push(msg.get_encoded().unwrap());
                         *state = new_state
                     }
-                    PrepareTransition::Finish(out_share) => {
+                    VerifyTransition::Finish(out_share) => {
                         out_shares.push(out_share);
                     }
                 }
@@ -655,12 +656,12 @@ pub mod test_utils {
             if outbound.len() == vdaf.num_aggregators() {
                 // Another round is required before output shares are computed.
                 inbound = vdaf
-                    .prepare_shares_to_prepare_message(
+                    .verifier_shares_to_message(
                         ctx,
                         agg_param,
                         outbound.iter().map(|encoded| {
-                            V::PrepareShare::get_decoded_with_param(&states[0], encoded)
-                                .expect("failed to decode prep share")
+                            V::VerifierShare::get_decoded_with_param(&states[0], encoded)
+                                .expect("failed to decode verifier share")
                         }),
                     )?
                     .get_encoded()
@@ -669,7 +670,7 @@ pub mod test_utils {
                 // Each Aggregator recovered an output share.
                 break;
             } else {
-                panic!("Aggregators did not finish the prepare phase at the same time");
+                panic!("Aggregators did not finish the verification process at the same time");
             }
         }
 
@@ -855,7 +856,7 @@ pub mod test_utils {
         V::PublicShare: PartialEq,
         V::AggregateResult: PartialEq,
         V::InputShare: PartialEq,
-        V::PrepareShare: PartialEq,
+        V::VerifierShare: PartialEq,
         V::OutputShare: PartialEq,
         V::AggregateShare: PartialEq,
     {
@@ -880,7 +881,7 @@ pub mod test_utils {
         V::PublicShare: PartialEq,
         V::AggregateResult: PartialEq,
         V::InputShare: PartialEq,
-        V::PrepareShare: PartialEq,
+        V::VerifierShare: PartialEq,
         V::OutputShare: PartialEq,
         V::AggregateShare: PartialEq,
     {
@@ -1112,17 +1113,17 @@ pub mod test_utils {
         public_share: &[u8],
         input_share: &[u8],
         expected_verifier_share: &[u8],
-    ) -> V::PrepareState
+    ) -> V::VerifyState
     where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-        V::PrepareShare: PartialEq,
+        V::VerifierShare: PartialEq,
     {
         let verify_key = verify_key.try_into().unwrap();
         let public_share = V::PublicShare::get_decoded_with_param(vdaf, public_share).unwrap();
         let input_share =
             V::InputShare::get_decoded_with_param(&(vdaf, agg_id), input_share).unwrap();
         let (verify_state, verify_share) = vdaf
-            .prepare_init(
+            .verify_init(
                 verify_key,
                 ctx,
                 agg_id,
@@ -1136,7 +1137,7 @@ pub mod test_utils {
         assert_eq!(verify_share.get_encoded().unwrap(), expected_verifier_share);
         assert_eq!(
             verify_share,
-            V::PrepareShare::get_decoded_with_param(&verify_state, expected_verifier_share)
+            V::VerifierShare::get_decoded_with_param(&verify_state, expected_verifier_share)
                 .unwrap()
         );
 
@@ -1151,7 +1152,7 @@ pub mod test_utils {
         vdaf: &V,
         ctx: &[u8],
         agg_param: &V::AggregationParam,
-        verifier_state: &V::PrepareState,
+        verifier_state: &V::VerifyState,
         verifier_shares: &[&[u8]],
         expected_verifier_message: &[u8],
     ) where
@@ -1159,10 +1160,10 @@ pub mod test_utils {
     {
         let verifier_shares = verifier_shares
             .iter()
-            .map(|bytes| V::PrepareShare::get_decoded_with_param(verifier_state, bytes).unwrap())
+            .map(|bytes| V::VerifierShare::get_decoded_with_param(verifier_state, bytes).unwrap())
             .collect::<Vec<_>>();
         let verifier_message = vdaf
-            .prepare_shares_to_prepare_message(ctx, agg_param, verifier_shares)
+            .verifier_shares_to_message(ctx, agg_param, verifier_shares)
             .unwrap();
 
         assert_eq!(
@@ -1171,7 +1172,7 @@ pub mod test_utils {
         );
         assert_eq!(
             verifier_message,
-            V::PrepareMessage::get_decoded_with_param(verifier_state, expected_verifier_message)
+            V::VerifierMessage::get_decoded_with_param(verifier_state, expected_verifier_message)
                 .unwrap()
         );
     }
@@ -1184,16 +1185,16 @@ pub mod test_utils {
         vdaf: &V,
         ctx: &[u8],
         agg_param: &V::AggregationParam,
-        verifier_state: &V::PrepareState,
+        verifier_state: &V::VerifyState,
         verifier_shares: &[&[u8]],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     {
         let verifier_shares = verifier_shares
             .iter()
-            .map(|bytes| V::PrepareShare::get_decoded_with_param(verifier_state, bytes).unwrap())
+            .map(|bytes| V::VerifierShare::get_decoded_with_param(verifier_state, bytes).unwrap())
             .collect::<Vec<_>>();
-        vdaf.prepare_shares_to_prepare_message(ctx, agg_param, verifier_shares)
+        vdaf.verifier_shares_to_message(ctx, agg_param, verifier_shares)
             .unwrap_err();
     }
 
@@ -1205,30 +1206,30 @@ pub mod test_utils {
         vdaf: &V,
         ctx: &[u8],
         agg_param: &V::AggregationParam,
-        verifier_state: &V::PrepareState,
+        verifier_state: &V::VerifyState,
         verifier_message: &[u8],
         expected_verifier_share: Option<&[u8]>,
         expected_out_share: Option<&[u8]>,
-    ) -> Option<V::PrepareState>
+    ) -> Option<V::VerifyState>
     where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-        V::PrepareShare: PartialEq,
+        V::VerifierShare: PartialEq,
         V::OutputShare: PartialEq,
     {
         let verifier_message =
-            V::PrepareMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
+            V::VerifierMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
         let transition = vdaf
-            .prepare_next(ctx, verifier_state.clone(), verifier_message)
+            .verify_next(ctx, verifier_state.clone(), verifier_message)
             .unwrap();
         match transition {
-            PrepareTransition::Continue(verifier_state, verifier_share) => {
+            VerifyTransition::Continue(verifier_state, verifier_share) => {
                 assert_eq!(
                     verifier_share.get_encoded().unwrap(),
                     expected_verifier_share.unwrap()
                 );
                 assert_eq!(
                     verifier_share,
-                    V::PrepareShare::get_decoded_with_param(
+                    V::VerifierShare::get_decoded_with_param(
                         &verifier_state,
                         expected_verifier_share.unwrap()
                     )
@@ -1237,7 +1238,7 @@ pub mod test_utils {
 
                 Some(verifier_state)
             }
-            PrepareTransition::Finish(out_share) => {
+            VerifyTransition::Finish(out_share) => {
                 assert_eq!(
                     out_share.get_encoded().unwrap(),
                     expected_out_share.unwrap()
@@ -1263,15 +1264,15 @@ pub mod test_utils {
     >(
         vdaf: &V,
         ctx: &[u8],
-        verifier_state: &V::PrepareState,
+        verifier_state: &V::VerifyState,
         verifier_message: &[u8],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     {
         let verifier_message =
-            V::PrepareMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
+            V::VerifierMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
 
-        vdaf.prepare_next(ctx, verifier_state.clone(), verifier_message)
+        vdaf.verify_next(ctx, verifier_state.clone(), verifier_message)
             .unwrap_err();
     }
 

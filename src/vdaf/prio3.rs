@@ -56,8 +56,8 @@ use crate::flp::{
 use crate::prng::Prng;
 use crate::vdaf::xof::{IntoFieldVec, Seed, Xof};
 use crate::vdaf::{
-    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, PrepareTransition,
-    Share, ShareDecodingParameter, Vdaf, VdafError, VERSION,
+    Aggregatable, AggregateShare, Aggregator, Client, Collector, OutputShare, Share,
+    ShareDecodingParameter, Vdaf, VdafError, VerifyTransition, VERSION,
 };
 #[cfg(feature = "experimental")]
 use fixed::traits::Fixed;
@@ -158,7 +158,7 @@ impl Prio3Sum {
 }
 
 /// The fixed point vector sum type. Each measurement is a vector of fixed point numbers
-/// and the aggregate is the sum represented as 64-bit floats. The preparation phase
+/// and the aggregate is the sum represented as 64-bit floats. The verification phase
 /// ensures the L2 norm of the input vector is < 1.
 ///
 /// This is useful for aggregating gradients in a federated version of
@@ -370,7 +370,7 @@ impl Prio3Average {
 ///
 /// ```
 /// use prio::vdaf::{
-///     Aggregator, Client, Collector, PrepareTransition,
+///     Aggregator, Client, Collector, VerifyTransition,
 ///     prio3::Prio3,
 /// };
 /// use rand::{rng, Rng, RngCore};
@@ -388,11 +388,11 @@ impl Prio3Average {
 ///     let nonce = rng.random::<[u8; 16]>();
 ///     let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce).unwrap();
 ///
-///     // Prepare
-///     let mut prep_states = vec![];
-///     let mut prep_shares = vec![];
+///     // Verify
+///     let mut verifier_states = vec![];
+///     let mut verifier_shares = vec![];
 ///     for (agg_id, input_share) in input_shares.iter().enumerate() {
-///         let (state, share) = vdaf.prepare_init(
+///         let (state, share) = vdaf.verify_init(
 ///             &verify_key,
 ///             ctx,
 ///             agg_id,
@@ -401,14 +401,14 @@ impl Prio3Average {
 ///             &public_share,
 ///             input_share
 ///         ).unwrap();
-///         prep_states.push(state);
-///         prep_shares.push(share);
+///         verifier_states.push(state);
+///         verifier_shares.push(share);
 ///     }
-///     let prep_msg = vdaf.prepare_shares_to_prepare_message(ctx, &(), prep_shares).unwrap();
+///     let verifier_msg = vdaf.verifier_shares_to_message(ctx, &(), verifier_shares).unwrap();
 ///
-///     for (agg_id, state) in prep_states.into_iter().enumerate() {
-///         let out_share = match vdaf.prepare_next(ctx, state, prep_msg.clone()).unwrap() {
-///             PrepareTransition::Finish(out_share) => out_share,
+///     for (agg_id, state) in verifier_states.into_iter().enumerate() {
+///         let out_share = match vdaf.verify_next(ctx, state, verifier_msg.clone()).unwrap() {
+///             VerifyTransition::Finish(out_share) => out_share,
 ///             _ => panic!("unexpected transition"),
 ///         };
 ///         out_shares[agg_id].push(out_share);
@@ -1067,8 +1067,8 @@ where
 }
 
 #[derive(Clone, Debug)]
-/// Message broadcast by each [`Aggregator`] in each round of the Preparation phase.
-pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
+/// Message broadcast by each [`Aggregator`] in each round of the Verification phase.
+pub struct Prio3VerifierShare<F, const SEED_SIZE: usize> {
     /// A share of the FLP verifier message. (See [`Type`].)
     verifiers: Vec<F>,
 
@@ -1076,15 +1076,17 @@ pub struct Prio3PrepareShare<F, const SEED_SIZE: usize> {
     joint_rand_part: Option<Seed<SEED_SIZE>>,
 }
 
-impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3PrepareShare<F, SEED_SIZE> {
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3VerifierShare<F, SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareShare<F, SEED_SIZE> {}
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3VerifierShare<F, SEED_SIZE> {}
 
-impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareShare<F, SEED_SIZE> {
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq
+    for Prio3VerifierShare<F, SEED_SIZE>
+{
     fn ct_eq(&self, other: &Self) -> Choice {
         // We allow short-circuiting on the presence or absence of the joint_rand_part.
         option_ct_eq(
@@ -1095,7 +1097,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
 }
 
 impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
-    for Prio3PrepareShare<F, SEED_SIZE>
+    for Prio3VerifierShare<F, SEED_SIZE>
 {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         for x in &self.verifiers {
@@ -1118,10 +1120,10 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
 }
 
 impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareShare<F, SEED_SIZE>
+    ParameterizedDecode<Prio3VerifyState<F, SEED_SIZE>> for Prio3VerifierShare<F, SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
+        decoding_parameter: &Prio3VerifyState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let mut verifiers = Vec::with_capacity(decoding_parameter.verifiers_len);
@@ -1135,7 +1137,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
             None
         };
 
-        Ok(Prio3PrepareShare {
+        Ok(Prio3VerifierShare {
             verifiers,
             joint_rand_part,
         })
@@ -1143,21 +1145,21 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
 }
 
 #[derive(Clone, Debug)]
-/// Result of combining a round of [`Prio3PrepareShare`] messages.
-pub struct Prio3PrepareMessage<const SEED_SIZE: usize> {
+/// Result of combining a round of [`Prio3VerifierShare`] messages.
+pub struct Prio3VerifierMessage<const SEED_SIZE: usize> {
     /// The joint randomness seed computed by the Aggregators.
     joint_rand_seed: Option<Seed<SEED_SIZE>>,
 }
 
-impl<const SEED_SIZE: usize> PartialEq for Prio3PrepareMessage<SEED_SIZE> {
+impl<const SEED_SIZE: usize> PartialEq for Prio3VerifierMessage<SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<const SEED_SIZE: usize> Eq for Prio3PrepareMessage<SEED_SIZE> {}
+impl<const SEED_SIZE: usize> Eq for Prio3VerifierMessage<SEED_SIZE> {}
 
-impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareMessage<SEED_SIZE> {
+impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3VerifierMessage<SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
         // We allow short-circuiting on the presnce or absence of the joint_rand_seed.
         option_ct_eq(
@@ -1167,7 +1169,7 @@ impl<const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareMessage<SEED_SIZE> {
     }
 }
 
-impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
+impl<const SEED_SIZE: usize> Encode for Prio3VerifierMessage<SEED_SIZE> {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         if let Some(ref seed) = self.joint_rand_seed {
             seed.encode(bytes)?;
@@ -1185,10 +1187,10 @@ impl<const SEED_SIZE: usize> Encode for Prio3PrepareMessage<SEED_SIZE> {
 }
 
 impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
-    ParameterizedDecode<Prio3PrepareState<F, SEED_SIZE>> for Prio3PrepareMessage<SEED_SIZE>
+    ParameterizedDecode<Prio3VerifyState<F, SEED_SIZE>> for Prio3VerifierMessage<SEED_SIZE>
 {
     fn decode_with_param(
-        decoding_parameter: &Prio3PrepareState<F, SEED_SIZE>,
+        decoding_parameter: &Prio3VerifyState<F, SEED_SIZE>,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError> {
         let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
@@ -1197,7 +1199,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
             None
         };
 
-        Ok(Prio3PrepareMessage { joint_rand_seed })
+        Ok(Prio3VerifierMessage { joint_rand_seed })
     }
 }
 
@@ -1219,9 +1221,9 @@ where
     }
 }
 
-/// State of each [`Aggregator`] during the Preparation phase.
+/// State of each [`Aggregator`] during the Verification phase.
 #[derive(Clone)]
-pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
+pub struct Prio3VerifyState<F, const SEED_SIZE: usize> {
     /// An uncompressed output share, or a compressed measurement share.
     ///
     /// Note that helpers will need to pass the measurement share through the FLP's `truncate()`
@@ -1232,15 +1234,15 @@ pub struct Prio3PrepareState<F, const SEED_SIZE: usize> {
     verifiers_len: usize,
 }
 
-impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3PrepareState<F, SEED_SIZE> {
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Prio3VerifyState<F, SEED_SIZE> {
     fn eq(&self, other: &Self) -> bool {
         self.ct_eq(other).into()
     }
 }
 
-impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3PrepareState<F, SEED_SIZE> {}
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> Eq for Prio3VerifyState<F, SEED_SIZE> {}
 
-impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareState<F, SEED_SIZE> {
+impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3VerifyState<F, SEED_SIZE> {
     fn ct_eq(&self, other: &Self) -> Choice {
         // We allow short-circuiting on the presence or absence of the joint_rand_seed, as well as
         // the aggregator ID & verifier length parameters.
@@ -1255,9 +1257,9 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3PrepareS
     }
 }
 
-impl<F, const SEED_SIZE: usize> Debug for Prio3PrepareState<F, SEED_SIZE> {
+impl<F, const SEED_SIZE: usize> Debug for Prio3VerifyState<F, SEED_SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Prio3PrepareState")
+        f.debug_struct("Prio3VerifyState")
             .field("share", &"[redacted]")
             .field(
                 "joint_rand_seed",
@@ -1272,9 +1274,7 @@ impl<F, const SEED_SIZE: usize> Debug for Prio3PrepareState<F, SEED_SIZE> {
     }
 }
 
-impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
-    for Prio3PrepareState<F, SEED_SIZE>
-{
+impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode for Prio3VerifyState<F, SEED_SIZE> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
         self.share.encode(bytes)?;
@@ -1294,7 +1294,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize> Encode
 }
 
 impl<'a, T, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Prio3<T, P, SEED_SIZE>, usize)>
-    for Prio3PrepareState<T::Field, SEED_SIZE>
+    for Prio3VerifyState<T::Field, SEED_SIZE>
 where
     T: Type,
     P: Xof<SEED_SIZE>,
@@ -1334,14 +1334,14 @@ where
     T: Type,
     P: Xof<SEED_SIZE>,
 {
-    type PrepareState = Prio3PrepareState<T::Field, SEED_SIZE>;
-    type PrepareShare = Prio3PrepareShare<T::Field, SEED_SIZE>;
-    type PrepareMessage = Prio3PrepareMessage<SEED_SIZE>;
+    type VerifyState = Prio3VerifyState<T::Field, SEED_SIZE>;
+    type VerifierShare = Prio3VerifierShare<T::Field, SEED_SIZE>;
+    type VerifierMessage = Prio3VerifierMessage<SEED_SIZE>;
 
-    /// Begins the Prep process with the other aggregators. The result of this process is
+    /// Begins the verification process with the other aggregators. The result of this process is
     /// the aggregator's output share.
     #[allow(clippy::type_complexity)]
-    fn prepare_init(
+    fn verify_init(
         &self,
         verify_key: &[u8; SEED_SIZE],
         ctx: &[u8],
@@ -1352,8 +1352,8 @@ where
         msg: &Prio3InputShare<T::Field, SEED_SIZE>,
     ) -> Result<
         (
-            Prio3PrepareState<T::Field, SEED_SIZE>,
-            Prio3PrepareShare<T::Field, SEED_SIZE>,
+            Prio3VerifyState<T::Field, SEED_SIZE>,
+            Prio3VerifierShare<T::Field, SEED_SIZE>,
         ),
         VdafError,
     > {
@@ -1414,7 +1414,7 @@ where
             //
             // The locally computed part should match the part from the public share for honestly
             // generated reports. If they do not match, the joint randomness seed check during the
-            // next round of preparation should fail.
+            // next round of verification should fail.
             let corrected_joint_rand_parts = public_share
                 .joint_rand_parts
                 .iter()
@@ -1469,27 +1469,27 @@ where
         };
 
         Ok((
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: state_share,
                 joint_rand_seed,
                 agg_id,
                 verifiers_len: verifiers_share.len(),
             },
-            Prio3PrepareShare {
+            Prio3VerifierShare {
                 verifiers: verifiers_share,
                 joint_rand_part,
             },
         ))
     }
 
-    fn prepare_shares_to_prepare_message<
-        M: IntoIterator<Item = Prio3PrepareShare<T::Field, SEED_SIZE>>,
+    fn verifier_shares_to_message<
+        M: IntoIterator<Item = Prio3VerifierShare<T::Field, SEED_SIZE>>,
     >(
         &self,
         ctx: &[u8],
         _: &Self::AggregationParam,
         inputs: M,
-    ) -> Result<Prio3PrepareMessage<SEED_SIZE>, VdafError> {
+    ) -> Result<Prio3VerifierMessage<SEED_SIZE>, VdafError> {
         let mut verifiers = vec![T::Field::zero(); self.typ.verifier_len() * self.num_proofs()];
         let mut joint_rand_parts = Vec::with_capacity(self.num_aggregators());
         let mut count = 0;
@@ -1534,15 +1534,15 @@ where
             None
         };
 
-        Ok(Prio3PrepareMessage { joint_rand_seed })
+        Ok(Prio3VerifierMessage { joint_rand_seed })
     }
 
-    fn prepare_next(
+    fn verify_next(
         &self,
         ctx: &[u8],
-        step: Prio3PrepareState<T::Field, SEED_SIZE>,
-        msg: Prio3PrepareMessage<SEED_SIZE>,
-    ) -> Result<PrepareTransition<Self, SEED_SIZE, 16>, VdafError> {
+        step: Prio3VerifyState<T::Field, SEED_SIZE>,
+        msg: Prio3VerifierMessage<SEED_SIZE>,
+    ) -> Result<VerifyTransition<Self, SEED_SIZE, 16>, VdafError> {
         if self.typ.joint_rand_len() > 0 {
             // Check that the joint randomness was correct.
             if step
@@ -1572,7 +1572,7 @@ where
             }
         };
 
-        Ok(PrepareTransition::Finish(OutputShare(output_share)))
+        Ok(VerifyTransition::Finish(OutputShare(output_share)))
     }
 
     fn aggregate_init(&self, _agg_param: &Self::AggregationParam) -> Self::AggregateShare {
@@ -1732,7 +1732,7 @@ mod tests {
         flp::Flp,
         vdaf::{
             equality_comparison_test, fieldvec_roundtrip_test,
-            test_utils::{run_vdaf, run_vdaf_prepare},
+            test_utils::{run_vdaf, run_vdaf_verify},
         },
     };
     use assert_matches::assert_matches;
@@ -1791,7 +1791,7 @@ mod tests {
         rng().fill(&mut nonce[..]);
 
         let (public_share, input_shares) = prio3.shard(CTX_STR, &false, &nonce).unwrap();
-        run_vdaf_prepare(
+        run_vdaf_verify(
             &prio3,
             &verify_key,
             CTX_STR,
@@ -1803,7 +1803,7 @@ mod tests {
         .unwrap();
 
         let (public_share, input_shares) = prio3.shard(CTX_STR, &true, &nonce).unwrap();
-        run_vdaf_prepare(
+        run_vdaf_verify(
             &prio3,
             &verify_key,
             CTX_STR,
@@ -1851,7 +1851,7 @@ mod tests {
                 measurement_share[0] += Field64::one();
             }
         );
-        let result = run_vdaf_prepare(
+        let result = run_vdaf_verify(
             &prio3,
             &verify_key,
             CTX_STR,
@@ -1869,7 +1869,7 @@ mod tests {
                 proofs_share[0] += Field64::one();
             }
         );
-        let result = run_vdaf_prepare(
+        let result = run_vdaf_verify(
             &prio3,
             &verify_key,
             CTX_STR,
@@ -2117,7 +2117,7 @@ mod tests {
                 .shard(CTX_STR, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
                 .unwrap();
             input_shares[0].joint_rand_blind_mut().unwrap().0[0] ^= 255;
-            let result = run_vdaf_prepare(
+            let result = run_vdaf_verify(
                 &prio3,
                 &verify_key,
                 CTX_STR,
@@ -2137,7 +2137,7 @@ mod tests {
                     measurement_share[0] += Field128::one();
                 }
             );
-            let result = run_vdaf_prepare(
+            let result = run_vdaf_verify(
                 &prio3,
                 &verify_key,
                 CTX_STR,
@@ -2157,7 +2157,7 @@ mod tests {
                     proofs_share[0] += Field128::one();
                 }
             );
-            let result = run_vdaf_prepare(
+            let result = run_vdaf_verify(
                 &prio3,
                 &verify_key,
                 CTX_STR,
@@ -2305,10 +2305,10 @@ mod tests {
             );
         }
 
-        let mut prepare_shares = Vec::new();
-        let mut last_prepare_state = None;
+        let mut verifier_shares = Vec::new();
+        let mut last_verifier_state = None;
         for (agg_id, input_share) in input_shares.iter().enumerate() {
-            let (prepare_state, prepare_share) = prio3.prepare_init(
+            let (verifier_state, verifier_share) = prio3.verify_init(
                 &verify_key,
                 CTX_STR,
                 agg_id,
@@ -2318,44 +2318,46 @@ mod tests {
                 input_share,
             )?;
 
-            let encoded_prepare_state = prepare_state.get_encoded().unwrap();
-            let decoded_prepare_state =
-                Prio3PrepareState::get_decoded_with_param(&(prio3, agg_id), &encoded_prepare_state)
-                    .expect("failed to decode prepare state");
-            assert_eq!(decoded_prepare_state, prepare_state);
+            let encoded_verifier_state = verifier_state.get_encoded().unwrap();
+            let decoded_verifier_state =
+                Prio3VerifyState::get_decoded_with_param(&(prio3, agg_id), &encoded_verifier_state)
+                    .expect("failed to decode verifier state");
+            assert_eq!(decoded_verifier_state, verifier_state);
             assert_eq!(
-                prepare_state.encoded_len().unwrap(),
-                encoded_prepare_state.len()
+                verifier_state.encoded_len().unwrap(),
+                encoded_verifier_state.len()
             );
 
-            let encoded_prepare_share = prepare_share.get_encoded().unwrap();
-            let decoded_prepare_share =
-                Prio3PrepareShare::get_decoded_with_param(&prepare_state, &encoded_prepare_share)
-                    .expect("failed to decode prepare share");
-            assert_eq!(decoded_prepare_share, prepare_share);
+            let encoded_verifier_share = verifier_share.get_encoded().unwrap();
+            let decoded_verifier_share = Prio3VerifierShare::get_decoded_with_param(
+                &verifier_state,
+                &encoded_verifier_share,
+            )
+            .expect("failed to decode verifier share");
+            assert_eq!(decoded_verifier_share, verifier_share);
             assert_eq!(
-                prepare_share.encoded_len().unwrap(),
-                encoded_prepare_share.len()
+                verifier_share.encoded_len().unwrap(),
+                encoded_verifier_share.len()
             );
 
-            prepare_shares.push(prepare_share);
-            last_prepare_state = Some(prepare_state);
+            verifier_shares.push(verifier_share);
+            last_verifier_state = Some(verifier_state);
         }
 
-        let prepare_message = prio3
-            .prepare_shares_to_prepare_message(CTX_STR, &(), prepare_shares)
+        let verifier_message = prio3
+            .verifier_shares_to_message(CTX_STR, &(), verifier_shares)
             .unwrap();
 
-        let encoded_prepare_message = prepare_message.get_encoded().unwrap();
-        let decoded_prepare_message = Prio3PrepareMessage::get_decoded_with_param(
-            &last_prepare_state.unwrap(),
-            &encoded_prepare_message,
+        let encoded_verifier_message = verifier_message.get_encoded().unwrap();
+        let decoded_verifier_message = Prio3VerifierMessage::get_decoded_with_param(
+            &last_verifier_state.unwrap(),
+            &encoded_verifier_message,
         )
-        .expect("failed to decode prepare message");
-        assert_eq!(decoded_prepare_message, prepare_message);
+        .expect("failed to decode verifier message");
+        assert_eq!(decoded_verifier_message, verifier_message);
         assert_eq!(
-            prepare_message.encoded_len().unwrap(),
-            encoded_prepare_message.len()
+            verifier_message.encoded_len().unwrap(),
+            encoded_verifier_message.len()
         );
 
         Ok(())
@@ -2443,25 +2445,25 @@ mod tests {
     }
 
     #[test]
-    fn prepare_share_equality_test() {
+    fn verifier_share_equality_test() {
         equality_comparison_test(&[
             // Default.
-            Prio3PrepareShare {
+            Prio3VerifierShare {
                 verifiers: Vec::from([0]),
                 joint_rand_part: Some(Seed([1])),
             },
             // Modified verifier.
-            Prio3PrepareShare {
+            Prio3VerifierShare {
                 verifiers: Vec::from([100]),
                 joint_rand_part: Some(Seed([1])),
             },
             // Modified joint_rand_part.
-            Prio3PrepareShare {
+            Prio3VerifierShare {
                 verifiers: Vec::from([0]),
                 joint_rand_part: Some(Seed([101])),
             },
             // Missing joint_rand_part.
-            Prio3PrepareShare {
+            Prio3VerifierShare {
                 verifiers: Vec::from([0]),
                 joint_rand_part: None,
             },
@@ -2469,63 +2471,63 @@ mod tests {
     }
 
     #[test]
-    fn prepare_message_equality_test() {
+    fn verifier_message_equality_test() {
         equality_comparison_test(&[
             // Default.
-            Prio3PrepareMessage {
+            Prio3VerifierMessage {
                 joint_rand_seed: Some(Seed([0])),
             },
             // Modified joint_rand_seed.
-            Prio3PrepareMessage {
+            Prio3VerifierMessage {
                 joint_rand_seed: Some(Seed([100])),
             },
             // Missing joint_rand_seed.
-            Prio3PrepareMessage {
+            Prio3VerifierMessage {
                 joint_rand_seed: None,
             },
         ])
     }
 
     #[test]
-    fn prepare_state_equality_test() {
+    fn verifier_state_equality_test() {
         equality_comparison_test(&[
             // Default.
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Modified measurement share.
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: Share::Leader(Vec::from([100])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Modified joint_rand_seed.
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([101])),
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Missing joint_rand_seed.
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: None,
                 agg_id: 2,
                 verifiers_len: 3,
             },
             // Modified agg_id.
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 102,
                 verifiers_len: 3,
             },
             // Modified verifier_len.
-            Prio3PrepareState {
+            Prio3VerifyState {
                 share: Share::Leader(Vec::from([0])),
                 joint_rand_seed: Some(Seed([1])),
                 agg_id: 2,
