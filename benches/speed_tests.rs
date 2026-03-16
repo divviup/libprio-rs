@@ -5,13 +5,9 @@ use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 #[cfg(feature = "experimental")]
 use fixed::types::{I1F15, I1F31};
-#[cfg(feature = "experimental")]
 use num_bigint::BigUint;
-#[cfg(feature = "experimental")]
 use num_rational::Ratio;
-#[cfg(feature = "experimental")]
 use num_traits::ToPrimitive;
-#[cfg(feature = "experimental")]
 use prio::dp::distributions::DiscreteGaussian;
 #[cfg(feature = "experimental")]
 use prio::idpf::test_utils::generate_zipf_distributed_batch;
@@ -30,8 +26,9 @@ use prio::{
     idpf::{Idpf, IdpfInput, RingBufferCache},
     vdaf::poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
 };
+use rand::{distr::Distribution, rngs::StdRng, SeedableRng};
 #[cfg(feature = "experimental")]
-use rand::{distr::Distribution, random, rngs::StdRng, RngExt, SeedableRng};
+use rand::{random, RngExt};
 #[cfg(feature = "experimental")]
 use std::iter;
 use std::{hint::black_box, time::Duration};
@@ -40,7 +37,6 @@ use std::{hint::black_box, time::Duration};
 ///
 /// A fixed RNG seed is used to generate inputs in order to minimize run-to-run variability. The
 /// seed value may be freely changed to get a different set of inputs.
-#[cfg(feature = "experimental")]
 const RNG_SEED: u64 = 0;
 
 /// Speed test for generating a seed and deriving a pseudorandom sequence of field elements.
@@ -57,7 +53,6 @@ fn prng(c: &mut Criterion) {
 
 /// Speed test for generating samples from the discrete gaussian distribution using different
 /// standard deviations.
-#[cfg(feature = "experimental")]
 pub fn dp_noise(c: &mut Criterion) {
     let mut group = c.benchmark_group("dp_noise");
     let mut rng = StdRng::seed_from_u64(RNG_SEED);
@@ -982,8 +977,8 @@ fn vidpf(c: &mut Criterion) {
 }
 
 #[cfg(feature = "experimental")]
-criterion_group!(benches, poplar1, prio3, prio2, prng, idpf, dp_noise, vidpf);
+criterion_group!(benches, poplar1, prio3, prio2, prng, idpf, vidpf);
 #[cfg(not(feature = "experimental"))]
-criterion_group!(benches, prio3, prng);
+criterion_group!(benches, prio3, prng, dp_noise);
 
 criterion_main!(benches);
