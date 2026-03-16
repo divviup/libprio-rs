@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "prio"
-version = "0.18.1-alpha.2"
+version = "0.18.1-alpha.3"
 dependencies = [
  "aes",
  "assert_matches",
