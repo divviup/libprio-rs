@@ -1,16 +1,8 @@
-use fixed::{
-    types::{extra::U15, I1F15},
-    FixedI16,
-};
-
 use prio::{
     codec::Encode,
     vdaf::{
         prio2::Prio2,
-        prio3::{
-            Prio3, Prio3Count, Prio3FixedPointBoundedL2VecSum, Prio3Histogram, Prio3Sum,
-            Prio3SumVec,
-        },
+        prio3::{Prio3, Prio3Count, Prio3Histogram, Prio3Sum, Prio3SumVec},
         Client, Vdaf,
     },
 };
@@ -60,18 +52,6 @@ fn main() {
         "prio3 sumvec ({} len) share size = {}",
         len,
         vdaf_input_share_size::<Prio3SumVec, 16>(
-            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
-        )
-    );
-
-    let len = 1000;
-    let prio3 = Prio3::new_fixedpoint_boundedl2_vec_sum(num_shares, len).unwrap();
-    const FP_NUM: I1F15 = I1F15::lit("0.0001");
-    let measurement = vec![FP_NUM; len];
-    println!(
-        "prio3 fixedpoint16 boundedl2 vec ({} entries) size = {}",
-        len,
-        vdaf_input_share_size::<Prio3FixedPointBoundedL2VecSum<FixedI16<U15>>, 16>(
             prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
         )
     );

@@ -35,13 +35,7 @@ use crate::field::{
 };
 #[cfg(feature = "multithreaded")]
 use crate::flp::gadgets::ParallelSumMultithreaded;
-#[cfg(feature = "experimental")]
-use crate::flp::gadgets::PolyEval;
 use crate::flp::gadgets::{Mul, ParallelSum};
-#[cfg(feature = "experimental")]
-use crate::flp::types::fixedpoint_l2::{
-    compatible_float::CompatibleFloat, FixedPointBoundedL2VecSum,
-};
 use crate::flp::{
     types::{Average, Count, Histogram, MultihotCountVec, Sum, SumVec},
     Type, TypeWithNoise,
@@ -52,8 +46,6 @@ use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, AggregatorWithNoise, Client, Collector, OutputShare,
     Share, ShareDecodingParameter, Vdaf, VdafError, VerifyTransition, VERSION,
 };
-#[cfg(feature = "experimental")]
-use fixed::traits::Fixed;
 use rand::{rng, RngExt};
 use std::borrow::Cow;
 use std::convert::TryFrom;
@@ -147,84 +139,6 @@ impl Prio3Sum {
         max_measurement: <Field64 as FieldElementWithInteger>::Integer,
     ) -> Result<Self, VdafError> {
         Prio3::new(num_aggregators, 1, 0x00000002, Sum::new(max_measurement)?)
-    }
-}
-
-/// The fixed point vector sum type. Each measurement is a vector of fixed point numbers
-/// and the aggregate is the sum represented as 64-bit floats. The verification phase
-/// ensures the L2 norm of the input vector is < 1.
-///
-/// This is useful for aggregating gradients in a federated version of
-/// [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent) with
-/// [differential privacy](https://en.wikipedia.org/wiki/Differential_privacy),
-/// useful, e.g., for [differentially private deep learning](https://arxiv.org/pdf/1607.00133.pdf).
-/// The bound on input norms is required for differential privacy. The fixed point representation
-/// allows an easy conversion to the integer type used in internal computation, while leaving
-/// conversion to the client. The model itself will have floating point parameters, so the output
-/// sum has that type as well.
-#[cfg(feature = "experimental")]
-#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
-pub type Prio3FixedPointBoundedL2VecSum<Fx> = Prio3<
-    FixedPointBoundedL2VecSum<
-        Fx,
-        ParallelSum<Field128, PolyEval<Field128>>,
-        ParallelSum<Field128, Mul>,
-    >,
-    XofTurboShake128,
-    32,
->;
-
-#[cfg(feature = "experimental")]
-impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSum<Fx> {
-    /// Construct an instance of this VDAF with the given number of aggregators and number of
-    /// vector entries.
-    pub fn new_fixedpoint_boundedl2_vec_sum(
-        num_aggregators: u8,
-        entries: usize,
-    ) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-        Prio3::new(
-            num_aggregators,
-            1,
-            0xFFFF0000,
-            FixedPointBoundedL2VecSum::new(entries)?,
-        )
-    }
-}
-
-/// The fixed point vector sum type. Each measurement is a vector of fixed point numbers
-/// and the aggregate is the sum represented as 64-bit floats. The verification function
-/// ensures the L2 norm of the input vector is < 1.
-#[cfg(all(feature = "experimental", feature = "multithreaded"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(feature = "experimental", feature = "multithreaded")))
-)]
-pub type Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> = Prio3<
-    FixedPointBoundedL2VecSum<
-        Fx,
-        ParallelSumMultithreaded<Field128, PolyEval<Field128>>,
-        ParallelSumMultithreaded<Field128, Mul>,
-    >,
-    XofTurboShake128,
-    32,
->;
-
-#[cfg(all(feature = "experimental", feature = "multithreaded"))]
-impl<Fx: Fixed + CompatibleFloat> Prio3FixedPointBoundedL2VecSumMultithreaded<Fx> {
-    /// Construct an instance of this VDAF with the given number of aggregators and number of
-    /// vector entries.
-    pub fn new_fixedpoint_boundedl2_vec_sum_multithreaded(
-        num_aggregators: u8,
-        entries: usize,
-    ) -> Result<Self, VdafError> {
-        check_num_aggregators(num_aggregators)?;
-        Prio3::new(
-            num_aggregators,
-            1,
-            0xFFFF0000,
-            FixedPointBoundedL2VecSum::new(entries)?,
-        )
     }
 }
 
@@ -1718,8 +1632,6 @@ pub fn optimal_chunk_length(measurement_length: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(feature = "experimental")]
-    use crate::flp::gadgets::ParallelSumGadget;
     use crate::{
         flp::Flp,
         vdaf::{
@@ -1728,14 +1640,6 @@ mod tests {
         },
     };
     use assert_matches::assert_matches;
-    #[cfg(feature = "experimental")]
-    use fixed::{
-        types::{
-            extra::{U15, U31, U63},
-            I1F15, I1F31, I1F63,
-        },
-        FixedI16, FixedI32, FixedI64,
-    };
 
     const CTX_STR: &[u8] = b"prio3 ctx";
 
@@ -1749,21 +1653,6 @@ mod tests {
                     meas_and_proofs_share,
                     ..
                 } => Share::Helper(meas_and_proofs_share.clone()),
-            }
-        }
-
-        // Needed for some feature-gated tests
-        #[cfg(feature = "experimental")]
-        fn joint_rand_blind_mut(&mut self) -> Option<&mut Seed<SEED_SIZE>> {
-            match self {
-                Prio3InputShare::Leader {
-                    ref mut joint_rand_blind,
-                    ..
-                } => joint_rand_blind.as_mut(),
-                Prio3InputShare::Helper {
-                    ref mut joint_rand_blind,
-                    ..
-                } => joint_rand_blind.as_mut(),
             }
         }
     }
@@ -1939,229 +1828,6 @@ mod tests {
             .unwrap(),
             vec![1, 3, 1, 0, 3, 1, 0, 1, 2, 2, 3, 3, 1, 5, 1, 2, 1, 3, 0, 2],
         );
-    }
-
-    #[test]
-    #[cfg(feature = "experimental")]
-    fn test_prio3_bounded_fpvec_sum_unaligned() {
-        type P<Fx> = Prio3FixedPointBoundedL2VecSum<Fx>;
-        #[cfg(feature = "multithreaded")]
-        type PM<Fx> = Prio3FixedPointBoundedL2VecSumMultithreaded<Fx>;
-        let ctor_32 = P::<FixedI32<U31>>::new_fixedpoint_boundedl2_vec_sum;
-        #[cfg(feature = "multithreaded")]
-        let ctor_mt_32 = PM::<FixedI32<U31>>::new_fixedpoint_boundedl2_vec_sum_multithreaded;
-
-        {
-            const SIZE: usize = 5;
-            const FP32_0: I1F31 = I1F31::lit("0");
-
-            // 32 bit fixedpoint, non-power-of-2 vector, single-threaded
-            {
-                let prio3_32 = ctor_32(2, SIZE).unwrap();
-                test_fixed_vec::<_, _, _, SIZE>(FP32_0, prio3_32);
-            }
-
-            // 32 bit fixedpoint, non-power-of-2 vector, multi-threaded
-            #[cfg(feature = "multithreaded")]
-            {
-                let prio3_mt_32 = ctor_mt_32(2, SIZE).unwrap();
-                test_fixed_vec::<_, _, _, SIZE>(FP32_0, prio3_mt_32);
-            }
-        }
-
-        fn test_fixed_vec<Fx, PE, M, const SIZE: usize>(
-            fp_0: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 32>,
-        ) where
-            Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
-            PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
-            M: Eq + ParallelSumGadget<Field128, Mul> + Clone + 'static,
-        {
-            let fp_vec = vec![fp_0; SIZE];
-
-            let measurements = [fp_vec.clone(), fp_vec];
-            assert_eq!(
-                run_vdaf(CTX_STR, &prio3, &(), measurements).unwrap(),
-                vec![0.0; SIZE]
-            );
-        }
-    }
-
-    #[test]
-    #[cfg(feature = "experimental")]
-    fn test_prio3_bounded_fpvec_sum() {
-        const FP16_4_INV: I1F15 = I1F15::lit("0.25");
-        const FP16_8_INV: I1F15 = I1F15::lit("0.125");
-        const FP16_16_INV: I1F15 = I1F15::lit("0.0625");
-        const FP32_4_INV: I1F31 = I1F31::lit("0.25");
-        const FP32_8_INV: I1F31 = I1F31::lit("0.125");
-        const FP32_16_INV: I1F31 = I1F31::lit("0.0625");
-        const FP64_4_INV: I1F63 = I1F63::lit("0.25");
-        const FP64_8_INV: I1F63 = I1F63::lit("0.125");
-        const FP64_16_INV: I1F63 = I1F63::lit("0.0625");
-
-        type P<Fx> = Prio3FixedPointBoundedL2VecSum<Fx>;
-        let ctor_16 = P::<FixedI16<U15>>::new_fixedpoint_boundedl2_vec_sum;
-        let ctor_32 = P::<FixedI32<U31>>::new_fixedpoint_boundedl2_vec_sum;
-        let ctor_64 = P::<FixedI64<U63>>::new_fixedpoint_boundedl2_vec_sum;
-
-        #[cfg(feature = "multithreaded")]
-        type PM<Fx> = Prio3FixedPointBoundedL2VecSumMultithreaded<Fx>;
-        #[cfg(feature = "multithreaded")]
-        let ctor_mt_16 = PM::<FixedI16<U15>>::new_fixedpoint_boundedl2_vec_sum_multithreaded;
-        #[cfg(feature = "multithreaded")]
-        let ctor_mt_32 = PM::<FixedI32<U31>>::new_fixedpoint_boundedl2_vec_sum_multithreaded;
-        #[cfg(feature = "multithreaded")]
-        let ctor_mt_64 = PM::<FixedI64<U63>>::new_fixedpoint_boundedl2_vec_sum_multithreaded;
-
-        {
-            // 16 bit fixedpoint
-
-            // two aggregators, three entries per vector.
-            {
-                let prio3_16 = ctor_16(2, 3).unwrap();
-                test_fixed(FP16_4_INV, FP16_8_INV, FP16_16_INV, prio3_16);
-            }
-
-            #[cfg(feature = "multithreaded")]
-            {
-                let prio3_16_mt = ctor_mt_16(2, 3).unwrap();
-                test_fixed(FP16_4_INV, FP16_8_INV, FP16_16_INV, prio3_16_mt);
-            }
-        }
-
-        {
-            // 32 bit fixedpoint
-
-            {
-                let prio3_32 = ctor_32(2, 3).unwrap();
-                test_fixed(FP32_4_INV, FP32_8_INV, FP32_16_INV, prio3_32);
-            }
-
-            #[cfg(feature = "multithreaded")]
-            {
-                let prio3_32_mt = ctor_mt_32(2, 3).unwrap();
-                test_fixed(FP32_4_INV, FP32_8_INV, FP32_16_INV, prio3_32_mt);
-            }
-        }
-
-        {
-            // 64 bit fixedpoint
-
-            {
-                let prio3_64 = ctor_64(2, 3).unwrap();
-                test_fixed(FP64_4_INV, FP64_8_INV, FP64_16_INV, prio3_64);
-            }
-
-            #[cfg(feature = "multithreaded")]
-            {
-                let prio3_64_mt = ctor_mt_64(2, 3).unwrap();
-                test_fixed(FP64_4_INV, FP64_8_INV, FP64_16_INV, prio3_64_mt);
-            }
-        }
-
-        fn test_fixed<Fx, PE, M>(
-            fp_4_inv: Fx,
-            fp_8_inv: Fx,
-            fp_16_inv: Fx,
-            prio3: Prio3<FixedPointBoundedL2VecSum<Fx, PE, M>, XofTurboShake128, 32>,
-        ) where
-            Fx: Fixed + CompatibleFloat + std::ops::Neg<Output = Fx>,
-            PE: Eq + ParallelSumGadget<Field128, PolyEval<Field128>> + Clone + 'static,
-            M: Eq + ParallelSumGadget<Field128, Mul> + Clone + 'static,
-        {
-            let fp_vec1 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
-            let fp_vec2 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
-
-            let fp_vec3 = vec![-fp_4_inv, -fp_8_inv, -fp_16_inv];
-            let fp_vec4 = vec![-fp_4_inv, -fp_8_inv, -fp_16_inv];
-
-            let fp_vec5 = vec![fp_4_inv, -fp_8_inv, -fp_16_inv];
-            let fp_vec6 = vec![fp_4_inv, fp_8_inv, fp_16_inv];
-
-            // positive entries
-            let fp_list = [fp_vec1, fp_vec2];
-            assert_eq!(
-                run_vdaf(CTX_STR, &prio3, &(), fp_list).unwrap(),
-                vec!(0.5, 0.25, 0.125),
-            );
-
-            // negative entries
-            let fp_list2 = [fp_vec3, fp_vec4];
-            assert_eq!(
-                run_vdaf(CTX_STR, &prio3, &(), fp_list2).unwrap(),
-                vec!(-0.5, -0.25, -0.125),
-            );
-
-            // both
-            let fp_list3 = [fp_vec5, fp_vec6];
-            assert_eq!(
-                run_vdaf(CTX_STR, &prio3, &(), fp_list3).unwrap(),
-                vec!(0.5, 0.0, 0.0),
-            );
-
-            let mut verify_key = [0; 32];
-            let mut nonce = [0; 16];
-            rng().fill(&mut verify_key);
-            rng().fill(&mut nonce);
-
-            let (public_share, mut input_shares) = prio3
-                .shard(CTX_STR, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
-                .unwrap();
-            input_shares[0].joint_rand_blind_mut().unwrap().0[0] ^= 255;
-            let result = run_vdaf_verify(
-                &prio3,
-                &verify_key,
-                CTX_STR,
-                &(),
-                &nonce,
-                public_share,
-                input_shares,
-            );
-            assert_matches!(result, Err(VdafError::Uncategorized(_)));
-
-            let (public_share, mut input_shares) = prio3
-                .shard(CTX_STR, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
-                .unwrap();
-            assert_matches!(
-                &mut input_shares[0],
-                Prio3InputShare::Leader { ref mut measurement_share, ..} => {
-                    measurement_share[0] += Field128::one();
-                }
-            );
-            let result = run_vdaf_verify(
-                &prio3,
-                &verify_key,
-                CTX_STR,
-                &(),
-                &nonce,
-                public_share,
-                input_shares,
-            );
-            assert_matches!(result, Err(VdafError::Uncategorized(_)));
-
-            let (public_share, mut input_shares) = prio3
-                .shard(CTX_STR, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce)
-                .unwrap();
-            assert_matches!(
-                &mut input_shares[0],
-                Prio3InputShare::Leader { ref mut proofs_share, ..} => {
-                    proofs_share[0] += Field128::one();
-                }
-            );
-            let result = run_vdaf_verify(
-                &prio3,
-                &verify_key,
-                CTX_STR,
-                &(),
-                &nonce,
-                public_share,
-                input_shares,
-            );
-            assert_matches!(result, Err(VdafError::Uncategorized(_)));
-
-            test_serialization(&prio3, &vec![fp_4_inv, fp_8_inv, fp_16_inv], &nonce).unwrap();
-        }
     }
 
     #[test]

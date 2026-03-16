@@ -746,7 +746,6 @@ dependencies = [
  "criterion",
  "ctr",
  "fiat-crypto",
- "fixed",
  "hex",
  "hmac",
  "iai",

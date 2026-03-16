@@ -16,9 +16,6 @@ use std::slice;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeGreater};
 
 mod dp;
-#[cfg(feature = "experimental")]
-#[cfg_attr(docsrs, doc(cfg(feature = "experimental")))]
-pub mod fixedpoint_l2;
 #[cfg(feature = "test-util")]
 pub mod higher_degree;
 mod l1boundsum;
