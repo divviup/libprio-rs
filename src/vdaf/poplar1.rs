@@ -2139,6 +2139,27 @@ mod tests {
         assert_matches!(err, CodecError::Other(_));
     }
 
+    #[test]
+    fn agg_param_excessive_num_prefixes() {
+        // Craft a message with num_prefixes=u32::MAX. This should be rejected before any
+        // allocation occurs, rather than attempting to allocate ~4 billion entries.
+        let encoded = [
+            0, 0, // level = 0
+            0xff, 0xff, 0xff, 0xff, // num_prefixes = u32::MAX
+        ];
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
+        assert_matches!(err, CodecError::LengthPrefixTooBig(4_294_967_295));
+
+        // Same idea but with some (insufficient) prefix data present.
+        let encoded = [
+            0, 0, // level = 0
+            0, 0, 0, 10, // num_prefixes = 10
+            0, 1, 2, // only 3 bytes of prefix data
+        ];
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
+        assert_matches!(err, CodecError::LengthPrefixTooBig(10));
+    }
+
     // Tests Poplar1::is_valid() functionality. This unit test is translated from
     // https://github.com/cfrg/draft-irtf-cfrg-vdaf/blob/a4874547794818573acd8734874c9784043b1140/poc/tests/test_vdaf_poplar1.py#L187
     #[test]
