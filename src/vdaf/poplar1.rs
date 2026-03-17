@@ -822,7 +822,7 @@ impl Decode for Poplar1AggregationParam {
             usize::try_from(bytes.position()).map_err(|e| CodecError::Other(e.into()))?,
         );
         if prefix_byte_len > 0 && num_prefixes > remaining / prefix_byte_len {
-            return Err(CodecError::LengthPrefixTooBig(num_prefixes));
+            return Err(CodecError::LengthPrefixTooBig(prefix_byte_len.saturating_mul(num_prefixes)));
         }
 
         // Encoded prefixes
