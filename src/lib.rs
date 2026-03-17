@@ -14,8 +14,6 @@
 //!
 //! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
 
-#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-mod bt;
 pub mod codec;
 pub mod dp;
 pub mod field;
@@ -32,9 +30,3 @@ mod polynomial;
 mod prng;
 pub mod topology;
 pub mod vdaf;
-#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-#[cfg_attr(
-    docsrs,
-    doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
-)]
-pub mod vidpf;
