@@ -816,9 +816,18 @@ impl Decode for Poplar1AggregationParam {
         let num_prefixes =
             usize::try_from(u32::decode(bytes)?).map_err(|e| CodecError::Other(e.into()))?;
 
+        // Validate num_prefixes against remaining bytes before allocating.
+        let prefix_byte_len = ((level + 1) as usize).div_ceil(8);
+        let remaining = bytes.get_ref().len().saturating_sub(
+            usize::try_from(bytes.position()).map_err(|e| CodecError::Other(e.into()))?,
+        );
+        if prefix_byte_len > 0 && num_prefixes > remaining / prefix_byte_len {
+            return Err(CodecError::LengthPrefixTooBig(num_prefixes));
+        }
+
         // Encoded prefixes
         let mut prefixes = Vec::with_capacity(num_prefixes);
-        let mut buf = vec![0; ((level + 1) as usize).div_ceil(8)];
+        let mut buf = vec![0; prefix_byte_len];
         let last_byte_mask = match (level + 1) % 8 {
             0 => 0,
             num_bits => {
