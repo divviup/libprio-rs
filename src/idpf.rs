@@ -25,7 +25,6 @@ use std::{
     fmt::Debug,
     hash::{Hash, Hasher},
     io::{Cursor, Read},
-    iter::zip,
     ops::{Add, AddAssign, Index, Sub},
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -875,11 +874,6 @@ pub(crate) fn conditional_select_seed(select: Choice, seeds: &[[u8; 16]; 2]) -> 
         &and_seeds(&control_bit_to_seed_mask(!select), &seeds[0]),
         &and_seeds(&control_bit_to_seed_mask(select), &seeds[1]),
     )
-}
-
-/// Interchange the contents of seeds if the choice is 1, otherwise seeds remain unchanged.
-pub(crate) fn conditional_swap_seed(lhs: &mut [u8; 16], rhs: &mut [u8; 16], choice: Choice) {
-    zip(lhs, rhs).for_each(|(a, b)| u8::conditional_swap(a, b, choice));
 }
 
 /// An interface that provides memoization of IDPF computations.

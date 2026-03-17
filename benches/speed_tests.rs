@@ -11,8 +11,6 @@ use prio::dp::distributions::DiscreteGaussian;
 use prio::idpf::test_utils::generate_zipf_distributed_batch;
 #[cfg(feature = "experimental")]
 use prio::vdaf::prio2::Prio2;
-#[cfg(feature = "experimental")]
-use prio::vidpf::VidpfServerId;
 use prio::{
     field::{Field128 as F, FieldElement},
     vdaf::{prio3::Prio3, Aggregator, Client},
@@ -699,66 +697,8 @@ fn poplar1(c: &mut Criterion) {
     group.finish();
 }
 
-/// Benchmark VIDPF performance.
 #[cfg(feature = "experimental")]
-fn vidpf(c: &mut Criterion) {
-    use prio::vidpf::{Vidpf, VidpfInput, VidpfWeight};
-
-    let test_sizes = [8usize, 8 * 16, 8 * 256];
-    const NONCE_SIZE: usize = 16;
-    const NONCE: &[u8; NONCE_SIZE] = b"Test Nonce VIDPF";
-
-    let mut group = c.benchmark_group("vidpf_gen");
-    for size in test_sizes.iter() {
-        group.throughput(Throughput::Bytes(*size as u64 / 8));
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
-            let input = VidpfInput::from_bools(&bits);
-            let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
-
-            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(bits.len(), 2).unwrap();
-
-            b.iter(|| {
-                let _ = vidpf
-                    .gen(b"some application", &input, &weight, NONCE)
-                    .unwrap();
-            });
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("vidpf_eval");
-    for size in test_sizes.iter() {
-        group.throughput(Throughput::Bytes(*size as u64 / 8));
-        group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
-            let input = VidpfInput::from_bools(&bits);
-            let weight = VidpfWeight::from(vec![Field255::one(), Field255::one()]);
-            let vidpf = Vidpf::<VidpfWeight<Field255>>::new(bits.len(), 2).unwrap();
-
-            let (public, keys) = vidpf
-                .gen(b"some application", &input, &weight, NONCE)
-                .unwrap();
-
-            b.iter(|| {
-                let _ = vidpf
-                    .eval(
-                        b"some application",
-                        VidpfServerId::S0,
-                        &keys[0],
-                        &public,
-                        &input,
-                        NONCE,
-                    )
-                    .unwrap();
-            });
-        });
-    }
-    group.finish();
-}
-
-#[cfg(feature = "experimental")]
-criterion_group!(benches, poplar1, prio3, prio2, prng, idpf, vidpf);
+criterion_group!(benches, poplar1, prio3, prio2, prng, idpf);
 #[cfg(not(feature = "experimental"))]
 criterion_group!(benches, prio3, prng, dp_noise);
 

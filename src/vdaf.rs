@@ -8,10 +8,6 @@
 use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
-#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-use crate::vdaf::mastic::szk::SzkError;
-#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-use crate::vidpf::VidpfError;
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
@@ -46,20 +42,10 @@ pub enum VdafError {
     #[error("flp error: {0}")]
     Flp(#[from] FlpError),
 
-    /// SZK error.
-    #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-    #[error("Szk error: {0}")]
-    Szk(#[from] SzkError),
-
     /// IDPF error.
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
     #[error("idpf error: {0}")]
     Idpf(#[from] IdpfError),
-
-    /// VIDPF error.
-    #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-    #[error("vidpf error: {0}")]
-    Vidpf(#[from] VidpfError),
 
     /// Errors from other VDAFs.
     #[error(transparent)]
@@ -1417,8 +1403,6 @@ mod tests {
 #[cfg(feature = "test-util")]
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod dummy;
-#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
-pub mod mastic;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(
     docsrs,
