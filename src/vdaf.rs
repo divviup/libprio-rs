@@ -67,13 +67,22 @@ pub enum VdafError {
 }
 
 /// An additive share of a vector of field elements.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Share<F, const SEED_SIZE: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
 
     /// A compressed share, typically sent to the helper.
     Helper(Seed<SEED_SIZE>),
+}
+
+impl<F, const SEED_SIZE: usize> Debug for Share<F, SEED_SIZE> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Leader(_) => f.debug_tuple("Share::Leader").finish(),
+            Self::Helper(_) => f.debug_tuple("Share::Helper").finish(),
+        }
+    }
 }
 
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Share<F, SEED_SIZE> {

@@ -756,7 +756,7 @@ where
 }
 
 /// Message sent by the [`Client`] to each [`Aggregator`] during the Sharding phase.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Prio3InputShare<F, const SEED_SIZE: usize> {
     /// The leader share. Includes the measurement share, the proof share, and the blinding seed
     Leader {
@@ -780,6 +780,15 @@ pub enum Prio3InputShare<F, const SEED_SIZE: usize> {
         /// optional because not every [`Type`] requires joint randomness.
         joint_rand_blind: Option<Seed<SEED_SIZE>>,
     },
+}
+
+impl<F, const SEED_SIZE: usize> Debug for Prio3InputShare<F, SEED_SIZE> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Leader { .. } => f.debug_tuple("Prio3InputShare::Leader").finish(),
+            Self::Helper { .. } => f.debug_tuple("Prio3InputShare::Helper").finish(),
+        }
+    }
 }
 
 impl<F: FieldElement, const SEED_SIZE: usize> Prio3InputShare<F, SEED_SIZE> {

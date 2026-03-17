@@ -169,13 +169,19 @@ impl<T: Type> ParameterizedDecode<Mastic<T>> for MasticPublicShare<VidpfWeight<T
 /// Mastic input share.
 ///
 /// Message sent by the [`Client`] to each Aggregator during the Sharding phase.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct MasticInputShare<F: FieldElement> {
     /// VIDPF key share.
     vidpf_key: VidpfKey,
 
     /// The proof share.
     proof_share: SzkProofShare<F>,
+}
+
+impl<F: FieldElement> Debug for MasticInputShare<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("MasticInputShare").finish_non_exhaustive()
+    }
 }
 
 impl<F: FieldElement> Encode for MasticInputShare<F> {

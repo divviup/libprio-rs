@@ -50,7 +50,7 @@ pub enum SzkError {
 
 /// Contains an FLP proof share, and if joint randomness is needed, the blind
 /// used to derive it and the other party's joint randomness part.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub enum SzkProofShare<F> {
     /// Leader's proof share is uncompressed.
     Leader {
@@ -69,6 +69,15 @@ pub enum SzkProofShare<F> {
         /// Set only if joint randomness is needed for the FLP.
         leader_joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     },
+}
+
+impl<F> std::fmt::Debug for SzkProofShare<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Leader { .. } => f.debug_tuple("SzkProofShare::Leader").finish(),
+            Self::Helper { .. } => f.debug_tuple("SzkProofShare::Helper").finish(),
+        }
+    }
 }
 
 impl<F: FieldElement> PartialEq for SzkProofShare<F> {
@@ -193,10 +202,16 @@ impl<F: FieldElement + Decode> ParameterizedDecode<(bool, usize, bool)> for SzkP
 }
 
 /// A tuple containing the state and messages produced by an SZK query.
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct SzkQueryShare<F: FieldElement> {
     joint_rand_part_opt: Option<Seed<SEED_SIZE>>,
     pub(crate) flp_verifier: Vec<F>,
+}
+
+impl<F: FieldElement> std::fmt::Debug for SzkQueryShare<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SzkQueryShare").finish_non_exhaustive()
+    }
 }
 
 impl<F: FieldElement> Encode for SzkQueryShare<F> {

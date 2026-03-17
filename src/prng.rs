@@ -18,12 +18,19 @@ const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
 
 /// This type implements an iterator that generates a pseudorandom sequence of field elements. The
 /// sequence is derived from a XOF's key stream.
-#[derive(Debug)]
 pub(crate) struct Prng<F, S> {
     phantom: PhantomData<F>,
     seed_stream: S,
     buffer: Vec<u8>,
     buffer_index: usize,
+}
+
+impl<F, S> std::fmt::Debug for Prng<F, S> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Prng")
+            .field("buffer_index", &self.buffer_index)
+            .finish_non_exhaustive()
+    }
 }
 
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
