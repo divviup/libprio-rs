@@ -54,7 +54,7 @@ pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
 impl<const SEED_SIZE: usize> Debug for Seed<SEED_SIZE> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_tuple("Seed").finish()
+        f.debug_tuple("Seed").finish_non_exhaustive()
     }
 }
 
