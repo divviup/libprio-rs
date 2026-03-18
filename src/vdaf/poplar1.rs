@@ -816,9 +816,20 @@ impl Decode for Poplar1AggregationParam {
         let num_prefixes =
             usize::try_from(u32::decode(bytes)?).map_err(|e| CodecError::Other(e.into()))?;
 
+        // Validate num_prefixes against remaining bytes before allocating.
+        let prefix_byte_len = ((level + 1) as usize).div_ceil(8);
+        let remaining = bytes.get_ref().len().saturating_sub(
+            usize::try_from(bytes.position()).map_err(|e| CodecError::Other(e.into()))?,
+        );
+        if prefix_byte_len > 0 && num_prefixes > remaining / prefix_byte_len {
+            return Err(CodecError::LengthPrefixTooBig(
+                prefix_byte_len.saturating_mul(num_prefixes),
+            ));
+        }
+
         // Encoded prefixes
         let mut prefixes = Vec::with_capacity(num_prefixes);
-        let mut buf = vec![0; ((level + 1) as usize).div_ceil(8)];
+        let mut buf = vec![0; prefix_byte_len];
         let last_byte_mask = match (level + 1) % 8 {
             0 => 0,
             num_bits => {
@@ -2128,6 +2139,27 @@ mod tests {
         .unwrap();
         let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
         assert_matches!(err, CodecError::Other(_));
+    }
+
+    #[test]
+    fn agg_param_excessive_num_prefixes() {
+        // Craft a message with num_prefixes=u32::MAX. This should be rejected before any
+        // allocation occurs, rather than attempting to allocate ~4 billion entries.
+        let encoded = [
+            0, 0, // level = 0
+            0xff, 0xff, 0xff, 0xff, // num_prefixes = u32::MAX
+        ];
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
+        assert_matches!(err, CodecError::LengthPrefixTooBig(4_294_967_295));
+
+        // Same idea but with some (insufficient) prefix data present.
+        let encoded = [
+            0, 0, // level = 0
+            0, 0, 0, 10, // num_prefixes = 10
+            0, 1, 2, // only 3 bytes of prefix data
+        ];
+        let err = Poplar1AggregationParam::get_decoded(&encoded).unwrap_err();
+        assert_matches!(err, CodecError::LengthPrefixTooBig(10));
     }
 
     // Tests Poplar1::is_valid() functionality. This unit test is translated from
