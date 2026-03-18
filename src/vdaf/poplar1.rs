@@ -823,7 +823,7 @@ impl Decode for Poplar1AggregationParam {
         );
         if prefix_byte_len > 0 && num_prefixes > remaining / prefix_byte_len {
             return Err(CodecError::LengthPrefixTooBig(
-                prefix_byte_len.saturating_mul(num_prefixes)
+                prefix_byte_len.saturating_mul(num_prefixes),
             ));
         }
 
