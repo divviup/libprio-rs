@@ -206,7 +206,12 @@ where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let variant = match &self.0 {
+            PingPongContinuationInner::OutputShare(_) => "OutputShare",
+            PingPongContinuationInner::Transition { .. } => "Transition",
+        };
         f.debug_struct("PingPongContinuation")
+            .field("variant", &variant)
             .finish_non_exhaustive()
     }
 }
