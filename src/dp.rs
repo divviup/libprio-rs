@@ -175,20 +175,9 @@ pub trait DifferentialPrivacyStrategy {
     /// by using this strategy.
     type Budget: DifferentialPrivacyBudget;
 
-    /// The distribution type this strategy will use to generate the noise.
-    type Distribution: DifferentialPrivacyDistribution;
-
-    /// The type the sensitivity used for privacy analysis has.
-    type Sensitivity;
-
     /// Create a strategy from a differential privacy budget. The distribution created with
     /// `create_distribution` should provide the amount of privacy specified here.
     fn from_budget(b: Self::Budget) -> Self;
-
-    /// Create a new distribution parametrized s.t. adding samples to the result of a function
-    /// with sensitivity `s` will yield differential privacy of the DP variant given in the
-    /// `Budget` type. Can error upon invalid parameters.
-    fn create_distribution(&self, s: Self::Sensitivity) -> Result<Self::Distribution, DpError>;
 }
 
 pub mod distributions;
