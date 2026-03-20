@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use crate::dp::{distributions::PureDpDiscreteLaplace, DifferentialPrivacyStrategy};
+use crate::dp::distributions::PureDpDiscreteLaplace;
 use crate::dp::{DifferentialPrivacyDistribution, DpError};
 use crate::field::{Field128, Field64, NttFriendlyFieldElement};
 use crate::flp::gadgets::{Mul, ParallelSumGadget};
