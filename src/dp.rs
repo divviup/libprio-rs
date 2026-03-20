@@ -175,8 +175,7 @@ pub trait DifferentialPrivacyStrategy {
     /// by using this strategy.
     type Budget: DifferentialPrivacyBudget;
 
-    /// Create a strategy from a differential privacy budget. The distribution created with
-    /// `create_distribution` should provide the amount of privacy specified here.
+    /// Create a strategy from a differential privacy budget.
     fn from_budget(b: Self::Budget) -> Self;
 }
 
