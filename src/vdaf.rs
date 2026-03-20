@@ -53,13 +53,22 @@ pub enum VdafError {
 }
 
 /// An additive share of a vector of field elements.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Share<F, const SEED_SIZE: usize> {
     /// An uncompressed share, typically sent to the leader.
     Leader(Vec<F>),
 
     /// A compressed share, typically sent to the helper.
     Helper(Seed<SEED_SIZE>),
+}
+
+impl<F, const SEED_SIZE: usize> Debug for Share<F, SEED_SIZE> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Leader(_) => f.debug_tuple("Share::Leader").finish_non_exhaustive(),
+            Self::Helper(_) => f.debug_tuple("Share::Helper").finish_non_exhaustive(),
+        }
+    }
 }
 
 impl<F: ConstantTimeEq, const SEED_SIZE: usize> PartialEq for Share<F, SEED_SIZE> {
@@ -141,24 +150,23 @@ impl<F: FieldElement, const SEED_SIZE: usize> Encode for Share<F, SEED_SIZE> {
 /// the VDAF.
 pub trait Vdaf: Clone + Debug {
     /// The type of Client measurement to be aggregated.
-    type Measurement: Clone + Debug;
+    type Measurement: Clone;
 
     /// The aggregate result of the VDAF execution.
-    type AggregateResult: Clone + Debug;
+    type AggregateResult: Clone;
 
     /// The aggregation parameter, used by the Aggregators to map their input shares to output
     /// shares.
     type AggregationParam: Clone + Debug + Decode + Encode;
 
     /// A public share sent by a Client.
-    type PublicShare: Clone + Debug + ParameterizedDecode<Self> + Encode;
+    type PublicShare: Clone + ParameterizedDecode<Self> + Encode;
 
     /// An input share sent by a Client.
-    type InputShare: Clone + Debug + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
+    type InputShare: Clone + for<'a> ParameterizedDecode<(&'a Self, usize)> + Encode;
 
     /// An output share recovered from an input share by an Aggregator.
     type OutputShare: Clone
-        + Debug
         + for<'a> ParameterizedDecode<(&'a Self, &'a Self::AggregationParam)>
         + Encode;
 
@@ -194,25 +202,20 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
 /// The Aggregator's role in the execution of a VDAF.
 pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vdaf {
     /// State of the Aggregator during the verification process.
-    type VerifyState: Clone + Debug + PartialEq + Eq;
+    type VerifyState: Clone + PartialEq + Eq;
 
     /// The type of messages sent by each aggregator at each round of the verification process.
     ///
     /// Decoding takes a [`Self::VerifyState`] as a parameter; this [`Self::VerifyState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type VerifierShare: Clone + Debug + ParameterizedDecode<Self::VerifyState> + Encode;
+    type VerifierShare: Clone + ParameterizedDecode<Self::VerifyState> + Encode;
 
     /// Result of preprocessing a round of verifier shares. This is used by all aggregators as an
     /// input to the next round of the verification process.
     ///
     /// Decoding takes a [`Self::VerifyState`] as a parameter; this [`Self::VerifyState`] may be
     /// associated with any aggregator involved in the execution of the VDAF.
-    type VerifierMessage: Clone
-        + Debug
-        + PartialEq
-        + Eq
-        + ParameterizedDecode<Self::VerifyState>
-        + Encode;
+    type VerifierMessage: Clone + PartialEq + Eq + ParameterizedDecode<Self::VerifyState> + Encode;
 
     /// Begins the verification process with the other Aggregators. The [`Self::VerifyState`]
     /// returned is passed to [`Self::verify_next`] to get this aggregator's first-round verifier
@@ -315,7 +318,7 @@ pub trait Collector: Vdaf {
 }
 
 /// A state transition of an Aggregator during the verification process.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum VerifyTransition<
     V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
     const VERIFY_KEY_SIZE: usize,
@@ -326,6 +329,24 @@ pub enum VerifyTransition<
 
     /// Finish processing and return the output share.
     Finish(V::OutputShare),
+}
+
+impl<V, const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize> Debug
+    for VerifyTransition<V, VERIFY_KEY_SIZE, NONCE_SIZE>
+where
+    V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+    V::VerifyState: Debug,
+    V::VerifierShare: Debug,
+    V::OutputShare: Debug,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Continue(state, share) => {
+                f.debug_tuple("Continue").field(state).field(share).finish()
+            }
+            Self::Finish(share) => f.debug_tuple("Finish").field(share).finish(),
+        }
+    }
 }
 
 /// An aggregate share resulting from aggregating output shares together that
@@ -462,6 +483,7 @@ impl<F: FieldElement> Encode for AggregateShare<F> {
 #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
 pub mod test_utils {
     use std::collections::HashMap;
+    use std::fmt::Debug;
 
     use super::{Aggregatable, Aggregator, Client, Collector, VdafError, VerifyTransition};
     #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -836,12 +858,14 @@ pub mod test_utils {
             + TestVectorVdaf
             + Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>
             + Collector,
-        V::PublicShare: PartialEq,
-        V::AggregateResult: PartialEq,
-        V::InputShare: PartialEq,
-        V::VerifierShare: PartialEq,
-        V::OutputShare: PartialEq,
-        V::AggregateShare: PartialEq,
+        V::PublicShare: Debug + PartialEq,
+        V::AggregateResult: Debug + PartialEq,
+        V::InputShare: Debug + PartialEq,
+        V::VerifierShare: Debug + PartialEq,
+        V::VerifierMessage: Debug,
+        V::VerifyState: Debug,
+        V::OutputShare: Debug + PartialEq,
+        V::AggregateShare: Debug + PartialEq,
     {
         check_test_vector_custom_constructor(test_vector, V::new);
     }
@@ -861,12 +885,14 @@ pub mod test_utils {
             + TestVectorVdaf
             + Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>
             + Collector,
-        V::PublicShare: PartialEq,
-        V::AggregateResult: PartialEq,
-        V::InputShare: PartialEq,
-        V::VerifierShare: PartialEq,
-        V::OutputShare: PartialEq,
-        V::AggregateShare: PartialEq,
+        V::PublicShare: Debug + PartialEq,
+        V::AggregateResult: Debug + PartialEq,
+        V::InputShare: Debug + PartialEq,
+        V::VerifierShare: Debug + PartialEq,
+        V::VerifierMessage: Debug,
+        V::VerifyState: Debug,
+        V::OutputShare: Debug + PartialEq,
+        V::AggregateShare: Debug + PartialEq,
     {
         let vdaf = constructor(test_vector.shares, &test_vector.other_params);
         let agg_param = V::AggregationParam::get_decoded(test_vector.agg_param.as_ref()).unwrap();
@@ -1056,8 +1082,8 @@ pub mod test_utils {
         expected_input_shares: &[&[u8]],
     ) where
         V: TestVectorClient<16> + TestVectorVdaf,
-        V::PublicShare: PartialEq,
-        V::InputShare: PartialEq,
+        V::PublicShare: Debug + PartialEq,
+        V::InputShare: Debug + PartialEq,
     {
         let measurement = V::deserialize_measurement(measurement);
         let (public_share, input_shares) = vdaf
@@ -1099,7 +1125,7 @@ pub mod test_utils {
     ) -> V::VerifyState
     where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-        V::VerifierShare: PartialEq,
+        V::VerifierShare: Debug + PartialEq,
     {
         let verify_key = verify_key.try_into().unwrap();
         let public_share = V::PublicShare::get_decoded_with_param(vdaf, public_share).unwrap();
@@ -1140,6 +1166,7 @@ pub mod test_utils {
         expected_verifier_message: &[u8],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+        V::VerifierMessage: Debug,
     {
         let verifier_shares = verifier_shares
             .iter()
@@ -1172,6 +1199,7 @@ pub mod test_utils {
         verifier_shares: &[&[u8]],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+        V::VerifierMessage: Debug,
     {
         let verifier_shares = verifier_shares
             .iter()
@@ -1196,8 +1224,8 @@ pub mod test_utils {
     ) -> Option<V::VerifyState>
     where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-        V::VerifierShare: PartialEq,
-        V::OutputShare: PartialEq,
+        V::VerifierShare: Debug + PartialEq,
+        V::OutputShare: Debug + PartialEq,
     {
         let verifier_message =
             V::VerifierMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
@@ -1251,6 +1279,9 @@ pub mod test_utils {
         verifier_message: &[u8],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+        V::VerifyState: Debug,
+        V::VerifierShare: Debug,
+        V::OutputShare: Debug,
     {
         let verifier_message =
             V::VerifierMessage::get_decoded_with_param(verifier_state, verifier_message).unwrap();
@@ -1266,7 +1297,7 @@ pub mod test_utils {
         expected_agg_share: &[u8],
     ) where
         V: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
-        V::AggregateShare: PartialEq,
+        V::AggregateShare: Debug + PartialEq,
     {
         let output_shares = output_shares
             .iter()
@@ -1290,7 +1321,7 @@ pub mod test_utils {
         expected_agg_result: &Value,
     ) where
         V: Collector + TestVectorVdaf,
-        V::AggregateResult: PartialEq,
+        V::AggregateResult: Debug + PartialEq,
     {
         let agg_shares = agg_shares
             .iter()

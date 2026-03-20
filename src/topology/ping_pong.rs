@@ -193,12 +193,28 @@ impl Decode for PingPongMessage {
 ///
 /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
 /// [sizes]: https://github.com/divviup/libprio-rs/pull/683/#issuecomment-1687210371
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct PingPongContinuation<
     const VERIFY_KEY_SIZE: usize,
     const NONCE_SIZE: usize,
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
 >(PingPongContinuationInner<VERIFY_KEY_SIZE, NONCE_SIZE, A>);
+
+impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> Debug
+    for PingPongContinuation<VERIFY_KEY_SIZE, NONCE_SIZE, A>
+where
+    A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let variant = match &self.0 {
+            PingPongContinuationInner::OutputShare(_) => "OutputShare",
+            PingPongContinuationInner::Transition { .. } => "Transition",
+        };
+        f.debug_struct("PingPongContinuation")
+            .field("variant", &variant)
+            .finish_non_exhaustive()
+    }
+}
 
 impl<
         const VERIFY_KEY_SIZE: usize,
@@ -371,7 +387,7 @@ impl<
 }
 
 /// PingPongContinuationInner hides the internals of [`PingPongContinuation`] from external clients.
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 enum PingPongContinuationInner<
     const VERIFY_KEY_SIZE: usize,
     const NONCE_SIZE: usize,

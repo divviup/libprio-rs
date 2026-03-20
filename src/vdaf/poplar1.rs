@@ -113,7 +113,7 @@ impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for P
 ///
 /// This is comprised of an IDPF key share and the correlated randomness used to compute the sketch
 /// during verification.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// IDPF key share.
     idpf_key: Seed<16>,
@@ -129,6 +129,12 @@ pub struct Poplar1InputShare<const SEED_SIZE: usize> {
     /// Aggregator's share of the correlated randomness used in the second part of the sketch. Used
     /// for leaf nodes of the IDPF tree.
     corr_leaf: [Field255; 2],
+}
+
+impl<const SEED_SIZE: usize> Debug for Poplar1InputShare<SEED_SIZE> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Poplar1InputShare").finish_non_exhaustive()
+    }
 }
 
 impl<const SEED_SIZE: usize> PartialEq for Poplar1InputShare<SEED_SIZE> {

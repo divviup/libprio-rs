@@ -49,8 +49,14 @@ use std::{
 use subtle::{Choice, ConstantTimeEq};
 
 /// Input of [`Xof`].
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
+
+impl<const SEED_SIZE: usize> Debug for Seed<SEED_SIZE> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("Seed").finish_non_exhaustive()
+    }
+}
 
 impl<const SEED_SIZE: usize> Distribution<Seed<SEED_SIZE>> for StandardUniform {
     fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> Seed<SEED_SIZE> {
@@ -197,12 +203,7 @@ impl TryRng for SeedStreamAes128 {
 #[cfg(feature = "crypto-dependencies")]
 impl Debug for SeedStreamAes128 {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        // Ctr64BE<Aes128> does not implement Debug, but [`ctr::CtrCore`][1] does, and we get that
-        // with [`cipher::StreamCipherCoreWrapper::get_core`][2].
-        //
-        // [1]: https://docs.rs/ctr/latest/ctr/struct.CtrCore.html
-        // [2]: https://docs.rs/cipher/latest/cipher/struct.StreamCipherCoreWrapper.html
-        self.0.get_core().fmt(f)
+        f.debug_struct("SeedStreamAes128").finish_non_exhaustive()
     }
 }
 
