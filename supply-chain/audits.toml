@@ -622,6 +622,12 @@ who = "Ameer Ghani <inahga@letsencrypt.org>"
 criteria = "safe-to-deploy"
 delta = "0.5.1 -> 0.5.2"
 
+[[audits.libz-rs-sys]]
+who = "Ameer Ghani <inahga@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.5.2 -> 0.6.3"
+notes = "Note libz-rs-sys now depends on the `libc` crate if you're using the `gz` feature. This is a foundational Rust crate, so this is not of concern."
+
 [[audits.linux-raw-sys]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
@@ -1295,6 +1301,11 @@ delta = "0.5.0 -> 0.5.1"
 who = "Ameer Ghani <inahga@letsencrypt.org>"
 criteria = "safe-to-deploy"
 delta = "0.5.1 -> 0.5.2"
+
+[[audits.zlib-rs]]
+who = "Ameer Ghani <inahga@letsencrypt.org>"
+criteria = "safe-to-deploy"
+delta = "0.5.2 -> 0.6.3"
 
 [[trusted.byteorder]]
 criteria = "safe-to-deploy"
