@@ -8,6 +8,6 @@ repository = "https://github.com/divviup/libprio-rs"
 
 [dependencies]
 base64 = "0.22.1"
-fixed = "1.30"
+fixed = "1.31"
 rand = "0.10"
 prio = { path = "..", features = ["experimental", "test-util"] }
