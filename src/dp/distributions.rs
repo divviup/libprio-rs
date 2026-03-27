@@ -274,20 +274,20 @@ pub type ZCdpDiscreteGaussian = DiscreteGaussianDpStrategy<ZCdpBudget>;
 
 impl DifferentialPrivacyStrategy for DiscreteGaussianDpStrategy<ZCdpBudget> {
     type Budget = ZCdpBudget;
-    type Distribution = DiscreteGaussian;
-    type Sensitivity = Ratio<BigUint>;
 
     fn from_budget(budget: ZCdpBudget) -> DiscreteGaussianDpStrategy<ZCdpBudget> {
         DiscreteGaussianDpStrategy { budget }
     }
+}
 
+impl DiscreteGaussianDpStrategy<ZCdpBudget> {
     /// Create a new sampler from the Discrete Gaussian Distribution with a standard
     /// deviation calibrated to provide `1/2 epsilon^2` zero-concentrated differential
     /// privacy when added to the result of an integer-valued function with sensitivity
     /// `sensitivity`, following Theorem 4 from [[CKS20]]
     ///
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
-    fn create_distribution(
+    pub fn create_distribution(
         &self,
         sensitivity: Ratio<BigUint>,
     ) -> Result<DiscreteGaussian, DpError> {
@@ -347,13 +347,13 @@ pub type PureDpDiscreteLaplace = DiscreteLaplaceDpStrategy<PureDpBudget>;
 
 impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
     type Budget = PureDpBudget;
-    type Distribution = DiscreteLaplace;
-    type Sensitivity = Ratio<BigUint>;
 
     fn from_budget(budget: Self::Budget) -> Self {
         DiscreteLaplaceDpStrategy { budget }
     }
+}
 
+impl PureDpDiscreteLaplace {
     /// Create a new sampler for the discrete Laplace distribution with a scale parameter calibrated
     /// to provide `epsilon`-differential privacy when added to the result of an integer-valued
     /// function with L1-sensitivity `sensitivity`.
@@ -372,10 +372,10 @@ impl DifferentialPrivacyStrategy for PureDpDiscreteLaplace {
     /// [GRS12]: https://theory.stanford.edu/~tim/papers/priv.pdf
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
     /// [DMNS06]: https://people.csail.mit.edu/asmith/PS/sensitivity-tcc-final.pdf
-    fn create_distribution(
+    pub fn create_distribution(
         &self,
-        sensitivity: Self::Sensitivity,
-    ) -> Result<Self::Distribution, DpError> {
+        sensitivity: Ratio<BigUint>,
+    ) -> Result<DiscreteLaplace, DpError> {
         DiscreteLaplace::new(sensitivity / &self.budget.epsilon)
     }
 }
