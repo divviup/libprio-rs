@@ -19,7 +19,7 @@ fiat-crypto = { version = "0.2.9", optional = true }
 fixed = { version = "1.27", optional = true }
 getrandom = { version = "0.2.17", features = ["std"] }
 hex = { version = "0.4.3", features = ["serde"], optional = true }
-hmac = { version = "0.12.1", optional = true }
+hmac = { version = "0.13.0", optional = true }
 num-bigint = { version = "0.4.6", optional = true, features = ["rand", "serde"] }
 num-integer = { version = "0.1.46", optional = true }
 num-iter = { version = "0.1.45", optional = true }
