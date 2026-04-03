@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementations of XOFs specified in [[draft-irtf-cfrg-vdaf-08]].
+//! Implementations of XOFs specified in [[draft-irtf-cfrg-vdaf-18]].
 //!
-//! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+//! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 /// Value of the domain separation byte "D" used by XofTurboShake128 when invoking TurboSHAKE128.
 const XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION: u8 = 1;
@@ -124,9 +124,9 @@ impl<S: Rng> IntoFieldVec for S {
     }
 }
 
-/// An extendable output function (XOF) with the interface specified in [[draft-irtf-cfrg-vdaf-08]].
+/// An extendable output function (XOF) with the interface specified in [[draft-irtf-cfrg-vdaf-18]].
 ///
-/// [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+/// [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 pub trait Xof<const SEED_SIZE: usize>: Clone + Debug {
     /// The type of stream produced by this XOF.
     type SeedStream: Rng + Sized;
@@ -207,9 +207,9 @@ impl Debug for SeedStreamAes128 {
     }
 }
 
-/// The XOF based on TurboSHAKE128 as specified in [[draft-irtf-cfrg-vdaf-08]].
+/// The XOF based on TurboSHAKE128 as specified in [[draft-irtf-cfrg-vdaf-18]].
 ///
-/// [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+/// [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 #[derive(Clone, Debug)]
 pub struct XofTurboShake128(TurboShake128);
 
@@ -353,7 +353,7 @@ impl XofFixedKeyAes128Key {
     }
 }
 
-/// XofFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-08]]. This XOF is NOT RECOMMENDED for
+/// XofFixedKeyAes128 as specified in [[draft-irtf-cfrg-vdaf-18]]. This XOF is NOT RECOMMENDED for
 /// general use; see Section 9 ("Security Considerations") for details.
 ///
 /// This XOF combines TurboSHAKE128 and a fixed-key mode of operation for AES-128. The key is
@@ -361,7 +361,7 @@ impl XofFixedKeyAes128Key {
 /// binder strings, and depending on the application, these strings can be hard-coded. The seed is
 /// used to construct each block of input passed to a hash function built from AES-128.
 ///
-/// [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+/// [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 #[derive(Clone, Debug)]
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 #[cfg_attr(

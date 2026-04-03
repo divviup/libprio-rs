@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of Poplar1 as specified in [[draft-irtf-cfrg-vdaf-08]].
+//! Implementation of Poplar1 as specified in [[draft-irtf-cfrg-vdaf-18]].
 //!
-//! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+//! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 use crate::{
     codec::{CodecError, Decode, Encode, ParameterizedDecode},
@@ -34,9 +34,9 @@ const DST_VERIFY_RANDOMNESS: u16 = 4;
 
 impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
     /// Create an instance of [`Poplar1`]. The caller provides the bit length of each
-    /// measurement (`BITS` as defined in [[draft-irtf-cfrg-vdaf-08]]).
+    /// measurement (`BITS` as defined in [[draft-irtf-cfrg-vdaf-18]]).
     ///
-    /// [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+    /// [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
     pub fn new(bits: usize) -> Self {
         Self {
             bits,
@@ -47,9 +47,9 @@ impl<P, const SEED_SIZE: usize> Poplar1<P, SEED_SIZE> {
 
 impl Poplar1<XofTurboShake128, 32> {
     /// Create an instance of [`Poplar1`] using [`XofTurboShake128`]. The caller provides the bit length of
-    /// each measurement (`BITS` as defined in [[draft-irtf-cfrg-vdaf-08]]).
+    /// each measurement (`BITS` as defined in [[draft-irtf-cfrg-vdaf-18]]).
     ///
-    /// [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+    /// [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
     pub fn new_turboshake128(bits: usize) -> Self {
         Poplar1::new(bits)
     }
@@ -781,7 +781,7 @@ impl Poplar1AggregationParam {
 
 impl Encode for Poplar1AggregationParam {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        // draft-irtf-cfrg-vdaf-13, Section 8.2.6.6:
+        // draft-irtf-cfrg-vdaf-18, Section 8.2.6.6:
         //
         // struct {
         //     uint16_t level;
