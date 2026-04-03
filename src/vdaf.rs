@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
 //! Verifiable Distributed Aggregation Functions (VDAFs) as described in
-//! [[draft-irtf-cfrg-vdaf-08]].
+//! [[draft-irtf-cfrg-vdaf-18]].
 //!
-//! [draft-irtf-cfrg-vdaf-08]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/08/
+//! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
@@ -190,7 +190,7 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
     ///
     /// Implements `Vdaf::shard` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-13#section-5.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.1
     fn shard(
         &self,
         ctx: &[u8],
@@ -223,7 +223,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.verify_init` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.2
     #[allow(clippy::too_many_arguments)]
     fn verify_init(
         &self,
@@ -240,7 +240,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.verifier_shares_to_message` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.2
     fn verifier_shares_to_message<M: IntoIterator<Item = Self::VerifierShare>>(
         &self,
         ctx: &[u8],
@@ -258,7 +258,7 @@ pub trait Aggregator<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>: Vda
     ///
     /// Implements `Vdaf.verify_next` from [VDAF].
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-08#section-5.2
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.2
     fn verify_next(
         &self,
         ctx: &[u8],

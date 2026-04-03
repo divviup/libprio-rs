@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-//! Implementation of a dummy VDAF which conforms to the specification in [draft-irtf-cfrg-vdaf-06]
+//! Implementation of a dummy VDAF which conforms to the specification in [draft-irtf-cfrg-vdaf-18]
 //! but does nothing. Useful for testing.
 //!
-//! [draft-irtf-cfrg-vdaf-06]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/06/
+//! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 use crate::{
     codec::{CodecError, Decode, Encode},

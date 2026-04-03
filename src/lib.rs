@@ -12,7 +12,7 @@
 //! Prio3 is available in the `vdaf` module as part of an implementation of [Verifiable Distributed
 //! Aggregation Functions][vdaf], along with an experimental implementation of Poplar1.
 //!
-//! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/05/
+//! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 pub mod codec;
 pub mod dp;

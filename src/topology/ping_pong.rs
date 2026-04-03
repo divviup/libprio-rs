@@ -4,7 +4,7 @@
 //! two aggregators, designated "Leader" and "Helper". This topology is required for implementing
 //! the [Distributed Aggregation Protocol][DAP].
 //!
-//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+//! [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
 //! [DAP]: https://datatracker.ietf.org/doc/html/draft-ietf-ppm-dap
 
 use crate::{
@@ -51,7 +51,7 @@ pub enum PingPongError {
 /// variants are opaque byte buffers. This is because the ping-pong routines take responsibility for
 /// decoding verifier shares and messages, which usually requires having the verifier state.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
 #[derive(Clone, PartialEq, Eq)]
 pub enum PingPongMessage {
     /// Corresponds to MessageType.initialize.
@@ -158,7 +158,7 @@ impl Decode for PingPongMessage {
 }
 
 /// A continuation of a state transition in the pong-pong topology. This mostly corresponds to the
-/// `ping_pong_continue` and `ping_pong_transition` functions defined in [VDAF].
+/// `ping_pong_continued` and `ping_pong_transition` functions defined in [VDAF].
 ///
 /// # Discussion
 ///
@@ -191,7 +191,7 @@ impl Decode for PingPongMessage {
 /// and `FinishedWithOutbound`, but because we need this to also yield `Finished` in some cases, it
 /// also captures parts of `ping_pong_continued`.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
 /// [sizes]: https://github.com/divviup/libprio-rs/pull/683/#issuecomment-1687210371
 #[derive(Clone)]
 pub struct PingPongContinuation<
@@ -415,7 +415,7 @@ enum PingPongContinuationInner<
 /// peer as input to the appropriate `PingPongTopology::{leader,helper}_continued` function to
 /// advance to the next round.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Continued<S> {
     /// A message for the peer aggregator.
@@ -429,7 +429,7 @@ pub struct Continued<S> {
 /// code, and the `Rejected` state is represented as `std::result::Result::Err`, so this enum does
 /// not include those variants.
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum PingPongState<P, O> {
     /// Verification of the report will continue.
@@ -443,7 +443,7 @@ pub enum PingPongState<P, O> {
     ///
     /// The `output_share` may be accumulated by the aggregator.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
     FinishedWithOutbound {
         /// The output share this aggregator verified.
         output_share: O,
@@ -457,7 +457,7 @@ pub enum PingPongState<P, O> {
     /// The `output_share` may be accumulated by the aggregator. No message need be transmitted to
     /// the peer, which has already finished verifying the report.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
     Finished {
         /// The output share this aggregator verified.
         output_share: O,
@@ -466,7 +466,7 @@ pub enum PingPongState<P, O> {
 
 /// Extension trait on [`crate::vdaf::Aggregator`] which adds the [VDAF Ping-Pong Topology][VDAF].
 ///
-/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+/// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
 pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize>:
     Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>
 {
@@ -483,7 +483,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     /// according to that item's documentation. On failure, the leader has transitioned to the
     /// `Rejected` state.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
     fn leader_initialized(
         &self,
         verify_key: &[u8; VERIFY_KEY_SIZE],
@@ -506,7 +506,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `leader_message` must be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
     #[allow(clippy::too_many_arguments)]
     fn helper_initialized(
         &self,
@@ -531,7 +531,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `helper_message` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
     fn leader_continued(
         &self,
         ctx: &[u8],
@@ -552,7 +552,7 @@ pub trait PingPongTopology<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize
     ///
     /// `leader_message` must not be `PingPongMessage::Initialize` or the function will fail.
     ///
-    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-15#section-5.7.1
+    /// [VDAF]: https://datatracker.ietf.org/doc/html/draft-irtf-cfrg-vdaf-18#section-5.7.1
     fn helper_continued(
         &self,
         ctx: &[u8],
