@@ -18,7 +18,7 @@ use crate::{
         ShareDecodingParameter, Vdaf, VdafError, VerifyTransition,
     },
 };
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rand::{rng, Rng, RngExt};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};

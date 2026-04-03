@@ -28,7 +28,7 @@ use aes::{
 #[cfg(feature = "crypto-dependencies")]
 use ctr::Ctr64BE;
 #[cfg(feature = "crypto-dependencies")]
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit as _, Mac};
 use rand::RngExt;
 use rand_core::{utils::next_word_via_fill, Rng, SeedableRng, TryRng};
 
@@ -515,7 +515,7 @@ impl Xof<32> for XofHmacSha256Aes128 {
     type SeedStream = SeedStreamAes128;
 
     fn init(seed_bytes: &[u8; 32], dst_parts: &[&[u8]]) -> Self {
-        let mut mac = <Hmac<Sha256> as Mac>::new_from_slice(seed_bytes).unwrap();
+        let mut mac = Hmac::<Sha256>::new_from_slice(seed_bytes).unwrap();
         let dst_len = dst_parts
             .iter()
             .map(|dst_part| dst_part.len())
