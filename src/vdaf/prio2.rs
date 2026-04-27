@@ -18,7 +18,7 @@ use crate::{
         ShareDecodingParameter, Vdaf, VdafError, VerifyTransition,
     },
 };
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use rand::{rng, Rng, RngExt};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
@@ -166,7 +166,7 @@ impl Client<16> for Prio2 {
 
         let helper_seed = rng.random();
         let helper_prng = Prng::from_prio2_seed(&helper_seed);
-        for (s1, d) in leader_data.iter_mut().zip(helper_prng.into_iter()) {
+        for (s1, d) in leader_data.iter_mut().zip(helper_prng) {
             *s1 -= d;
         }
 

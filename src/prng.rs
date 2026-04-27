@@ -39,7 +39,11 @@ impl<F: FieldElement> Prng<F, SeedStreamAes128> {
     /// bytes of the seed are used, respectively, for the key and initialization vector for AES128
     /// in CTR mode.
     pub(crate) fn from_prio2_seed(seed: &[u8; 32]) -> Self {
-        let seed_stream = SeedStreamAes128::new(&seed[..16], &seed[16..]);
+        // Unwrap safety: these slices are of fixed size, so these conversions always succeed.
+        let seed_stream = SeedStreamAes128::new(
+            (&seed[..16]).try_into().unwrap(),
+            (&seed[16..]).try_into().unwrap(),
+        );
         Self::from_seed_stream(seed_stream)
     }
 }
