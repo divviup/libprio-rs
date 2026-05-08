@@ -532,6 +532,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 version = "0.12.1"
 
+[[audits.inout]]
+who = "David Cook <dcook@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.4 -> 0.2.2"
+
 [[audits.io-lifetimes]]
 who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
