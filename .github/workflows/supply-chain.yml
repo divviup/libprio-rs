@@ -3,12 +3,10 @@ name: supply-chain
 on:
   push:
     branches:
-     - main
-     - release/**
+     - release/0.16
   pull_request:
     branches:
-     - main
-     - release/**
+     - release/0.16
   workflow_dispatch:
 
 jobs:
