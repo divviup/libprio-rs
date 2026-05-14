@@ -1001,6 +1001,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "sponge-cursor"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
+
+[[package]]
 name = "statrs"
 version = "0.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1078,12 +1084,13 @@ dependencies = [
 
 [[package]]
 name = "turboshake"
-version = "0.6.0"
+version = "0.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17266b249d9e17f9a5d7db4e16dedc6de78074ee2cc68c34f08042e1cd7ffa60"
+checksum = "18f6c0efafe36b577cad1234adcf31fba4081df189254b5b0ce037c630ba2aa0"
 dependencies = [
  "digest",
  "keccak",
+ "sponge-cursor",
 ]
 
 [[package]]
