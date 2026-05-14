@@ -45,7 +45,7 @@ use std::{
 use subtle::{Choice, ConstantTimeEq};
 use turboshake::{
     digest::{ExtendableOutput, Update, XofReader},
-    TurboShake128, TurboShake128Reader,
+    CTurboShake128, TurboShake128Reader,
 };
 
 /// Input of [`Xof`].
@@ -211,11 +211,11 @@ impl Debug for SeedStreamAes128 {
 ///
 /// [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 #[derive(Clone, Debug)]
-pub struct XofTurboShake128(TurboShake128<XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION>);
+pub struct XofTurboShake128(CTurboShake128<XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION>);
 
 impl XofTurboShake128 {
     pub(crate) fn from_seed_slice(seed_bytes: &[u8], dst_parts: &[&[u8]]) -> Self {
-        let mut xof = Self(TurboShake128::<XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION>::default());
+        let mut xof = Self(CTurboShake128::<XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION>::default());
 
         let dst_len = dst_parts
             .iter()
@@ -311,7 +311,7 @@ impl XofFixedKeyAes128Key {
     /// Panics if the total length of all elements of `dst` exceeds `u16::MAX`.
     pub fn new(dst: &[&[u8]], binder: &[u8]) -> Self {
         let mut fixed_key_deriver =
-            TurboShake128::<XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION>::default();
+            CTurboShake128::<XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION>::default();
         let tot_dst_len: usize = dst
             .iter()
             .map(|s| {
@@ -366,7 +366,7 @@ impl XofFixedKeyAes128Key {
     doc(cfg(all(feature = "crypto-dependencies", feature = "experimental")))
 )]
 pub struct XofFixedKeyAes128 {
-    fixed_key_deriver: TurboShake128<XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION>,
+    fixed_key_deriver: CTurboShake128<XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION>,
     base_block: Block,
 }
 
@@ -380,7 +380,7 @@ impl Xof<16> for XofFixedKeyAes128 {
 
     fn init(seed_bytes: &[u8; 16], dst_parts: &[&[u8]]) -> Self {
         let mut fixed_key_deriver =
-            TurboShake128::<XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION>::default();
+            CTurboShake128::<XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION>::default();
         let dst_len = dst_parts
             .iter()
             .map(|dst_part| dst_part.len())
