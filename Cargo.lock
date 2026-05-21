@@ -1084,9 +1084,9 @@ dependencies = [
 
 [[package]]
 name = "turboshake"
-version = "0.7.0"
+version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18f6c0efafe36b577cad1234adcf31fba4081df189254b5b0ce037c630ba2aa0"
+checksum = "f892c6904b0bd5a9241eac848347abcbbbd2b9f3892bad23ac3e6efab8d6f06a"
 dependencies = [
  "digest",
  "keccak",
