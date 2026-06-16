@@ -1,0 +1,15 @@
+name: Dependabot auto-merge
+on:
+  pull_request:
+    types: [opened, reopened]
+
+jobs:
+  dependabot:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    steps:
+      - name: Approve & enable auto-merge for Dependabot PRs
+        run: gh pr review --approve -b "Auto-approving dependabot PR." "$PR_URL" && gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.DIVVIUP_GITHUB_AUTOMATION_DEPENDABOT_APPROVER_PAT }}
