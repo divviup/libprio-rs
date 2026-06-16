@@ -561,11 +561,12 @@ checksum = "78ca9ab1a0babb1e7d5695e3530886289c18cf2f87ec19a575a0abdce112e3a3"
 
 [[package]]
 name = "modinverse"
-version = "0.1.1"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f62f577f148cc1a9466e7065a22e59466a7d537cceba5e77e57181d0f706633"
+checksum = "c49599cd615927fb0f2c73bc878df7339610c5945129b6ff6560bec332474dc7"
 dependencies = [
  "num-integer",
+ "num-traits",
 ]
 
 [[package]]
