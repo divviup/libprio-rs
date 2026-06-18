@@ -18,7 +18,7 @@ jobs:
     env:
       CARGO_VET_COMMIT: 8b40d6351ed9758a73a4a0bf2c930c17a35c5e15
     steps:
-    - uses: actions/checkout@v6
+    - uses: actions/checkout@v6.0.3
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
     - name: Cache cargo vet
