@@ -213,29 +213,6 @@ impl Encode for u16 {
     }
 }
 
-/// 24 bit integer, per
-/// [RFC 8443, section 3.3](https://datatracker.ietf.org/doc/html/rfc8446#section-3.3)
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct U24(pub u32);
-
-impl Decode for U24 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(U24(bytes.read_u24::<BigEndian>()?))
-    }
-}
-
-impl Encode for U24 {
-    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        // Encode lower three bytes of the u32 as u24
-        bytes.extend_from_slice(&u32::to_be_bytes(self.0)[1..]);
-        Ok(())
-    }
-
-    fn encoded_len(&self) -> Option<usize> {
-        Some(3)
-    }
-}
-
 impl Decode for u32 {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
         Ok(bytes.read_u32::<BigEndian>()?)
@@ -354,46 +331,6 @@ pub fn decode_u16_items<P, D: ParameterizedDecode<P>>(
 }
 
 /// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of
-/// `0xffffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u24_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    U24(0).encode(bytes)?;
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len = u32::try_from(bytes.len() - len_offset - 3)
-        .map_err(|_| CodecError::LengthPrefixOverflow)?;
-    if len > 0xffffff {
-        return Err(CodecError::LengthPrefixOverflow);
-    }
-    bytes[len_offset..len_offset + 3].copy_from_slice(&len.to_be_bytes()[1..]);
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xffffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u24_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read three bytes to get length of opaque byte vector
-    let length = U24::decode(bytes)?.0 as usize;
-
-    decode_fixlen_items(length, decoding_parameter, bytes)
-}
-
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of
 /// `0xffffffff`.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
@@ -505,20 +442,6 @@ mod tests {
     }
 
     #[test]
-    fn roundtrip_u24() {
-        let value = U24(1_000_000u32);
-
-        let mut bytes = vec![];
-        value.encode(&mut bytes).unwrap();
-        assert_eq!(bytes.len(), 3);
-        // Check endianness of encoding
-        assert_eq!(bytes, vec![15, 66, 64]);
-
-        let decoded = U24::decode(&mut Cursor::new(&bytes)).unwrap();
-        assert_eq!(value, decoded);
-    }
-
-    #[test]
     fn roundtrip_u32() {
         let value = 134_217_728u32;
 
@@ -550,7 +473,6 @@ mod tests {
     struct TestMessage {
         field_u8: u8,
         field_u16: u16,
-        field_u24: U24,
         field_u32: u32,
         field_u64: u64,
     }
@@ -559,7 +481,6 @@ mod tests {
         fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
             self.field_u8.encode(bytes)?;
             self.field_u16.encode(bytes)?;
-            self.field_u24.encode(bytes)?;
             self.field_u32.encode(bytes)?;
             self.field_u64.encode(bytes)
         }
@@ -568,7 +489,6 @@ mod tests {
             Some(
                 self.field_u8.encoded_len()?
                     + self.field_u16.encoded_len()?
-                    + self.field_u24.encoded_len()?
                     + self.field_u32.encoded_len()?
                     + self.field_u64.encoded_len()?,
             )
@@ -579,14 +499,12 @@ mod tests {
         fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
             let field_u8 = u8::decode(bytes)?;
             let field_u16 = u16::decode(bytes)?;
-            let field_u24 = U24::decode(bytes)?;
             let field_u32 = u32::decode(bytes)?;
             let field_u64 = u64::decode(bytes)?;
 
             Ok(TestMessage {
                 field_u8,
                 field_u16,
-                field_u24,
                 field_u32,
                 field_u64,
             })
@@ -599,8 +517,6 @@ mod tests {
             1 +
             // u16 field
             2 +
-            // u24 field
-            3 +
             // u32 field
             4 +
             // u64 field
@@ -613,7 +529,6 @@ mod tests {
         let value = TestMessage {
             field_u8: 0,
             field_u16: 300,
-            field_u24: U24(1_000_000),
             field_u32: 134_217_728,
             field_u64: 137_438_953_472,
         };
@@ -632,21 +547,18 @@ mod tests {
             TestMessage {
                 field_u8: 0,
                 field_u16: 300,
-                field_u24: U24(1_000_000),
                 field_u32: 134_217_728,
                 field_u64: 137_438_953_472,
             },
             TestMessage {
                 field_u8: 0,
                 field_u16: 300,
-                field_u24: U24(1_000_000),
                 field_u32: 134_217_728,
                 field_u64: 137_438_953_472,
             },
             TestMessage {
                 field_u8: 0,
                 field_u16: 300,
-                field_u24: U24(1_000_000),
                 field_u32: 134_217_728,
                 field_u64: 137_438_953_472,
             },
@@ -689,27 +601,6 @@ mod tests {
         assert_eq!(bytes[0..2], [0, 3 * TestMessage::encoded_length() as u8]);
 
         let decoded = decode_u16_items(&(), &mut Cursor::new(&bytes)).unwrap();
-        assert_eq!(values, decoded);
-    }
-
-    #[test]
-    fn roundtrip_variable_length_u24() {
-        let values = messages_vec();
-        let mut bytes = vec![];
-        encode_u24_items(&mut bytes, &(), &values).unwrap();
-
-        assert_eq!(
-            bytes.len(),
-            // Length of opaque vector
-            3 +
-            // 3 TestMessage values
-            3 * TestMessage::encoded_length()
-        );
-
-        // Check endianness of encoded length
-        assert_eq!(bytes[0..3], [0, 0, 3 * TestMessage::encoded_length() as u8]);
-
-        let decoded = decode_u24_items(&(), &mut Cursor::new(&bytes)).unwrap();
         assert_eq!(values, decoded);
     }
 
@@ -803,10 +694,6 @@ mod tests {
         assert_eq!(
             0u16.encoded_len().unwrap(),
             0u16.get_encoded().unwrap().len()
-        );
-        assert_eq!(
-            U24(0).encoded_len().unwrap(),
-            U24(0).get_encoded().unwrap().len()
         );
         assert_eq!(
             0u32.encoded_len().unwrap(),
