@@ -744,7 +744,7 @@ dependencies = [
  "num-traits",
  "once_cell",
  "prio",
- "rand 0.10.1",
+ "rand 0.10.2",
  "rand_core 0.10.1",
  "rand_distr 0.6.0",
  "rayon",
@@ -763,7 +763,7 @@ version = "0.5.0"
 dependencies = [
  "base64",
  "prio",
- "rand 0.10.1",
+ "rand 0.10.2",
 ]
 
 [[package]]
@@ -809,9 +809,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.1"
+version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d2e8e8bcc7961af1fdac401278c6a831614941f6164ee3bf4ce61b7edb162207"
+checksum = "c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"
 dependencies = [
  "chacha20",
  "getrandom 0.4.1",
@@ -860,7 +860,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d431c2703ccf129de4d45253c03f49ebb22b97d6ad79ee3ecfc7e3f4862c1d8"
 dependencies = [
  "num-traits",
- "rand 0.10.1",
+ "rand 0.10.2",
 ]
 
 [[package]]
