@@ -17,7 +17,6 @@ use std::{
     io::{Cursor, Read},
     marker::PhantomData,
     mem::size_of,
-    num::TryFromIntError,
 };
 
 /// An error that occurred during decoding.
@@ -405,117 +404,6 @@ pub fn encode_fixlen_items<E: Encode>(bytes: &mut Vec<u8>, items: &[E]) -> Resul
     Ok(())
 }
 
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u8_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    bytes.push(0);
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len =
-        u8::try_from(bytes.len() - len_offset - 1).map_err(|_| CodecError::LengthPrefixOverflow)?;
-    bytes[len_offset] = len;
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u8_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read one byte to get length of opaque byte vector
-    let length = usize::from(u8::decode(bytes)?);
-
-    decode_fixlen_items(length, decoding_parameter, bytes)
-}
-
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u16_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    0u16.encode(bytes)?;
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len = u16::try_from(bytes.len() - len_offset - 2)
-        .map_err(|_| CodecError::LengthPrefixOverflow)?;
-    bytes[len_offset..len_offset + 2].copy_from_slice(&len.to_be_bytes());
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u16_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read two bytes to get length of opaque byte vector
-    let length = usize::from(u16::decode(bytes)?);
-
-    decode_fixlen_items(length, decoding_parameter, bytes)
-}
-
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of
-/// `0xffffffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u32_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    0u32.encode(bytes)?;
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len = u32::try_from(bytes.len() - len_offset - 4)
-        .map_err(|_| CodecError::LengthPrefixOverflow)?;
-    bytes[len_offset..len_offset + 4].copy_from_slice(&len.to_be_bytes());
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xffffffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read four bytes to get length of opaque byte vector.
-    let len: usize = u32::decode(bytes)?
-        .try_into()
-        .map_err(|err: TryFromIntError| CodecError::Other(err.into()))?;
-
-    decode_fixlen_items(len, decoding_parameter, bytes)
-}
-
 /// Decode `bytes` as a [fixed-length vector][1] into as many instances of `D` as possible.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
@@ -722,9 +610,6 @@ mod tests {
         let values = VariableLengthVector::<0, u8, _>::new(messages_vec());
         let mut bytes = vec![];
         values.encode(&mut bytes).unwrap();
-        let mut old_bytes = vec![];
-        encode_u8_items(&mut old_bytes, &(), &messages_vec()).unwrap();
-        assert_eq!(old_bytes, bytes);
 
         assert_eq!(
             bytes.len(),
@@ -743,9 +628,6 @@ mod tests {
         let values = VariableLengthVector::<0, u16, _>::new(messages_vec());
         let mut bytes = vec![];
         values.encode(&mut bytes).unwrap();
-        let mut old_bytes = vec![];
-        encode_u16_items(&mut old_bytes, &(), &messages_vec()).unwrap();
-        assert_eq!(old_bytes, bytes);
 
         assert_eq!(
             bytes.len(),
@@ -767,10 +649,6 @@ mod tests {
         let values = VariableLengthVector::<0, u32, _>::new(messages_vec());
         let mut bytes = Vec::new();
         values.encode(&mut bytes).unwrap();
-
-        let mut old_bytes = Vec::new();
-        encode_u32_items(&mut old_bytes, &(), &messages_vec()).unwrap();
-        assert_eq!(bytes, old_bytes);
 
         assert_eq!(bytes.len(), 4 + 3 * TestMessage::encoded_length());
 
