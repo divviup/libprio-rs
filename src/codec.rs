@@ -39,7 +39,7 @@ pub enum CodecError {
     #[error("vector length exceeded range of length prefix")]
     LengthPrefixOverflow,
 
-    /// The number of items in a variable-length vector is outside of the type's range.
+    /// The number of bytes in a variable-length vector is outside of the type's range.
     ///
     /// In TLS presentation language, variable-length vectors declare a subrange of legal lengths
     /// ([1]). Vectors of items whose length is outside this range are invalid.
@@ -57,34 +57,42 @@ pub enum CodecError {
     UnexpectedValue,
 }
 
-/// Describes how to decode an object from a byte sequence.
+/// Decode an object from a byte sequence.
 pub trait Decode: Sized {
-    /// Read and decode an encoded object from `bytes`. On success, the decoded value is returned
-    /// and `bytes` is advanced by the encoded size of the value. On failure, an error is returned
-    /// and no further attempt to read from `bytes` should be made.
+    /// Read and decode an encoded object from `bytes`.
+    ///
+    /// On success, the decoded value is returned and `bytes` is advanced by the encoded size of the
+    /// value. On failure, an error is returned and no further attempt to read from `bytes` should
+    /// be made.
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError>;
 
-    /// Convenience method to get a decoded value. Returns an error if [`Self::decode`] fails, or if
-    /// there are any bytes left in `bytes` after decoding a value.
+    /// Convenience method to get a decoded value.
+    ///
+    /// Returns an error if [`Self::decode`] fails, or if there are any bytes left in `bytes` after
+    /// decoding a value. On failure, no further attempt to read from `bytes` should be made.
     fn get_decoded(bytes: &[u8]) -> Result<Self, CodecError> {
         Self::get_decoded_with_param(&(), bytes)
     }
 }
 
-/// Describes how to decode an object from a byte sequence and a decoding parameter that provides
-/// additional context.
+/// Decode an object from a byte sequence and a decoding parameter that provides additional context.
 pub trait ParameterizedDecode<P>: Sized {
-    /// Read and decode an encoded object from `bytes`. `decoding_parameter` provides details of the
-    /// wire encoding such as lengths of different portions of the message. On success, the decoded
-    /// value is returned and `bytes` is advanced by the encoded size of the value. On failure, an
-    /// error is returned and no further attempt to read from `bytes` should be made.
+    /// Read and decode an encoded object from `bytes`.
+    ///
+    /// `decoding_parameter` provides details of the wire encoding such as lengths of different
+    /// portions of the message. On success, the decoded value is returned and `bytes` is advanced
+    /// by the encoded size of the value. On failure, an error is returned and no further attempt to
+    /// read from `bytes` should be made.
     fn decode_with_param(
         decoding_parameter: &P,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError>;
 
-    /// Convenience method to get a decoded value. Returns an error if [`Self::decode_with_param`]
-    /// fails, or if there are any bytes left in `bytes` after decoding a value.
+    /// Convenience method to get a decoded value.
+    ///
+    /// Returns an error if [`Self::decode_with_param`] fails, or if there are any bytes left in
+    /// `bytes` after decoding a value. On failure, no further attempt to read from `bytes` should
+    /// be made.
     fn get_decoded_with_param(decoding_parameter: &P, bytes: &[u8]) -> Result<Self, CodecError> {
         let mut cursor = Cursor::new(bytes);
         let decoded = Self::decode_with_param(decoding_parameter, &mut cursor)?;
@@ -112,15 +120,22 @@ impl<D: Decode, T> ParameterizedDecode<T> for D {
 /// Describes how to encode objects into a byte sequence.
 pub trait Encode {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError>;
 
     /// Convenience method to encode a value into a new `Vec<u8>`.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn get_encoded(&self) -> Result<Vec<u8>, CodecError> {
         self.get_encoded_with_param(&())
     }
 
-    /// Returns an optional hint indicating how many bytes will be required to encode this value, or
-    /// `None` by default.
+    /// Returns an optional hint indicating how many bytes will be required to encode this value.
+    ///
+    /// The default implementation returns `None`.
     fn encoded_len(&self) -> Option<usize> {
         None
     }
@@ -129,8 +144,12 @@ pub trait Encode {
 /// Describes how to encode objects into a byte sequence.
 pub trait ParameterizedEncode<P> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
+    ///
     /// `encoding_parameter` provides details of the wire encoding, used to control how the value
     /// is encoded.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn encode_with_param(
         &self,
         encoding_parameter: &P,
@@ -138,6 +157,9 @@ pub trait ParameterizedEncode<P> {
     ) -> Result<(), CodecError>;
 
     /// Convenience method to encode a value into a new `Vec<u8>`.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn get_encoded_with_param(&self, encoding_parameter: &P) -> Result<Vec<u8>, CodecError> {
         let mut ret = if let Some(length) = self.encoded_len_with_param(encoding_parameter) {
             Vec::with_capacity(length)
@@ -148,8 +170,9 @@ pub trait ParameterizedEncode<P> {
         Ok(ret)
     }
 
-    /// Returns an optional hint indicating how many bytes will be required to encode this value, or
-    /// `None` by default.
+    /// Returns an optional hint indicating how many bytes will be required to encode this value.
+    ///
+    /// The default implementation returns `None`.
     fn encoded_len_with_param(&self, _encoding_parameter: &P) -> Option<usize> {
         None
     }
@@ -300,15 +323,6 @@ impl<const MIN_LEN: usize, LEN: LengthPrefix, E: Encode> Encode
     for VariableLengthVector<MIN_LEN, LEN, E>
 {
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-        if self.contents.len() < MIN_LEN
-            || self.contents.len()
-                > LEN::max_value()
-                    .try_into()
-                    .map_err(|_| CodecError::Other("prefix max length too big for usize".into()))?
-        {
-            return Err(CodecError::VectorLengthOutsideOfRange);
-        }
-
         // Reserve space to later write length
         let len_offset = bytes.len();
         LEN::ZERO.encode(bytes)?;
@@ -317,10 +331,23 @@ impl<const MIN_LEN: usize, LEN: LengthPrefix, E: Encode> Encode
             item.encode(bytes)?;
         }
 
-        let len = LEN::try_from(bytes.len() - len_offset - LEN::ENCODED_LEN)
-            .map_err(|_| CodecError::LengthPrefixOverflow)?;
+        // Check whether the number of bytes written falls outside the type's declared range. We can
+        // only do this after encoding all the items because we can't assume `Encode::encoded_len`
+        // is implemented.
+        let encoded_len = bytes.len() - len_offset - LEN::ENCODED_LEN;
+        if encoded_len < MIN_LEN
+            || encoded_len
+                > LEN::max_value()
+                    .try_into()
+                    .map_err(|_| CodecError::Other("prefix max length too big for usize".into()))?
+        {
+            return Err(CodecError::VectorLengthOutsideOfRange);
+        }
+
+        let encoded_len =
+            LEN::try_from(encoded_len).map_err(|_| CodecError::LengthPrefixOverflow)?;
         bytes[len_offset..len_offset + LEN::ENCODED_LEN]
-            .copy_from_slice(len.to_be_bytes().as_ref());
+            .copy_from_slice(encoded_len.to_be_bytes().as_ref());
         Ok(())
     }
 
@@ -330,8 +357,8 @@ impl<const MIN_LEN: usize, LEN: LengthPrefix, E: Encode> Encode
                 + self
                     .contents
                     .iter()
-                    .map(|item| item.encoded_len().unwrap_or(0))
-                    .sum::<usize>(),
+                    .map(Encode::encoded_len)
+                    .sum::<Option<usize>>()?,
         )
     }
 }
@@ -340,7 +367,7 @@ impl<const MIN_LEN: usize, LEN: LengthPrefix, D: Decode> Decode
     for VariableLengthVector<MIN_LEN, LEN, D>
 {
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        // Read two bytes to get length of opaque byte vector
+        // Read the length prefix
         let length: usize = LEN::decode(bytes)?
             .try_into()
             .map_err(|_| CodecError::Other("prefix max length too big for usize".into()))?;
@@ -504,7 +531,7 @@ mod tests {
         assert_eq!(value, decoded);
     }
 
-    #[derive(Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     struct TestMessage {
         field_u8: u8,
         field_u16: u16,
@@ -663,7 +690,7 @@ mod tests {
     }
 
     #[test]
-    fn variable_length_vector_reject_too_short() {
+    fn variable_length_vector_reject_too_short_byte_items() {
         assert_matches!(
             VariableLengthVector::<2, u16, _>::new(vec![0u8])
                 .get_encoded()
@@ -673,11 +700,40 @@ mod tests {
     }
 
     #[test]
-    fn variable_length_vector_reject_too_long() {
+    fn variable_length_vector_reject_too_short_nontrivial_items() {
+        // Minimum length chosen to be bigger than the encoding of messages_vec()
+        const MIN_LEN: usize = 48;
+        let vlv = VariableLengthVector::<MIN_LEN, u16, _>::new(messages_vec());
+        assert!(
+            MIN_LEN > vlv.encoded_len().unwrap(),
+            "{:?}",
+            vlv.encoded_len()
+        );
+        let encoded = vlv.get_encoded();
+        assert_matches!(encoded.unwrap_err(), CodecError::VectorLengthOutsideOfRange);
+    }
+
+    #[test]
+    fn variable_length_vector_reject_too_long_byte_items() {
         assert_matches!(
-            VariableLengthVector::<2, u16, _>::new(vec![0u8; usize::from(u16::MAX) + 1])
+            VariableLengthVector::<0, u8, _>::new(vec![0u8; usize::from(u8::MAX) + 1])
                 .get_encoded()
                 .unwrap_err(),
+            CodecError::VectorLengthOutsideOfRange
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_reject_too_long_nontrivial_items() {
+        // 18 is enough TestMessage items that the encoding will be more than 255 bytes
+        let vlv = VariableLengthVector::<0, u8, _>::new(vec![TestMessage::default(); 18]);
+        assert!(
+            vlv.encoded_len().unwrap() > u8::MAX as usize,
+            "{:?}",
+            vlv.encoded_len()
+        );
+        assert_matches!(
+            vlv.get_encoded().unwrap_err(),
             CodecError::VectorLengthOutsideOfRange
         );
     }
@@ -707,6 +763,24 @@ mod tests {
             vlv.encoded_len().unwrap(),
             4 + 3 * TestMessage::encoded_length()
         );
+    }
+
+    #[test]
+    fn variable_length_vector_items_have_no_encoded_len() {
+        struct NoEncodedLen;
+
+        impl Encode for NoEncodedLen {
+            fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+                ().encode(bytes)
+            }
+
+            fn encoded_len(&self) -> Option<usize> {
+                None
+            }
+        }
+
+        let vlv = VariableLengthVector::<0, u16, _>::new(vec![NoEncodedLen, NoEncodedLen]);
+        assert!(vlv.encoded_len().is_none(), "{:?}", vlv.encoded_len());
     }
 
     #[test]
