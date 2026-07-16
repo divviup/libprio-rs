@@ -18,7 +18,7 @@ ctr = { version = "0.10.1", optional = true }
 fiat-crypto = { version = "0.3.0", optional = true }
 hex = { version = "0.4.3", features = ["serde"], optional = true }
 hmac = { version = "0.13.0", optional = true }
-num-bigint = { version = "0.4.6", features = ["serde"] }
+num-bigint = { version = "0.5.1", features = ["serde"] }
 num-integer = "0.1.46"
 num-iter = "0.1.45"
 num-rational = { version = "0.4.2", features = ["serde"] }
