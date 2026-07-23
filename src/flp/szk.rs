@@ -525,16 +525,15 @@ where
                     leader_blind_and_helper_joint_rand_part_opt,
                 } => match leader_blind_and_helper_joint_rand_part_opt {
                     Some((seed, helper_joint_rand_part)) => {
-                        match self.derive_joint_rand_part(&seed, input_share, nonce) {
-                            Ok(leader_joint_rand_part) => (
-                                self.derive_joint_rand_and_seed(
-                                    &leader_joint_rand_part,
-                                    &helper_joint_rand_part,
-                                ),
-                                leader_joint_rand_part,
+                        let leader_joint_rand_part =
+                            self.derive_joint_rand_part(&seed, input_share, nonce)?;
+                        (
+                            self.derive_joint_rand_and_seed(
+                                &leader_joint_rand_part,
+                                &helper_joint_rand_part,
                             ),
-                            Err(e) => return Err(e),
-                        }
+                            leader_joint_rand_part,
+                        )
                     }
                     None => {
                         return Err(SzkError::Query(
@@ -546,20 +545,20 @@ where
                     proof_share_seed_and_blind,
                     leader_joint_rand_part_opt,
                 } => match leader_joint_rand_part_opt {
-                    Some(leader_joint_rand_part) => match self.derive_joint_rand_part(
-                        &proof_share_seed_and_blind,
-                        input_share,
-                        nonce,
-                    ) {
-                        Ok(helper_joint_rand_part) => (
+                    Some(leader_joint_rand_part) => {
+                        let helper_joint_rand_part = self.derive_joint_rand_part(
+                            &proof_share_seed_and_blind,
+                            input_share,
+                            nonce,
+                        )?;
+                        (
                             self.derive_joint_rand_and_seed(
                                 &leader_joint_rand_part,
                                 &helper_joint_rand_part,
                             ),
                             helper_joint_rand_part,
-                        ),
-                        Err(e) => return Err(e),
-                    },
+                        )
+                    }
                     None => {
                         return Err(SzkError::Query(
                             "leader_joint_rand_part should be set".to_string(),
