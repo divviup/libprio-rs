@@ -149,10 +149,8 @@ impl<V> Node<V> {
     pub fn get(&self, path: &Path) -> Option<&V> {
         let mut node = self;
         for bit in path {
-            match if !bit { &node.left } else { &node.right } {
-                None => return None,
-                Some(next_node) => node = next_node,
-            };
+            let next_node = if !bit { &node.left } else { &node.right };
+            node = next_node.as_ref()?;
         }
         Some(&node.value)
     }
@@ -166,14 +164,12 @@ impl<V> Node<V> {
     pub fn get_node(&mut self, path: &Path) -> Option<&mut Node<V>> {
         let mut node = self;
         for bit in path {
-            match if !bit {
+            let next_node = if !bit {
                 &mut node.left
             } else {
                 &mut node.right
-            } {
-                None => return None,
-                Some(next_node) => node = next_node,
             };
+            node = next_node.as_mut()?;
         }
         Some(node)
     }
