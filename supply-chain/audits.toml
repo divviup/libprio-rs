@@ -910,6 +910,11 @@ who = "J.C. Jones <jc@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "2.0.17 -> 2.0.18"
 
+[[audits.thiserror-impl]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "2.0.18 -> 2.0.19"
+
 [[audits.unicode-ident]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
