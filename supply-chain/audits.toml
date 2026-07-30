@@ -576,6 +576,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-deploy"
 delta = "1.0.52 -> 1.0.54"
 
+[[audits.proc-macro2]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "1.0.106 -> 1.0.107"
+
 [[audits.rand]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
