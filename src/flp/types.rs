@@ -415,7 +415,7 @@ impl<F: NttFriendlyFieldElement, S: ParallelSumGadget<F, Mul>> Histogram<F, S> {
         }
 
         let mut gadget_calls = length / chunk_length;
-        if length % chunk_length != 0 {
+        if !length.is_multiple_of(chunk_length) {
             gadget_calls += 1;
         }
 
