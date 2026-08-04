@@ -78,3 +78,26 @@ rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo-all-features]
 skip_optional_dependencies = true
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "bitvec::boxed::BitBox",
+    "bitvec::slice::BitSlice",
+    "bitvec::vec::BitVec",
+    "num_bigint::bigint::BigInt",
+    "num_bigint::biguint::BigUint",
+    "num_bigint::TryFromBigIntError",
+    "rand_core::Rng",
+    "rand_core::seedable_rng::SeedableRng",
+    "rand_core::TryRng",
+    "rand::distr::distribution::Distribution",
+    "serde_core::de::Deserialize",
+    "serde_core::de::DeserializeOwned",
+    "serde_core::ser::Serialize",
+    "serde_json::value::Value",
+    "subtle::Choice",
+    "subtle::ConditionallyNegatable",
+    "subtle::ConditionallySelectable",
+    "subtle::ConstantTimeEq",
+    "subtle::ConstantTimeLess",
+]

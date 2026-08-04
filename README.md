@@ -87,3 +87,11 @@ This crate defines the following feature flags:
 |`wasm-compat`|No|Enables the `getrandom/js` feature. This is necessary for `wasm32-unknown-unknown` targets, when in a JavaScript environment.|✅|
 
 Features that are not marked as "Semver stable" may undergo breaking changes in future patch releases, as an exception to semantic versioning.
+
+## Re-exported dependencies
+
+Public interfaces in `prio` should avoid re-exporting types from dependencies. We have a check in CI
+that verifies that only allow-listed items from dependencies appear in API. To run this locally,
+you'll need [`cargo-check-external-types`](https://github.com/awslabs/cargo-check-external-types) as
+well as a version of the Rust nightly toolchain whose JSON documentation output matches what
+`cargo-check-external-types` expects.

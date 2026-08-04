@@ -86,7 +86,10 @@ jobs:
     - name: Add the tool cache directory to the search path
       run: echo "${{ runner.tool_cache }}/cargo-all-features/bin/" >> $GITHUB_PATH
     - name: Ensure that the tool cache is populated with the cargo-all-features binaries
-      run: cargo install --root ${{ runner.tool_cache }}/cargo-all-features --version ${{ env.CARGO_ALL_FEATURES_VERSION }} cargo-all-features
+      run: |
+        cargo install --root ${{ runner.tool_cache }}/cargo-all-features \
+          --version ${{ env.CARGO_ALL_FEATURES_VERSION }} \
+          cargo-all-features
 
     - name: Lint
       run: |
@@ -106,3 +109,33 @@ jobs:
       run: cargo bench --no-run --profile=dev
     - name: Build benchmarks (all features)
       run: cargo bench --no-run --profile=dev --all-features
+
+  check-public-dependencies:
+    name: check that types from dependencies are not unintentionally exposed in API
+    runs-on: ubuntu-latest
+    env:
+      RUSTFLAGS: -D exported-private-dependencies
+      CARGO_CHECK_EXTERNAL_TYPES_VERSION: 0.5.0
+    steps:
+    - uses: actions/checkout@v7.0.1
+    # We have to install a nightly version that uses a rustdoc JSON format that matches what
+    # check-external-types expects
+    # https://github.com/awslabs/cargo-check-external-types/blob/main/rust-toolchain.toml
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly-2026-03-20
+    - name: Cache cargo-check-external-types
+      uses: actions/cache@v6.1.0
+      with:
+        key: cargo-check-external-types-bin-${{ env.CARGO_CHECK_EXTERNAL_TYPES_VERSION }}-rust-nightly-2026-03-20
+        path: ${{ runner.tool_cache }}/cargo-check-external-types
+    - name: Add the tool cache directory to the search path
+      run: echo "${{ runner.tool_cache }}/cargo-check-external-types/bin/" >> $GITHUB_PATH
+    - name: Ensure that the tool cache is populated with the cargo-check-external-types binary
+      run: |
+        cargo install --root ${{ runner.tool_cache }}/cargo-check-external-types \
+          --version ${{ env.CARGO_CHECK_EXTERNAL_TYPES_VERSION }} \
+          cargo-check-external-types
+    - name: check exported public dependencies
+      run: cargo check-external-types
