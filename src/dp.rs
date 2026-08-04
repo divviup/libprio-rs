@@ -16,6 +16,7 @@
 //!
 use num_bigint::{BigInt, BigUint, TryFromBigIntError};
 use num_rational::{BigRational, Ratio};
+use num_traits::ToPrimitive;
 use serde::Serialize;
 
 /// Errors propagated by methods in this module.
@@ -40,11 +41,13 @@ pub enum DpError {
 
 /// Positive arbitrary precision rational number to represent DP and noise distribution parameters in
 /// protocol messages and manipulate them without rounding errors.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Rational(Ratio<BigUint>);
 
 impl Rational {
-    /// Construct a [`Rational`] number from numerator `n` and denominator `d`. Errors if denominator is zero.
+    /// Construct a [`Rational`] number from numerator `n` and denominator `d`.
+    ///
+    /// Errors if denominator is zero.
     pub fn from_unsigned<T>(n: T, d: T) -> Result<Self, DpError>
     where
         T: Into<u128>,
@@ -58,6 +61,17 @@ impl Rational {
         } else {
             Ok(Rational(Ratio::<BigUint>::new(n.into().into(), d.into())))
         }
+    }
+
+    /// Get the [`Rational`] as an `f64`, if possible.
+    pub fn to_f64(&self) -> Option<f64> {
+        self.0.to_f64()
+    }
+}
+
+impl From<BigUint> for Rational {
+    fn from(value: BigUint) -> Self {
+        Self(Ratio::from(value))
     }
 }
 
@@ -110,7 +124,7 @@ impl DifferentialPrivacyBudget for ZCdpBudget {}
 /// Pure differential privacy budget. (&epsilon;-DP or (&epsilon;, 0)-DP)
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Ord, PartialOrd)]
 pub struct PureDpBudget {
-    epsilon: Ratio<BigUint>,
+    epsilon: Rational,
 }
 
 impl PureDpBudget {
@@ -119,7 +133,7 @@ impl PureDpBudget {
         if epsilon.0.numer() == &BigUint::ZERO {
             return Err(DpError::InvalidParameter("epsilon cannot be zero".into()));
         }
-        Ok(Self { epsilon: epsilon.0 })
+        Ok(Self { epsilon })
     }
 }
 

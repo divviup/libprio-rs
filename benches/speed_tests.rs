@@ -4,9 +4,7 @@
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use num_bigint::BigUint;
-use num_rational::Ratio;
-use num_traits::ToPrimitive;
-use prio::dp::distributions::DiscreteGaussian;
+use prio::dp::{distributions::DiscreteGaussian, Rational};
 #[cfg(feature = "experimental")]
 use prio::idpf::test_utils::generate_zipf_distributed_batch;
 #[cfg(feature = "experimental")]
@@ -53,11 +51,11 @@ pub fn dp_noise(c: &mut Criterion) {
     let mut rng = StdRng::seed_from_u64(RNG_SEED);
 
     let test_stds = [
-        Ratio::<BigUint>::from_integer(BigUint::from(u128::MAX)).pow(2),
-        Ratio::<BigUint>::from_integer(BigUint::from(u64::MAX)),
-        Ratio::<BigUint>::from_integer(BigUint::from(u32::MAX)),
-        Ratio::<BigUint>::from_integer(BigUint::from(5u8)),
-        Ratio::<BigUint>::new(BigUint::from(10000u32), BigUint::from(23u32)),
+        Rational::from(BigUint::from(u128::MAX).pow(2)),
+        Rational::from(BigUint::from(u64::MAX)),
+        Rational::from(BigUint::from(u32::MAX)),
+        Rational::from(BigUint::from(5u8)),
+        Rational::from_unsigned(10000u32, 23u32).unwrap(),
     ];
     for std in test_stds {
         let sampler = DiscreteGaussian::new(std.clone()).unwrap();
