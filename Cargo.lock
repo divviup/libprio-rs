@@ -102,9 +102,9 @@ checksum = "572f695136211188308f16ad2ca5c851a712c464060ae6974944458eb83880ba"
 
 [[package]]
 name = "bytemuck"
-version = "1.12.1"
+version = "1.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2f5715e491b5a1598fc2bef5a606847b5dc1d48ea625bd3c02c00de8285591da"
+checksum = "95832e849adfb21180ccb6826a99da14e5d266ae5c2e668e1602cf234f153797"
 
 [[package]]
 name = "byteorder"
@@ -142,7 +142,7 @@ checksum = "6f8d983286843e49675a4b7a2d174efe136dc93a18d69130dd18198a6c167601"
 dependencies = [
  "cfg-if",
  "cpufeatures",
- "rand_core 0.10.1",
+ "rand_core",
 ]
 
 [[package]]
@@ -372,17 +372,6 @@ checksum = "e6d5a32815ae3f33302d95fdcb2ce17862f8c65363dcfd29360480ba1001fc9c"
 
 [[package]]
 name = "getrandom"
-version = "0.2.15"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4567c8db10ae91089c99af84c68c38da3ec2f087c3f82960bcdbf3656b6f4d7"
-dependencies = [
- "cfg-if",
- "libc",
- "wasi",
-]
-
-[[package]]
-name = "getrandom"
 version = "0.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "139ef39800118c7683f2fd3c98c1b23c09ae076556b435f8e9064ae108aaeeec"
@@ -390,10 +379,34 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
- "rand_core 0.10.1",
+ "rand_core",
  "wasip2",
  "wasip3",
 ]
+
+[[package]]
+name = "glam"
+version = "0.30.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19fc433e8437a212d1b6f1e68c7824af3aed907da60afa994e7f542d18d12aa9"
+
+[[package]]
+name = "glam"
+version = "0.31.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "556f6b2ea90b8d15a74e0e7bb41671c9bdf38cd9f78c284d750b9ce58a2b5be7"
+
+[[package]]
+name = "glam"
+version = "0.32.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f70749695b063ecbf6b62949ccccde2e733ec3ecbbd71d467dca4e5c6c97cca0"
+
+[[package]]
+name = "glam"
+version = "0.33.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7360bd2cd76e0cd9032d42cf2922155cecea2685b0cfa4630c3246df030bcfd6"
 
 [[package]]
 name = "half"
@@ -571,17 +584,20 @@ dependencies = [
 
 [[package]]
 name = "nalgebra"
-version = "0.33.2"
+version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "26aecdf64b707efd1310e3544d709c5c0ac61c13756046aaaba41be5c4f66a3b"
+checksum = "adc43a60c217b0c6ff46e47f26911015ad8d2e5a8be1af668c67e370d99a4346"
 dependencies = [
  "approx",
+ "glam 0.30.10",
+ "glam 0.31.1",
+ "glam 0.32.1",
+ "glam 0.33.3",
  "matrixmultiply",
  "num-complex",
  "num-rational",
  "num-traits",
- "rand 0.8.6",
- "rand_distr 0.4.3",
+ "rand",
  "simba",
  "typenum",
 ]
@@ -670,12 +686,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "paste"
-version = "1.0.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1de2e551fb905ac83f73f7aedf2f0cb4a0da7e35efa24a202a936269f1f18e1"
-
-[[package]]
 name = "plotters"
 version = "0.3.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -702,12 +712,6 @@ checksum = "f9a81d2759aae1dae668f783c308bc5c8ebd191ff4184aaa1b37f65a6ae5a56f"
 dependencies = [
  "plotters-backend",
 ]
-
-[[package]]
-name = "ppv-lite86"
-version = "0.2.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb9f9e6e233e5c4a35559a617bf40a4ec447db2e84c20b55a6f83167b7e57872"
 
 [[package]]
 name = "prettyplease"
@@ -743,9 +747,9 @@ dependencies = [
  "num-traits",
  "once_cell",
  "prio",
- "rand 0.10.2",
- "rand_core 0.10.1",
- "rand_distr 0.6.0",
+ "rand",
+ "rand_core",
+ "rand_distr",
  "rayon",
  "serde",
  "serde_json",
@@ -762,7 +766,7 @@ version = "0.5.0"
 dependencies = [
  "base64",
  "prio",
- "rand 0.10.2",
+ "rand",
 ]
 
 [[package]]
@@ -797,43 +801,13 @@ checksum = "dc33ff2d4973d518d823d61aa239014831e521c75da58e3df4840d3f47749d09"
 
 [[package]]
 name = "rand"
-version = "0.8.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ca0ecfa931c29007047d1bc58e623ab12e5590e8c7cc53200d5202b69266d8a"
-dependencies = [
- "libc",
- "rand_chacha",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand"
 version = "0.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c7f5fa3a058cd35567ef9bfa5e75732bee0f9e4c55fa90477bef2dfcdbc4be80"
 dependencies = [
  "chacha20",
- "getrandom 0.4.1",
- "rand_core 0.10.1",
-]
-
-[[package]]
-name = "rand_chacha"
-version = "0.3.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6c10a63a0fa32252be49d21e7709d4d4baf8d231c2dbce1eaa8141b9b127d88"
-dependencies = [
- "ppv-lite86",
- "rand_core 0.6.4",
-]
-
-[[package]]
-name = "rand_core"
-version = "0.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
-dependencies = [
- "getrandom 0.2.15",
+ "getrandom",
+ "rand_core",
 ]
 
 [[package]]
@@ -844,22 +818,12 @@ checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_distr"
-version = "0.4.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "32cb0b9bc82b0a0876c2dd994a7e7a2683d3e7390ca40e6886785ef0c7e3ee31"
-dependencies = [
- "num-traits",
- "rand 0.8.6",
-]
-
-[[package]]
-name = "rand_distr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4d431c2703ccf129de4d45253c03f49ebb22b97d6ad79ee3ecfc7e3f4862c1d8"
 dependencies = [
  "num-traits",
- "rand 0.10.2",
+ "rand",
 ]
 
 [[package]]
@@ -905,9 +869,9 @@ checksum = "a3f87b73ce11b1619a3c6332f45341e0047173771e8b8b73f87bfeefb7b56244"
 
 [[package]]
 name = "safe_arch"
-version = "0.7.0"
+version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62a7484307bd40f8f7ccbacccac730108f2cae119a3b11c74485b48aa9ea650f"
+checksum = "3a52ec151f024d703f9fd65abb7cbe81e7cdb39f18917a3a37e3014470dc7c59"
 dependencies = [
  "bytemuck",
 ]
@@ -989,14 +953,13 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "simba"
-version = "0.9.0"
+version = "0.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b3a386a501cd104797982c15ae17aafe8b9261315b5d07e3ec803f2ea26be0fa"
+checksum = "834a9952211d4a60ff10ac1d20cc01640a75bdc0a0c688d62f359ea7d17459f3"
 dependencies = [
  "approx",
  "num-complex",
  "num-traits",
- "paste",
  "wide",
 ]
 
@@ -1008,14 +971,15 @@ checksum = "3a0219bd7d979d58245a4f41f695e1ac9f8befdffadd7f61f1bae9e39abc6620"
 
 [[package]]
 name = "statrs"
-version = "0.18.0"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a3fe7c28c6512e766b0874335db33c94ad7b8f9054228ae1c2abd47ce7d335e"
+checksum = "c78553aa710187998fc7c7945c18889c59ef199ff7d2146ab90998b431b29eea"
 dependencies = [
  "approx",
  "nalgebra",
  "num-traits",
- "rand 0.8.6",
+ "rand",
+ "thiserror",
 ]
 
 [[package]]
@@ -1132,12 +1096,6 @@ dependencies = [
  "winapi",
  "winapi-util",
 ]
-
-[[package]]
-name = "wasi"
-version = "0.11.0+wasi-snapshot-preview1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c8d87e72b64a3b4db28d11ce29237c246188f4f51057d65a7eab63b7987e423"
 
 [[package]]
 name = "wasip2"
@@ -1257,9 +1215,9 @@ dependencies = [
 
 [[package]]
 name = "wide"
-version = "0.7.11"
+version = "1.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa469ffa65ef7e0ba0f164183697b89b854253fd31aeb92358b7b6155177d62f"
+checksum = "be99e8317aa9f08e7d16e13033ca43faab59ab582b1d0feab7b385424c42f8b1"
 dependencies = [
  "bytemuck",
  "safe_arch",
