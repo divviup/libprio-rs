@@ -168,7 +168,7 @@ pub trait FieldElement:
     /// impossible.
     #[deprecated]
     fn byte_slice_into_vec(bytes: &[u8]) -> Result<Vec<Self>, FieldError> {
-        if bytes.len() % Self::ENCODED_SIZE != 0 {
+        if !bytes.len().is_multiple_of(Self::ENCODED_SIZE) {
             return Err(FieldError::ShortRead);
         }
         let mut vec = Vec::with_capacity(bytes.len() / Self::ENCODED_SIZE);
