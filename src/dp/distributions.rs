@@ -288,7 +288,7 @@ impl DiscreteGaussianDpStrategy<ZCdpBudget> {
     ///
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
     pub fn create_distribution(&self, sensitivity: Rational) -> Result<DiscreteGaussian, DpError> {
-        DiscreteGaussian::new(Rational(sensitivity.0 / self.budget.epsilon.clone()))
+        DiscreteGaussian::new(Rational(sensitivity.0 / self.budget.epsilon.clone().0))
     }
 }
 

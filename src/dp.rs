@@ -52,7 +52,6 @@ impl Rational {
     where
         T: Into<u128>,
     {
-        // we don't want to expose BigUint in the public api, hence the Into<u128> bound
         let d = d.into();
         if d == 0 {
             Err(DpError::InvalidParameter(
@@ -103,7 +102,7 @@ pub trait DifferentialPrivacyDistribution {}
 /// [BS16]: https://arxiv.org/pdf/1605.02065.pdf
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Ord, PartialOrd)]
 pub struct ZCdpBudget {
-    epsilon: Ratio<BigUint>,
+    epsilon: Rational,
 }
 
 impl ZCdpBudget {
@@ -115,7 +114,7 @@ impl ZCdpBudget {
         if epsilon.0.numer() == &BigUint::ZERO {
             return Err(DpError::InvalidParameter("epsilon cannot be zero".into()));
         }
-        Ok(Self { epsilon: epsilon.0 })
+        Ok(Self { epsilon })
     }
 }
 
