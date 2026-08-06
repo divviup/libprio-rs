@@ -62,7 +62,7 @@ use super::{
     DifferentialPrivacyBudget, DifferentialPrivacyDistribution, DifferentialPrivacyStrategy,
     DpError, PureDpBudget, ZCdpBudget,
 };
-use crate::dp::rand_bigint::UniformBigUint;
+use crate::dp::{rand_bigint::UniformBigUint, Rational};
 
 /// Sample from the Bernoulli(gamma) distribution, where $gamma /leq 1$.
 ///
@@ -231,14 +231,14 @@ fn sample_discrete_gaussian<R: Rng + ?Sized>(sigma: &Ratio<BigUint>, rng: &mut R
 #[derive(Clone, Debug)]
 pub struct DiscreteGaussian {
     /// The standard deviation of the distribution.
-    std: Ratio<BigUint>,
+    std: Rational,
 }
 
 impl DiscreteGaussian {
     /// Create a new sampler from the Discrete Gaussian Distribution with the given
     /// standard deviation and mean zero. Errors if the input has denominator zero.
-    pub fn new(std: Ratio<BigUint>) -> Result<DiscreteGaussian, DpError> {
-        if std.denom().is_zero() {
+    pub fn new(std: Rational) -> Result<DiscreteGaussian, DpError> {
+        if std.0.denom().is_zero() {
             return Err(DpError::InvalidParameter(
                 "standard deviation denominator was zero".to_owned(),
             ));
@@ -252,7 +252,7 @@ impl Distribution<BigInt> for DiscreteGaussian {
     where
         R: Rng + ?Sized,
     {
-        sample_discrete_gaussian(&self.std, rng)
+        sample_discrete_gaussian(&self.std.0, rng)
     }
 }
 
@@ -287,11 +287,8 @@ impl DiscreteGaussianDpStrategy<ZCdpBudget> {
     /// `sensitivity`, following Theorem 4 from [[CKS20]]
     ///
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
-    pub fn create_distribution(
-        &self,
-        sensitivity: Ratio<BigUint>,
-    ) -> Result<DiscreteGaussian, DpError> {
-        DiscreteGaussian::new(sensitivity / self.budget.epsilon.clone())
+    pub fn create_distribution(&self, sensitivity: Rational) -> Result<DiscreteGaussian, DpError> {
+        DiscreteGaussian::new(Rational(sensitivity.0 / self.budget.epsilon.clone().0))
     }
 }
 
@@ -302,19 +299,19 @@ impl DiscreteGaussianDpStrategy<ZCdpBudget> {
 /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
 pub struct DiscreteLaplace {
     /// The scale parameter of the distribution.
-    scale: Ratio<BigUint>,
+    scale: Rational,
 }
 
 impl DiscreteLaplace {
     /// Create a new sampler for the discrete Laplace distribution with the given scale parameter.
     /// Returns an error if the scale parameter is zero or if it has a denominator of zero.
-    pub fn new(scale: Ratio<BigUint>) -> Result<Self, DpError> {
-        if scale.denom().is_zero() {
+    pub fn new(scale: Rational) -> Result<Self, DpError> {
+        if scale.0.denom().is_zero() {
             return Err(DpError::InvalidParameter(
                 "scale parameter denominator was zero".to_owned(),
             ));
         }
-        if scale.numer().is_zero() {
+        if scale.0.numer().is_zero() {
             return Err(DpError::InvalidParameter(
                 "the scale of the discrete Laplace distribution must be nonzero".into(),
             ));
@@ -325,7 +322,7 @@ impl DiscreteLaplace {
 
 impl Distribution<BigInt> for DiscreteLaplace {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> BigInt {
-        sample_discrete_laplace(&self.scale, rng)
+        sample_discrete_laplace(&self.scale.0, rng)
     }
 }
 
@@ -372,11 +369,8 @@ impl PureDpDiscreteLaplace {
     /// [GRS12]: https://theory.stanford.edu/~tim/papers/priv.pdf
     /// [CKS20]: https://arxiv.org/pdf/2004.00010.pdf
     /// [DMNS06]: https://people.csail.mit.edu/asmith/PS/sensitivity-tcc-final.pdf
-    pub fn create_distribution(
-        &self,
-        sensitivity: Ratio<BigUint>,
-    ) -> Result<DiscreteLaplace, DpError> {
-        DiscreteLaplace::new(sensitivity / &self.budget.epsilon)
+    pub fn create_distribution(&self, sensitivity: Rational) -> Result<DiscreteLaplace, DpError> {
+        DiscreteLaplace::new(Rational(sensitivity.0 / &self.budget.epsilon.0))
     }
 }
 
@@ -395,8 +389,7 @@ mod tests {
 
     #[test]
     fn test_discrete_gaussian() {
-        let sampler =
-            DiscreteGaussian::new(Ratio::<BigUint>::from_integer(BigUint::from(5u8))).unwrap();
+        let sampler = DiscreteGaussian::new(Rational::from_unsigned(5u8, 1u8).unwrap()).unwrap();
 
         // check samples are consistent
         let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
@@ -416,8 +409,7 @@ mod tests {
     /// by using the constructor of `DiscreteGaussian` directly.
     fn test_zcdp_discrete_gaussian() {
         // sample from a manually created distribution
-        let sampler1 =
-            DiscreteGaussian::new(Ratio::<BigUint>::from_integer(BigUint::from(4u8))).unwrap();
+        let sampler1 = DiscreteGaussian::new(Rational::from_unsigned(4u8, 1u8).unwrap()).unwrap();
         let mut rng = SeedStreamTurboShake128::from_seed([0u8; 32]);
         let samples1: Vec<i8> = (0..10)
             .map(|_| i8::try_from(sampler1.sample(&mut rng)).unwrap())
@@ -428,7 +420,7 @@ mod tests {
             budget: ZCdpBudget::new(Rational::try_from(0.25).unwrap()).unwrap(),
         };
         let sampler2 = zcdp
-            .create_distribution(Ratio::<BigUint>::from_integer(1u8.into()))
+            .create_distribution(Rational::from_unsigned(1u8, 1u8).unwrap())
             .unwrap();
         let mut rng2 = SeedStreamTurboShake128::from_seed([0u8; 32]);
         let samples2: Vec<i8> = (0..10)

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use num_bigint::{BigInt, BigUint};
-use num_rational::Ratio;
+use num_bigint::BigInt;
 use num_traits::FromPrimitive;
 use prio::dp::distributions::DiscreteGaussian;
+use prio::dp::Rational;
 use prio::vdaf::xof::SeedStreamTurboShake128;
 use rand::distr::Distribution;
 use rand::SeedableRng;
@@ -41,10 +41,9 @@ fn discrete_gauss_reference() {
     ];
 
     for test_vector in test_vectors {
-        let sampler = DiscreteGaussian::new(Ratio::<BigUint>::new(
-            test_vector.std_num.into(),
-            test_vector.std_denom.into(),
-        ))
+        let sampler = DiscreteGaussian::new(
+            Rational::from_unsigned(test_vector.std_num, test_vector.std_denom).unwrap(),
+        )
         .unwrap();
 
         // check samples are consistent
