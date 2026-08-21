@@ -172,6 +172,9 @@ pub trait FieldElement:
             return Err(FieldError::ShortRead);
         }
         let mut vec = Vec::with_capacity(bytes.len() / Self::ENCODED_SIZE);
+        // We cannot use as_chunks() with this const generic parameter expression.
+        #[allow(unknown_lints)]
+        #[allow(clippy::chunks_exact_to_as_chunks)]
         for chunk in bytes.chunks_exact(Self::ENCODED_SIZE) {
             #[allow(deprecated)]
             vec.push(Self::get_decoded(chunk).map_err(FieldError::Codec)?);

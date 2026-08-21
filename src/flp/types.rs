@@ -1057,14 +1057,14 @@ pub(crate) fn parallel_sum_range_checks<F: NttFriendlyFieldElement>(
         let mut r_power = r;
 
         // Construct arguments for the Mul subcircuits.
-        for (input, args) in chunk.iter().zip(padded_chunk.chunks_exact_mut(2)) {
+        for (input, args) in chunk.iter().zip(padded_chunk.as_chunks_mut::<2>().0) {
             args[0] = r_power * *input;
             args[1] = *input - num_shares_inverse;
             r_power *= r;
         }
         // If the chunk of the input is smaller than chunk_length, use zeros instead of measurement
         // inputs for the remaining calls.
-        for args in padded_chunk[chunk.len() * 2..].chunks_exact_mut(2) {
+        for args in padded_chunk[chunk.len() * 2..].as_chunks_mut::<2>().0 {
             args[0] = F::zero();
             args[1] = -num_shares_inverse;
             // Skip updating r_power. This inner loop is only used during the last iteration of the
