@@ -68,7 +68,7 @@ pub(crate) fn generate_verification_message<F: NttFriendlyFieldElement>(
     ntt_in[1] = unpacked.points_h_packed[0];
     for (x, chunk) in unpacked.points_h_packed[1..]
         .iter()
-        .zip(ntt_in[2..proof_length].chunks_exact_mut(2))
+        .zip(ntt_in[2..proof_length].as_chunks_mut::<2>().0)
     {
         chunk[0] = F::zero();
         chunk[1] = *x;

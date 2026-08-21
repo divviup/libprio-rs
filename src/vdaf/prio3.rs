@@ -499,7 +499,8 @@ where
                 "incorrect random input length".to_string(),
             ));
         }
-        let mut random_seeds = random.chunks_exact(SEED_SIZE);
+        let (random_seeds, _remainder) = random.as_chunks::<SEED_SIZE>();
+        let mut random_seeds = random_seeds.iter();
         let num_aggregators = self.num_aggregators;
         let encoded_measurement = self.typ.encode_measurement(measurement)?;
 
@@ -524,18 +525,18 @@ where
             // Result is okay to unwrap because the ChunksExact iterator always returns slices of
             // the correct length.
             // This seed is used for both the helper measurement share and the helper proof share
-            let meas_and_proof_share_seed = random_seeds.next().unwrap().try_into().unwrap();
+            let meas_and_proof_share_seed = random_seeds.next().unwrap();
             let measurement_share_prng: Prng<T::Field, _> = Prng::from_seed_stream(P::seed_stream(
-                &meas_and_proof_share_seed,
+                meas_and_proof_share_seed,
                 &[&self.domain_separation_tag(DST_MEASUREMENT_SHARE), ctx],
                 &[&[agg_id]],
             ));
             let joint_rand_blind = if let Some(helper_joint_rand_parts) =
                 helper_joint_rand_parts.as_mut()
             {
-                let joint_rand_blind = random_seeds.next().unwrap().try_into().unwrap();
+                let joint_rand_blind = random_seeds.next().unwrap();
                 let mut joint_rand_part_xof = P::init(
-                    &joint_rand_blind,
+                    joint_rand_blind,
                     &[&self.domain_separation_tag(DST_JOINT_RAND_PART), ctx],
                 );
                 joint_rand_part_xof.update(&[agg_id]); // Aggregator ID
@@ -562,8 +563,8 @@ where
                 None
             };
             shares_out.push(Prio3InputShare::Helper {
-                meas_and_proofs_share: Seed::from_bytes(meas_and_proof_share_seed),
-                joint_rand_blind: joint_rand_blind.map(Seed::from_bytes),
+                meas_and_proofs_share: Seed::from_bytes(*meas_and_proof_share_seed),
+                joint_rand_blind: joint_rand_blind.copied().map(Seed::from_bytes),
             });
         }
 
@@ -573,8 +574,8 @@ where
                 .as_ref()
                 .map(
                     |helper_joint_rand_parts| -> Result<Vec<Seed<SEED_SIZE>>, VdafError> {
-                        let leader_blind_bytes = random_seeds.next().unwrap().try_into().unwrap();
-                        let leader_blind = Seed::from_bytes(leader_blind_bytes);
+                        let leader_blind_bytes = random_seeds.next().unwrap();
+                        let leader_blind = Seed::from_bytes(*leader_blind_bytes);
 
                         let mut joint_rand_part_xof = P::init(
                             leader_blind.as_ref(),
@@ -613,10 +614,8 @@ where
             .unwrap_or_default();
 
         // Generate the proofs.
-        let prove_rands = self.derive_prove_rands(
-            ctx,
-            &Seed::from_bytes(random_seeds.next().unwrap().try_into().unwrap()),
-        );
+        let prove_rands =
+            self.derive_prove_rands(ctx, &Seed::from_bytes(*random_seeds.next().unwrap()));
         let mut leader_proofs_share = Vec::with_capacity(self.typ.proof_len() * self.num_proofs());
         for p in 0..self.num_proofs() {
             let prove_rand =
