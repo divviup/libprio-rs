@@ -449,6 +449,11 @@ who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
 delta = "0.1.45 -> 0.1.46"
 
+[[audits.num-integer]]
+who = "Tim Geoghegan <timg@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.1.46 -> 0.1.47"
+
 [[audits.num-iter]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
