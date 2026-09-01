@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 
-use num_bigint::BigInt;
+use num_bigint_0_5::BigInt;
 use num_traits::FromPrimitive;
 use prio::dp::distributions::DiscreteGaussian;
 use prio::dp::Rational;

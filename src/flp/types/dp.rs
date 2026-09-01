@@ -7,7 +7,7 @@ use crate::flp::gadgets::{Mul, ParallelSumGadget};
 use crate::flp::types::{Histogram, L1BoundSum, SumVec};
 use crate::flp::{FlpError, TypeWithNoise};
 use crate::vdaf::xof::SeedStreamTurboShake128;
-use num_bigint::{BigInt, BigUint, TryFromBigIntError};
+use num_bigint_0_5::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
 use rand::{distr::Distribution, make_rng, Rng};
 
@@ -254,8 +254,7 @@ where
         // Project it into the field by taking the modulus, converting to a fixed-precision
         // integer, and converting to a field element.
         let noise_wrapped = noise.mod_floor(&modulus);
-        let noise_fieldint =
-            F::Integer::try_from(noise_wrapped).map_err(DpError::BigIntConversion)?;
+        let noise_fieldint = F::Integer::try_from(noise_wrapped).map_err(DpError::from)?;
         let noise_field = F::from(noise_fieldint);
 
         // Add noise to each element of the aggregate share.

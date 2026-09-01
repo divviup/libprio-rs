@@ -133,7 +133,7 @@ pub(crate) fn log2(x: u128) -> u128 {
 pub(crate) mod tests {
     use core::{cmp::max, fmt::Debug, marker::PhantomData};
     use modinverse::modinverse;
-    use num_bigint::{BigInt, ToBigInt};
+    use num_bigint_0_5::{BigInt, ToBigInt};
     use num_traits::AsPrimitive;
     use rand::{distr::Distribution, rng, RngExt};
 

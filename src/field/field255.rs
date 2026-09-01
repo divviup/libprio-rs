@@ -359,7 +359,7 @@ mod tests {
     use fiat_crypto::curve25519_64::{
         fiat_25519_from_bytes, fiat_25519_tight_field_element, fiat_25519_to_bytes,
     };
-    use num_bigint::BigUint;
+    use num_bigint_0_5::BigUint;
     use once_cell::sync::Lazy;
     use std::convert::{TryFrom, TryInto};
 

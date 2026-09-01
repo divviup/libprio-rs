@@ -27,7 +27,7 @@
 //! removed, method names and signatures have been updated to align with rand 0.9, and documentation
 //! has been updated.
 
-use num_bigint::BigUint;
+use num_bigint_0_5::BigUint;
 use num_integer::Integer;
 use num_traits::{ToPrimitive, Zero};
 use rand::distr::uniform::Error;
