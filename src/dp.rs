@@ -14,8 +14,8 @@
 //!  - `DifferentialPrivacyStrategy`: This is a combination of choices for budget and distribution.
 //!    Examples: zCDP-DiscreteGaussian, EpsilonDelta-DiscreteGaussian
 //!
-use num_bigint::{BigInt, BigUint, TryFromBigIntError};
-use num_rational::{BigRational, Ratio};
+use num_bigint_0_5::BigUint;
+use num_rational::Ratio;
 use num_traits::ToPrimitive;
 use serde::Serialize;
 
@@ -31,12 +31,24 @@ pub enum DpError {
     InvalidFloat,
 
     /// Tried to convert BigInt into something incompatible.
-    #[error("DP error: {0}")]
-    BigIntConversion(#[from] TryFromBigIntError<BigInt>),
+    #[error("DP error: conversion from big integer failed")]
+    BigIntConversion,
 
     /// Invalid parameter value.
     #[error("invalid parameter: {0}")]
     InvalidParameter(String),
+}
+
+impl From<num_bigint_0_4::TryFromBigIntError<num_bigint_0_4::BigInt>> for DpError {
+    fn from(_: num_bigint_0_4::TryFromBigIntError<num_bigint_0_4::BigInt>) -> Self {
+        DpError::BigIntConversion
+    }
+}
+
+impl From<num_bigint_0_5::TryFromBigIntError<num_bigint_0_5::BigInt>> for DpError {
+    fn from(_: num_bigint_0_5::TryFromBigIntError<num_bigint_0_5::BigInt>) -> Self {
+        DpError::BigIntConversion
+    }
 }
 
 /// Positive arbitrary precision rational number to represent DP and noise distribution parameters in
@@ -64,7 +76,11 @@ impl Rational {
 
     /// Get the [`Rational`] as an `f64`, if possible.
     pub fn to_f64(&self) -> Option<f64> {
-        self.0.to_f64()
+        // Convert the numerator and denominator from num-bigint 0.5 to num-bigint 0.4, for
+        // compatibility with num-rational 0.4.
+        let numer = num_bigint_0_4::BigUint::from_slice(&self.0.numer().to_u32_digits());
+        let denom = num_bigint_0_4::BigUint::from_slice(&self.0.denom().to_u32_digits());
+        Ratio::new(numer, denom).to_f64()
     }
 }
 
@@ -81,13 +97,18 @@ impl TryFrom<f32> for Rational {
     /// The special float values (NaN, positive and negative infinity) result in
     /// an error. All other values are represented exactly, without rounding errors.
     fn try_from(value: f32) -> Result<Self, DpError> {
-        match BigRational::from_float(value) {
-            Some(y) => Ok(Rational(Ratio::<BigUint>::new(
-                y.numer().clone().try_into()?,
-                y.denom().clone().try_into()?,
-            ))),
-            None => Err(DpError::InvalidFloat)?,
-        }
+        // Use num-bigint 0.4 for the initial conversion from a floating point number, since
+        // num-rational 0.4 is only compatible with that.
+        let Some(y) = Ratio::<num_bigint_0_4::BigInt>::from_float(value) else {
+            return Err(DpError::InvalidFloat)?;
+        };
+        let numer = num_bigint_0_4::BigUint::try_from(y.numer().clone())?;
+        let denom = num_bigint_0_4::BigUint::try_from(y.denom().clone())?;
+        // Convert from num-bigint 0.4 to num-bigint 0.5 for the return value.
+        Ok(Rational(Ratio::<BigUint>::new(
+            num_bigint_0_5::BigUint::from_slice(&numer.to_u32_digits()),
+            num_bigint_0_5::BigUint::from_slice(&denom.to_u32_digits()),
+        )))
     }
 }
 
@@ -142,7 +163,7 @@ impl DifferentialPrivacyBudget for PureDpBudget {}
 /// `Deserialize` implementations in customized `Deserialize` implementations, which make use of
 /// constructor associated methods for budgets to enforce input validation invariants.
 mod budget_serde {
-    use num_bigint::BigUint;
+    use num_bigint_0_5::BigUint;
     use num_rational::Ratio;
     use serde::{de, Deserialize};
 

@@ -1122,7 +1122,7 @@ mod tests {
         prelude::{BitBox, Lsb0},
         slice::BitSlice,
     };
-    use num_bigint::BigUint;
+    use num_bigint_0_5::BigUint;
     use rand::random;
     use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 

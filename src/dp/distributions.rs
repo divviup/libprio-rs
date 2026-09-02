@@ -50,7 +50,7 @@
 //!     Clément Canonne, Gautam Kamath, Thomas Steinke. The Discrete Gaussian for Differential Privacy. 2020.
 //!     <https://arxiv.org/pdf/2004.00010.pdf>
 
-use num_bigint::{BigInt, BigUint};
+use num_bigint_0_5::{BigInt, BigUint};
 use num_integer::Integer;
 use num_iter::range_inclusive;
 use num_rational::Ratio;
@@ -381,7 +381,7 @@ mod tests {
     use crate::dp::Rational;
     use crate::vdaf::xof::SeedStreamTurboShake128;
 
-    use num_bigint::{BigUint, Sign, ToBigInt, ToBigUint};
+    use num_bigint_0_5::{BigUint, Sign, ToBigInt, ToBigUint};
     use num_traits::{One, Signed, ToPrimitive};
     use rand::{distr::Distribution, SeedableRng};
     use statrs::distribution::{ChiSquared, ContinuousCDF, Normal};
@@ -450,12 +450,12 @@ mod tests {
         let z_stat = probit(alpha / 2.).abs();
 
         // confidence interval for the mean
-        let abs_p_tol = Ratio::<BigInt>::from_float(z_stat * (hyp_var / n as f64).sqrt()).unwrap();
+        let abs_p_tol = float_to_bigint_ratio(z_stat * (hyp_var / n as f64).sqrt());
 
         // take n samples from the distribution, compute empirical mean
         let emp_mean = Ratio::<BigInt>::new((0..n).map(|_| sampler()).sum::<BigInt>(), n.into());
 
-        (emp_mean - Ratio::<BigInt>::from_float(hyp_mean).unwrap()).abs() < abs_p_tol
+        (emp_mean - float_to_bigint_ratio(hyp_mean)).abs() < abs_p_tol
     }
 
     fn histogram(
@@ -510,11 +510,10 @@ mod tests {
         let exp_sum = |lower: &BigInt, upper: &BigInt| {
             range_inclusive(lower.clone(), upper.clone())
                 .map(|x: BigInt| {
-                    f64::exp(
-                        Ratio::<BigInt>::new(-(x.pow(2)), 2 * sigma.pow(2))
-                            .to_f64()
-                            .unwrap(),
-                    )
+                    f64::exp(bigint_ratio_to_float(Ratio::<BigInt>::new(
+                        -(x.pow(2)),
+                        2 * sigma.pow(2),
+                    )))
                 })
                 .sum::<f64>()
         };
@@ -599,6 +598,51 @@ mod tests {
         let p = 1.0 - chi2.cdf(stat);
 
         p > alpha
+    }
+
+    /// Convert a floating point number to a ratio of signed bigints.
+    fn float_to_bigint_ratio(value: f64) -> Ratio<BigInt> {
+        // Use num-bigint 0.4 for the initial conversion from a floating point number, since
+        // num-rational 0.4 is only compatible with that.
+        let Some(y) = Ratio::<num_bigint_0_4::BigInt>::from_float(value) else {
+            panic!("floating point value is invalid: {value}");
+        };
+        // Convert from num-bigint 0.4 to num-bigint 0.5 for the return value.
+        let (numer_sign, numer_digits) = y.numer().to_u32_digits();
+        let (denom_sign, denom_digits) = y.denom().to_u32_digits();
+        Ratio::<BigInt>::new(
+            num_bigint_0_5::BigInt::from_slice(upgrade_sign(numer_sign), &numer_digits),
+            num_bigint_0_5::BigInt::from_slice(upgrade_sign(denom_sign), &denom_digits),
+        )
+    }
+
+    /// Convert a signed ratio of bigints to a floating point number.
+    fn bigint_ratio_to_float(value: Ratio<BigInt>) -> f64 {
+        // Convert the numerator and denominator from num-bigint 0.5 to num-bigint 0.4, so we can
+        // use num-rational 0.4.
+        let (numer_sign, numer_digits) = value.numer().to_u32_digits();
+        let (denom_sign, denom_digits) = value.denom().to_u32_digits();
+        let numer = num_bigint_0_4::BigInt::from_slice(downgrade_sign(numer_sign), &numer_digits);
+        let denom = num_bigint_0_4::BigInt::from_slice(downgrade_sign(denom_sign), &denom_digits);
+        Ratio::new(numer, denom)
+            .to_f64()
+            .expect("could not convert ratio to floating point number")
+    }
+
+    fn upgrade_sign(sign: num_bigint_0_4::Sign) -> num_bigint_0_5::Sign {
+        match sign {
+            num_bigint_0_4::Sign::Minus => num_bigint_0_5::Sign::Minus,
+            num_bigint_0_4::Sign::NoSign => num_bigint_0_5::Sign::NoSign,
+            num_bigint_0_4::Sign::Plus => num_bigint_0_5::Sign::Plus,
+        }
+    }
+
+    fn downgrade_sign(sign: num_bigint_0_5::Sign) -> num_bigint_0_4::Sign {
+        match sign {
+            num_bigint_0_5::Sign::Minus => num_bigint_0_4::Sign::Minus,
+            num_bigint_0_5::Sign::NoSign => num_bigint_0_4::Sign::NoSign,
+            num_bigint_0_5::Sign::Plus => num_bigint_0_4::Sign::Plus,
+        }
     }
 
     #[test]

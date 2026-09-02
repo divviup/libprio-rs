@@ -3,7 +3,7 @@
 #[cfg(feature = "experimental")]
 use criterion::Throughput;
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use num_bigint::BigUint;
+use num_bigint_0_5::BigUint;
 use prio::dp::{distributions::DiscreteGaussian, Rational};
 #[cfg(feature = "experimental")]
 use prio::idpf::test_utils::generate_zipf_distributed_batch;
