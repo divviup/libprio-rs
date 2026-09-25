@@ -10,12 +10,13 @@
 //! [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3
 
 use byteorder::{BigEndian, ReadBytesExt};
+use num_traits::{bounds::UpperBounded, ConstZero, ToBytes};
 use std::{
     convert::TryInto,
     error::Error,
     io::{Cursor, Read},
+    marker::PhantomData,
     mem::size_of,
-    num::TryFromIntError,
 };
 
 /// An error that occurred during decoding.
@@ -38,6 +39,15 @@ pub enum CodecError {
     #[error("vector length exceeded range of length prefix")]
     LengthPrefixOverflow,
 
+    /// The number of bytes in a variable-length vector is outside of the type's range.
+    ///
+    /// In TLS presentation language, variable-length vectors declare a subrange of legal lengths
+    /// ([1]). Vectors of items whose length is outside this range are invalid.
+    ///
+    /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
+    #[error("vector length outside of type's range")]
+    VectorLengthOutsideOfRange,
+
     /// Custom errors from [`Decode`] implementations.
     #[error("other error: {0}")]
     Other(#[source] Box<dyn Error + 'static + Send + Sync>),
@@ -47,34 +57,42 @@ pub enum CodecError {
     UnexpectedValue,
 }
 
-/// Describes how to decode an object from a byte sequence.
+/// Decode an object from a byte sequence.
 pub trait Decode: Sized {
-    /// Read and decode an encoded object from `bytes`. On success, the decoded value is returned
-    /// and `bytes` is advanced by the encoded size of the value. On failure, an error is returned
-    /// and no further attempt to read from `bytes` should be made.
+    /// Read and decode an encoded object from `bytes`.
+    ///
+    /// On success, the decoded value is returned and `bytes` is advanced by the encoded size of the
+    /// value. On failure, an error is returned and no further attempt to read from `bytes` should
+    /// be made.
     fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError>;
 
-    /// Convenience method to get a decoded value. Returns an error if [`Self::decode`] fails, or if
-    /// there are any bytes left in `bytes` after decoding a value.
+    /// Convenience method to get a decoded value.
+    ///
+    /// Returns an error if [`Self::decode`] fails, or if there are any bytes left in `bytes` after
+    /// decoding a value. On failure, no further attempt to read from `bytes` should be made.
     fn get_decoded(bytes: &[u8]) -> Result<Self, CodecError> {
         Self::get_decoded_with_param(&(), bytes)
     }
 }
 
-/// Describes how to decode an object from a byte sequence and a decoding parameter that provides
-/// additional context.
+/// Decode an object from a byte sequence and a decoding parameter that provides additional context.
 pub trait ParameterizedDecode<P>: Sized {
-    /// Read and decode an encoded object from `bytes`. `decoding_parameter` provides details of the
-    /// wire encoding such as lengths of different portions of the message. On success, the decoded
-    /// value is returned and `bytes` is advanced by the encoded size of the value. On failure, an
-    /// error is returned and no further attempt to read from `bytes` should be made.
+    /// Read and decode an encoded object from `bytes`.
+    ///
+    /// `decoding_parameter` provides details of the wire encoding such as lengths of different
+    /// portions of the message. On success, the decoded value is returned and `bytes` is advanced
+    /// by the encoded size of the value. On failure, an error is returned and no further attempt to
+    /// read from `bytes` should be made.
     fn decode_with_param(
         decoding_parameter: &P,
         bytes: &mut Cursor<&[u8]>,
     ) -> Result<Self, CodecError>;
 
-    /// Convenience method to get a decoded value. Returns an error if [`Self::decode_with_param`]
-    /// fails, or if there are any bytes left in `bytes` after decoding a value.
+    /// Convenience method to get a decoded value.
+    ///
+    /// Returns an error if [`Self::decode_with_param`] fails, or if there are any bytes left in
+    /// `bytes` after decoding a value. On failure, no further attempt to read from `bytes` should
+    /// be made.
     fn get_decoded_with_param(decoding_parameter: &P, bytes: &[u8]) -> Result<Self, CodecError> {
         let mut cursor = Cursor::new(bytes);
         let decoded = Self::decode_with_param(decoding_parameter, &mut cursor)?;
@@ -102,15 +120,22 @@ impl<D: Decode, T> ParameterizedDecode<T> for D {
 /// Describes how to encode objects into a byte sequence.
 pub trait Encode {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError>;
 
     /// Convenience method to encode a value into a new `Vec<u8>`.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn get_encoded(&self) -> Result<Vec<u8>, CodecError> {
         self.get_encoded_with_param(&())
     }
 
-    /// Returns an optional hint indicating how many bytes will be required to encode this value, or
-    /// `None` by default.
+    /// Returns an optional hint indicating how many bytes will be required to encode this value.
+    ///
+    /// The default implementation returns `None`.
     fn encoded_len(&self) -> Option<usize> {
         None
     }
@@ -119,8 +144,12 @@ pub trait Encode {
 /// Describes how to encode objects into a byte sequence.
 pub trait ParameterizedEncode<P> {
     /// Append the encoded form of this object to the end of `bytes`, growing the vector as needed.
+    ///
     /// `encoding_parameter` provides details of the wire encoding, used to control how the value
     /// is encoded.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn encode_with_param(
         &self,
         encoding_parameter: &P,
@@ -128,6 +157,9 @@ pub trait ParameterizedEncode<P> {
     ) -> Result<(), CodecError>;
 
     /// Convenience method to encode a value into a new `Vec<u8>`.
+    ///
+    /// On failure, an error is returned and no further attempt to read from or write to `bytes`
+    /// should be made.
     fn get_encoded_with_param(&self, encoding_parameter: &P) -> Result<Vec<u8>, CodecError> {
         let mut ret = if let Some(length) = self.encoded_len_with_param(encoding_parameter) {
             Vec::with_capacity(length)
@@ -138,8 +170,9 @@ pub trait ParameterizedEncode<P> {
         Ok(ret)
     }
 
-    /// Returns an optional hint indicating how many bytes will be required to encode this value, or
-    /// `None` by default.
+    /// Returns an optional hint indicating how many bytes will be required to encode this value.
+    ///
+    /// The default implementation returns `None`.
     fn encoded_len_with_param(&self, _encoding_parameter: &P) -> Option<usize> {
         None
     }
@@ -247,6 +280,146 @@ impl Encode for u64 {
     }
 }
 
+/// A variable-length vector of encoded items.
+///
+/// The vector has a length prefix of type `LEN`, which will be one of `u8`, `u16` or `u32`. The
+/// maximum length of the vector is the maximum value of the length prefix.
+///
+/// A TLS presentation language declaration like `opaque buf<11..2^16-1>` would be represented by
+/// `VariableLengthVector<11, u16, u8>`.
+///
+/// `ExampleType values<0..2^32-1>` would be `VariableLengthVector<0, u32, ExampleType>`, assuming a
+/// Rust type `ExampleType` corresponding to the TLS presentation language type of that name exists.
+///
+/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VariableLengthVector<const MIN_LEN: usize, LEN, E> {
+    /// Contents of the vector.
+    contents: Vec<E>,
+    phantom: PhantomData<LEN>,
+}
+
+impl<const MIN_LEN: usize, LEN, E> VariableLengthVector<MIN_LEN, LEN, E> {
+    /// Make a new variable length vector.
+    pub fn new(contents: Vec<E>) -> Self {
+        Self {
+            contents,
+            phantom: PhantomData,
+        }
+    }
+
+    /// Length of the vector
+    pub fn len(&self) -> usize {
+        self.contents.len()
+    }
+
+    /// Whether this vector is empty.
+    pub fn is_empty(&self) -> bool {
+        self.contents.is_empty()
+    }
+}
+
+impl<const MIN_LEN: usize, LEN: LengthPrefix, E: Encode> Encode
+    for VariableLengthVector<MIN_LEN, LEN, E>
+{
+    fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+        // Reserve space to later write length
+        let len_offset = bytes.len();
+        LEN::ZERO.encode(bytes)?;
+
+        for item in &self.contents {
+            item.encode(bytes)?;
+        }
+
+        // Check whether the number of bytes written falls outside the type's declared range. We can
+        // only do this after encoding all the items because we can't assume `Encode::encoded_len`
+        // is implemented.
+        let encoded_len = bytes.len() - len_offset - LEN::ENCODED_LEN;
+        if encoded_len < MIN_LEN
+            || encoded_len
+                > LEN::max_value()
+                    .try_into()
+                    .map_err(|_| CodecError::Other("prefix max length too big for usize".into()))?
+        {
+            return Err(CodecError::VectorLengthOutsideOfRange);
+        }
+
+        let encoded_len =
+            LEN::try_from(encoded_len).map_err(|_| CodecError::LengthPrefixOverflow)?;
+        bytes[len_offset..len_offset + LEN::ENCODED_LEN]
+            .copy_from_slice(encoded_len.to_be_bytes().as_ref());
+        Ok(())
+    }
+
+    fn encoded_len(&self) -> Option<usize> {
+        Some(
+            LEN::ENCODED_LEN
+                + self
+                    .contents
+                    .iter()
+                    .map(Encode::encoded_len)
+                    .sum::<Option<usize>>()?,
+        )
+    }
+}
+
+impl<const MIN_LEN: usize, LEN: LengthPrefix, D: Decode> Decode
+    for VariableLengthVector<MIN_LEN, LEN, D>
+{
+    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        // Read the length prefix
+        let length: usize = LEN::decode(bytes)?
+            .try_into()
+            .map_err(|_| CodecError::Other("prefix max length too big for usize".into()))?;
+
+        if length < MIN_LEN {
+            return Err(CodecError::VectorLengthOutsideOfRange);
+        }
+
+        let contents = decode_fixlen_items(length, &(), bytes)?;
+
+        Ok(contents.into())
+    }
+}
+
+impl<const MIN_LEN: usize, LEN, E> AsRef<[E]> for VariableLengthVector<MIN_LEN, LEN, E> {
+    fn as_ref(&self) -> &[E] {
+        &self.contents
+    }
+}
+
+impl<const MIN_LEN: usize, LEN, E> AsMut<[E]> for VariableLengthVector<MIN_LEN, LEN, E> {
+    fn as_mut(&mut self) -> &mut [E] {
+        &mut self.contents
+    }
+}
+
+impl<const MIN_LEN: usize, LEN, E> From<Vec<E>> for VariableLengthVector<MIN_LEN, LEN, E> {
+    fn from(contents: Vec<E>) -> Self {
+        Self::new(contents)
+    }
+}
+
+/// Marker trait for types that can be the length prefix of a [`VariableLengthVector`].
+trait LengthPrefix:
+    Encode + Decode + TryFrom<usize> + TryInto<usize> + ConstZero + UpperBounded + ToBytes
+{
+    /// Length of an encoded length prefix.
+    const ENCODED_LEN: usize;
+}
+
+impl LengthPrefix for u8 {
+    const ENCODED_LEN: usize = 1;
+}
+
+impl LengthPrefix for u16 {
+    const ENCODED_LEN: usize = 2;
+}
+
+impl LengthPrefix for u32 {
+    const ENCODED_LEN: usize = 4;
+}
+
 /// Encode `items` into `bytes` as a [fixed-length vector][1], with no length tag.
 ///
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
@@ -256,117 +429,6 @@ pub fn encode_fixlen_items<E: Encode>(bytes: &mut Vec<u8>, items: &[E]) -> Resul
     }
 
     Ok(())
-}
-
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u8_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    bytes.push(0);
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len =
-        u8::try_from(bytes.len() - len_offset - 1).map_err(|_| CodecError::LengthPrefixOverflow)?;
-    bytes[len_offset] = len;
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u8_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read one byte to get length of opaque byte vector
-    let length = usize::from(u8::decode(bytes)?);
-
-    decode_fixlen_items(length, decoding_parameter, bytes)
-}
-
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of `0xffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u16_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    0u16.encode(bytes)?;
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len = u16::try_from(bytes.len() - len_offset - 2)
-        .map_err(|_| CodecError::LengthPrefixOverflow)?;
-    bytes[len_offset..len_offset + 2].copy_from_slice(&len.to_be_bytes());
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u16_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read two bytes to get length of opaque byte vector
-    let length = usize::from(u16::decode(bytes)?);
-
-    decode_fixlen_items(length, decoding_parameter, bytes)
-}
-
-/// Encode `items` into `bytes` as a [variable-length vector][1] with a maximum length of
-/// `0xffffffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn encode_u32_items<P, E: ParameterizedEncode<P>>(
-    bytes: &mut Vec<u8>,
-    encoding_parameter: &P,
-    items: &[E],
-) -> Result<(), CodecError> {
-    // Reserve space to later write length
-    let len_offset = bytes.len();
-    0u32.encode(bytes)?;
-
-    for item in items {
-        item.encode_with_param(encoding_parameter, bytes)?;
-    }
-
-    let len = u32::try_from(bytes.len() - len_offset - 4)
-        .map_err(|_| CodecError::LengthPrefixOverflow)?;
-    bytes[len_offset..len_offset + 4].copy_from_slice(&len.to_be_bytes());
-    Ok(())
-}
-
-/// Decode `bytes` into a vector of `D` values, treating `bytes` as a [variable-length vector][1] of
-/// maximum length `0xffffffff`.
-///
-/// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
-pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
-    decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
-) -> Result<Vec<D>, CodecError> {
-    // Read four bytes to get length of opaque byte vector.
-    let len: usize = u32::decode(bytes)?
-        .try_into()
-        .map_err(|err: TryFromIntError| CodecError::Other(err.into()))?;
-
-    decode_fixlen_items(len, decoding_parameter, bytes)
 }
 
 /// Decode `bytes` as a [fixed-length vector][1] into as many instances of `D` as possible.
@@ -469,7 +531,7 @@ mod tests {
         assert_eq!(value, decoded);
     }
 
-    #[derive(Debug, Eq, PartialEq)]
+    #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
     struct TestMessage {
         field_u8: u8,
         field_u16: u16,
@@ -542,6 +604,11 @@ mod tests {
         assert_eq!(value, decoded);
     }
 
+    #[test]
+    fn empty_variable_length_vector() {
+        assert!(VariableLengthVector::<0, u8, u8>::new(vec![]).is_empty())
+    }
+
     fn messages_vec() -> Vec<TestMessage> {
         vec![
             TestMessage {
@@ -567,9 +634,9 @@ mod tests {
 
     #[test]
     fn roundtrip_variable_length_u8() {
-        let values = messages_vec();
+        let values = VariableLengthVector::<0, u8, _>::new(messages_vec());
         let mut bytes = vec![];
-        encode_u8_items(&mut bytes, &(), &values).unwrap();
+        values.encode(&mut bytes).unwrap();
 
         assert_eq!(
             bytes.len(),
@@ -579,15 +646,15 @@ mod tests {
             3 * TestMessage::encoded_length()
         );
 
-        let decoded = decode_u8_items(&(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = VariableLengthVector::get_decoded(&bytes).unwrap();
         assert_eq!(values, decoded);
     }
 
     #[test]
     fn roundtrip_variable_length_u16() {
-        let values = messages_vec();
+        let values = VariableLengthVector::<0, u16, _>::new(messages_vec());
         let mut bytes = vec![];
-        encode_u16_items(&mut bytes, &(), &values).unwrap();
+        values.encode(&mut bytes).unwrap();
 
         assert_eq!(
             bytes.len(),
@@ -600,15 +667,15 @@ mod tests {
         // Check endianness of encoded length
         assert_eq!(bytes[0..2], [0, 3 * TestMessage::encoded_length() as u8]);
 
-        let decoded = decode_u16_items(&(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = VariableLengthVector::get_decoded(&bytes).unwrap();
         assert_eq!(values, decoded);
     }
 
     #[test]
     fn roundtrip_variable_length_u32() {
-        let values = messages_vec();
+        let values = VariableLengthVector::<0, u32, _>::new(messages_vec());
         let mut bytes = Vec::new();
-        encode_u32_items(&mut bytes, &(), &values).unwrap();
+        values.encode(&mut bytes).unwrap();
 
         assert_eq!(bytes.len(), 4 + 3 * TestMessage::encoded_length());
 
@@ -618,8 +685,102 @@ mod tests {
             [0, 0, 0, 3 * TestMessage::encoded_length() as u8]
         );
 
-        let decoded = decode_u32_items(&(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = VariableLengthVector::get_decoded(&bytes).unwrap();
         assert_eq!(values, decoded);
+    }
+
+    #[test]
+    fn variable_length_vector_reject_too_short_byte_items() {
+        assert_matches!(
+            VariableLengthVector::<2, u16, _>::new(vec![0u8])
+                .get_encoded()
+                .unwrap_err(),
+            CodecError::VectorLengthOutsideOfRange
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_reject_too_short_nontrivial_items() {
+        // Minimum length chosen to be bigger than the encoding of messages_vec()
+        const MIN_LEN: usize = 48;
+        let vlv = VariableLengthVector::<MIN_LEN, u16, _>::new(messages_vec());
+        assert!(
+            MIN_LEN > vlv.encoded_len().unwrap(),
+            "{:?}",
+            vlv.encoded_len()
+        );
+        let encoded = vlv.get_encoded();
+        assert_matches!(encoded.unwrap_err(), CodecError::VectorLengthOutsideOfRange);
+    }
+
+    #[test]
+    fn variable_length_vector_reject_too_long_byte_items() {
+        assert_matches!(
+            VariableLengthVector::<0, u8, _>::new(vec![0u8; usize::from(u8::MAX) + 1])
+                .get_encoded()
+                .unwrap_err(),
+            CodecError::VectorLengthOutsideOfRange
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_reject_too_long_nontrivial_items() {
+        // 18 is enough TestMessage items that the encoding will be more than 255 bytes
+        let vlv = VariableLengthVector::<0, u8, _>::new(vec![TestMessage::default(); 18]);
+        assert!(
+            vlv.encoded_len().unwrap() > u8::MAX as usize,
+            "{:?}",
+            vlv.encoded_len()
+        );
+        assert_matches!(
+            vlv.get_encoded().unwrap_err(),
+            CodecError::VectorLengthOutsideOfRange
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_u8_encoded_len() {
+        let vlv = VariableLengthVector::<1, u8, _>::new(messages_vec());
+        assert_eq!(
+            vlv.encoded_len().unwrap(),
+            1 + 3 * TestMessage::encoded_length()
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_u16_encoded_len() {
+        let vlv = VariableLengthVector::<1, u16, _>::new(messages_vec());
+        assert_eq!(
+            vlv.encoded_len().unwrap(),
+            2 + 3 * TestMessage::encoded_length()
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_u32_encoded_len() {
+        let vlv = VariableLengthVector::<1, u32, _>::new(messages_vec());
+        assert_eq!(
+            vlv.encoded_len().unwrap(),
+            4 + 3 * TestMessage::encoded_length()
+        );
+    }
+
+    #[test]
+    fn variable_length_vector_items_have_no_encoded_len() {
+        struct NoEncodedLen;
+
+        impl Encode for NoEncodedLen {
+            fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
+                ().encode(bytes)
+            }
+
+            fn encoded_len(&self) -> Option<usize> {
+                None
+            }
+        }
+
+        let vlv = VariableLengthVector::<0, u16, _>::new(vec![NoEncodedLen, NoEncodedLen]);
+        assert!(vlv.encoded_len().is_none(), "{:?}", vlv.encoded_len());
     }
 
     #[test]
@@ -648,16 +809,15 @@ mod tests {
 
     #[test]
     fn decode_too_short() {
-        let values = messages_vec();
-        let mut bytes = Vec::new();
-        encode_u32_items(&mut bytes, &(), &values).unwrap();
+        let values = VariableLengthVector::<0, u32, _>::new(messages_vec());
+        let encoded = values.get_encoded().unwrap();
 
         let error =
-            decode_u32_items::<_, TestMessage>(&(), &mut Cursor::new(&bytes[..3])).unwrap_err();
+            VariableLengthVector::<0, u32, TestMessage>::get_decoded(&encoded[..3]).unwrap_err();
         assert_matches!(error, CodecError::Io(e) => assert_eq!(e.kind(), ErrorKind::UnexpectedEof));
 
         let error =
-            decode_u32_items::<_, TestMessage>(&(), &mut Cursor::new(&bytes[..4])).unwrap_err();
+            VariableLengthVector::<0, u32, TestMessage>::get_decoded(&encoded[..4]).unwrap_err();
         assert_matches!(error, CodecError::LengthPrefixTooBig(_));
     }
 
@@ -729,12 +889,5 @@ mod tests {
         assert_eq!(MyMessage.encoded_len(), None);
 
         assert_eq!(MyMessage.get_encoded().unwrap(), b"Hello, world");
-    }
-
-    #[test]
-    fn encode_length_prefix_overflow() {
-        let mut bytes = Vec::new();
-        let error = encode_u8_items(&mut bytes, &(), &[1u8; u8::MAX as usize + 1]).unwrap_err();
-        assert_matches!(error, CodecError::LengthPrefixOverflow);
     }
 }
