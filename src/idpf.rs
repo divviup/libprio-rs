@@ -1131,9 +1131,7 @@ mod tests {
         IdpfPublicShare, NoCache, RingBufferCache,
     };
     use crate::{
-        codec::{
-            decode_u32_items, encode_u32_items, CodecError, Decode, Encode, ParameterizedDecode,
-        },
+        codec::{CodecError, Decode, Encode, ParameterizedDecode, VariableLengthVector},
         field::{Field128, Field255, Field64, FieldElement},
         prng::Prng,
         vdaf::{poplar1::Poplar1IdpfValue, xof::Seed},
@@ -2202,7 +2200,7 @@ mod tests {
         /// field elements. The length must be fixed before generating IDPF keys, but we assume it
         /// is not known at compile time.
         #[derive(Debug, Clone)]
-        struct MyVector(Vec<Field128>);
+        struct MyVector(VariableLengthVector<0, u32, Field128>);
 
         impl IdpfValue for MyVector {
             type ValueParameter = usize;
@@ -2215,42 +2213,45 @@ mod tests {
                 for element in output.iter_mut() {
                     *element = <Field128 as IdpfValue>::generate(seed_stream, &());
                 }
-                MyVector(output)
+                MyVector(output.into())
             }
 
             fn zero(length: &usize) -> Self {
-                MyVector(vec![<Field128 as FieldElement>::zero(); *length])
+                MyVector(vec![<Field128 as FieldElement>::zero(); *length].into())
             }
 
             fn conditional_select(a: &Self, b: &Self, choice: Choice) -> Self {
                 debug_assert_eq!(a.0.len(), b.0.len());
                 let mut output = vec![<Field128 as FieldElement>::zero(); a.0.len()];
                 for ((a_elem, b_elem), output_elem) in
-                    a.0.iter().zip(b.0.iter()).zip(output.iter_mut())
+                    a.0.as_ref()
+                        .iter()
+                        .zip(b.0.as_ref().iter())
+                        .zip(output.iter_mut())
                 {
                     *output_elem = <Field128 as ConditionallySelectable>::conditional_select(
                         a_elem, b_elem, choice,
                     );
                 }
-                MyVector(output)
+                MyVector(output.into())
             }
         }
 
         impl Encode for MyVector {
             fn encode(&self, bytes: &mut Vec<u8>) -> Result<(), CodecError> {
-                encode_u32_items(bytes, &(), &self.0)
+                self.0.encode(bytes)
             }
         }
 
         impl Decode for MyVector {
             fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-                decode_u32_items(&(), bytes).map(MyVector)
+                VariableLengthVector::decode(bytes).map(MyVector)
             }
         }
 
         impl ConditionallyNegatable for MyVector {
             fn conditional_negate(&mut self, choice: Choice) {
-                for element in self.0.iter_mut() {
+                for element in self.0.as_mut().iter_mut() {
                     element.conditional_negate(choice);
                 }
             }
@@ -2262,19 +2263,24 @@ mod tests {
             fn add(self, rhs: Self) -> Self::Output {
                 debug_assert_eq!(self.0.len(), rhs.0.len());
                 let mut output = vec![<Field128 as FieldElement>::zero(); self.0.len()];
-                for ((left_elem, right_elem), output_elem) in
-                    self.0.iter().zip(rhs.0.iter()).zip(output.iter_mut())
+                for ((left_elem, right_elem), output_elem) in self
+                    .0
+                    .as_ref()
+                    .iter()
+                    .zip(rhs.0.as_ref().iter())
+                    .zip(output.iter_mut())
                 {
                     *output_elem = left_elem + right_elem;
                 }
-                MyVector(output)
+                MyVector(output.into())
             }
         }
 
         impl AddAssign for MyVector {
             fn add_assign(&mut self, rhs: Self) {
                 debug_assert_eq!(self.0.len(), rhs.0.len());
-                for (self_elem, right_elem) in self.0.iter_mut().zip(rhs.0.iter()) {
+                for (self_elem, right_elem) in self.0.as_mut().iter_mut().zip(rhs.0.as_ref().iter())
+                {
                     *self_elem += *right_elem;
                 }
             }
@@ -2286,12 +2292,16 @@ mod tests {
             fn sub(self, rhs: Self) -> Self::Output {
                 debug_assert_eq!(self.0.len(), rhs.0.len());
                 let mut output = vec![<Field128 as FieldElement>::zero(); self.0.len()];
-                for ((left_elem, right_elem), output_elem) in
-                    self.0.iter().zip(rhs.0.iter()).zip(output.iter_mut())
+                for ((left_elem, right_elem), output_elem) in self
+                    .0
+                    .as_ref()
+                    .iter()
+                    .zip(rhs.0.as_ref().iter())
+                    .zip(output.iter_mut())
                 {
                     *output_elem = left_elem - right_elem;
                 }
-                MyVector(output)
+                MyVector(output.into())
             }
         }
 
@@ -2303,11 +2313,9 @@ mod tests {
             .gen(
                 &IdpfInput::from_bytes(b"ae"),
                 [MyUnit; 15],
-                MyVector(Vec::from([
-                    Field128::from(1),
-                    Field128::from(2),
-                    Field128::from(3),
-                ])),
+                MyVector(
+                    Vec::from([Field128::from(1), Field128::from(2), Field128::from(3)]).into(),
+                ),
                 CTX_STR,
                 binder,
             )
@@ -2338,9 +2346,9 @@ mod tests {
         let zero_output = zero_share_0.merge(zero_share_1).unwrap();
         assert_matches!(zero_output, IdpfOutputShare::Leaf(value) => {
             assert_eq!(value.0.len(), 3);
-            assert_eq!(value.0[0], <Field128 as FieldElement>::zero());
-            assert_eq!(value.0[1], <Field128 as FieldElement>::zero());
-            assert_eq!(value.0[2], <Field128 as FieldElement>::zero());
+            assert_eq!(value.0.as_ref()[0], <Field128 as FieldElement>::zero());
+            assert_eq!(value.0.as_ref()[1], <Field128 as FieldElement>::zero());
+            assert_eq!(value.0.as_ref()[2], <Field128 as FieldElement>::zero());
         });
 
         let programmed_share_0 = idpf
@@ -2368,9 +2376,9 @@ mod tests {
         let programmed_output = programmed_share_0.merge(programmed_share_1).unwrap();
         assert_matches!(programmed_output, IdpfOutputShare::Leaf(value) => {
             assert_eq!(value.0.len(), 3);
-            assert_eq!(value.0[0], Field128::from(1));
-            assert_eq!(value.0[1], Field128::from(2));
-            assert_eq!(value.0[2], Field128::from(3));
+            assert_eq!(value.0.as_ref()[0], Field128::from(1));
+            assert_eq!(value.0.as_ref()[1], Field128::from(2));
+            assert_eq!(value.0.as_ref()[2], Field128::from(3));
         });
     }
 }
