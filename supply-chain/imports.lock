@@ -325,6 +325,12 @@ criteria = "safe-to-deploy"
 delta = "0.9.15 -> 0.9.18"
 notes = "Nontrivial update but mostly around dependencies and how `unsafe` code is managed. Everything looks the same shape as before."
 
+[[audits.bytecode-alliance.audits.crossbeam-epoch]]
+who = "Alex Crichton <alex@alexcrichton.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.18 -> 0.9.20"
+notes = "Minor updates, nothing out of place."
+
 [[audits.bytecode-alliance.audits.crypto-common]]
 who = "Benjamin Bouvier <public@benj.me>"
 criteria = "safe-to-deploy"
@@ -572,6 +578,12 @@ criteria = "safe-to-deploy"
 delta = "0.9.13 -> 0.9.14"
 aggregated-from = "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/supply-chain/audits.toml"
 
+[[audits.mozilla.audits.crossbeam-epoch]]
+who = "Jan-Erik Rediger <jrediger@mozilla.com>"
+criteria = "safe-to-deploy"
+delta = "0.9.14 -> 0.9.15"
+aggregated-from = "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/supply-chain/audits.toml"
+
 [[audits.mozilla.audits.crossbeam-utils]]
 who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
@@ -631,6 +643,12 @@ who = "Mike Hommey <mh+mozilla@glandium.org>"
 criteria = "safe-to-deploy"
 delta = "0.1.19 -> 0.2.6"
 aggregated-from = "https://raw.githubusercontent.com/mozilla-firefox/firefox/main/supply-chain/audits.toml"
+
+[[audits.mozilla.audits.hermit-abi]]
+who = "Alex Franchuk <afranchuk@mozilla.com>"
+criteria = "safe-to-deploy"
+delta = "0.3.1 -> 0.3.9"
+aggregated-from = "https://raw.githubusercontent.com/mozilla/cargo-vet/main/supply-chain/audits.toml"
 
 [[audits.mozilla.audits.hex]]
 who = "Simon Friedberger <simon@mozilla.com>"
@@ -772,13 +790,6 @@ who = "Daira-Emma Hopwood <daira@jacaranda.org>"
 criteria = "safe-to-deploy"
 delta = "0.8.4 -> 0.8.5"
 notes = "Changes to `unsafe` code look okay."
-aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
-
-[[audits.zcash.audits.crossbeam-epoch]]
-who = "Jack Grigg <jack@electriccoin.co>"
-criteria = "safe-to-deploy"
-delta = "0.9.14 -> 0.9.15"
-notes = "Bumps memoffset to 0.9, and unmarks some ARMv7r and Sony Vita targets as not having 64-bit atomics."
 aggregated-from = "https://raw.githubusercontent.com/zcash/zcash/master/qa/supply-chain/audits.toml"
 
 [[audits.zcash.audits.getrandom]]

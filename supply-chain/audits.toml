@@ -158,6 +158,11 @@ who = "Brandon Pitman <bran@bran.land>"
 criteria = "safe-to-run"
 delta = "0.4.0 -> 0.5.1"
 
+[[audits.crossbeam-epoch]]
+who = "J.C. Jones <jc@divviup.org>"
+criteria = "safe-to-deploy"
+delta = "0.9.20 -> 0.9.21"
+
 [[audits.crunchy]]
 who = "David Cook <dcook@divviup.org>"
 criteria = "safe-to-deploy"
