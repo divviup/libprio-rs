@@ -176,8 +176,7 @@ pub trait FieldElement:
         #[allow(unknown_lints)]
         #[allow(clippy::chunks_exact_to_as_chunks)]
         for chunk in bytes.chunks_exact(Self::ENCODED_SIZE) {
-            #[allow(deprecated)]
-            vec.push(Self::get_decoded(chunk).map_err(FieldError::Codec)?);
+            vec.push(Self::try_from(chunk)?);
         }
         Ok(vec)
     }
@@ -1150,9 +1149,7 @@ pub(crate) mod test_utils {
             assert_matches!(err, FieldError::ShortRead);
 
             let err = F::byte_slice_into_vec(&vec![0xffu8; F::ENCODED_SIZE]).unwrap_err();
-            assert_matches!(err, FieldError::Codec(CodecError::Other(err)) => {
-                assert_matches!(err.downcast_ref::<FieldError>(), Some(FieldError::ModulusOverflow));
-            });
+            assert_matches!(err, FieldError::ModulusOverflow);
         }
 
         let insufficient = vec![0u8; F::ENCODED_SIZE - 1];
