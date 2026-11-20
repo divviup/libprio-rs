@@ -12,10 +12,6 @@ use serde::{Deserialize, Serialize};
 /// Possible errors from server operations
 #[derive(Debug, thiserror::Error)]
 pub enum ServerError {
-    /// Unexpected Share Length
-    #[allow(unused)]
-    #[error("unexpected share length")]
-    ShareLength,
     /// Finite field operation error
     #[error("finite field operation error")]
     Field(#[from] FieldError),
