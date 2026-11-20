@@ -5,13 +5,15 @@
 
 use crate::{
     codec::{CodecError, Decode, Encode},
-    field::{FieldElement, FieldElementVisitor, FieldError},
+    field::{FieldElement, FieldElementExt, FieldElementVisitor, FieldError},
 };
 use fiat_crypto::curve25519_64::{
     fiat_25519_add, fiat_25519_carry, fiat_25519_carry_mul, fiat_25519_from_bytes,
     fiat_25519_loose_field_element, fiat_25519_opp, fiat_25519_relax, fiat_25519_selectznz,
     fiat_25519_sub, fiat_25519_tight_field_element, fiat_25519_to_bytes,
 };
+use rand::distr::{Distribution, StandardUniform};
+use rand_core::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     convert::TryFrom,
@@ -321,6 +323,12 @@ impl FieldElement for Field255 {
     }
 }
 
+impl Distribution<Field255> for StandardUniform {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Field255 {
+        Field255::generate_random(rng)
+    }
+}
+
 impl Default for Field255 {
     fn default() -> Self {
         Field255::zero()
@@ -361,6 +369,7 @@ mod tests {
     };
     use num_bigint_0_5::BigUint;
     use once_cell::sync::Lazy;
+    use rand::random;
     use std::convert::{TryFrom, TryInto};
 
     static MODULUS: Lazy<BigUint> = Lazy::new(|| BigUint::from_bytes_le(&MODULUS_LITTLE_ENDIAN));
@@ -571,5 +580,12 @@ mod tests {
             format!("{:?}", Field255::one()),
             "0x0100000000000000000000000000000000000000000000000000000000000000"
         );
+    }
+
+    #[test]
+    fn random_smoke_test() {
+        let a = random::<Field255>();
+        // This check is only infinitesimally flaky.
+        assert_ne!(a, Field255::zero());
     }
 }
