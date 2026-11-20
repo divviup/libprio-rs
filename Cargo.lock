@@ -775,7 +775,6 @@ dependencies = [
 name = "prio-binaries"
 version = "0.5.0"
 dependencies = [
- "base64",
  "prio",
  "rand",
 ]
