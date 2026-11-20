@@ -34,10 +34,6 @@ pub enum VdafError {
     #[error("field error: {0}")]
     Field(#[from] FieldError),
 
-    /// An error occured while parsing a message.
-    #[error("io error: {0}")]
-    IoError(#[from] std::io::Error),
-
     /// FLP error.
     #[error("flp error: {0}")]
     Flp(#[from] FlpError),

@@ -54,9 +54,6 @@ pub enum FieldError {
     /// equal to the field modulus.
     #[error("input value exceeds modulus")]
     ModulusOverflow,
-    /// Error while performing I/O.
-    #[error("I/O error")]
-    Io(#[from] std::io::Error),
     /// Error encoding or decoding a field.
     #[error("Codec error")]
     #[deprecated]
