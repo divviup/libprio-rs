@@ -8,7 +8,7 @@
 //! [DAP]: https://datatracker.ietf.org/doc/html/draft-ietf-ppm-dap
 
 use crate::{
-    codec::{decode_u32_items, encode_u32_items, CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, ParameterizedDecode, VariableLengthVector},
     vdaf::{Aggregator, VdafError, VerifyTransition},
 };
 use std::fmt::Debug;
@@ -57,19 +57,19 @@ pub enum PingPongMessage {
     /// Corresponds to MessageType.initialize.
     Initialize {
         /// The leader's initial verifier share.
-        verifier_share: Vec<u8>,
+        verifier_share: VariableLengthVector<0, u32, u8>,
     },
     /// Corresponds to MessageType.continue.
     Continue {
         /// The current round's verifier message.
-        verifier_message: Vec<u8>,
+        verifier_message: VariableLengthVector<0, u32, u8>,
         /// The next round's verifier share.
-        verifier_share: Vec<u8>,
+        verifier_share: VariableLengthVector<0, u32, u8>,
     },
     /// Corresponds to MessageType.finish.
     Finish {
         /// The current round's verifier message.
-        verifier_message: Vec<u8>,
+        verifier_message: VariableLengthVector<0, u32, u8>,
     },
 }
 
@@ -102,19 +102,19 @@ impl Encode for PingPongMessage {
         match self {
             Self::Initialize { verifier_share } => {
                 0u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), verifier_share)?;
+                verifier_share.encode(bytes)?;
             }
             Self::Continue {
                 verifier_message,
                 verifier_share,
             } => {
                 1u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), verifier_message)?;
-                encode_u32_items(bytes, &(), verifier_share)?;
+                verifier_message.encode(bytes)?;
+                verifier_share.encode(bytes)?;
             }
             Self::Finish { verifier_message } => {
                 2u8.encode(bytes)?;
-                encode_u32_items(bytes, &(), verifier_message)?;
+                verifier_message.encode(bytes)?;
             }
         }
         Ok(())
@@ -136,22 +136,16 @@ impl Decode for PingPongMessage {
     fn decode(bytes: &mut std::io::Cursor<&[u8]>) -> Result<Self, CodecError> {
         let message_type = u8::decode(bytes)?;
         Ok(match message_type {
-            0 => {
-                let verifier_share = decode_u32_items(&(), bytes)?;
-                Self::Initialize { verifier_share }
-            }
-            1 => {
-                let verifier_message = decode_u32_items(&(), bytes)?;
-                let verifier_share = decode_u32_items(&(), bytes)?;
-                Self::Continue {
-                    verifier_message,
-                    verifier_share,
-                }
-            }
-            2 => {
-                let verifier_message = decode_u32_items(&(), bytes)?;
-                Self::Finish { verifier_message }
-            }
+            0 => Self::Initialize {
+                verifier_share: VariableLengthVector::decode(bytes)?,
+            },
+            1 => Self::Continue {
+                verifier_message: VariableLengthVector::decode(bytes)?,
+                verifier_share: VariableLengthVector::decode(bytes)?,
+            },
+            2 => Self::Finish {
+                verifier_message: VariableLengthVector::decode(bytes)?,
+            },
             _ => return Err(CodecError::UnexpectedValue),
         })
     }
@@ -268,16 +262,19 @@ impl<
                 Ok(PingPongState::Continued(Continued {
                     verifier_state,
                     message: PingPongMessage::Continue {
-                        verifier_message,
+                        verifier_message: verifier_message.into(),
                         verifier_share: verifier_share
                             .get_encoded()
-                            .map_err(PingPongError::CodecVerifierShare)?,
+                            .map_err(PingPongError::CodecVerifierShare)?
+                            .into(),
                     },
                 }))
             }
             VerifyTransition::Finish(output_share) => Ok(PingPongState::FinishedWithOutbound {
                 output_share,
-                message: PingPongMessage::Finish { verifier_message },
+                message: PingPongMessage::Finish {
+                    verifier_message: verifier_message.into(),
+                },
             }),
         })
     }
@@ -610,7 +607,8 @@ impl<
                 message: PingPongMessage::Initialize {
                     verifier_share: verifier_share
                         .get_encoded()
-                        .map_err(PingPongError::CodecVerifierShare)?,
+                        .map_err(PingPongError::CodecVerifierShare)?
+                        .into(),
                 },
             })
         })
@@ -638,16 +636,17 @@ impl<
             )
             .map_err(PingPongError::VdafVerifyInit)?;
 
-        let leader_verifier_share =
-            if let PingPongMessage::Initialize { verifier_share } = leader_message {
-                Self::VerifierShare::get_decoded_with_param(&verifier_state, verifier_share)
-                    .map_err(PingPongError::CodecVerifierShare)?
-            } else {
-                return Err(PingPongError::PeerMessageMismatch {
-                    found: leader_message.variant(),
-                    expected: "initialize",
-                });
-            };
+        let leader_verifier_share = if let PingPongMessage::Initialize { verifier_share } =
+            leader_message
+        {
+            Self::VerifierShare::get_decoded_with_param(&verifier_state, verifier_share.as_ref())
+                .map_err(PingPongError::CodecVerifierShare)?
+        } else {
+            return Err(PingPongError::PeerMessageMismatch {
+                found: leader_message.variant(),
+                expected: "initialize",
+            });
+        };
 
         let current_verifier_message = self
             .verifier_shares_to_message(
@@ -713,9 +712,11 @@ impl<
             PingPongMessage::Finish { verifier_message } => (verifier_message, None),
         };
 
-        let verifier_message =
-            Self::VerifierMessage::get_decoded_with_param(&host_verifier_state, verifier_message)
-                .map_err(PingPongError::CodecVerifierMessage)?;
+        let verifier_message = Self::VerifierMessage::get_decoded_with_param(
+            &host_verifier_state,
+            verifier_message.as_ref(),
+        )
+        .map_err(PingPongError::CodecVerifierMessage)?;
         let host_verify_transition = self
             .verify_next(ctx, host_verifier_state, verifier_message)
             .map_err(PingPongError::VdafVerifyNext)?;
@@ -727,7 +728,7 @@ impl<
             ) => {
                 let next_peer_verifier_share = Self::VerifierShare::get_decoded_with_param(
                     &next_verifier_state,
-                    next_peer_verifier_share,
+                    next_peer_verifier_share.as_ref(),
                 )
                 .map_err(PingPongError::CodecVerifierShare)?;
                 let mut verifier_shares = [next_peer_verifier_share, next_host_verifier_share];
@@ -971,7 +972,7 @@ mod tests {
         let messages = [
             (
                 PingPongMessage::Initialize {
-                    verifier_share: Vec::from("verifier share"),
+                    verifier_share: Vec::from("verifier share").into(),
                 },
                 concat!(
                     "00", // enum discriminant
@@ -984,8 +985,8 @@ mod tests {
             ),
             (
                 PingPongMessage::Continue {
-                    verifier_message: Vec::from("verifier message"),
-                    verifier_share: Vec::from("verifier share"),
+                    verifier_message: Vec::from("verifier message").into(),
+                    verifier_share: Vec::from("verifier share").into(),
                 },
                 concat!(
                     "01", // enum discriminant
@@ -1003,7 +1004,7 @@ mod tests {
             ),
             (
                 PingPongMessage::Finish {
-                    verifier_message: Vec::from("verifier message"),
+                    verifier_message: Vec::from("verifier message").into(),
                 },
                 concat!(
                     "02", // enum discriminant
