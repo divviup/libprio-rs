@@ -21,6 +21,9 @@
 //! use prio::flp::types::Count;
 //! use prio::flp::{Type, Flp};
 //! use prio::field::{FieldElement, Field64};
+//! use rand::rng;
+//!
+//! let mut rng = rng();
 //!
 //! // The prover chooses a measurement.
 //! let count = Count::new();
@@ -30,16 +33,16 @@
 //! // check the proof. The application needs to ensure that the prover
 //! // "commits" to the input before this point. In Prio3, the joint
 //! // randomness is derived from additive shares of the input.
-//! let joint_rand = Field64::random_vector(count.joint_rand_len());
+//! let joint_rand = Field64::random_vector(count.joint_rand_len(), &mut rng);
 //!
 //! // The prover generates the proof.
-//! let prove_rand = Field64::random_vector(count.prove_rand_len());
+//! let prove_rand = Field64::random_vector(count.prove_rand_len(), &mut rng);
 //! let proof = count.prove(&input, &prove_rand, &joint_rand).unwrap();
 //!
 //! // The verifier checks the proof. In the first step, the verifier "queries"
 //! // the input and proof, getting the "verifier message" in response. It then
 //! // inspects the verifier to decide if the input is valid.
-//! let query_rand = Field64::random_vector(count.query_rand_len());
+//! let query_rand = Field64::random_vector(count.query_rand_len(), &mut rng);
 //! let verifier = count.query(&input, &proof, &query_rand, &joint_rand, 1).unwrap();
 //! assert!(count.decide(&verifier).unwrap());
 //! ```
@@ -53,6 +56,7 @@ use crate::ntt::NttError;
 use crate::polynomial::{
     extend_values_to_power_of_2, get_double_evaluations, poly_eval_lagrange_batched,
 };
+use rand_core::Rng;
 use std::any::Any;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -151,10 +155,12 @@ pub trait Flp: Sized + Eq + Clone + Debug {
     /// use prio::flp::types::Count;
     /// use prio::flp::{Flp, Type};
     /// use prio::field::{FieldElement, Field64};
+    /// use rand::rng;
     ///
+    /// let mut rng = rng();
     /// let count = Count::new();
     /// let input: Vec<Field64> = count.encode_measurement(&true).unwrap();
-    /// let joint_rand = Field64::random_vector(count.joint_rand_len());
+    /// let joint_rand = Field64::random_vector(count.joint_rand_len(), &mut rng);
     /// let v = count.valid(&mut count.gadget(), &input, &joint_rand, 1).unwrap();
     /// assert!(v.into_iter().all(|f| f == Field64::zero()));
     /// ```
@@ -600,6 +606,7 @@ where
         dp_strategy: &S,
         agg_result: &mut [Self::Field],
         num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError>;
 }
 
@@ -811,6 +818,7 @@ pub(crate) fn gadget_poly_len(gadget_degree: usize, wire_poly_len: usize) -> usi
 pub mod test_utils {
     use super::*;
     use crate::field::{add_vector, sub_assign_vector, FieldElement, FieldElementWithInteger};
+    use rand::rng;
 
     /// Various tests for an FLP.
     #[cfg_attr(docsrs, doc(cfg(feature = "test-util")))]
@@ -884,9 +892,10 @@ pub mod test_utils {
             );
 
             let mut gadgets = self.flp.gadget();
-            let joint_rand = T::Field::random_vector(self.flp.joint_rand_len());
-            let prove_rand = T::Field::random_vector(self.flp.prove_rand_len());
-            let query_rand = T::Field::random_vector(self.flp.query_rand_len());
+            let mut rng = rng();
+            let joint_rand = T::Field::random_vector(self.flp.joint_rand_len(), &mut rng);
+            let prove_rand = T::Field::random_vector(self.flp.prove_rand_len(), &mut rng);
+            let query_rand = T::Field::random_vector(self.flp.query_rand_len(), &mut rng);
             assert_eq!(
                 self.flp.joint_rand_len(),
                 joint_rand.len(),
@@ -1004,8 +1013,9 @@ pub mod test_utils {
         let mut outp = Vec::with_capacity(SHARES);
         outp.push(inp.to_vec());
 
+        let mut rng = rng();
         for _ in 1..SHARES {
-            let share = F::random_vector(inp.len());
+            let share = F::random_vector(inp.len(), &mut rng);
             sub_assign_vector(&mut outp[0], share.iter().copied());
             outp.push(share);
         }
@@ -1016,6 +1026,8 @@ pub mod test_utils {
 
 #[cfg(test)]
 mod tests {
+    use rand::rng;
+
     use super::*;
     use crate::field::{add_vector, split_vector, Field128};
     use crate::flp::gadgets::{Mul, PolyEval};
@@ -1037,9 +1049,10 @@ mod tests {
             .into_iter()
             .collect();
 
-        let joint_rand = Field128::random_vector(typ.joint_rand_len());
-        let prove_rand = Field128::random_vector(typ.prove_rand_len());
-        let query_rand = Field128::random_vector(typ.query_rand_len());
+        let mut rng = rng();
+        let joint_rand = Field128::random_vector(typ.joint_rand_len(), &mut rng);
+        let prove_rand = Field128::random_vector(typ.prove_rand_len(), &mut rng);
+        let query_rand = Field128::random_vector(typ.query_rand_len(), &mut rng);
 
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         assert_eq!(proof.len(), typ.proof_len());
@@ -1189,9 +1202,10 @@ mod tests {
         let typ: Issue254Type<Field128> = Issue254Type::new();
         let input = typ.encode_measurement(&0).unwrap();
         assert_eq!(input.len(), typ.input_len());
-        let joint_rand = Field128::random_vector(typ.joint_rand_len());
-        let prove_rand = Field128::random_vector(typ.prove_rand_len());
-        let query_rand = Field128::random_vector(typ.query_rand_len());
+        let mut rng = rng();
+        let joint_rand = Field128::random_vector(typ.joint_rand_len(), &mut rng);
+        let prove_rand = Field128::random_vector(typ.prove_rand_len(), &mut rng);
+        let query_rand = Field128::random_vector(typ.query_rand_len(), &mut rng);
         let proof = typ.prove(&input, &prove_rand, &joint_rand).unwrap();
         let verifier = typ
             .query(&input, &proof, &query_rand, &joint_rand, 1)

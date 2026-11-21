@@ -189,12 +189,14 @@ mod tests {
         },
         polynomial::poly_eval_monomial,
     };
+    use rand::rng;
 
     fn ntt_then_inv_test<F: NttFriendlyFieldElement>() -> Result<(), NttError> {
+        let mut rng = rng();
         let test_sizes = [1, 2, 4, 8, 16, 256, 1024, 2048];
 
         for size in test_sizes.iter() {
-            let want = F::random_vector(*size);
+            let want = F::random_vector(*size, &mut rng);
 
             let tmp = get_ntt(&want, *size)?;
             let got = get_ntt_inv(&tmp, tmp.len())?;
@@ -205,13 +207,14 @@ mod tests {
     }
 
     fn test_ntt_set_s<F: NttFriendlyFieldElement>() {
+        let mut rng = rng();
         for log_n in 0..8 {
             let n = 1 << log_n;
             let nth_root = F::root(log_n).unwrap();
             let two_nth_root = F::root(log_n + 1).unwrap();
 
             // Random polynomial in monomial basis
-            let p_monomial = F::random_vector(n);
+            let p_monomial = F::random_vector(n, &mut rng);
 
             // Evaluate the polynomial at the powers of an n-th root of unity multiplied by a 2n-th
             // root of unity
@@ -250,9 +253,10 @@ mod tests {
     // polynomial over the plaintext data.
     #[test]
     fn test_ntt_linearity() {
+        let mut rng = rng();
         let len = 16;
         let num_shares = 3;
-        let x = Field64::random_vector(len);
+        let x = Field64::random_vector(len, &mut rng);
         let mut x_shares = split_vector(&x, num_shares);
 
         // Just for fun, let's do something different with a subset of the inputs. For the first
@@ -283,8 +287,9 @@ mod tests {
 
     #[test]
     fn test_ntt_interpolation() {
+        let mut rng = rng();
         let count = 128;
-        let points = Field128::random_vector(count);
+        let points = Field128::random_vector(count, &mut rng);
         let poly = get_ntt(&points, count).unwrap();
         let principal_root = Field128::root(7).unwrap(); // log_2(128);
         for (power, poly_coeff) in poly.iter().enumerate() {

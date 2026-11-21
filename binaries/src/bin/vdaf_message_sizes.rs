@@ -6,6 +6,7 @@ use prio::{
         Client, Vdaf,
     },
 };
+use rand::rng;
 
 const PRIO2_CTX_STR: &[u8] = b"prio2 ctx";
 const PRIO3_CTX_STR: &[u8] = b"prio3 ctx";
@@ -13,13 +14,16 @@ const PRIO3_CTX_STR: &[u8] = b"prio3 ctx";
 fn main() {
     let num_shares = 2;
     let nonce = [0; 16];
+    let mut rng = rng();
 
     let prio3 = Prio3::new_count(num_shares).unwrap();
     let measurement = true;
     println!(
         "prio3 count share size = {}",
         vdaf_input_share_size::<Prio3Count, 16>(
-            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+            prio3
+                .shard(PRIO3_CTX_STR, &measurement, &nonce, &mut rng)
+                .unwrap()
         )
     );
 
@@ -30,7 +34,9 @@ fn main() {
         "prio3 histogram ({} buckets) share size = {}",
         length,
         vdaf_input_share_size::<Prio3Histogram, 16>(
-            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+            prio3
+                .shard(PRIO3_CTX_STR, &measurement, &nonce, &mut rng)
+                .unwrap()
         )
     );
 
@@ -41,7 +47,9 @@ fn main() {
         "prio3 sum ({} bits) share size = {}",
         max_measurement.ilog2() + 1,
         vdaf_input_share_size::<Prio3Sum, 16>(
-            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+            prio3
+                .shard(PRIO3_CTX_STR, &measurement, &nonce, &mut rng)
+                .unwrap()
         )
     );
 
@@ -52,7 +60,9 @@ fn main() {
         "prio3 sumvec ({} len) share size = {}",
         len,
         vdaf_input_share_size::<Prio3SumVec, 16>(
-            prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+            prio3
+                .shard(PRIO3_CTX_STR, &measurement, &nonce, &mut rng)
+                .unwrap()
         )
     );
 
@@ -66,7 +76,9 @@ fn main() {
             "prio2 ({} entries) size = {}",
             size,
             vdaf_input_share_size::<Prio2, 16>(
-                prio2.shard(PRIO2_CTX_STR, &measurement, &nonce).unwrap()
+                prio2
+                    .shard(PRIO2_CTX_STR, &measurement, &nonce, &mut rng)
+                    .unwrap()
             )
         );
 
@@ -77,7 +89,9 @@ fn main() {
             "prio3 sumvec ({} entries) size = {}",
             size,
             vdaf_input_share_size::<Prio3SumVec, 16>(
-                prio3.shard(PRIO3_CTX_STR, &measurement, &nonce).unwrap()
+                prio3
+                    .shard(PRIO3_CTX_STR, &measurement, &nonce, &mut rng)
+                    .unwrap()
             )
         );
     }

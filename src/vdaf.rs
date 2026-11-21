@@ -14,6 +14,7 @@ use crate::{
     flp::FlpError,
     vdaf::xof::Seed,
 };
+use rand::CryptoRng;
 use serde::{Deserialize, Serialize};
 use std::{error::Error, fmt::Debug, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
@@ -192,6 +193,7 @@ pub trait Client<const NONCE_SIZE: usize>: Vdaf {
         ctx: &[u8],
         measurement: &Self::Measurement,
         nonce: &[u8; NONCE_SIZE],
+        rng: &mut impl CryptoRng,
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError>;
 }
 
@@ -299,6 +301,7 @@ pub trait AggregatorWithNoise<
         agg_param: &Self::AggregationParam,
         agg_share: &mut Self::AggregateShare,
         num_measurements: usize,
+        rng: &mut impl CryptoRng,
     ) -> Result<(), VdafError>;
 }
 
@@ -489,7 +492,7 @@ pub mod test_utils {
         flp::Type,
         vdaf::{prio3::Prio3, xof::Xof, Vdaf},
     };
-    use rand::{random, rng, RngExt};
+    use rand::{rng, RngExt};
     use serde::Deserialize;
     use serde_json::Value;
 
@@ -504,10 +507,11 @@ pub mod test_utils {
         V: Client<16> + Aggregator<SEED_SIZE, 16> + Collector,
         M: IntoIterator<Item = V::Measurement>,
     {
+        let mut rng = rng();
         let mut sharded_measurements = Vec::new();
         for measurement in measurements.into_iter() {
-            let nonce = random();
-            let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce)?;
+            let nonce = rng.random();
+            let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce, &mut rng)?;
 
             sharded_measurements.push((public_share, nonce, input_shares));
         }
@@ -1344,7 +1348,8 @@ where
     for<'a> T: ParameterizedDecode<(&'a V, &'a V::AggregationParam)>,
 {
     // Generate an arbitrary vector of field elements.
-    let vec = F::random_vector(length);
+    let mut rng = rand::rng();
+    let vec = F::random_vector(length, &mut rng);
 
     // Serialize the field element vector into a vector of bytes.
     let mut bytes = Vec::with_capacity(vec.len() * F::ENCODED_SIZE);

@@ -179,8 +179,8 @@ pub trait FieldElement:
     }
 
     /// Generate a vector of uniformly distributed random field elements.
-    fn random_vector(len: usize) -> Vec<Self> {
-        Prng::new().take(len).collect()
+    fn random_vector(len: usize, rng: &mut impl Rng) -> Vec<Self> {
+        Prng::new(rng).take(len).collect()
     }
 }
 
@@ -913,11 +913,12 @@ pub(crate) fn split_vector<F: FieldElement>(inp: &[F], num_shares: usize) -> Vec
         return vec![];
     }
 
+    let mut rng = rand::rng();
     let mut outp = Vec::with_capacity(num_shares);
     outp.push(inp.to_vec());
 
     for _ in 1..num_shares {
-        let share = F::random_vector(inp.len());
+        let share = F::random_vector(inp.len(), &mut rng);
         sub_assign_vector(&mut outp[0], share.iter().copied());
         outp.push(share);
     }
@@ -987,6 +988,7 @@ pub(crate) mod test_utils {
     use super::{FieldElement, FieldElementWithInteger, Integer};
     use crate::{codec::CodecError, field::FieldError, prng::Prng};
     use assert_matches::assert_matches;
+    use rand::rng;
     use std::{
         collections::hash_map::DefaultHasher,
         convert::TryFrom,
@@ -1025,7 +1027,8 @@ pub(crate) mod test_utils {
     }
 
     pub(crate) fn field_element_test_common<F: TestFieldElementWithInteger>() {
-        let mut prng: Prng<F, _> = Prng::new();
+        let mut rng = rng();
+        let mut prng: Prng<F, _> = Prng::new(&mut rng);
         let int_modulus = F::modulus();
         let int_one = F::TestInteger::try_from(1).unwrap();
         let zero = F::zero();
@@ -1201,6 +1204,7 @@ mod tests {
     use crate::fp::MAX_ROOTS;
     use crate::prng::Prng;
     use assert_matches::assert_matches;
+    use rand::rng;
 
     #[test]
     fn test_accumulate() {
@@ -1220,7 +1224,8 @@ mod tests {
     fn field_element_test<F: NttFriendlyFieldElement + Hash>() {
         field_element_test_common::<F>();
 
-        let mut prng: Prng<F, _> = Prng::new();
+        let mut rng = rng();
+        let mut prng: Prng<F, _> = Prng::new(&mut rng);
         let int_modulus = F::modulus();
         let int_one = F::Integer::try_from(1).unwrap();
         let zero = F::zero();

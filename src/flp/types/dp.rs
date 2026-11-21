@@ -6,10 +6,10 @@ use crate::field::{Field128, Field64, NttFriendlyFieldElement};
 use crate::flp::gadgets::{Mul, ParallelSumGadget};
 use crate::flp::types::{Histogram, L1BoundSum, SumVec};
 use crate::flp::{FlpError, TypeWithNoise};
-use crate::vdaf::xof::SeedStreamTurboShake128;
 use num_bigint_0_5::{BigInt, BigUint, TryFromBigIntError};
 use num_integer::Integer;
-use rand::{distr::Distribution, make_rng, Rng};
+use rand::distr::Distribution;
+use rand_core::Rng;
 
 // TODO(#1071): This is implemented for the concrete fields `Field64` and `Field128` in order to
 // avoid imposing the `BigInt: From<F::Integer>` bound on all callers. In the future, we may want to
@@ -24,12 +24,9 @@ where
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError> {
-        self.add_noise(
-            dp_strategy,
-            agg_result,
-            &mut make_rng::<SeedStreamTurboShake128>(),
-        )
+        self.add_noise(dp_strategy, agg_result, rng)
     }
 }
 
@@ -42,12 +39,9 @@ where
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError> {
-        self.add_noise(
-            dp_strategy,
-            agg_result,
-            &mut make_rng::<SeedStreamTurboShake128>(),
-        )
+        self.add_noise(dp_strategy, agg_result, rng)
     }
 }
 
@@ -57,15 +51,12 @@ where
     BigInt: From<F::Integer>,
     F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
 {
-    fn add_noise<R>(
+    fn add_noise(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [F],
-        rng: &mut R,
-    ) -> Result<(), FlpError>
-    where
-        R: Rng,
-    {
+        rng: &mut impl Rng,
+    ) -> Result<(), FlpError> {
         // Compute the global sensitivity of the aggregation function, using the L1 norm as a
         // distance metric, and using the substitution-DP model. The worst case is when one
         // individual's measurement changes such that each vector element flips from 0 to 2^bits -
@@ -98,12 +89,9 @@ where
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError> {
-        self.add_noise(
-            dp_strategy,
-            agg_result,
-            &mut make_rng::<SeedStreamTurboShake128>(),
-        )
+        self.add_noise(dp_strategy, agg_result, rng)
     }
 }
 
@@ -116,12 +104,9 @@ where
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError> {
-        self.add_noise(
-            dp_strategy,
-            agg_result,
-            &mut make_rng::<SeedStreamTurboShake128>(),
-        )
+        self.add_noise(dp_strategy, agg_result, rng)
     }
 }
 
@@ -131,15 +116,12 @@ where
     BigInt: From<F::Integer>,
     F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
 {
-    fn add_noise<R>(
+    fn add_noise(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [F],
-        rng: &mut R,
-    ) -> Result<(), FlpError>
-    where
-        R: Rng,
-    {
+        rng: &mut impl Rng,
+    ) -> Result<(), FlpError> {
         // The global sensitivity of the aggregation function is two, using the L1 norm as a
         // distance metric, and using the substitution-DP model. Substituting a measurement may, at
         // worst, cause one cell of the query result to be incremented by one, and another to be
@@ -163,12 +145,9 @@ where
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError> {
-        self.add_noise(
-            dp_strategy,
-            agg_result,
-            &mut make_rng::<SeedStreamTurboShake128>(),
-        )
+        self.add_noise(dp_strategy, agg_result, rng)
     }
 }
 
@@ -181,12 +160,9 @@ where
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [Self::Field],
         _num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), FlpError> {
-        self.add_noise(
-            dp_strategy,
-            agg_result,
-            &mut make_rng::<SeedStreamTurboShake128>(),
-        )
+        self.add_noise(dp_strategy, agg_result, rng)
     }
 }
 
@@ -196,15 +172,12 @@ where
     BigInt: From<F::Integer>,
     F::Integer: TryFrom<BigInt, Error = TryFromBigIntError<BigInt>>,
 {
-    fn add_noise<R>(
+    fn add_noise(
         &self,
         dp_strategy: &PureDpDiscreteLaplace,
         agg_result: &mut [F],
-        rng: &mut R,
-    ) -> Result<(), FlpError>
-    where
-        R: Rng,
-    {
+        rng: &mut impl Rng,
+    ) -> Result<(), FlpError> {
         // Compute the global sensitivity of the aggregation function, using the L1 norm as a
         // distance metric, and using the substitution-DP model. The worst case is when one
         // individual's measurement changes such that the vector's L1 norm before and after are both

@@ -9,7 +9,8 @@ use crate::{
     codec::{CodecError, Decode, Encode},
     vdaf::{self, Aggregatable, VdafError, VerifyTransition},
 };
-use rand::random;
+use rand::RngExt;
+use rand_core::Rng;
 use std::{fmt::Debug, io::Cursor, sync::Arc};
 
 /// The Dummy VDAF does summation modulus 256 so we can predict aggregation results.
@@ -173,8 +174,9 @@ impl vdaf::Client<16> for Vdaf {
         _ctx: &[u8],
         measurement: &Self::Measurement,
         _nonce: &[u8; 16],
+        rng: &mut impl Rng,
     ) -> Result<(Self::PublicShare, Vec<Self::InputShare>), VdafError> {
-        let first_input_share = random();
+        let first_input_share = rng.random();
         let (second_input_share, _) = measurement.overflowing_sub(first_input_share);
         Ok((
             (),
@@ -349,16 +351,18 @@ mod tests {
     use rand::{rng, RngExt};
 
     fn run_test(rounds: u32, aggregation_parameter: u8) {
+        let mut rng = rng();
         let vdaf = Vdaf::new(rounds);
         let mut verify_key = [0; 0];
-        rng().fill(&mut verify_key[..]);
+        rng.fill(&mut verify_key[..]);
         let measurements = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
 
         let mut sharded_measurements = Vec::new();
         for measurement in measurements {
-            let nonce = rng().random();
-            let (public_share, input_shares) =
-                vdaf.shard(b"dummy ctx", &measurement, &nonce).unwrap();
+            let nonce = rng.random();
+            let (public_share, input_shares) = vdaf
+                .shard(b"dummy ctx", &measurement, &nonce, &mut rng)
+                .unwrap();
 
             sharded_measurements.push((public_share, nonce, input_shares));
         }

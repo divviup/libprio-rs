@@ -21,9 +21,10 @@ use prio::{
         Client,
     },
 };
+use rand::rng;
 
 fn prng(size: usize) -> Vec<Field128> {
-    Field128::random_vector(size)
+    Field128::random_vector(size, &mut rng())
 }
 
 fn prng_16() -> Vec<Field128> {
@@ -47,8 +48,9 @@ fn prio2_client(size: usize) -> Vec<Share<FieldPrio2, 32>> {
     let prio2 = Prio2::new(size).unwrap();
     let input = vec![0u32; size];
     let nonce = [0; 16];
+    let mut rng = rng();
     prio2
-        .shard(b"", &black_box(input), &black_box(nonce))
+        .shard(b"", &black_box(input), &black_box(nonce), &mut rng)
         .unwrap()
         .1
 }
@@ -73,8 +75,9 @@ fn prio2_shard_and_verify(size: usize) -> Prio2VerifierShare {
     let prio2 = Prio2::new(size).unwrap();
     let input = vec![0u32; size];
     let nonce = [0; 16];
+    let mut rng = rng();
     let (public_share, input_shares) = prio2
-        .shard(b"", &black_box(input), &black_box(nonce))
+        .shard(b"", &black_box(input), &black_box(nonce), &mut rng)
         .unwrap();
     prio2
         .verify_init(
@@ -109,8 +112,9 @@ fn prio3_client_count() -> Vec<Prio3InputShare<Field64, 32>> {
     let prio3 = Prio3::new_count(2).unwrap();
     let measurement = true;
     let nonce = [0; 16];
+    let mut rng = rng();
     prio3
-        .shard(b"", &black_box(measurement), &black_box(nonce))
+        .shard(b"", &black_box(measurement), &black_box(nonce), &mut rng)
         .unwrap()
         .1
 }
@@ -119,8 +123,9 @@ fn prio3_client_histogram_10() -> Vec<Prio3InputShare<Field128, 32>> {
     let prio3 = Prio3::new_histogram(2, 10, 3).unwrap();
     let measurement = 9;
     let nonce = [0; 16];
+    let mut rng = rng();
     prio3
-        .shard(b"", &black_box(measurement), &black_box(nonce))
+        .shard(b"", &black_box(measurement), &black_box(nonce), &mut rng)
         .unwrap()
         .1
 }
@@ -130,8 +135,9 @@ fn prio3_client_sum_32() -> Vec<Prio3InputShare<Field64, 32>> {
     let prio3 = Prio3::new_sum(2, (1 << bits) - 1).unwrap();
     let measurement = 1337;
     let nonce = [0; 16];
+    let mut rng = rng();
     prio3
-        .shard(b"", &black_box(measurement), &black_box(nonce))
+        .shard(b"", &black_box(measurement), &black_box(nonce), &mut rng)
         .unwrap()
         .1
 }
@@ -141,8 +147,9 @@ fn prio3_client_count_vec_1000() -> Vec<Prio3InputShare<Field128, 32>> {
     let prio3 = Prio3::new_sum_vec(2, 1, len, 31).unwrap();
     let measurement = vec![0; len];
     let nonce = [0; 16];
+    let mut rng = rng();
     prio3
-        .shard(b"", &black_box(measurement), &black_box(nonce))
+        .shard(b"", &black_box(measurement), &black_box(nonce), &mut rng)
         .unwrap()
         .1
 }
@@ -153,8 +160,9 @@ fn prio3_client_count_vec_multithreaded_1000() -> Vec<Prio3InputShare<Field128, 
     let prio3 = Prio3::new_sum_vec_multithreaded(2, 1, len, 31).unwrap();
     let measurement = vec![0; len];
     let nonce = [0; 16];
+    let mut rng = rng();
     prio3
-        .shard(b"", &black_box(measurement), &black_box(nonce))
+        .shard(b"", &black_box(measurement), &black_box(nonce), &mut rng)
         .unwrap()
         .1
 }
@@ -165,8 +173,9 @@ fn idpf_poplar_gen(
     inner_values: Vec<Poplar1IdpfValue<Field64>>,
     leaf_value: Poplar1IdpfValue<Field255>,
 ) {
+    let mut rng = rng();
     let idpf = Idpf::new((), ());
-    idpf.gen(input, inner_values, leaf_value, b"", &[0; 16])
+    idpf.gen(input, inner_values, leaf_value, b"", &[0; 16], &mut rng)
         .unwrap();
 }
 

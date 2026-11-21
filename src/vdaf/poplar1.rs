@@ -14,7 +14,7 @@ use crate::{
         Aggregatable, Aggregator, Client, Collector, Vdaf, VdafError, VerifyTransition, VERSION,
     },
 };
-use rand::{rng, Rng, RngExt};
+use rand::{Rng, RngExt};
 use std::{
     collections::BTreeSet,
     convert::TryFrom,
@@ -1060,8 +1060,8 @@ impl<P: Xof<SEED_SIZE>, const SEED_SIZE: usize> Client<16> for Poplar1<P, SEED_S
         ctx: &[u8],
         input: &IdpfInput,
         nonce: &[u8; 16],
+        rng: &mut impl Rng,
     ) -> Result<(Self::PublicShare, Vec<Poplar1InputShare<SEED_SIZE>>), VdafError> {
-        let mut rng = rng();
         let mut idpf_random = [[0u8; 16]; 2];
         let mut poplar_random = [[0u8; SEED_SIZE]; 3];
         for random_seed in idpf_random.iter_mut() {
@@ -1582,6 +1582,7 @@ mod tests {
         test_utils::{check_test_vector, run_vdaf_verify, TestVectorVdaf},
     };
     use assert_matches::assert_matches;
+    use rand::rng;
     use serde_json::Value;
     use std::collections::{HashMap, HashSet};
 
@@ -1643,6 +1644,7 @@ mod tests {
                         CTX_STR,
                         &IdpfInput::from_bytes(measurement.as_ref()),
                         &nonce,
+                        &mut rng,
                     )
                     .unwrap();
                 (nonce, public_share, input_shares)
@@ -1728,7 +1730,7 @@ mod tests {
         let verify_key = rng.random();
         let input = IdpfInput::from_bytes(b"12341324");
         let nonce = rng.random();
-        let (public_share, input_shares) = vdaf.shard(CTX_STR, &input, &nonce).unwrap();
+        let (public_share, input_shares) = vdaf.shard(CTX_STR, &input, &nonce, &mut rng).unwrap();
 
         test_verify(
             &vdaf,

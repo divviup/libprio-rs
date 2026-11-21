@@ -19,7 +19,7 @@ use bitvec::{
     vec::BitVec,
     view::BitView,
 };
-use rand::{rng, Rng, RngExt};
+use rand::{CryptoRng, Rng, RngExt};
 use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
@@ -488,11 +488,11 @@ where
         leaf_value: VL,
         ctx: &[u8],
         nonce: &[u8],
+        rng: &mut impl CryptoRng,
     ) -> Result<(IdpfPublicShare<VI, VL>, [Seed<16>; 2]), VdafError>
     where
         M: IntoIterator<Item = VI>,
     {
-        let mut rng = rng();
         if input.is_empty() {
             return Err(
                 IdpfError::InvalidParameter("invalid number of bits: 0".to_string()).into(),
@@ -1123,7 +1123,7 @@ mod tests {
         slice::BitSlice,
     };
     use num_bigint_0_5::BigUint;
-    use rand::random;
+    use rand::{rng, RngExt};
     use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable};
 
     use super::{
@@ -1166,7 +1166,7 @@ mod tests {
 
     impl IdpfCache for LossyCache {
         fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
-            if random() {
+            if rng().random() {
                 self.map.get(input).cloned()
             } else {
                 None
@@ -1223,7 +1223,8 @@ mod tests {
     #[test]
     fn test_idpf_poplar() {
         let input = bitbox![0, 1, 1, 0, 1].into();
-        let nonce: [u8; 16] = random();
+        let mut rng = rng();
+        let nonce: [u8; 16] = rng.random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
             .gen(
@@ -1232,6 +1233,7 @@ mod tests {
                 Poplar1IdpfValue::new([Field255::one(), Field255::one()]),
                 CTX_STR,
                 &nonce,
+                &mut rng,
             )
             .unwrap();
 
@@ -1361,26 +1363,35 @@ mod tests {
         // This test on 40 byte inputs takes about a second in debug mode. (and ten milliseconds in
         // release mode)
         const INPUT_LEN: usize = 320;
+        let mut rng = rng();
         let mut bits = bitbox![0; INPUT_LEN];
         for mut bit in bits.iter_mut() {
-            bit.set(random());
+            bit.set(rng.random());
         }
         let input = bits.clone().into();
 
         let mut inner_values = Vec::with_capacity(INPUT_LEN - 1);
-        let mut prng = Prng::new();
+        let mut prng = Prng::new(&mut rng);
         for _ in 0..INPUT_LEN - 1 {
             inner_values.push(Poplar1IdpfValue::new([
                 Field64::one(),
                 prng.next().unwrap(),
             ]));
         }
-        let leaf_values = Poplar1IdpfValue::new([Field255::one(), Prng::new().next().unwrap()]);
+        let leaf_values =
+            Poplar1IdpfValue::new([Field255::one(), Prng::new(&mut rng).next().unwrap()]);
 
-        let nonce: [u8; 16] = random();
+        let nonce: [u8; 16] = rng.random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
-            .gen(&input, inner_values.clone(), leaf_values, CTX_STR, &nonce)
+            .gen(
+                &input,
+                inner_values.clone(),
+                leaf_values,
+                CTX_STR,
+                &nonce,
+                &mut rng,
+            )
             .unwrap();
         let mut cache_0 = RingBufferCache::new(3);
         let mut cache_1 = RingBufferCache::new(3);
@@ -1435,20 +1446,29 @@ mod tests {
         let bits = bitbox![0, 1, 1, 1, 0, 1, 0, 0];
         let input = bits.into();
 
+        let mut rng = rng();
         let mut inner_values = Vec::with_capacity(7);
-        let mut prng = Prng::new();
+        let mut prng = Prng::new(&mut rng);
         for _ in 0..7 {
             inner_values.push(Poplar1IdpfValue::new([
                 Field64::one(),
                 prng.next().unwrap(),
             ]));
         }
-        let leaf_values = Poplar1IdpfValue::new([Field255::one(), Prng::new().next().unwrap()]);
+        let leaf_values =
+            Poplar1IdpfValue::new([Field255::one(), Prng::new(&mut rng).next().unwrap()]);
 
-        let nonce: [u8; 16] = random();
+        let nonce: [u8; 16] = rng.random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
-            .gen(&input, inner_values.clone(), leaf_values, CTX_STR, &nonce)
+            .gen(
+                &input,
+                inner_values.clone(),
+                leaf_values,
+                CTX_STR,
+                &nonce,
+                &mut rng,
+            )
             .unwrap();
         let mut cache_0 = SnoopingCache::new(HashMapCache::new());
         let mut cache_1 = HashMapCache::new();
@@ -1613,20 +1633,29 @@ mod tests {
         let bits = bitbox![1, 0, 0, 1, 1, 0, 1, 0];
         let input = bits.into();
 
+        let mut rng = rng();
         let mut inner_values = Vec::with_capacity(7);
-        let mut prng = Prng::new();
+        let mut prng = Prng::new(&mut rng);
         for _ in 0..7 {
             inner_values.push(Poplar1IdpfValue::new([
                 Field64::one(),
                 prng.next().unwrap(),
             ]));
         }
-        let leaf_values = Poplar1IdpfValue::new([Field255::one(), Prng::new().next().unwrap()]);
+        let leaf_values =
+            Poplar1IdpfValue::new([Field255::one(), Prng::new(&mut rng).next().unwrap()]);
 
-        let nonce: [u8; 16] = random();
+        let nonce: [u8; 16] = rng.random();
         let idpf = Idpf::new((), ());
         let (public_share, keys) = idpf
-            .gen(&input, inner_values.clone(), leaf_values, CTX_STR, &nonce)
+            .gen(
+                &input,
+                inner_values.clone(),
+                leaf_values,
+                CTX_STR,
+                &nonce,
+                &mut rng,
+            )
             .unwrap();
         let mut cache_0 = LossyCache::new();
         let mut cache_1 = LossyCache::new();
@@ -1655,7 +1684,8 @@ mod tests {
 
     #[test]
     fn test_idpf_poplar_error_cases() {
-        let nonce: [u8; 16] = random();
+        let mut rng = rng();
+        let nonce: [u8; 16] = rng.random();
         let idpf = Idpf::new((), ());
         // Zero bits does not make sense.
         idpf.gen(
@@ -1664,6 +1694,7 @@ mod tests {
             Poplar1IdpfValue::new([Field255::zero(); 2]),
             CTX_STR,
             &nonce,
+            &mut rng,
         )
         .unwrap_err();
 
@@ -1674,6 +1705,7 @@ mod tests {
                 Poplar1IdpfValue::new([Field255::zero(); 2]),
                 CTX_STR,
                 &nonce,
+                &mut rng,
             )
             .unwrap();
 
@@ -1684,6 +1716,7 @@ mod tests {
             Poplar1IdpfValue::new([Field255::zero(); 2]),
             CTX_STR,
             &nonce,
+            &mut rng,
         )
         .unwrap_err();
         idpf.gen(
@@ -1692,6 +1725,7 @@ mod tests {
             Poplar1IdpfValue::new([Field255::zero(); 2]),
             CTX_STR,
             &nonce,
+            &mut rng,
         )
         .unwrap_err();
 
@@ -2299,6 +2333,7 @@ mod tests {
         // the leaf nodes, to test out values that require runtime parameters.
         let idpf = Idpf::new((), 3);
         let binder = b"binder";
+        let mut rng = rng();
         let (public_share, [key_0, key_1]) = idpf
             .gen(
                 &IdpfInput::from_bytes(b"ae"),
@@ -2310,6 +2345,7 @@ mod tests {
                 ])),
                 CTX_STR,
                 binder,
+                &mut rng,
             )
             .unwrap();
 

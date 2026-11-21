@@ -9,7 +9,7 @@ use crate::field::{FieldElement, FieldElementExt};
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::vdaf::xof::SeedStreamAes128;
 use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
-use rand::{rng, Rng, RngExt};
+use rand::{Rng, RngExt};
 
 use std::marker::PhantomData;
 use std::ops::ControlFlow;
@@ -50,8 +50,8 @@ impl<F: FieldElement> Prng<F, SeedStreamAes128> {
 
 impl<F: FieldElement> Prng<F, SeedStreamTurboShake128> {
     /// Create a [`Prng`] from a randomly generated seed.
-    pub(crate) fn new() -> Self {
-        let seed = rng().random::<Seed<32>>();
+    pub(crate) fn new(rng: &mut impl Rng) -> Self {
+        let seed = rng.random::<Seed<32>>();
         Prng::from_seed_stream(XofTurboShake128::seed_stream(seed.as_ref(), &[], &[]))
     }
 }
@@ -137,6 +137,7 @@ mod tests {
     };
     #[cfg(feature = "experimental")]
     use base64::{engine::Engine, prelude::BASE64_STANDARD};
+    use rand::rng;
     #[cfg(feature = "experimental")]
     use sha2::{Digest, Sha256};
 

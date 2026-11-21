@@ -3,6 +3,9 @@
 
 //! Primitives for the Prio2 client.
 
+use rand::RngExt;
+use rand_core::Rng;
+
 use crate::{
     codec::CodecError,
     field::NttFriendlyFieldElement,
@@ -11,7 +14,6 @@ use crate::{
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
 
-use rand::{rng, RngExt};
 use std::convert::TryFrom;
 
 /// Serialization errors
@@ -36,8 +38,7 @@ pub(crate) struct ClientMemory<F> {
 }
 
 impl<F: NttFriendlyFieldElement> ClientMemory<F> {
-    pub(crate) fn new(dimension: usize) -> Result<Self, VdafError> {
-        let mut rng = rng();
+    pub(crate) fn new(dimension: usize, rng: &mut impl Rng) -> Result<Self, VdafError> {
         let n = (dimension + 1).next_power_of_two();
         if let Ok(size) = F::Integer::try_from(2 * n) {
             if size > F::generator_order() {

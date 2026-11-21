@@ -19,9 +19,9 @@ use prio::{
     idpf::{Idpf, IdpfInput, RingBufferCache},
     vdaf::poplar1::{Poplar1, Poplar1AggregationParam, Poplar1IdpfValue},
 };
-use rand::{distr::Distribution, rngs::StdRng, SeedableRng};
 #[cfg(feature = "experimental")]
-use rand::{random, RngExt};
+use rand::RngExt;
+use rand::{distr::Distribution, rng, rngs::StdRng, SeedableRng};
 #[cfg(feature = "experimental")]
 use std::iter;
 use std::{hint::black_box, time::Duration};
@@ -36,9 +36,10 @@ const RNG_SEED: u64 = 0;
 fn prng(c: &mut Criterion) {
     let mut group = c.benchmark_group("rand");
     let test_sizes = [16, 256, 1024, 4096];
+    let mut rng = rng();
     for size in test_sizes {
         group.bench_with_input(BenchmarkId::from_parameter(size), &size, |b, size| {
-            b.iter(|| F::random_vector(*size))
+            b.iter(|| F::random_vector(*size, &mut rng))
         });
     }
     group.finish();
@@ -81,7 +82,8 @@ fn prio2(c: &mut Criterion) {
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                let mut rng = rng();
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
             },
         );
     }
@@ -99,7 +101,9 @@ fn prio2(c: &mut Criterion) {
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 32]);
-                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+                let mut rng = rng();
+                let (public_share, input_shares) =
+                    vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                 b.iter(|| {
                     vdaf.verify_init(
                         &verify_key,
@@ -126,7 +130,8 @@ fn prio3(c: &mut Criterion) {
         let vdaf = Prio3::new_count(num_shares).unwrap();
         let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
-        b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+        let mut rng = rng();
+        b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
     });
 
     c.bench_function("prio3count_verify_init", |b| {
@@ -134,7 +139,8 @@ fn prio3(c: &mut Criterion) {
         let measurement = black_box(true);
         let nonce = black_box([0u8; 16]);
         let verify_key = black_box([0u8; 32]);
-        let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+        let mut rng = rng();
+        let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
         b.iter(|| {
             vdaf.verify_init(
                 &verify_key,
@@ -157,7 +163,8 @@ fn prio3(c: &mut Criterion) {
             let vdaf = Prio3::new_sum(num_shares, max_measurement).unwrap();
             let measurement = max_measurement;
             let nonce = black_box([0u8; 16]);
-            b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+            let mut rng = rng();
+            b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
         });
     }
     group.finish();
@@ -170,7 +177,9 @@ fn prio3(c: &mut Criterion) {
             let measurement = max_measurement;
             let nonce = black_box([0u8; 16]);
             let verify_key = black_box([0u8; 32]);
-            let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+            let mut rng = rng();
+            let (public_share, input_shares) =
+                vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
             b.iter(|| {
                 vdaf.verify_init(
                     &verify_key,
@@ -198,7 +207,8 @@ fn prio3(c: &mut Criterion) {
                     .map(|i| i & 1)
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                let mut rng = rng();
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
             },
         );
     }
@@ -221,7 +231,8 @@ fn prio3(c: &mut Criterion) {
                         .map(|i| i & 1)
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                    let mut rng = rng();
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
                 },
             );
         }
@@ -240,7 +251,9 @@ fn prio3(c: &mut Criterion) {
                     .collect::<Vec<_>>();
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 32]);
-                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+                let mut rng = rng();
+                let (public_share, input_shares) =
+                    vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                 b.iter(|| {
                     vdaf.verify_init(
                         &verify_key,
@@ -276,8 +289,9 @@ fn prio3(c: &mut Criterion) {
                         .collect::<Vec<_>>();
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 32]);
+                    let mut rng = rng();
                     let (public_share, input_shares) =
-                        vdaf.shard(b"", &measurement, &nonce).unwrap();
+                        vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                     b.iter(|| {
                         vdaf.verify_init(
                             &verify_key,
@@ -314,7 +328,8 @@ fn prio3(c: &mut Criterion) {
                 let vdaf = Prio3::new_histogram(num_shares, *input_length, *chunk_length).unwrap();
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                let mut rng = rng();
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
             },
         );
     }
@@ -343,7 +358,8 @@ fn prio3(c: &mut Criterion) {
                     .unwrap();
                     let measurement = black_box(0);
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                    let mut rng = rng();
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
                 },
             );
         }
@@ -369,7 +385,9 @@ fn prio3(c: &mut Criterion) {
                 let measurement = black_box(0);
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 32]);
-                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+                let mut rng = rng();
+                let (public_share, input_shares) =
+                    vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                 b.iter(|| {
                     vdaf.verify_init(
                         &verify_key,
@@ -411,8 +429,9 @@ fn prio3(c: &mut Criterion) {
                     let measurement = black_box(0);
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 32]);
+                    let mut rng = rng();
                     let (public_share, input_shares) =
-                        vdaf.shard(b"", &measurement, &nonce).unwrap();
+                        vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                     b.iter(|| {
                         vdaf.verify_init(
                             &verify_key,
@@ -445,7 +464,8 @@ fn prio3(c: &mut Criterion) {
                 measurement[1] = true;
                 let measurement = black_box(measurement);
                 let nonce = black_box([0u8; 16]);
-                b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                let mut rng = rng();
+                b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
             },
         );
     }
@@ -469,7 +489,8 @@ fn prio3(c: &mut Criterion) {
                     measurement[1] = true;
                     let measurement = black_box(measurement);
                     let nonce = black_box([0u8; 16]);
-                    b.iter(|| vdaf.shard(b"", &measurement, &nonce).unwrap());
+                    let mut rng = rng();
+                    b.iter(|| vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap());
                 },
             );
         }
@@ -491,7 +512,9 @@ fn prio3(c: &mut Criterion) {
                 let measurement = black_box(measurement);
                 let nonce = black_box([0u8; 16]);
                 let verify_key = black_box([0u8; 32]);
-                let (public_share, input_shares) = vdaf.shard(b"", &measurement, &nonce).unwrap();
+                let mut rng = rng();
+                let (public_share, input_shares) =
+                    vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                 b.iter(|| {
                     vdaf.verify_init(
                         &verify_key,
@@ -528,8 +551,9 @@ fn prio3(c: &mut Criterion) {
                     let measurement = black_box(measurement);
                     let nonce = black_box([0u8; 16]);
                     let verify_key = black_box([0u8; 32]);
+                    let mut rng = rng();
                     let (public_share, input_shares) =
-                        vdaf.shard(b"", &measurement, &nonce).unwrap();
+                        vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
                     b.iter(|| {
                         vdaf.verify_init(
                             &verify_key,
@@ -553,25 +577,35 @@ fn prio3(c: &mut Criterion) {
 #[cfg(feature = "experimental")]
 fn idpf(c: &mut Criterion) {
     let test_sizes = [8usize, 8 * 16, 8 * 256];
+    let mut rng = rng();
 
     let mut group = c.benchmark_group("idpf_gen");
     for size in test_sizes.iter() {
         group.throughput(Throughput::Bytes(*size as u64 / 8));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let bits = iter::repeat_with(|| rng.random())
+                .take(size)
+                .collect::<Vec<bool>>();
             let input = IdpfInput::from_bools(&bits);
 
-            let inner_values = Field64::random_vector(size - 1)
+            let inner_values = Field64::random_vector(size - 1, &mut rng)
                 .into_iter()
                 .map(|random_element| Poplar1IdpfValue::new([Field64::one(), random_element]))
                 .collect::<Vec<_>>();
             let leaf_value =
-                Poplar1IdpfValue::new([Field255::one(), Field255::random_vector(1)[0]]);
+                Poplar1IdpfValue::new([Field255::one(), Field255::random_vector(1, &mut rng)[0]]);
 
             let idpf = Idpf::new((), ());
             b.iter(|| {
-                idpf.gen(&input, inner_values.clone(), leaf_value, b"", &[0; 16])
-                    .unwrap();
+                idpf.gen(
+                    &input,
+                    inner_values.clone(),
+                    leaf_value,
+                    b"",
+                    &[0; 16],
+                    &mut rng,
+                )
+                .unwrap();
             });
         });
     }
@@ -581,19 +615,21 @@ fn idpf(c: &mut Criterion) {
     for size in test_sizes.iter() {
         group.throughput(Throughput::Bytes(*size as u64 / 8));
         group.bench_with_input(BenchmarkId::from_parameter(size), size, |b, &size| {
-            let bits = iter::repeat_with(random).take(size).collect::<Vec<bool>>();
+            let bits = iter::repeat_with(|| rng.random())
+                .take(size)
+                .collect::<Vec<bool>>();
             let input = IdpfInput::from_bools(&bits);
 
-            let inner_values = Field64::random_vector(size - 1)
+            let inner_values = Field64::random_vector(size - 1, &mut rng)
                 .into_iter()
                 .map(|random_element| Poplar1IdpfValue::new([Field64::one(), random_element]))
                 .collect::<Vec<_>>();
             let leaf_value =
-                Poplar1IdpfValue::new([Field255::one(), Field255::random_vector(1)[0]]);
+                Poplar1IdpfValue::new([Field255::one(), Field255::random_vector(1, &mut rng)[0]]);
 
             let idpf = Idpf::new((), ());
             let (public_share, keys) = idpf
-                .gen(&input, inner_values, leaf_value, b"", &[0; 16])
+                .gen(&input, inner_values, leaf_value, b"", &[0; 16], &mut rng)
                 .unwrap();
 
             b.iter(|| {
@@ -640,7 +676,7 @@ fn poplar1(c: &mut Criterion) {
             let measurement = IdpfInput::from_bools(&bits);
 
             b.iter(|| {
-                vdaf.shard(b"", &measurement, &nonce).unwrap();
+                vdaf.shard(b"", &measurement, &nonce, &mut rng).unwrap();
             });
         });
     }
@@ -669,7 +705,8 @@ fn poplar1(c: &mut Criterion) {
             // We are benchmarking verification of a single report. For this test, it doesn't matter
             // which measurement we generate a report for, so pick the first measurement
             // arbitrarily.
-            let (public_share, input_shares) = vdaf.shard(b"", &measurements[0], &nonce).unwrap();
+            let (public_share, input_shares) =
+                vdaf.shard(b"", &measurements[0], &nonce, &mut rng).unwrap();
             let input_share = input_shares.into_iter().next().unwrap();
 
             // For the aggregation paramter, we use the candidate prefixes from the prefix tree for

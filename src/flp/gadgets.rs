@@ -358,6 +358,9 @@ fn gadget_eval_poly_check<F: NttFriendlyFieldElement, G: Gadget<F>, P: AsRef<[F]
 mod tests {
     use std::iter::repeat_with;
 
+    use rand::rng;
+    use rand_core::Rng;
+
     use super::*;
 
     use crate::{
@@ -367,12 +370,16 @@ mod tests {
 
     #[test]
     fn test_mul() {
-        gadget_test::<TestField, _>(&mut Mul::new(20));
+        gadget_test::<TestField, _>(&mut Mul::new(20), &mut rng());
     }
 
     #[test]
     fn test_poly_eval() {
-        gadget_test::<TestField, _>(&mut PolyEval::new(TestField::random_vector(10), 30));
+        let mut rng = rng();
+        gadget_test::<TestField, _>(
+            &mut PolyEval::new(TestField::random_vector(10, &mut rng), 30),
+            &mut rng,
+        );
     }
 
     #[test]
@@ -381,17 +388,18 @@ mod tests {
         let chunks = 23;
 
         let mut g = ParallelSum::<TestField, _>::new(Mul::new(num_calls), chunks);
-        gadget_test(&mut g);
+        gadget_test(&mut g, &mut rng());
     }
 
     #[test]
     #[cfg(feature = "multithreaded")]
     fn test_parallel_sum_multithreaded() {
+        let mut rng = rng();
         for num_calls in [1, 10, 100] {
             let chunks = 23;
 
             let mut g = ParallelSumMultithreaded::new(Mul::new(num_calls), chunks);
-            gadget_test(&mut g);
+            gadget_test(&mut g, &mut rng);
 
             // Test that the multithreaded version has the same output as the normal version.
             let mut g_serial = ParallelSum::new(Mul::new(num_calls), chunks);
@@ -403,7 +411,7 @@ mod tests {
             let degree = g.degree();
 
             // Test that both gadgets evaluate to the same value when run on scalar inputs.
-            let inp = TestField::random_vector(arity);
+            let inp = TestField::random_vector(arity, &mut rng);
             let result = g.eval(&inp).unwrap();
             let result_serial = g_serial.eval(&inp).unwrap();
             assert_eq!(result, result_serial);
@@ -413,10 +421,11 @@ mod tests {
                 vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
             let mut poly_outp_serial =
                 vec![TestField::zero(); (degree * num_calls + 1).next_power_of_two()];
-            let poly_inp: Vec<_> =
-                std::iter::repeat_with(|| TestField::random_vector(wire_poly_len(num_calls)))
-                    .take(arity)
-                    .collect();
+            let poly_inp: Vec<_> = std::iter::repeat_with(|| {
+                TestField::random_vector(wire_poly_len(num_calls), &mut rng)
+            })
+            .take(arity)
+            .collect();
 
             g.eval_poly(&mut poly_outp, &poly_inp).unwrap();
             g_serial
@@ -428,10 +437,10 @@ mod tests {
 
     /// Test that calling g.eval_poly() and evaluating the output at a given point is equivalent
     /// to evaluating each of the inputs at the same point and applying g.eval() on the results.
-    fn gadget_test<F: NttFriendlyFieldElement, G: Gadget<F>>(g: &mut G) {
-        let random_point = F::random_vector(1)[0];
+    fn gadget_test<F: NttFriendlyFieldElement, G: Gadget<F>>(g: &mut G, rng: &mut impl Rng) {
+        let random_point = F::random_vector(1, rng)[0];
 
-        let wire_polys: Vec<_> = repeat_with(|| F::random_vector(wire_poly_len(g.calls())))
+        let wire_polys: Vec<_> = repeat_with(|| F::random_vector(wire_poly_len(g.calls()), rng))
             .take(g.arity())
             .collect();
 

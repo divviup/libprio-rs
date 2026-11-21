@@ -308,6 +308,7 @@ mod tests {
             poly_mul_monomial, poly_range_check,
         },
     };
+    use rand::rng;
     use std::convert::TryFrom;
 
     #[test]
@@ -423,6 +424,7 @@ mod tests {
     }
 
     fn test_poly_eval_lagrange_batched_with_lengths(lengths: &[usize]) {
+        let mut rng = rng();
         let sizes = lengths
             .iter()
             .map(|s| s.next_power_of_two())
@@ -430,9 +432,9 @@ mod tests {
 
         let polynomials = sizes
             .iter()
-            .map(|&size| Field64::random_vector(size))
+            .map(|&size| Field64::random_vector(size, &mut rng))
             .collect::<Vec<_>>();
-        let x = Field64::random_vector(1)[0];
+        let x = Field64::random_vector(1, &mut rng)[0];
 
         let &n = sizes.iter().max().unwrap();
         let mut ntt_mem = vec![Field64::zero(); n];
@@ -453,11 +455,12 @@ mod tests {
 
     #[test]
     fn test_poly_mul_lagrange() {
+        let mut rng = rng();
         for log_n in 0..8 {
             let n = 1 << log_n;
 
-            let p_monomial = Field64::random_vector(n);
-            let q_monomial = Field64::random_vector(n);
+            let p_monomial = Field64::random_vector(n, &mut rng);
+            let q_monomial = Field64::random_vector(n, &mut rng);
 
             let p_lagrange = get_ntt(&p_monomial, n).unwrap();
             let q_lagrange = get_ntt(&q_monomial, n).unwrap();
@@ -472,11 +475,12 @@ mod tests {
 
     #[test]
     fn test_extend_values_to_power_of_2() {
+        let mut rng = rng();
         for log_n in 0..7 {
             let n = 1 << log_n;
             for k in 0..n + 1 {
                 // Random monomial polynomial of degree k - 1
-                let mut p_monomial = Field64::random_vector(k);
+                let mut p_monomial = Field64::random_vector(k, &mut rng);
                 p_monomial.extend_from_slice(&vec![Field64::zero(); n - k]);
 
                 // Convert to Lagrange basis
@@ -498,10 +502,11 @@ mod tests {
 
     #[test]
     fn test_double_evaluations() {
+        let mut rng = rng();
         for log_n in 0..8 {
             let n = 1 << log_n;
             // Random monomial polynomial
-            let p_monomial = Field64::random_vector(n);
+            let p_monomial = Field64::random_vector(n, &mut rng);
 
             // Convert to Lagrange basis
             let p_lagrange = get_ntt(&p_monomial, n).unwrap();

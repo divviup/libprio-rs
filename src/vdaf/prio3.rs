@@ -47,7 +47,8 @@ use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, AggregatorWithNoise, Client, Collector, OutputShare,
     Share, ShareDecodingParameter, Vdaf, VdafError, VerifyTransition, VERSION,
 };
-use rand::{rng, RngExt};
+use rand::RngExt;
+use rand_core::Rng;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Debug;
@@ -294,7 +295,7 @@ impl Prio3Average {
 /// for measurement in measurements {
 ///     // Shard
 ///     let nonce = rng.random::<[u8; 16]>();
-///     let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce).unwrap();
+///     let (public_share, input_shares) = vdaf.shard(ctx, &measurement, &nonce, &mut rng).unwrap();
 ///
 ///     // Verify
 ///     let mut verifier_states = vec![];
@@ -1134,9 +1135,10 @@ where
         ctx: &[u8],
         measurement: &T::Measurement,
         nonce: &[u8; 16],
+        rng: &mut impl Rng,
     ) -> Result<(Self::PublicShare, Vec<Prio3InputShare<T::Field, SEED_SIZE>>), VdafError> {
         let mut random = vec![0u8; self.random_size()];
-        rng().fill(&mut random[..]);
+        rng.fill(&mut random[..]);
         self.shard_with_random(ctx, measurement, nonce, &random)
     }
 }
@@ -1518,9 +1520,10 @@ where
         _agg_param: &Self::AggregationParam,
         agg_share: &mut Self::AggregateShare,
         num_measurements: usize,
+        rng: &mut impl Rng,
     ) -> Result<(), VdafError> {
         self.typ
-            .add_noise_to_agg_share(dp_strategy, &mut agg_share.0, num_measurements)?;
+            .add_noise_to_agg_share(dp_strategy, &mut agg_share.0, num_measurements, rng)?;
         Ok(())
     }
 }
@@ -1653,6 +1656,7 @@ mod tests {
         },
     };
     use assert_matches::assert_matches;
+    use rand::rng;
 
     const CTX_STR: &[u8] = b"prio3 ctx";
 
@@ -1681,10 +1685,11 @@ mod tests {
 
         let mut nonce = [0; 16];
         let mut verify_key = [0; 32];
-        rng().fill(&mut verify_key[..]);
-        rng().fill(&mut nonce[..]);
+        let mut rng = rng();
+        rng.fill(&mut verify_key[..]);
+        rng.fill(&mut nonce[..]);
 
-        let (public_share, input_shares) = prio3.shard(CTX_STR, &false, &nonce).unwrap();
+        let (public_share, input_shares) = prio3.shard(CTX_STR, &false, &nonce, &mut rng).unwrap();
         run_vdaf_verify(
             &prio3,
             &verify_key,
@@ -1696,7 +1701,7 @@ mod tests {
         )
         .unwrap();
 
-        let (public_share, input_shares) = prio3.shard(CTX_STR, &true, &nonce).unwrap();
+        let (public_share, input_shares) = prio3.shard(CTX_STR, &true, &nonce, &mut rng).unwrap();
         run_vdaf_verify(
             &prio3,
             &verify_key,
@@ -1734,11 +1739,12 @@ mod tests {
             max_measurement + 2,
         );
 
+        let mut rng = rng();
         let mut verify_key = [0; 32];
-        rng().fill(&mut verify_key[..]);
+        rng.fill(&mut verify_key[..]);
         let nonce = [0; 16];
 
-        let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce).unwrap();
+        let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce, &mut rng).unwrap();
         assert_matches!(
             &mut input_shares[0],
             Prio3InputShare::Leader { ref mut measurement_share, ..} => {
@@ -1756,7 +1762,7 @@ mod tests {
         );
         assert_matches!(result, Err(VdafError::Uncategorized(_)));
 
-        let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce).unwrap();
+        let (public_share, mut input_shares) = prio3.shard(CTX_STR, &1, &nonce, &mut rng).unwrap();
         assert_matches!(
             &mut input_shares[0],
             Prio3InputShare::Leader { ref mut proofs_share, ..} => {
@@ -1917,9 +1923,10 @@ mod tests {
 
     #[test]
     fn test_prio3_input_share() {
+        let mut rng = rng();
         let max_measurement = 1;
         let prio3 = Prio3::new_sum(5, max_measurement).unwrap();
-        let (_public_share, input_shares) = prio3.shard(CTX_STR, &1, &[0; 16]).unwrap();
+        let (_public_share, input_shares) = prio3.shard(CTX_STR, &1, &[0; 16], &mut rng).unwrap();
 
         // Check that seed shares are distinct.
         for (i, x) in input_shares.iter().enumerate() {
@@ -1951,8 +1958,9 @@ mod tests {
         P: Xof<SEED_SIZE>,
     {
         let mut verify_key = [0; SEED_SIZE];
-        rng().fill(&mut verify_key[..]);
-        let (public_share, input_shares) = prio3.shard(CTX_STR, measurement, nonce)?;
+        let mut rng = rng();
+        rng.fill(&mut verify_key[..]);
+        let (public_share, input_shares) = prio3.shard(CTX_STR, measurement, nonce, &mut rng)?;
 
         let encoded_public_share = public_share.get_encoded().unwrap();
         let decoded_public_share =

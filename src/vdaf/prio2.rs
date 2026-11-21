@@ -19,7 +19,7 @@ use crate::{
     },
 };
 use hmac::{Hmac, KeyInit, Mac};
-use rand::{rng, Rng, RngExt};
+use rand::{Rng, RngExt};
 use sha2::Sha256;
 use std::{convert::TryFrom, io::Cursor};
 use subtle::{Choice, ConstantTimeEq};
@@ -146,8 +146,8 @@ impl Client<16> for Prio2 {
         _ctx: &[u8],
         measurement: &Vec<u32>,
         _nonce: &[u8; 16],
+        rng: &mut impl Rng,
     ) -> Result<(Self::PublicShare, Vec<Share<FieldPrio2, 32>>), VdafError> {
-        let mut rng = rng();
         if measurement.len() != self.input_len {
             return Err(VdafError::Uncategorized("incorrect input length".into()));
         }
@@ -156,7 +156,7 @@ impl Client<16> for Prio2 {
             input.push((*int).into());
         }
 
-        let mut mem = v2_client::ClientMemory::new(self.input_len)?;
+        let mut mem = v2_client::ClientMemory::new(self.input_len, rng)?;
         let copy_data = |share_data: &mut [FieldPrio2]| {
             share_data[..].clone_from_slice(&input);
         };
@@ -402,6 +402,7 @@ mod tests {
         test_utils::run_vdaf,
     };
     use assert_matches::assert_matches;
+    use rand::rng;
 
     // The value of this string doesn't matter. Prio2 is not defined to use the context string for
     // any computation
@@ -436,7 +437,7 @@ mod tests {
         let nonce = rng.random::<[u8; 16]>();
         let data = vec![0, 0, 1, 1, 0];
         let prio2 = Prio2::new(data.len()).unwrap();
-        let (public_share, input_shares) = prio2.shard(CTX_STR, &data, &nonce).unwrap();
+        let (public_share, input_shares) = prio2.shard(CTX_STR, &data, &nonce, &mut rng).unwrap();
         for (agg_id, input_share) in input_shares.iter().enumerate() {
             let (verifier_state, verifier_share) = prio2
                 .verify_init(

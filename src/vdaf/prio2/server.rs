@@ -201,7 +201,7 @@ mod tests {
         },
     };
     use assert_matches::assert_matches;
-    use rand::random;
+    use rand::{rng, RngExt};
 
     #[test]
     fn test_validation() {
@@ -272,8 +272,9 @@ mod tests {
             data[0] = 2;
         }
 
+        let mut rng = rng();
         let vdaf = Prio2::new(dim).unwrap();
-        let (_, shares) = vdaf.shard(CTX_STR, &data, &[0; 16]).unwrap();
+        let (_, shares) = vdaf.shard(CTX_STR, &data, &[0; 16], &mut rng).unwrap();
         let share1_original = shares[0].get_encoded().unwrap();
         let share2 = shares[1].get_encoded().unwrap();
 
@@ -299,7 +300,7 @@ mod tests {
             .get_encoded()
             .unwrap();
 
-        let mut prng = Prng::from_prio2_seed(&random());
+        let mut prng = Prng::from_prio2_seed(&rng.random());
         let eval_at = vdaf.choose_eval_at(&mut prng);
 
         let mut v1 = server1
