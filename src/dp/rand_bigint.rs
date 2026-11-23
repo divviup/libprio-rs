@@ -33,7 +33,7 @@ use num_traits::{ToPrimitive, Zero};
 use rand::distr::uniform::Error;
 use rand::{Rng, RngExt};
 
-/// Use [`Rng::fill`] to generate random bits.
+/// Use [`RngExt::fill`] to generate random bits.
 ///
 /// If `rem` is greater than zero, than only the lowest `rem` bits of the last u32 are filled with
 /// random data.

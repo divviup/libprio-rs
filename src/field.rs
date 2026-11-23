@@ -125,7 +125,7 @@ pub trait FieldElement:
     ///
     /// This function should only be used internally to convert a random byte string into
     /// a field element. Use [`Decode::decode`] to deserialize field elements. Use
-    /// [`random_vector`] to randomly generate field elements.
+    /// [`Self::random_vector`] to randomly generate field elements.
     #[doc(hidden)]
     fn try_from_random(bytes: &[u8]) -> Result<Self, FieldError>;
 
