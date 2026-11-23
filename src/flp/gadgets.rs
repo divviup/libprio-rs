@@ -12,9 +12,10 @@ use crate::polynomial::{poly_deg, poly_eval_monomial, poly_mul_lagrange};
 #[cfg(feature = "multithreaded")]
 use rayon::prelude::*;
 
-use std::any::Any;
-use std::fmt::Debug;
-use std::marker::PhantomData;
+use alloc::{format, string::ToString, vec, vec::Vec};
+use core::any::Any;
+use core::fmt::Debug;
+use core::marker::PhantomData;
 
 /// An arity-2 gadget that multiples its inputs.
 #[derive(Clone, Debug, Eq, PartialEq)]

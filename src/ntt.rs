@@ -5,7 +5,8 @@
 use crate::field::NttFriendlyFieldElement;
 use crate::fp::{log2, MAX_ROOTS};
 
-use std::convert::TryFrom;
+use alloc::{vec, vec::Vec};
+use core::convert::TryFrom;
 
 /// An error returned by an NTT operation.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]

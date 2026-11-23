@@ -11,6 +11,13 @@ use crate::{
         VdafError, VERSION,
     },
 };
+use alloc::{
+    borrow::ToOwned,
+    collections::VecDeque,
+    format,
+    string::{String, ToString},
+    vec::Vec,
+};
 use bitvec::{
     bitvec,
     boxed::BitBox,
@@ -19,13 +26,16 @@ use bitvec::{
     vec::BitVec,
     view::BitView,
 };
-use rand::{CryptoRng, Rng, RngExt};
-use std::{
-    collections::{HashMap, VecDeque},
+use core::{
+    cmp,
     fmt::Debug,
     hash::{Hash, Hasher},
+    iter,
     ops::{Add, AddAssign, Index, Sub},
 };
+use rand::{CryptoRng, Rng, RngExt};
+#[cfg(feature = "std")]
+use std::collections::HashMap;
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 const EXTEND_DOMAIN_SEP: &[u8; 8] = &[
@@ -756,12 +766,12 @@ where
         }
 
         // Seeds
-        let mut seeds = std::iter::repeat_with(|| Seed::decode(bytes).map(|seed| seed.0))
+        let mut seeds = iter::repeat_with(|| Seed::decode(bytes).map(|seed| seed.0))
             .take(*bits)
             .collect::<Result<Vec<_>, _>>()?;
 
         // Inner payloads
-        let inner_payloads = std::iter::repeat_with(|| VI::decode(bytes))
+        let inner_payloads = iter::repeat_with(|| VI::decode(bytes))
             .take(bits - 1)
             .collect::<Result<Vec<_>, _>>()?;
 
@@ -914,11 +924,13 @@ impl IdpfCache for NoCache {
 
 /// A simple [`IdpfCache`] implementation that caches intermediate results in an in-memory hash map,
 /// with no eviction.
+#[cfg(feature = "std")]
 #[derive(Default)]
 pub struct HashMapCache {
     map: HashMap<NormalizedBitVec, ([u8; 16], u8)>,
 }
 
+#[cfg(feature = "std")]
 impl HashMapCache {
     /// Create a new unpopulated `HashMapCache`.
     pub fn new() -> HashMapCache {
@@ -933,6 +945,7 @@ impl HashMapCache {
     }
 }
 
+#[cfg(feature = "std")]
 impl IdpfCache for HashMapCache {
     fn get(&self, input: &BitSlice) -> Option<([u8; 16], u8)> {
         let normalized = NormalizedBitVec::from(input.to_bitvec());
@@ -990,7 +1003,7 @@ impl RingBufferCache {
     /// Create a new unpopulated `RingBufferCache`.
     pub fn new(capacity: usize) -> RingBufferCache {
         Self {
-            ring: VecDeque::with_capacity(std::cmp::max(capacity, 1)),
+            ring: VecDeque::with_capacity(cmp::max(capacity, 1)),
         }
     }
 }

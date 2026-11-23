@@ -9,6 +9,7 @@ use crate::{
     codec::{CodecError, Decode, Encode, Input},
     vdaf::{self, Aggregatable, VdafError, VerifyTransition},
 };
+use core::fmt;
 use rand::RngExt;
 use rand_core::Rng;
 use std::{fmt::Debug, sync::Arc};
@@ -33,7 +34,7 @@ pub struct Vdaf {
 }
 
 impl Debug for Vdaf {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Vdaf")
             .field("verify_init_fn", &"[redacted]")
             .field("verify_next_fn", &"[redacted]")

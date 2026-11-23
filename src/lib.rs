@@ -14,6 +14,10 @@
 //!
 //! [vdaf]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
+#![cfg_attr(not(feature = "std"), no_std)]
+
+extern crate alloc;
+
 pub mod codec;
 pub mod dp;
 pub mod field;

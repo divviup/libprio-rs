@@ -14,6 +14,7 @@
 //!  - `DifferentialPrivacyStrategy`: This is a combination of choices for budget and distribution.
 //!    Examples: zCDP-DiscreteGaussian, EpsilonDelta-DiscreteGaussian
 //!
+use alloc::{borrow::ToOwned, string::String};
 use num_bigint_0_5::BigUint;
 use num_rational::Ratio;
 use num_traits::ToPrimitive;

@@ -50,6 +50,7 @@
 //!     Clément Canonne, Gautam Kamath, Thomas Steinke. The Discrete Gaussian for Differential Privacy. 2020.
 //!     <https://arxiv.org/pdf/2004.00010.pdf>
 
+use alloc::borrow::ToOwned;
 use num_bigint_0_5::{BigInt, BigUint};
 use num_integer::Integer;
 use num_iter::range_inclusive;

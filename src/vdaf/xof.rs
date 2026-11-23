@@ -29,15 +29,19 @@ use aes::{
 use ctr::Ctr64BE;
 #[cfg(feature = "crypto-dependencies")]
 use hmac::{Hmac, Mac};
+use rand::distr::{Distribution, StandardUniform};
 use rand::RngExt;
 use rand_core::{utils::next_word_via_fill, Rng, SeedableRng, TryRng};
-
-use rand::distr::{Distribution, StandardUniform};
 #[cfg(feature = "crypto-dependencies")]
 use sha2::Sha256;
-#[cfg(feature = "crypto-dependencies")]
-use std::fmt::Formatter;
-use std::{convert::Infallible, fmt::Debug};
+
+use alloc::vec::Vec;
+#[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
+use core::cmp;
+use core::{
+    convert::Infallible,
+    fmt::{self, Debug, Formatter},
+};
 use subtle::{Choice, ConstantTimeEq};
 use turboshake::{
     digest::{ExtendableOutput, Update, XofReader},
@@ -49,7 +53,7 @@ use turboshake::{
 pub struct Seed<const SEED_SIZE: usize>(pub(crate) [u8; SEED_SIZE]);
 
 impl<const SEED_SIZE: usize> Debug for Seed<SEED_SIZE> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_tuple("Seed").finish_non_exhaustive()
     }
 }
@@ -196,7 +200,7 @@ impl TryRng for SeedStreamAes128 {
 
 #[cfg(feature = "crypto-dependencies")]
 impl Debug for SeedStreamAes128 {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         f.debug_struct("SeedStreamAes128").finish_non_exhaustive()
     }
 }
@@ -468,7 +472,7 @@ impl SeedStreamFixedKeyAes128 {
                 *b ^= i;
             }
             self.hash_block(&mut block);
-            let read = std::cmp::min(16 - offset, buf.len() - index);
+            let read = cmp::min(16 - offset, buf.len() - index);
             buf[index..index + read].copy_from_slice(&block[offset..offset + read]);
             offset = 0;
             index += read;

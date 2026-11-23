@@ -14,16 +14,16 @@ use crate::{
         Aggregatable, Aggregator, Client, Collector, Vdaf, VdafError, VerifyTransition, VERSION,
     },
 };
-use rand::{Rng, RngExt};
-use std::{
-    collections::BTreeSet,
+use alloc::{collections::BTreeSet, format, vec, vec::Vec};
+use core::{
     convert::TryFrom,
-    fmt::Debug,
+    fmt::{self, Debug},
     iter,
     marker::PhantomData,
     num::TryFromIntError,
     ops::{Add, AddAssign, Sub},
 };
+use rand::{Rng, RngExt};
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
 
 const DST_SHARD_RANDOMNESS: u16 = 1;
@@ -131,7 +131,7 @@ pub struct Poplar1InputShare<const SEED_SIZE: usize> {
 }
 
 impl<const SEED_SIZE: usize> Debug for Poplar1InputShare<SEED_SIZE> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Poplar1InputShare").finish_non_exhaustive()
     }
 }
@@ -340,7 +340,7 @@ impl<F: ConstantTimeEq> ConstantTimeEq for VerifierState<F> {
 }
 
 impl<F> Debug for VerifierState<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("VerifierState")
             .field("sketch", &"[redacted]")
             .field("output_share", &"[redacted]")

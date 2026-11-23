@@ -7,6 +7,14 @@ use crate::{
     codec::{CodecError, Decode, Encode, Input},
     field::{FieldElement, FieldElementExt, FieldElementVisitor, FieldError},
 };
+use alloc::{boxed::Box, vec::Vec};
+use core::{
+    convert::TryFrom,
+    fmt::{self, Debug, Display, Formatter},
+    marker::PhantomData,
+    mem::size_of,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
 use fiat_crypto::curve25519_64::{
     fiat_25519_add, fiat_25519_carry, fiat_25519_carry_mul, fiat_25519_from_bytes,
     fiat_25519_loose_field_element, fiat_25519_opp, fiat_25519_relax, fiat_25519_selectznz,
@@ -15,13 +23,6 @@ use fiat_crypto::curve25519_64::{
 use rand::distr::{Distribution, StandardUniform};
 use rand_core::Rng;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use std::{
-    convert::TryFrom,
-    fmt::{self, Debug, Display, Formatter},
-    marker::PhantomData,
-    mem::size_of,
-    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
-};
 use subtle::{
     Choice, ConditionallySelectable, ConstantTimeEq, ConstantTimeGreater, ConstantTimeLess,
 };
@@ -286,7 +287,7 @@ impl Decode for Field255 {
     fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         let value = bytes.split_const::<{ Self::ENCODED_SIZE }>()?;
         Field255::try_from_bytes(value.as_slice(), false).map_err(|e| {
-            CodecError::Other(Box::new(e) as Box<dyn std::error::Error + 'static + Send + Sync>)
+            CodecError::Other(Box::new(e) as Box<dyn core::error::Error + 'static + Send + Sync>)
         })
     }
 }

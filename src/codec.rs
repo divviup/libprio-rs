@@ -9,7 +9,8 @@
 //!
 //! [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3
 
-use std::{convert::TryInto, error::Error, num::TryFromIntError};
+use alloc::{boxed::Box, vec::Vec};
+use core::{convert::TryInto, error::Error, num::TryFromIntError};
 
 /// An error that occurred during decoding.
 #[derive(Debug, thiserror::Error)]

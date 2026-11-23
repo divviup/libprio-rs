@@ -9,7 +9,8 @@ use crate::{
     ntt::{ntt_inv, ntt_set_s, NttError},
 };
 
-use std::convert::TryFrom;
+use alloc::{vec, vec::Vec};
+use core::convert::TryFrom;
 
 /// Evaluate a polynomial in the monomial basis using Horner's method.
 pub fn poly_eval_monomial<F: NttFriendlyFieldElement>(poly: &[F], eval_at: F) -> F {

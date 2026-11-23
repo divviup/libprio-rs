@@ -18,10 +18,11 @@ use crate::{
         ShareDecodingParameter, Vdaf, VdafError, VerifyTransition,
     },
 };
+use alloc::{boxed::Box, string::ToString, vec, vec::Vec};
+use core::convert::TryFrom;
 use hmac::{Hmac, KeyInit, Mac};
 use rand::{Rng, RngExt};
 use sha2::Sha256;
-use std::convert::TryFrom;
 use subtle::{Choice, ConstantTimeEq};
 
 mod client;

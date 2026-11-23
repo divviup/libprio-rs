@@ -12,27 +12,27 @@ resolver = "2"
 
 [dependencies]
 aes = { version = "0.9.1", optional = true }
-bitvec = { version = "1.0.1", optional = true }
+bitvec = { version = "1.0.1", optional = true, default-features = false, features = ["alloc"] }
 ctr = { version = "0.10.1", optional = true }
-fiat-crypto = { version = "0.3.0", optional = true }
+fiat-crypto = { version = "0.3.0", optional = true, default-features = false }
 hex = { version = "0.4.3", features = ["serde"], optional = true }
 hmac = { version = "0.13.0", optional = true }
-num-bigint-0-4 = { package = "num-bigint", version = "0.4.2" }
-num-bigint-0-5 = { package = "num-bigint", version = "0.5.1", features = ["serde"] }
-num-integer = "0.1.46"
-num-iter = "0.1.45"
-num-rational = { version = "0.4.2", features = ["serde"] }
-num-traits = "0.2.19"
+num-bigint-0-4 = { package = "num-bigint", version = "0.4.2", default-features = false }
+num-bigint-0-5 = { package = "num-bigint", version = "0.5.1", default-features = false, features = ["serde"] }
+num-integer = { version = "0.1.46", default-features = false }
+num-iter = { version = "0.1.45", default-features = false }
+num-rational = { version = "0.4.2", default-features = false, features = ["num-bigint", "serde"] }
+num-traits = { version = "0.2.19", default-features = false }
 rand = { version = "0.10", default-features = false }
 rand_core = "0.10"
 rand_distr = { version = "0.6.0", optional = true }
 rayon = { version = "1.12.0", optional = true }
-serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 serde_json = { version = "1.0", optional = true }
 sha2 = { version = "0.11.0", optional = true }
 turboshake = "0.7.1"
-subtle = "2.6.1"
-thiserror = "2.0"
+subtle = { version = "2.6.1", default-features = false, features = ["i128"] }
+thiserror = { version = "2.0", default-features = false }
 
 [dev-dependencies]
 assert_matches = "1.5.0"
@@ -47,10 +47,24 @@ rand = { version = "0.10", default-features = false, features = ["std_rng", "sys
 statrs = "0.19.0"
 
 [features]
-default = ["crypto-dependencies"]
+default = ["crypto-dependencies", "std"]
 experimental = ["bitvec", "fiat-crypto"]
 multithreaded = ["rayon"]
 crypto-dependencies = ["aes", "ctr", "hmac", "sha2"]
+std = [
+    "num-bigint-0-4/std",
+    "num-bigint-0-5/std",
+    "num-integer/std",
+    "num-iter/std",
+    "num-rational/std",
+    "num-traits/std",
+    "rand/std",
+    "rand/sys_rng",
+    "rand/thread_rng",
+    "serde/std",
+    "subtle/std",
+    "thiserror/std",
+]
 test-util = ["hex", "serde_json", "rand_distr", "rand/std_rng", "rand/sys_rng", "rand/thread_rng"]
 
 [workspace]

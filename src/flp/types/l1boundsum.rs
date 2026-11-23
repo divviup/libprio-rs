@@ -13,7 +13,11 @@ use crate::{
         Flp, FlpError, Gadget, Type,
     },
 };
-use std::{fmt::Debug, marker::PhantomData};
+use alloc::{boxed::Box, format, string::ToString, vec, vec::Vec};
+use core::{
+    fmt::{self, Debug},
+    marker::PhantomData,
+};
 
 /// Implementation of the L1BoundSum FLP described in [draft-ietf-ppm-l1-bound-sum-01][1].
 /// L1BoundSum is very similar to SumVec, except that it also checks that the L1 norm of the
@@ -44,7 +48,7 @@ pub struct L1BoundSum<F: NttFriendlyFieldElement, S> {
 }
 
 impl<F: NttFriendlyFieldElement, S> Debug for L1BoundSum<F, S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("L1BoundSum")
             .field("measurement_len", &self.measurement_len)
             .field("max_value", &self.max_value)

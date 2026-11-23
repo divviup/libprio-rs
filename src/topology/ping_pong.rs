@@ -13,7 +13,8 @@ use crate::{
     },
     vdaf::{Aggregator, VdafError, VerifyTransition},
 };
-use std::fmt::Debug;
+use alloc::vec::Vec;
+use core::fmt::{self, Debug};
 
 /// Errors emitted by this module.
 #[derive(Debug, thiserror::Error)]
@@ -92,7 +93,7 @@ impl Debug for PingPongMessage {
     // logged. Normally, we'd use the `derivative` crate to customize a derived `Debug`, but that
     // crate has not been audited (in the `cargo vet` sense) so we can't use it here unless we audit
     // 8,000+ lines of proc macros.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple(self.variant()).finish()
     }
 }
@@ -207,7 +208,7 @@ impl<const VERIFY_KEY_SIZE: usize, const NONCE_SIZE: usize, A> Debug
 where
     A: Aggregator<VERIFY_KEY_SIZE, NONCE_SIZE>,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let variant = match &self.0 {
             PingPongContinuationInner::OutputShare(_) => "OutputShare",
             PingPongContinuationInner::Transition { .. } => "Transition",

@@ -7,6 +7,7 @@ use crate::{
     polynomial::poly_interpret_eval,
     vdaf::prio2::client::{unpack_proof, SerializeError},
 };
+use alloc::vec;
 use serde::{Deserialize, Serialize};
 
 /// Possible errors from server operations

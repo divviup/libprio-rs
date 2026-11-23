@@ -56,10 +56,11 @@ use crate::ntt::NttError;
 use crate::polynomial::{
     extend_values_to_power_of_2, get_double_evaluations, poly_eval_lagrange_batched,
 };
+use alloc::{boxed::Box, format, string::String, vec, vec::Vec};
+use core::any::Any;
+use core::convert::TryFrom;
+use core::fmt::Debug;
 use rand_core::Rng;
-use std::any::Any;
-use std::convert::TryFrom;
-use std::fmt::Debug;
 
 pub mod gadgets;
 pub mod types;
@@ -818,6 +819,7 @@ pub(crate) fn gadget_poly_len(gadget_degree: usize, wire_poly_len: usize) -> usi
 pub mod test_utils {
     use super::*;
     use crate::field::{add_vector, sub_assign_vector, FieldElement, FieldElementWithInteger};
+    use core::cmp;
     use rand::rng;
 
     /// Various tests for an FLP.
@@ -974,7 +976,7 @@ pub mod test_utils {
             );
 
             // Try verifying various proof mutants.
-            for i in 0..std::cmp::min(proof.len(), 10) {
+            for i in 0..cmp::min(proof.len(), 10) {
                 let mut mutated_proof = proof.clone();
                 mutated_proof[i] += T::Field::from(
                     <T::Field as FieldElementWithInteger>::Integer::try_from(23).unwrap(),

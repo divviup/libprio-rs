@@ -11,8 +11,10 @@ use crate::vdaf::xof::SeedStreamAes128;
 use crate::vdaf::xof::{Seed, SeedStreamTurboShake128, Xof, XofTurboShake128};
 use rand::{Rng, RngExt};
 
-use std::marker::PhantomData;
-use std::ops::ControlFlow;
+use alloc::{vec, vec::Vec};
+use core::fmt;
+use core::marker::PhantomData;
+use core::ops::ControlFlow;
 
 const BUFFER_SIZE_IN_ELEMENTS: usize = 32;
 
@@ -25,8 +27,8 @@ pub(crate) struct Prng<F, S> {
     buffer_index: usize,
 }
 
-impl<F, S> std::fmt::Debug for Prng<F, S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<F, S> fmt::Debug for Prng<F, S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Prng")
             .field("buffer_index", &self.buffer_index)
             .finish_non_exhaustive()

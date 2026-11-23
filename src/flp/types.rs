@@ -9,10 +9,11 @@ use crate::field::{
 use crate::flp::gadgets::{Mul, ParallelSumGadget, PolyEval};
 use crate::flp::{Flp, FlpError, Gadget, Type};
 use crate::polynomial::poly_range_check;
-use std::convert::TryInto;
-use std::fmt::{self, Debug};
-use std::marker::PhantomData;
-use std::slice;
+use alloc::{boxed::Box, format, string::ToString, vec, vec::Vec};
+use core::convert::TryInto;
+use core::fmt::{self, Debug};
+use core::marker::PhantomData;
+use core::slice;
 use subtle::{Choice, ConditionallySelectable, ConstantTimeGreater};
 
 mod dp;

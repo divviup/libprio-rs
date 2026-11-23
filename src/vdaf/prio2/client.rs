@@ -14,7 +14,8 @@ use crate::{
     vdaf::{xof::SeedStreamAes128, VdafError},
 };
 
-use std::convert::TryFrom;
+use alloc::{vec, vec::Vec};
+use core::convert::TryFrom;
 
 /// Serialization errors
 #[derive(Debug, thiserror::Error)]

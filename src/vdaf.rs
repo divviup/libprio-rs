@@ -14,9 +14,13 @@ use crate::{
     flp::FlpError,
     vdaf::xof::Seed,
 };
+use alloc::{boxed::Box, string::String, vec::Vec};
+use core::{
+    error::Error,
+    fmt::{self, Debug},
+};
 use rand::CryptoRng;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Debug};
 use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
@@ -60,7 +64,7 @@ pub enum Share<F, const SEED_SIZE: usize> {
 }
 
 impl<F, const SEED_SIZE: usize> Debug for Share<F, SEED_SIZE> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Leader(_) => f.debug_tuple("Share::Leader").finish_non_exhaustive(),
             Self::Helper(_) => f.debug_tuple("Share::Helper").finish_non_exhaustive(),
@@ -338,7 +342,7 @@ where
     V::VerifierShare: Debug,
     V::OutputShare: Debug,
 {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Continue(state, share) => {
                 f.debug_tuple("Continue").field(state).field(share).finish()
@@ -402,7 +406,7 @@ impl<F: FieldElement> Encode for OutputShare<F> {
 }
 
 impl<F> Debug for OutputShare<F> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("OutputShare").finish()
     }
 }

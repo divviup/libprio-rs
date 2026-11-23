@@ -47,13 +47,17 @@ use crate::vdaf::{
     Aggregatable, AggregateShare, Aggregator, AggregatorWithNoise, Client, Collector, OutputShare,
     Share, ShareDecodingParameter, Vdaf, VdafError, VerifyTransition, VERSION,
 };
+use alloc::borrow::Cow;
+use alloc::boxed::Box;
+use alloc::string::ToString;
+use alloc::vec::Vec;
+use alloc::{format, vec};
+use core::convert::TryFrom;
+use core::fmt::{self, Debug};
+use core::iter::{self, IntoIterator};
+use core::marker::PhantomData;
 use rand::RngExt;
 use rand_core::Rng;
-use std::borrow::Cow;
-use std::convert::TryFrom;
-use std::fmt::Debug;
-use std::iter::{self, IntoIterator};
-use std::marker::PhantomData;
 use subtle::{Choice, ConstantTimeEq};
 
 mod l1boundsum;
@@ -783,7 +787,7 @@ pub enum Prio3InputShare<F, const SEED_SIZE: usize> {
 }
 
 impl<F, const SEED_SIZE: usize> Debug for Prio3InputShare<F, SEED_SIZE> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Leader { .. } => f
                 .debug_struct("Prio3InputShare::Leader")
@@ -1179,7 +1183,7 @@ impl<F: ConstantTimeEq, const SEED_SIZE: usize> ConstantTimeEq for Prio3VerifySt
 }
 
 impl<F, const SEED_SIZE: usize> Debug for Prio3VerifyState<F, SEED_SIZE> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Prio3VerifyState")
             .field("share", &"[redacted]")
             .field(

@@ -12,13 +12,8 @@ use crate::{
     fp::{FieldOps, FieldParameters, FP128, FP32, FP64},
     prng::Prng,
 };
-use rand::distr::{Distribution, StandardUniform};
-use rand_core::Rng;
-use serde::{
-    de::{DeserializeOwned, Visitor},
-    Deserialize, Deserializer, Serialize, Serializer,
-};
-use std::{
+use alloc::{boxed::Box, vec, vec::Vec};
+use core::{
     cmp::min,
     convert::{TryFrom, TryInto},
     fmt::{self, Debug, Display, Formatter},
@@ -28,6 +23,12 @@ use std::{
         Add, AddAssign, BitAnd, ControlFlow, Div, DivAssign, Mul, MulAssign, Neg, Range, Shl, Shr,
         Sub, SubAssign,
     },
+};
+use rand::distr::{Distribution, StandardUniform};
+use rand_core::Rng;
+use serde::{
+    de::{DeserializeOwned, Visitor},
+    Deserialize, Deserializer, Serialize, Serializer,
 };
 use subtle::{
     Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq, ConstantTimeLess,
@@ -200,10 +201,10 @@ pub trait Integer:
     + TryInto<u64, Error = Self::TryIntoU64Error>
 {
     /// The error returned if converting `usize` to this integer type fails.
-    type TryFromUsizeError: std::error::Error;
+    type TryFromUsizeError: core::error::Error;
 
     /// The error returned if converting this integer type to a `u64` fails.
-    type TryIntoU64Error: std::error::Error;
+    type TryIntoU64Error: core::error::Error;
 
     /// Returns zero.
     fn zero() -> Self;
@@ -683,13 +684,13 @@ macro_rules! make_field {
         }
 
         impl Display for $elem {
-            fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+            fn fmt(&self, f: &mut Formatter) -> fmt::Result {
                 write!(f, "{}", $fp::residue(self.0))
             }
         }
 
         impl Debug for $elem {
-            fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+            fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
                 write!(f, "{}", $fp::residue(self.0))
             }
         }
@@ -727,7 +728,7 @@ macro_rules! make_field {
             fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
                 let value = bytes.split_const::<{ $elem::ENCODED_SIZE }>() ?;
                 $elem::try_from_bytes(value.as_slice(), $int_internal::MAX).map_err(|e| {
-                    CodecError::Other(Box::new(e) as Box<dyn std::error::Error + 'static + Send + Sync>)
+                    CodecError::Other(Box::new(e) as Box<dyn core::error::Error + 'static + Send + Sync>)
                 })
             }
         }
@@ -1000,8 +1001,8 @@ pub(crate) mod test_utils {
     pub(crate) trait TestFieldElementWithInteger:
         FieldElement + From<Self::TestInteger>
     {
-        type IntegerTryFromError: std::error::Error;
-        type TryIntoU64Error: std::error::Error;
+        type IntegerTryFromError: core::error::Error;
+        type TryIntoU64Error: core::error::Error;
         type TestInteger: Integer + From<Self> + Clone;
 
         fn modulus() -> Self::TestInteger;
