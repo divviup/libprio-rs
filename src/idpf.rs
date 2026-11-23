@@ -4,7 +4,7 @@
 //! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 use crate::{
-    codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, Input, ParameterizedDecode},
     field::{FieldElement, FieldElementExt},
     vdaf::{
         xof::{Seed, Xof, XofFixedKeyAes128Key, XofTurboShake128},
@@ -24,7 +24,6 @@ use std::{
     collections::{HashMap, VecDeque},
     fmt::Debug,
     hash::{Hash, Hasher},
-    io::{Cursor, Read},
     ops::{Add, AddAssign, Index, Sub},
 };
 use subtle::{Choice, ConditionallyNegatable, ConditionallySelectable, ConstantTimeEq};
@@ -740,11 +739,10 @@ where
     VI: Decode,
     VL: Decode,
 {
-    fn decode_with_param(bits: &usize, bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode_with_param(bits: &usize, bytes: &mut Input) -> Result<Self, CodecError> {
         let packed_control_len = bits.div_ceil(4);
-        let mut packed_control_bits = vec![0u8; packed_control_len];
-        bytes.read_exact(&mut packed_control_bits)?;
-        let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_vec(packed_control_bits);
+        let packed_control_bits = bytes.split(packed_control_len)?;
+        let unpacked_control_bits: BitVec<u8, Lsb0> = BitVec::from_slice(packed_control_bits);
 
         // Control bits
         let mut control_bits = Vec::with_capacity(*bits);
@@ -767,13 +765,13 @@ where
             .take(bits - 1)
             .collect::<Result<Vec<_>, _>>()?;
 
-        // Outer payload
-        let leaf_paylaod = VL::decode(bytes)?;
+        // Leaf payload
+        let leaf_payload = VL::decode(bytes)?;
 
         let leaf_correction_word = IdpfCorrectionWord {
-            seed: seeds.pop().unwrap(),                // *bits == 0
-            control_bits: control_bits.pop().unwrap(), // *bits == 0
-            value: leaf_paylaod,
+            seed: seeds.pop().unwrap(),
+            control_bits: control_bits.pop().unwrap(),
+            value: leaf_payload,
         };
 
         let inner_correction_words = seeds
@@ -1109,7 +1107,6 @@ mod tests {
     use std::{
         collections::HashMap,
         convert::TryInto,
-        io::Cursor,
         ops::{Add, AddAssign, Sub},
         sync::Mutex,
     };
@@ -1132,7 +1129,8 @@ mod tests {
     };
     use crate::{
         codec::{
-            decode_u32_items, encode_u32_items, CodecError, Decode, Encode, ParameterizedDecode,
+            decode_u32_items, encode_u32_items, CodecError, Decode, Encode, Input,
+            ParameterizedDecode,
         },
         field::{Field128, Field255, Field64, FieldElement},
         prng::Prng,
@@ -1971,26 +1969,26 @@ mod tests {
 
         buf[0] = 1 << 2;
         let err =
-            IdpfPublicShare::<Field64, Field255>::decode_with_param(&1, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&1, &mut Input::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 4;
         let err =
-            IdpfPublicShare::<Field64, Field255>::decode_with_param(&2, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&2, &mut Input::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 1 << 6;
         let err =
-            IdpfPublicShare::<Field64, Field255>::decode_with_param(&3, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&3, &mut Input::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
 
         buf[0] = 0;
         buf[1] = 1 << 2;
         let err =
-            IdpfPublicShare::<Field64, Field255>::decode_with_param(&5, &mut Cursor::new(&buf))
+            IdpfPublicShare::<Field64, Field255>::decode_with_param(&5, &mut Input::new(&buf))
                 .unwrap_err();
         assert_matches!(err, CodecError::UnexpectedValue);
     }
@@ -2197,7 +2195,7 @@ mod tests {
         }
 
         impl Decode for MyUnit {
-            fn decode(_: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+            fn decode(_: &mut Input) -> Result<Self, CodecError> {
                 Ok(MyUnit)
             }
         }
@@ -2277,7 +2275,7 @@ mod tests {
         }
 
         impl Decode for MyVector {
-            fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+            fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
                 decode_u32_items(&(), bytes).map(MyVector)
             }
         }

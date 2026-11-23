@@ -11,9 +11,9 @@ const XOF_TURBO_SHAKE_128_DOMAIN_SEPARATION: u8 = 1;
 const XOF_FIXED_KEY_AES_128_DOMAIN_SEPARATION: u8 = 2;
 
 use crate::{
+    codec::{CodecError, Decode, Encode, Input},
     field::FieldElement,
     prng::Prng,
-    vdaf::{CodecError, Decode, Encode},
 };
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use aes::{
@@ -37,11 +37,7 @@ use rand::distr::{Distribution, StandardUniform};
 use sha2::Sha256;
 #[cfg(feature = "crypto-dependencies")]
 use std::fmt::Formatter;
-use std::{
-    convert::Infallible,
-    fmt::Debug,
-    io::{Cursor, Read},
-};
+use std::{convert::Infallible, fmt::Debug};
 use subtle::{Choice, ConstantTimeEq};
 use turboshake::{
     digest::{ExtendableOutput, Update, XofReader},
@@ -105,10 +101,8 @@ impl<const SEED_SIZE: usize> Encode for Seed<SEED_SIZE> {
 }
 
 impl<const SEED_SIZE: usize> Decode for Seed<SEED_SIZE> {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut seed = [0; SEED_SIZE];
-        bytes.read_exact(&mut seed)?;
-        Ok(Seed(seed))
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+        Ok(Seed(*bytes.split_const::<SEED_SIZE>()?))
     }
 }
 
@@ -549,7 +543,7 @@ mod tests {
     use crate::{field::Field128, vdaf::equality_comparison_test};
     use rand::{rng, Rng, RngExt};
     use serde::{Deserialize, Serialize};
-    use std::{convert::TryInto, io::Cursor};
+    use std::convert::TryInto;
 
     #[derive(Deserialize, Serialize)]
     struct XofTestVector {
@@ -603,9 +597,9 @@ mod tests {
             Seed(t.derived_seed.try_into().unwrap())
         );
 
-        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut bytes = Input::new(t.expanded_vec_field128.as_slice());
         let mut want = Vec::with_capacity(t.length);
-        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
+        while !bytes.is_empty() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
         let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);
@@ -627,9 +621,9 @@ mod tests {
             Seed(t.derived_seed.try_into().unwrap())
         );
 
-        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut bytes = Input::new(t.expanded_vec_field128.as_slice());
         let mut want = Vec::with_capacity(t.length);
-        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
+        while !bytes.is_empty() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
         let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);
@@ -651,9 +645,9 @@ mod tests {
             Seed(t.derived_seed.try_into().unwrap())
         );
 
-        let mut bytes = Cursor::new(t.expanded_vec_field128.as_slice());
+        let mut bytes = Input::new(t.expanded_vec_field128.as_slice());
         let mut want = Vec::with_capacity(t.length);
-        while (bytes.position() as usize) < t.expanded_vec_field128.len() {
+        while !bytes.is_empty() {
             want.push(Field128::decode(&mut bytes).unwrap())
         }
         let got: Vec<Field128> = xof.clone().into_seed_stream().into_field_vec(t.length);

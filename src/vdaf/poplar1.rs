@@ -5,7 +5,7 @@
 //! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 use crate::{
-    codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, Input, ParameterizedDecode},
     field::{decode_fieldvec, merge_vector, Field255, Field64, FieldElement},
     idpf::{Idpf, IdpfInput, IdpfOutputShare, IdpfPublicShare, IdpfValue, RingBufferCache},
     prng::Prng,
@@ -19,7 +19,6 @@ use std::{
     collections::BTreeSet,
     convert::TryFrom,
     fmt::Debug,
-    io::{Cursor, Read},
     iter,
     marker::PhantomData,
     num::TryFromIntError,
@@ -103,7 +102,7 @@ pub type Poplar1PublicShare =
 impl<P, const SEED_SIZE: usize> ParameterizedDecode<Poplar1<P, SEED_SIZE>> for Poplar1PublicShare {
     fn decode_with_param(
         poplar1: &Poplar1<P, SEED_SIZE>,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         Self::decode_with_param(&poplar1.bits, bytes)
     }
@@ -190,7 +189,7 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 {
     fn decode_with_param(
         (poplar1, _agg_id): &(&'a Poplar1<P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let idpf_key = Seed::decode(bytes)?;
         let corr_seed = Seed::decode(bytes)?;
@@ -241,7 +240,7 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 {
     fn decode_with_param(
         decoding_parameter: &(&'a Poplar1<P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         Ok(Self(VerifierStateVariant::decode_with_param(
             decoding_parameter,
@@ -304,7 +303,7 @@ impl<'a, P, const SEED_SIZE: usize> ParameterizedDecode<(&'a Poplar1<P, SEED_SIZ
 {
     fn decode_with_param(
         decoding_parameter: &(&'a Poplar1<P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         match u8::decode(bytes)? {
             0 => {
@@ -373,7 +372,7 @@ impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
 {
     fn decode_with_param(
         decoding_parameter: &(&'a Poplar1<P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let sketch = SketchState::<F>::decode_with_param(decoding_parameter, bytes)?;
         let output_share_len = u32::decode(bytes)?
@@ -468,7 +467,7 @@ impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
     #[allow(non_snake_case)]
     fn decode_with_param(
         (_, agg_id): &(&'a Poplar1<P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         match u8::decode(bytes)? {
             0 => {
@@ -488,7 +487,7 @@ impl<'a, P, F: FieldElement, const SEED_SIZE: usize>
 }
 
 impl<F: FieldElement> SketchState<F> {
-    fn decode_sketch_share(&self, bytes: &mut Cursor<&[u8]>) -> Result<Vec<F>, CodecError> {
+    fn decode_sketch_share(&self, bytes: &mut Input) -> Result<Vec<F>, CodecError> {
         match self {
             // The sketch share is three field elements.
             Self::RoundOne { .. } => Ok(vec![
@@ -501,7 +500,7 @@ impl<F: FieldElement> SketchState<F> {
         }
     }
 
-    fn decode_sketch(&self, bytes: &mut Cursor<&[u8]>) -> Result<Option<[F; 3]>, CodecError> {
+    fn decode_sketch(&self, bytes: &mut Input) -> Result<Option<[F; 3]>, CodecError> {
         match self {
             // The sketch is three field elements.
             Self::RoundOne { .. } => Ok(Some([
@@ -556,7 +555,7 @@ impl Encode for Poplar1VerifierMessage {
 impl ParameterizedDecode<Poplar1VerifierState> for Poplar1VerifierMessage {
     fn decode_with_param(
         state: &Poplar1VerifierState,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         match state.0 {
             VerifierStateVariant::Inner(ref state_variant) => Ok(Self(
@@ -654,7 +653,7 @@ impl<'a, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
 {
     fn decode_with_param(
         (poplar1, agg_param): &(&'a Poplar1<P, SEED_SIZE>, &'a Poplar1AggregationParam),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         if agg_param.level() == poplar1.bits - 1 {
             decode_fieldvec(agg_param.prefixes().len(), bytes).map(Poplar1FieldVec::Leaf)
@@ -667,7 +666,7 @@ impl<'a, P: Xof<SEED_SIZE>, const SEED_SIZE: usize>
 impl ParameterizedDecode<Poplar1VerifierState> for Poplar1FieldVec {
     fn decode_with_param(
         state: &Poplar1VerifierState,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         match state.0 {
             VerifierStateVariant::Inner(ref state_variant) => Ok(Poplar1FieldVec::Inner(
@@ -814,7 +813,7 @@ impl Encode for Poplar1AggregationParam {
 }
 
 impl Decode for Poplar1AggregationParam {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         // Level
         let level = u16::decode(bytes)?;
 
@@ -824,9 +823,7 @@ impl Decode for Poplar1AggregationParam {
 
         // Validate num_prefixes against remaining bytes before allocating.
         let prefix_byte_len = ((level + 1) as usize).div_ceil(8);
-        let remaining = bytes.get_ref().len().saturating_sub(
-            usize::try_from(bytes.position()).map_err(|e| CodecError::Other(e.into()))?,
-        );
+        let remaining = bytes.len();
         if prefix_byte_len > 0 && num_prefixes > remaining / prefix_byte_len {
             return Err(CodecError::LengthPrefixTooBig(
                 prefix_byte_len.saturating_mul(num_prefixes),
@@ -835,7 +832,6 @@ impl Decode for Poplar1AggregationParam {
 
         // Encoded prefixes
         let mut prefixes = Vec::with_capacity(num_prefixes);
-        let mut buf = vec![0; prefix_byte_len];
         let last_byte_mask = match (level + 1) % 8 {
             0 => 0,
             num_bits => {
@@ -847,12 +843,12 @@ impl Decode for Poplar1AggregationParam {
             }
         };
         for _ in 0..num_prefixes {
-            bytes.read_exact(&mut buf)?;
+            let buf = bytes.split(prefix_byte_len)?;
             // Ensure there are no trailing bits in the encoded prefix.
             if buf.last().unwrap() & last_byte_mask > 0 {
                 return Err(CodecError::UnexpectedValue);
             }
-            prefixes.push(IdpfInput::from_bytes(&buf).prefix(level as usize));
+            prefixes.push(IdpfInput::from_bytes(buf).prefix(level as usize));
         }
 
         Poplar1AggregationParam::try_from_prefixes(prefixes)
@@ -1547,7 +1543,7 @@ impl<F> Decode for Poplar1IdpfValue<F>
 where
     F: Decode,
 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         Ok(Self([F::decode(bytes)?, F::decode(bytes)?]))
     }
 }

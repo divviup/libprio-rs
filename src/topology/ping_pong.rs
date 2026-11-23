@@ -8,7 +8,9 @@
 //! [DAP]: https://datatracker.ietf.org/doc/html/draft-ietf-ppm-dap
 
 use crate::{
-    codec::{decode_u32_items, encode_u32_items, CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{
+        decode_u32_items, encode_u32_items, CodecError, Decode, Encode, Input, ParameterizedDecode,
+    },
     vdaf::{Aggregator, VdafError, VerifyTransition},
 };
 use std::fmt::Debug;
@@ -133,7 +135,7 @@ impl Encode for PingPongMessage {
 }
 
 impl Decode for PingPongMessage {
-    fn decode(bytes: &mut std::io::Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         let message_type = u8::decode(bytes)?;
         Ok(match message_type {
             0 => {
@@ -326,7 +328,7 @@ where
 {
     fn decode_with_param(
         decoding_param: &VerifierStateDecode,
-        bytes: &mut std::io::Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let previous_verifier_state = A::VerifyState::decode_with_param(decoding_param, bytes)?;
         let current_verifier_message =
@@ -761,8 +763,6 @@ impl<
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
-
     use super::*;
     use crate::vdaf::dummy;
     use assert_matches::assert_matches;
@@ -1024,7 +1024,7 @@ mod tests {
                 &got_hex, expected_hex,
                 "Couldn't roundtrip (encoded value differs): {message:?}",
             );
-            let decoded_val = PingPongMessage::decode(&mut Cursor::new(&encoded_val)).unwrap();
+            let decoded_val = PingPongMessage::decode(&mut Input::new(&encoded_val)).unwrap();
             assert_eq!(
                 decoded_val, message,
                 "Couldn't roundtrip (decoded value differs): {message:?}"

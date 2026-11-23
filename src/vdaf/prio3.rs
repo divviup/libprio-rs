@@ -28,7 +28,7 @@
 //! [DPRS23]: https://ia.cr/2023/130
 //! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
-use crate::codec::{encode_fixlen_items, CodecError, Decode, Encode, ParameterizedDecode};
+use crate::codec::{encode_fixlen_items, CodecError, Decode, Encode, Input, ParameterizedDecode};
 use crate::dp::DifferentialPrivacyStrategy;
 use crate::field::{
     add_assign_vector, decode_fieldvec, sub_assign_vector, Field128, Field64, FieldElement,
@@ -52,7 +52,6 @@ use rand_core::Rng;
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fmt::Debug;
-use std::io::Cursor;
 use std::iter::{self, IntoIterator};
 use std::marker::PhantomData;
 use subtle::{Choice, ConstantTimeEq};
@@ -739,7 +738,7 @@ where
 {
     fn decode_with_param(
         decoding_parameter: &Prio3<T, P, SEED_SIZE>,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         if decoding_parameter.typ.joint_rand_len() > 0 {
             let joint_rand_parts = iter::repeat_with(|| Seed::<SEED_SIZE>::decode(bytes))
@@ -948,7 +947,7 @@ where
 {
     fn decode_with_param(
         (prio3, agg_id): &(&'a Prio3<T, P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let agg_id = prio3
             .role_try_from(*agg_id)
@@ -1045,7 +1044,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
 {
     fn decode_with_param(
         decoding_parameter: &Prio3VerifyState<F, SEED_SIZE>,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let mut verifiers = Vec::with_capacity(decoding_parameter.verifiers_len);
         for _ in 0..decoding_parameter.verifiers_len {
@@ -1112,7 +1111,7 @@ impl<F: NttFriendlyFieldElement, const SEED_SIZE: usize>
 {
     fn decode_with_param(
         decoding_parameter: &Prio3VerifyState<F, SEED_SIZE>,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let joint_rand_seed = if decoding_parameter.joint_rand_seed.is_some() {
             Some(Seed::decode(bytes)?)
@@ -1223,7 +1222,7 @@ where
 {
     fn decode_with_param(
         (prio3, agg_id): &(&'a Prio3<T, P, SEED_SIZE>, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let agg_id = prio3
             .role_try_from(*agg_id)
@@ -1572,7 +1571,7 @@ where
 {
     fn decode_with_param(
         (vdaf, _): &(&'a Prio3<T, P, SEED_SIZE>, &'a ()),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(vdaf.output_len(), bytes).map(Self)
     }
@@ -1587,7 +1586,7 @@ where
 {
     fn decode_with_param(
         (vdaf, _): &(&'a Prio3<T, P, SEED_SIZE>, &'a ()),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(vdaf.output_len(), bytes).map(Self)
     }

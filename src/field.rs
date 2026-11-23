@@ -8,7 +8,7 @@
 //! generates a multiplicative subgroup of order `2^n` for some `n`.
 
 use crate::{
-    codec::{CodecError, Decode, Encode},
+    codec::{CodecError, Decode, Encode, Input},
     fp::{FieldOps, FieldParameters, FP128, FP32, FP64},
     prng::Prng,
 };
@@ -23,7 +23,6 @@ use std::{
     convert::{TryFrom, TryInto},
     fmt::{self, Debug, Display, Formatter},
     hash::{Hash, Hasher},
-    io::{Cursor, Read},
     marker::PhantomData,
     ops::{
         Add, AddAssign, BitAnd, ControlFlow, Div, DivAssign, Mul, MulAssign, Neg, Range, Shl, Shr,
@@ -725,10 +724,9 @@ macro_rules! make_field {
         }
 
         impl Decode for $elem {
-            fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-                let mut value = [0u8; $elem::ENCODED_SIZE];
-                bytes.read_exact(&mut value)?;
-                $elem::try_from_bytes(&value, $int_internal::MAX).map_err(|e| {
+            fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+                let value = bytes.split_const::<{ $elem::ENCODED_SIZE }>() ?;
+                $elem::try_from_bytes(value.as_slice(), $int_internal::MAX).map_err(|e| {
                     CodecError::Other(Box::new(e) as Box<dyn std::error::Error + 'static + Send + Sync>)
                 })
             }
@@ -962,23 +960,16 @@ pub(crate) fn encode_fieldvec<F: FieldElement, T: AsRef<[F]>>(
     Ok(())
 }
 
-/// `decode_fieldvec` deserializes some number of field elements from a cursor, and advances the
-/// cursor's position.
+/// `decode_fieldvec` deserializes some number of field elements from the input, and advances the
+/// input's position.
 pub(crate) fn decode_fieldvec<F: FieldElement>(
     count: usize,
-    input: &mut Cursor<&[u8]>,
+    input: &mut Input,
 ) -> Result<Vec<F>, CodecError> {
     let mut vec = Vec::with_capacity(count);
-    let mut buffer = [0u8; 64];
-    assert!(
-        buffer.len() >= F::ENCODED_SIZE,
-        "field is too big for buffer"
-    );
     for _ in 0..count {
-        input.read_exact(&mut buffer[..F::ENCODED_SIZE])?;
-        vec.push(
-            F::try_from(&buffer[..F::ENCODED_SIZE]).map_err(|e| CodecError::Other(Box::new(e)))?,
-        );
+        let value = input.split(F::ENCODED_SIZE)?;
+        vec.push(F::try_from(value).map_err(|e| CodecError::Other(Box::new(e)))?);
     }
     Ok(vec)
 }
@@ -986,14 +977,17 @@ pub(crate) fn decode_fieldvec<F: FieldElement>(
 #[cfg(test)]
 pub(crate) mod test_utils {
     use super::{FieldElement, FieldElementWithInteger, Integer};
-    use crate::{codec::CodecError, field::FieldError, prng::Prng};
+    use crate::{
+        codec::{CodecError, Input},
+        field::FieldError,
+        prng::Prng,
+    };
     use assert_matches::assert_matches;
     use rand::rng;
     use std::{
         collections::hash_map::DefaultHasher,
         convert::TryFrom,
         hash::{Hash, Hasher},
-        io::Cursor,
     };
 
     /// A test-only copy of `FieldElementWithInteger`.
@@ -1155,10 +1149,10 @@ pub(crate) mod test_utils {
         let insufficient = vec![0u8; F::ENCODED_SIZE - 1];
         let err = F::try_from(insufficient.as_ref()).unwrap_err();
         assert_matches!(err, FieldError::ShortRead);
-        let err = F::decode(&mut Cursor::new(&insufficient)).unwrap_err();
-        assert_matches!(err, CodecError::Io(_));
+        let err = F::decode(&mut Input::new(&insufficient)).unwrap_err();
+        assert_matches!(err, CodecError::UnexpectedEof);
 
-        let err = F::decode(&mut Cursor::new(&vec![0xffu8; F::ENCODED_SIZE])).unwrap_err();
+        let err = F::decode(&mut Input::new(&vec![0xffu8; F::ENCODED_SIZE])).unwrap_err();
         assert_matches!(err, CodecError::Other(err) => {
             assert_matches!(err.downcast_ref::<FieldError>(), Some(FieldError::ModulusOverflow));
         });

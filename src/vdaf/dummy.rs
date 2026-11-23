@@ -6,12 +6,12 @@
 //! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
 use crate::{
-    codec::{CodecError, Decode, Encode},
+    codec::{CodecError, Decode, Encode, Input},
     vdaf::{self, Aggregatable, VdafError, VerifyTransition},
 };
 use rand::RngExt;
 use rand_core::Rng;
-use std::{fmt::Debug, io::Cursor, sync::Arc};
+use std::{fmt::Debug, sync::Arc};
 
 /// The Dummy VDAF does summation modulus 256 so we can predict aggregation results.
 const MODULUS: u64 = u8::MAX as u64 + 1;
@@ -219,7 +219,7 @@ impl Encode for InputShare {
 }
 
 impl Decode for InputShare {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         Ok(Self(u8::decode(bytes)?))
     }
 }
@@ -239,7 +239,7 @@ impl Encode for AggregationParam {
 }
 
 impl Decode for AggregationParam {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         Ok(Self(u8::decode(bytes)?))
     }
 }
@@ -249,7 +249,7 @@ impl Decode for AggregationParam {
 pub struct OutputShare(pub u64);
 
 impl Decode for OutputShare {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         Ok(Self(u64::decode(bytes)?))
     }
 }
@@ -283,7 +283,7 @@ impl Encode for VerifierState {
 }
 
 impl Decode for VerifierState {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         let input_share = u8::decode(bytes)?;
         let current_round = u32::decode(bytes)?;
 
@@ -319,7 +319,7 @@ impl From<OutputShare> for AggregateShare {
 }
 
 impl Decode for AggregateShare {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
         Ok(Self(u64::decode(bytes)?))
     }
 }

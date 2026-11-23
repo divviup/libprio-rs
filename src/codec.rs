@@ -9,23 +9,12 @@
 //!
 //! [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3
 
-use byteorder::{BigEndian, ReadBytesExt};
-use std::{
-    convert::TryInto,
-    error::Error,
-    io::{Cursor, Read},
-    mem::size_of,
-    num::TryFromIntError,
-};
+use std::{convert::TryInto, error::Error, num::TryFromIntError};
 
 /// An error that occurred during decoding.
 #[derive(Debug, thiserror::Error)]
 #[non_exhaustive]
 pub enum CodecError {
-    /// An I/O error.
-    #[error("I/O error")]
-    Io(#[from] std::io::Error),
-
     /// Extra data remained in the input after decoding a value.
     #[error("{0} bytes left in buffer after decoding value")]
     BytesLeftOver(usize),
@@ -45,6 +34,10 @@ pub enum CodecError {
     /// An invalid value was decoded.
     #[error("unexpected value")]
     UnexpectedValue,
+
+    /// The input was too short to decode as a value.
+    #[error("unexpected EOF")]
+    UnexpectedEof,
 }
 
 /// Describes how to decode an object from a byte sequence.
@@ -52,7 +45,7 @@ pub trait Decode: Sized {
     /// Read and decode an encoded object from `bytes`. On success, the decoded value is returned
     /// and `bytes` is advanced by the encoded size of the value. On failure, an error is returned
     /// and no further attempt to read from `bytes` should be made.
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError>;
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError>;
 
     /// Convenience method to get a decoded value. Returns an error if [`Self::decode`] fails, or if
     /// there are any bytes left in `bytes` after decoding a value.
@@ -68,20 +61,15 @@ pub trait ParameterizedDecode<P>: Sized {
     /// wire encoding such as lengths of different portions of the message. On success, the decoded
     /// value is returned and `bytes` is advanced by the encoded size of the value. On failure, an
     /// error is returned and no further attempt to read from `bytes` should be made.
-    fn decode_with_param(
-        decoding_parameter: &P,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError>;
+    fn decode_with_param(decoding_parameter: &P, bytes: &mut Input) -> Result<Self, CodecError>;
 
     /// Convenience method to get a decoded value. Returns an error if [`Self::decode_with_param`]
     /// fails, or if there are any bytes left in `bytes` after decoding a value.
     fn get_decoded_with_param(decoding_parameter: &P, bytes: &[u8]) -> Result<Self, CodecError> {
-        let mut cursor = Cursor::new(bytes);
-        let decoded = Self::decode_with_param(decoding_parameter, &mut cursor)?;
-        if cursor.position() as usize != bytes.len() {
-            return Err(CodecError::BytesLeftOver(
-                bytes.len() - cursor.position() as usize,
-            ));
+        let mut input = Input::new(bytes);
+        let decoded = Self::decode_with_param(decoding_parameter, &mut input)?;
+        if !input.is_empty() {
+            return Err(CodecError::BytesLeftOver(input.len()));
         }
 
         Ok(decoded)
@@ -91,11 +79,49 @@ pub trait ParameterizedDecode<P>: Sized {
 /// Provide a blanket implementation so that any [`Decode`] can be used as a
 /// `ParameterizedDecode<T>` for any `T`.
 impl<D: Decode, T> ParameterizedDecode<T> for D {
-    fn decode_with_param(
-        _decoding_parameter: &T,
-        bytes: &mut Cursor<&[u8]>,
-    ) -> Result<Self, CodecError> {
+    fn decode_with_param(_decoding_parameter: &T, bytes: &mut Input) -> Result<Self, CodecError> {
         Self::decode(bytes)
+    }
+}
+
+/// Input slice for decoding operations.
+///
+/// This is a newtype around a byte slice, with convenience methods that split off the front of the
+/// slice, and update `self` to be the rest of the slice.
+pub struct Input<'a>(&'a [u8]);
+
+impl<'a> Input<'a> {
+    /// Construct an input from a byte slice.
+    pub fn new(bytes: &'a [u8]) -> Self {
+        Self(bytes)
+    }
+
+    /// Split off some number of bytes from the front of the input, and return them.
+    pub fn split(&mut self, length: usize) -> Result<&'a [u8], CodecError> {
+        let Some((chunk, rest)) = self.0.split_at_checked(length) else {
+            return Err(CodecError::UnexpectedEof);
+        };
+        self.0 = rest;
+        Ok(chunk)
+    }
+
+    /// Split of a constant number of bytes from the front of the input, and return them.
+    pub fn split_const<const N: usize>(&mut self) -> Result<&'a [u8; N], CodecError> {
+        let Some((chunk, rest)) = self.0.split_first_chunk::<N>() else {
+            return Err(CodecError::UnexpectedEof);
+        };
+        self.0 = rest;
+        Ok(chunk)
+    }
+
+    /// Check if the input is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Get the length of the remaining input.
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 }
 
@@ -162,7 +188,7 @@ impl<E: Encode + ?Sized, T> ParameterizedEncode<T> for E {
 }
 
 impl Decode for () {
-    fn decode(_bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+    fn decode(_bytes: &mut Input) -> Result<Self, CodecError> {
         Ok(())
     }
 }
@@ -178,9 +204,8 @@ impl Encode for () {
 }
 
 impl Decode for u8 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut value = [0u8; size_of::<u8>()];
-        bytes.read_exact(&mut value)?;
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+        let value = bytes.split_const::<1>()?;
         Ok(value[0])
     }
 }
@@ -197,8 +222,9 @@ impl Encode for u8 {
 }
 
 impl Decode for u16 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(bytes.read_u16::<BigEndian>()?)
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+        let value = bytes.split_const::<2>()?;
+        Ok(u16::from_be_bytes(*value))
     }
 }
 
@@ -214,8 +240,9 @@ impl Encode for u16 {
 }
 
 impl Decode for u32 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(bytes.read_u32::<BigEndian>()?)
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+        let value = bytes.split_const::<4>()?;
+        Ok(u32::from_be_bytes(*value))
     }
 }
 
@@ -231,8 +258,9 @@ impl Encode for u32 {
 }
 
 impl Decode for u64 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        Ok(bytes.read_u64::<BigEndian>()?)
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+        let value = bytes.split_const::<8>()?;
+        Ok(u64::from_be_bytes(*value))
     }
 }
 
@@ -286,7 +314,7 @@ pub fn encode_u8_items<P, E: ParameterizedEncode<P>>(
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
 pub fn decode_u8_items<P, D: ParameterizedDecode<P>>(
     decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
+    bytes: &mut Input,
 ) -> Result<Vec<D>, CodecError> {
     // Read one byte to get length of opaque byte vector
     let length = usize::from(u8::decode(bytes)?);
@@ -322,7 +350,7 @@ pub fn encode_u16_items<P, E: ParameterizedEncode<P>>(
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
 pub fn decode_u16_items<P, D: ParameterizedDecode<P>>(
     decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
+    bytes: &mut Input,
 ) -> Result<Vec<D>, CodecError> {
     // Read two bytes to get length of opaque byte vector
     let length = usize::from(u16::decode(bytes)?);
@@ -359,7 +387,7 @@ pub fn encode_u32_items<P, E: ParameterizedEncode<P>>(
 /// [1]: https://datatracker.ietf.org/doc/html/rfc8446#section-3.4
 pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
     decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
+    bytes: &mut Input,
 ) -> Result<Vec<D>, CodecError> {
     // Read four bytes to get length of opaque byte vector.
     let len: usize = u32::decode(bytes)?
@@ -375,36 +403,26 @@ pub fn decode_u32_items<P, D: ParameterizedDecode<P>>(
 pub fn decode_fixlen_items<P, D: ParameterizedDecode<P>>(
     length: usize,
     decoding_parameter: &P,
-    bytes: &mut Cursor<&[u8]>,
+    bytes: &mut Input,
 ) -> Result<Vec<D>, CodecError> {
     let mut decoded = Vec::new();
-    let initial_position = bytes.position() as usize;
 
-    // Create cursor over specified portion of provided cursor to ensure we can't read past length.
-    let inner = bytes.get_ref();
+    // Split the specified protion of the input buffer to ensure we can't read past length.
+    let mut contents = Input::new(
+        bytes
+            .split(length)
+            .map_err(|_| CodecError::LengthPrefixTooBig(length))?,
+    );
 
-    // Make sure encoded length doesn't overflow usize or go past the end of provided byte buffer.
-    let (items_end, overflowed) = initial_position.overflowing_add(length);
-    if overflowed || items_end > inner.len() {
-        return Err(CodecError::LengthPrefixTooBig(length));
+    while !contents.is_empty() {
+        decoded.push(D::decode_with_param(decoding_parameter, &mut contents)?);
     }
-
-    let mut sub = Cursor::new(&bytes.get_ref()[initial_position..items_end]);
-
-    while sub.position() < length as u64 {
-        decoded.push(D::decode_with_param(decoding_parameter, &mut sub)?);
-    }
-
-    // Advance outer cursor by the amount read in the inner cursor
-    bytes.set_position(initial_position as u64 + sub.position());
 
     Ok(decoded)
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::ErrorKind;
-
     use super::*;
     use assert_matches::assert_matches;
 
@@ -423,7 +441,7 @@ mod tests {
         value.encode(&mut bytes).unwrap();
         assert_eq!(bytes.len(), 1);
 
-        let decoded = u8::decode(&mut Cursor::new(&bytes)).unwrap();
+        let decoded = u8::decode(&mut Input::new(&bytes)).unwrap();
         assert_eq!(value, decoded);
     }
 
@@ -437,7 +455,7 @@ mod tests {
         // Check endianness of encoding
         assert_eq!(bytes, vec![3, 232]);
 
-        let decoded = u16::decode(&mut Cursor::new(&bytes)).unwrap();
+        let decoded = u16::decode(&mut Input::new(&bytes)).unwrap();
         assert_eq!(value, decoded);
     }
 
@@ -451,7 +469,7 @@ mod tests {
         // Check endianness of encoding
         assert_eq!(bytes, vec![8, 0, 0, 0]);
 
-        let decoded = u32::decode(&mut Cursor::new(&bytes)).unwrap();
+        let decoded = u32::decode(&mut Input::new(&bytes)).unwrap();
         assert_eq!(value, decoded);
     }
 
@@ -465,7 +483,7 @@ mod tests {
         // Check endianness of encoding
         assert_eq!(bytes, vec![0, 0, 0, 32, 0, 0, 0, 0]);
 
-        let decoded = u64::decode(&mut Cursor::new(&bytes)).unwrap();
+        let decoded = u64::decode(&mut Input::new(&bytes)).unwrap();
         assert_eq!(value, decoded);
     }
 
@@ -496,7 +514,7 @@ mod tests {
     }
 
     impl Decode for TestMessage {
-        fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
+        fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
             let field_u8 = u8::decode(bytes)?;
             let field_u16 = u16::decode(bytes)?;
             let field_u32 = u32::decode(bytes)?;
@@ -538,7 +556,7 @@ mod tests {
         assert_eq!(bytes.len(), TestMessage::encoded_length());
         assert_eq!(value.encoded_len().unwrap(), TestMessage::encoded_length());
 
-        let decoded = TestMessage::decode(&mut Cursor::new(&bytes)).unwrap();
+        let decoded = TestMessage::decode(&mut Input::new(&bytes)).unwrap();
         assert_eq!(value, decoded);
     }
 
@@ -579,7 +597,7 @@ mod tests {
             3 * TestMessage::encoded_length()
         );
 
-        let decoded = decode_u8_items(&(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = decode_u8_items(&(), &mut Input::new(&bytes)).unwrap();
         assert_eq!(values, decoded);
     }
 
@@ -600,7 +618,7 @@ mod tests {
         // Check endianness of encoded length
         assert_eq!(bytes[0..2], [0, 3 * TestMessage::encoded_length() as u8]);
 
-        let decoded = decode_u16_items(&(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = decode_u16_items(&(), &mut Input::new(&bytes)).unwrap();
         assert_eq!(values, decoded);
     }
 
@@ -618,7 +636,7 @@ mod tests {
             [0, 0, 0, 3 * TestMessage::encoded_length() as u8]
         );
 
-        let decoded = decode_u32_items(&(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = decode_u32_items(&(), &mut Input::new(&bytes)).unwrap();
         assert_eq!(values, decoded);
     }
 
@@ -628,19 +646,19 @@ mod tests {
         let mut bytes = Vec::new();
         encode_fixlen_items(&mut bytes, &values).unwrap();
 
-        let decoded = decode_fixlen_items(bytes.len(), &(), &mut Cursor::new(&bytes)).unwrap();
+        let decoded = decode_fixlen_items(bytes.len(), &(), &mut Input::new(&bytes)).unwrap();
         assert_eq!(values, decoded);
 
         // too short
         assert_matches!(
-            decode_fixlen_items::<_, TestMessage>(bytes.len() - 1, &(), &mut Cursor::new(&bytes))
+            decode_fixlen_items::<_, TestMessage>(bytes.len() - 1, &(), &mut Input::new(&bytes))
                 .unwrap_err(),
-            CodecError::Io(e) => assert_eq!(e.kind(), ErrorKind::UnexpectedEof)
+            CodecError::UnexpectedEof
         );
 
         // too long
         assert_matches!(
-            decode_fixlen_items::<_, TestMessage>(bytes.len() + 1, &(), &mut Cursor::new(&bytes))
+            decode_fixlen_items::<_, TestMessage>(bytes.len() + 1, &(), &mut Input::new(&bytes))
                 .unwrap_err(),
             CodecError::LengthPrefixTooBig(_)
         );
@@ -653,36 +671,30 @@ mod tests {
         encode_u32_items(&mut bytes, &(), &values).unwrap();
 
         let error =
-            decode_u32_items::<_, TestMessage>(&(), &mut Cursor::new(&bytes[..3])).unwrap_err();
-        assert_matches!(error, CodecError::Io(e) => assert_eq!(e.kind(), ErrorKind::UnexpectedEof));
+            decode_u32_items::<_, TestMessage>(&(), &mut Input::new(&bytes[..3])).unwrap_err();
+        assert_matches!(error, CodecError::UnexpectedEof);
 
         let error =
-            decode_u32_items::<_, TestMessage>(&(), &mut Cursor::new(&bytes[..4])).unwrap_err();
+            decode_u32_items::<_, TestMessage>(&(), &mut Input::new(&bytes[..4])).unwrap_err();
         assert_matches!(error, CodecError::LengthPrefixTooBig(_));
     }
 
     #[test]
     fn decode_items_overflow() {
-        let encoded = vec![1u8];
-
-        let mut cursor = Cursor::new(encoded.as_slice());
-        cursor.set_position(1);
+        let mut input = Input::new(&[]);
 
         assert_matches!(
-            decode_fixlen_items::<(), u8>(usize::MAX, &(), &mut cursor).unwrap_err(),
+            decode_fixlen_items::<(), u8>(usize::MAX, &(), &mut input).unwrap_err(),
             CodecError::LengthPrefixTooBig(usize::MAX)
         );
     }
 
     #[test]
     fn decode_items_too_big() {
-        let encoded = vec![1u8];
-
-        let mut cursor = Cursor::new(encoded.as_slice());
-        cursor.set_position(1);
+        let mut input = Input::new(&[]);
 
         assert_matches!(
-            decode_fixlen_items::<(), u8>(2, &(), &mut cursor).unwrap_err(),
+            decode_fixlen_items::<(), u8>(2, &(), &mut input).unwrap_err(),
             CodecError::LengthPrefixTooBig(2)
         );
     }

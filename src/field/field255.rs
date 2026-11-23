@@ -4,7 +4,7 @@
 //! Finite field arithmetic for `GF(2^255 - 19)`.
 
 use crate::{
-    codec::{CodecError, Decode, Encode},
+    codec::{CodecError, Decode, Encode, Input},
     field::{FieldElement, FieldElementExt, FieldElementVisitor, FieldError},
 };
 use fiat_crypto::curve25519_64::{
@@ -18,7 +18,6 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer};
 use std::{
     convert::TryFrom,
     fmt::{self, Debug, Display, Formatter},
-    io::{Cursor, Read},
     marker::PhantomData,
     mem::size_of,
     ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
@@ -284,10 +283,9 @@ impl Encode for Field255 {
 }
 
 impl Decode for Field255 {
-    fn decode(bytes: &mut Cursor<&[u8]>) -> Result<Self, CodecError> {
-        let mut value = [0u8; Self::ENCODED_SIZE];
-        bytes.read_exact(&mut value)?;
-        Field255::try_from_bytes(&value, false).map_err(|e| {
+    fn decode(bytes: &mut Input) -> Result<Self, CodecError> {
+        let value = bytes.split_const::<{ Self::ENCODED_SIZE }>()?;
+        Field255::try_from_bytes(value.as_slice(), false).map_err(|e| {
             CodecError::Other(Box::new(e) as Box<dyn std::error::Error + 'static + Send + Sync>)
         })
     }

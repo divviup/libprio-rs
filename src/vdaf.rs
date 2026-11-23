@@ -5,18 +5,18 @@
 //!
 //! [draft-irtf-cfrg-vdaf-18]: https://datatracker.ietf.org/doc/draft-irtf-cfrg-vdaf/18/
 
-use crate::dp::DifferentialPrivacyStrategy;
 #[cfg(all(feature = "crypto-dependencies", feature = "experimental"))]
 use crate::idpf::IdpfError;
 use crate::{
-    codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, Input, ParameterizedDecode},
+    dp::DifferentialPrivacyStrategy,
     field::{encode_fieldvec, merge_vector, FieldElement, FieldError},
     flp::FlpError,
     vdaf::xof::Seed,
 };
 use rand::CryptoRng;
 use serde::{Deserialize, Serialize};
-use std::{error::Error, fmt::Debug, io::Cursor};
+use std::{error::Error, fmt::Debug};
 use subtle::{Choice, ConstantTimeEq};
 
 /// A component of the domain-separation tag, used to bind the VDAF operations to the document
@@ -100,13 +100,13 @@ impl<F: FieldElement, const SEED_SIZE: usize> ParameterizedDecode<ShareDecodingP
 {
     fn decode_with_param(
         decoding_parameter: &ShareDecodingParameter<SEED_SIZE>,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         match decoding_parameter {
             ShareDecodingParameter::Leader(share_length) => {
                 let mut data = Vec::with_capacity(*share_length);
                 for _ in 0..*share_length {
-                    data.push(F::decode(bytes)?)
+                    data.push(F::decode(bytes)?);
                 }
                 Ok(Self::Leader(data))
             }

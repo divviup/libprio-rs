@@ -3,7 +3,7 @@
 //! Backwards-compatible port of the ENPA Prio system to a VDAF.
 
 use crate::{
-    codec::{CodecError, Decode, Encode, ParameterizedDecode},
+    codec::{CodecError, Decode, Encode, Input, ParameterizedDecode},
     field::{
         decode_fieldvec, FieldElement, FieldElementWithInteger, FieldPrio2, NttFriendlyFieldElement,
     },
@@ -21,7 +21,7 @@ use crate::{
 use hmac::{Hmac, KeyInit, Mac};
 use rand::{Rng, RngExt};
 use sha2::Sha256;
-use std::{convert::TryFrom, io::Cursor};
+use std::convert::TryFrom;
 use subtle::{Choice, ConstantTimeEq};
 
 mod client;
@@ -208,7 +208,7 @@ impl Encode for Prio2VerifierState {
 impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Prio2VerifierState {
     fn decode_with_param(
         (prio2, agg_id): &(&'a Prio2, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let share_decoder = if *agg_id == 0 {
             ShareDecodingParameter::Leader(prio2.input_len)
@@ -239,7 +239,7 @@ impl Encode for Prio2VerifierShare {
 impl ParameterizedDecode<Prio2VerifierState> for Prio2VerifierShare {
     fn decode_with_param(
         _state: &Prio2VerifierState,
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         Ok(Self(v2_server::VerificationMessage {
             f_r: FieldPrio2::decode(bytes)?,
@@ -349,7 +349,7 @@ impl Collector for Prio2 {
 impl<'a> ParameterizedDecode<(&'a Prio2, usize)> for Share<FieldPrio2, 32> {
     fn decode_with_param(
         (prio2, agg_id): &(&'a Prio2, usize),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         let is_leader = role_try_from(*agg_id).map_err(|e| CodecError::Other(Box::new(e)))?;
         let decoder = if is_leader {
@@ -368,7 +368,7 @@ where
 {
     fn decode_with_param(
         (prio2, _): &(&'a Prio2, &'a ()),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(prio2.input_len, bytes).map(Self)
     }
@@ -380,7 +380,7 @@ where
 {
     fn decode_with_param(
         (prio2, _): &(&'a Prio2, &'a ()),
-        bytes: &mut Cursor<&[u8]>,
+        bytes: &mut Input,
     ) -> Result<Self, CodecError> {
         decode_fieldvec(prio2.input_len, bytes).map(Self)
     }
