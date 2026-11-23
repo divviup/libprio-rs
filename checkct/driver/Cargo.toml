@@ -6,7 +6,8 @@ edition = "2024"
 
 [dependencies]
 checkct_macros = { path = "../checkct_macros" }
-prio = { path = "../.." }
+prio = { path = "../..", default-features = false, features = ["experimental"] }
+rand = { version = "0.10", default-features = false }
 # PrivateRng and PublicRng implement the traits of all these rand_core versions,
 # so that they can be passed to libraries depending on any of them.
 rand_core = "0.10"

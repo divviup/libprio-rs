@@ -8,5 +8,5 @@ target = ["thumbv7em-none-eabihf", "riscv32imac-unknown-none-elf", "x86_64-unkno
 rustflags = ["-C", "linker=rust-lld", "-C", "linker-flavor=ld.lld", "-C", "relocation-model=static"]
 
 [unstable]
-build-std = ["core", "panic_abort"]
+build-std = ["alloc", "core", "panic_abort"]
 build-std-features = ["compiler-builtins-mem"]
