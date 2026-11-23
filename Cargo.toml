@@ -101,6 +101,7 @@ allowed_external_types = [
     "num_bigint::bigint::BigInt",
     "num_bigint::biguint::BigUint",
     "num_bigint::TryFromBigIntError",
+    "rand_core::CryptoRng",
     "rand_core::Rng",
     "rand_core::seedable_rng::SeedableRng",
     "rand_core::TryRng",
