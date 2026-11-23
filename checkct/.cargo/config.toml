@@ -1,5 +1,5 @@
 [build]
-target = ["thumbv7em-none-eabihf", "riscv32imac-unknown-none-elf", "x86_64-unknown-linux-gnu"]
+target = ["thumbv7em-none-eabihf", "x86_64-unknown-linux-gnu"]
 
 # The drivers are freestanding, so rust-lld can link them on any host without a cross gcc.
 # It is set through rustflags, which (unlike `linker`) do not apply to build scripts.
