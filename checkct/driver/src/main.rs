@@ -17,6 +17,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 }
 
 /// The analysis of a path stops when it reaches this function.
+#[allow(clippy::empty_loop)]
 #[unsafe(no_mangle)]
 #[inline(never)]
 pub extern "C" fn __checkct_panic() -> ! {
